@@ -29,11 +29,8 @@
 
 - [字段映射与导出规则](#字段映射与导出规则)
 - [快速启动](#快速启动)
-- [生产服务器部署](#生产服务器部署)
-- [PaddleOCR + 多模态识别链路](#paddleocr--多模态识别链路)
-- [动态视觉模型列表](#动态视觉模型列表)
-- [API 路由](#api-路由)
 - [使用流程](#使用流程)
+- [进阶参考](#进阶参考)（识别链路 · 模型列表 · API 路由）
 - [数据与隐私](#数据与隐私)
 - [测试](#测试)
 - [当前限制](#当前限制)
@@ -62,12 +59,8 @@
 
 ### 硬性导出约束
 
-这三列是硬性导出约束：
-
-- 整份 CSV 中每个非空 `Scene` 必须匹配 `^\d{3}$`；
-- 每个非空 `Shot`、`Take` 必须匹配 `^\d{2}$`。
-
-合成时会规范未匹配行中的旧值，最终编码器还会再次校验，因此绕过普通合成入口也不能导出错误位数。CSV 文件本身没有工作簿式的“单元格类型”或数字格式；项目保证的是文件中实际写出的字符为 `001`、`01`、`09`，重新解析后前导零仍在。
+- 整份 CSV 中每个非空 `Scene` 必须匹配 `^\d{3}$`；每个非空 `Shot`、`Take` 必须匹配 `^\d{2}$`。
+- 合成时会规范未匹配行中的旧值，最终编码器还会再次校验，因此绕过普通合成入口也不能导出错误位数。CSV 没有工作簿式的“单元格类型”；项目保证写出的字符为 `001`、`01`、`09`，重新解析后前导零仍在。
 
 ### 镜号继承（合并单元格）
 
@@ -77,7 +70,7 @@
 
 ## 快速启动
 
-**环境要求**：Node.js **20.19** 或更高版本。项目使用内置 PDF.js 校验 PDF，并为每页生成整页图和两张核心列局部放大图，不需要安装 Poppler、`pdftoppm` 或其他系统组件。
+**环境要求**：Node.js **20.19** 或更高版本。项目使用内置 PDF.js 校验 PDF 并生成页面视图，不需要安装 Poppler、`pdftoppm` 或其他系统组件。
 
 ### 1. 配置环境变量
 
@@ -96,6 +89,28 @@ OPENAI_COMPATIBLE_API_KEY=your-key
 OPENAI_COMPATIBLE_BASE_URL=https://your-provider.example/v1
 OPENAI_COMPATIBLE_MODEL=your-vision-model
 ```
+
+### 2. 安装依赖并启动
+
+首次下载项目后：
+
+```bash
+npm ci
+npm run ocr:setup
+npm start
+```
+
+### 3. 打开浏览器
+
+访问 <http://127.0.0.1:4173>。
+
+关于 `npm run ocr:setup`：
+
+- 在项目内创建被 Git 忽略的 `.venv-paddleocr`，安装 PaddlePaddle 3.3.1 与 PaddleOCR 3.7.0；首次实际识别时下载所选 PP-OCRv5 官方权重到 `.paddlex-cache`，后续启动直接复用。
+- 可用 `npm run ocr:check` 检查本地依赖；暂时不需要 OCR 时，可在 `.env` 设置 `PADDLEOCR_ENABLED=false`。
+
+<details>
+<summary><strong>工作流配置（slatesync.config.json）</strong></summary>
 
 工作流行为由项目根目录的 `slatesync.config.json` 控制：
 
@@ -118,28 +133,10 @@ OPENAI_COMPATIBLE_MODEL=your-vision-model
 - 格式中的每个 `X` 表示一位数字，允许 `1–6` 个 `X`。默认 `Scene=XXX`、`Shot=XX`、`Take=XX`。
 - 修改配置后需要重启 SlateSync。也可通过 `.env` 的 `SLATESYNC_CONFIG_PATH` 指定其他配置文件。
 
-### 2. 安装依赖并启动
+</details>
 
-首次下载项目后：
-
-```bash
-npm ci
-npm run ocr:setup
-npm start
-```
-
-### 3. 打开浏览器
-
-访问 <http://127.0.0.1:4173>。
-
-关于 `npm run ocr:setup`：
-
-- 会在项目内创建被 Git 忽略的 `.venv-paddleocr`，安装 PaddlePaddle 3.3.1 与 PaddleOCR 3.7.0。
-- 第一次实际识别时还会下载所选 PP-OCRv5 官方权重到项目内的 `.paddlex-cache`；后续启动直接复用，不再重复下载。
-- 可用 `npm run ocr:check` 检查本地依赖。
-- 若暂时不需要 OCR，可在 `.env` 设置 `PADDLEOCR_ENABLED=false`。
-
-## 生产服务器部署
+<details>
+<summary><strong>生产服务器部署（Docker · Nginx · 运维）</strong></summary>
 
 推荐使用 Docker Compose。容器以非 root 用户运行，异常退出后自动重启，并通过健康检查确认 Node 服务可用；PaddleOCR 模型权重保存在独立数据卷中，更新容器时无需重复下载。
 
@@ -189,18 +186,70 @@ docker compose down
 - `slatesync-ocr-cache` 卷只保存可重新下载的 OCR 模型。上传文件、CSV 与识别结果仍只在内存中处理，不写入该卷。
 - 升级前备份 `.env`。OCR 缓存不属于业务数据，可以按需重建。
 
-## PaddleOCR + 多模态识别链路
+</details>
 
-### OCR 证据
+## 使用流程
 
-网页上传的 PDF 先在浏览器内逐页生成一张整页图和两张核心列局部放大图。服务端随后按整份文档一次启动本地 PP-OCRv5，给每个识别文本保留：
+### 基本步骤
 
-- 原文；
-- 置信度；
-- 所属来源页与整页/局部视图；
-- 归一化坐标框 `[left, top, right, bottom]`。
+1. **选择场记单**：上传单张图片或最多 20 页的 PDF，等待浏览器完成页面准备。
+2. **开始识别**：选择 API 与视觉模型；PDF 会裁去上下大面积白边，为每页生成整页图和上下两张核心列局部放大图，先由本地 PaddleOCR 提取文字证据，再最多同时处理 2 页多模态请求。
+3. **并行载入 CSV**：场记单文件准备完成后，Resolve CSV 入口立即开放；可以在场记单识别过程中载入或更换 CSV，不必等待模型完成。
+4. **选择素材目录（可选）**：CSV 载入后即可选择视频备份盘根目录，同样不必等待识别完成。程序按 CSV 中的素材编号定向搜索配置深度内以 `slate.txt` 结尾的文件，跳过无关素材目录，只解析 `Clip Name` 与 `Sensor FPS`；视频文件不会被读取或上传。不支持低 I/O 目录接口的浏览器会自动回退到兼容模式。
+5. **校对与合成**：识别完成后校对卷号、视频码、场次、镜和次；程序用结果匹配 CSV，并将 `slate.txt` 的 `Sensor FPS` 合成到 `Camera FPS`。
+6. **下载回填**：下载“已回填”的完整 Resolve CSV，再导入 Resolve。
 
-### 分工方式
+### 校对与回填规则
+
+**合并与继承**
+
+- 程序按页合并记录，同一页允许出现多个摄影机卷号；跨页留空的场次和镜会按同一卷号的上一条记录继承。
+- 两类有前后记录佐证的高置信错位会被自动校正：被同镜连续 Take 前后夹住的单行镜/次误读，以及至少两条连续素材共同漏掉下一镜十位（例如 `17` 后的 `18` 被读成 `08`）。所有自动校正都会降低置信度并显示人工复核警告；单条或拍摄顺序不明确的情况不会自动改号。
+
+**完整性对账**
+
+- 识别完成后，程序在浏览器本地把识别到的“卷号 + 视频码”与 CSV 素材清单对账：结果区显示覆盖数，未识别素材按连续范围列出，并在 CSV 预览中以**橙色**标记。该对账不会把 Resolve CSV 或其目录、时间码等字段发送给模型。
+
+**回填**
+
+- **不虚构素材**：程序不会生成虚构的文件名，也不会新增不存在的素材行。程序从 `Reel Name`（卷名）和 `File Name`（文件名）解析“卷号 + 条号”，匹配后只回填对应行的 `Scene`、`Shot`、`Take`、`Comments`；同时用 `slate.txt` 的 `Clip Name` 匹配同一素材，将 `Sensor FPS` 写入 `Camera FPS`。
+- **`Sensor FPS` 安全规则**：支持 UTF-8/UTF-16 `slate.txt`。txt 内已有 `Clip Name` 但无法识别、与 txt 文件名指向不同素材，或同一素材存在冲突 `Sensor FPS` 时，不写入并显示警告；仅当 txt 完全缺少 `Clip Name` 时才允许用文件名识别素材；未找到有效 txt 时保留 CSV 原有 `Camera FPS`，不会清空。即使场记字段不完整或互相冲突，可靠的 `Camera FPS` 仍可独立写入。
+- **`Comments` 白名单**：成功匹配的行中 `Comments` 只能是 `_OK`、`_KP` 或空值；导出前对整列清洗：旧值 `OK`/`KP` 规范为 `_OK`/`_KP`，其他文字清空，不会写入“过”“保”“废条”等字样。
+- **位数规范化**：导出前按 `slatesync.config.json` 的 `resolve.fieldFormats` 规范化全表 `Scene`/`Shot`/`Take`，默认三位/两位/两位。
+- **其余内容不变**：同一素材在 CSV 中出现多行时会全部回填，其他行、列顺序和非目标字段保持不变。
+
+**视频码**
+
+- 视频码固定为 `C0XX`：表格预印 `C0`，场记填 `15` 识别为 `C015`，填 `5` 识别为 `C005`。匹配时忽略 C 后数字多余的前导零，场记 `D001 + C009` 可匹配 Resolve 的 `D001C0009_...MOV`；不同卷号上的相同条号不会串行。
+
+**下载**
+
+- 下载文件沿用上传 CSV 的编码、BOM、分隔符、换行符和末尾换行设置；缺少的 `Scene`/`Shot`/`Take`/`Comments` 列会按 Resolve 英文字段名自动补充，已选有效 `slate.txt` 时缺少的 `Camera FPS` 列也会自动补充。
+
+<details>
+<summary><strong>高精度模式与流式接口（NDJSON）</strong></summary>
+
+界面默认启用高精度模式：
+
+- 每个来源页先做一次完整字段**主识别**，再做一次独立的核心字段**查漏**，并按“卷号 + 视频码”合并。
+- 两次结果的场、镜、次或状态互相冲突，或某个素材只在查漏结果中出现时，会发起第三次**定向复核**；只在查漏中出现但最终无法确认的素材会被移除，避免把假阳性写入 CSV。
+- 局部放大图始终与整页图归属于同一来源页，不会重复生成素材记录。
+- 因此每页通常消耗两次模型请求和更多图像 token，存在冲突或查漏候选的页面会消耗第三次请求。
+
+服务端 API 的旧 `imageDataUrl` / `imageDataUrls` 调用保持单次快速模式兼容；传入 `accuracyMode: "high"` 与 `imageDataGroups` 才启用上述流程。
+
+网页使用 `POST /api/recognize-stream` 接收换行分隔 JSON（NDJSON）进度事件与最终结果；旧的 `POST /api/recognize` JSON 接口仍保留，供已有客户端兼容使用。流式错误也会以结构化事件返回，前端会停止进度并显示可读原因。
+
+</details>
+
+## 进阶参考
+
+<details>
+<summary><strong>PaddleOCR + 多模态识别链路（含性能档位）</strong></summary>
+
+**OCR 证据与分工**
+
+网页上传的 PDF 先在浏览器内逐页生成一张整页图和两张核心列局部放大图。服务端随后按整份文档一次启动本地 PP-OCRv5，给每个识别文本保留：原文、置信度、所属来源页与整页/局部视图、归一化坐标框 `[left, top, right, bottom]`。
 
 这些 OCR 结果作为“证据”与页面图像一起交给多模态模型：
 
@@ -208,7 +257,7 @@ docker compose down
 - 提示词明确要求模型核对图片，不把 OCR 当成绝对正确答案；同一文字在整页图与局部图中重复时也不能生成重复素材。
 - 这样 PaddleOCR 负责尽量完整地抄录和定位，多模态模型负责表格关系、跨行继承、相似数字纠错和最终 JSON 结构化。
 
-### 页面视图与进度
+**页面视图与进度**
 
 每个 PDF 页面固定生成 **1 张整页图 + 2 张核心列局部放大图**，因此 4 页 PDF 会显示 12 个“页面视图”。这些不是额外 PDF 页，而是用于保留小字、手写数字和表格列证据的三种视图。
 
@@ -218,9 +267,9 @@ PDF 页面使用受控的双页并发预处理，在保留原页序的同时缩�
 
 PaddleOCR 每处理完一个整页或局部视图就更新一次进度；模型层按已完成页数更新，因此长任务不会只显示无法判断状态的循环动画。
 
-### 性能档位
+**性能档位与运行参数**
 
-`PADDLEOCR_PROFILE` 提供三档性能：
+`PADDLEOCR_PROFILE` 提供三档性能，三档都会保留上述三视图：
 
 | 档位 | 检测模型 | 识别模型 | 识别批量 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -228,21 +277,17 @@ PaddleOCR 每处理完一个整页或局部视图就更新一次进度；模型�
 | `fast` | Mobile | Mobile | 16 | 最快 |
 | `accurate` | Server | Server | 4 | 最准 |
 
-三档都会保留上述三视图。也可以用 `PADDLEOCR_DETECTION_MODEL`、`PADDLEOCR_RECOGNITION_MODEL` 和 `PADDLEOCR_RECOGNITION_BATCH_SIZE` 单独覆盖。
+也可以用 `PADDLEOCR_DETECTION_MODEL`、`PADDLEOCR_RECOGNITION_MODEL` 和 `PADDLEOCR_RECOGNITION_BATCH_SIZE` 单独覆盖。
 
-### 启用与降级
-
-- 默认 `PADDLEOCR_ENABLED=auto`：检测到项目虚拟环境就启用。
-- OCR 初始化或推理失败时会在结果中显示原因，并降级为原有纯多模态流程。
-- 生产环境可设置 `PADDLEOCR_REQUIRED=true`，让 OCR 失败直接中止，避免静默降低识别质量。
+- 默认 `PADDLEOCR_ENABLED=auto`：检测到项目虚拟环境就启用。OCR 初始化或推理失败时会在结果中显示原因，并降级为原有纯多模态流程；生产环境可设置 `PADDLEOCR_REQUIRED=true`，让 OCR 失败直接中止，避免静默降低识别质量。
 - 服务端旧接口若直接提交 Base64 PDF 而不是逐页图片，会明确跳过 OCR；Required 模式会直接拒绝这种无法运行 OCR 的输入。网页正常上传 PDF 不受此限制。
-
-### 超时与内存
-
 - `PADDLEOCR_TIMEOUT_MS=auto` 会按照整份文档的视图数量增加超时时间，避免合法的 20 页文档被固定短超时中断。
 - `PADDLEOCR_MAX_BLOCKS_PER_VIEW=0` 默认保留全部 OCR 文本块；若为了限制内存设置为正数，程序会在整页高度范围内均匀保留证据，不会总是删除页面底部。
 
-## 动态视觉模型列表
+</details>
+
+<details>
+<summary><strong>动态视觉模型列表</strong></summary>
 
 选择一个已配置的 API 服务商后，网页会自动调用服务端的模型发现接口：
 
@@ -267,11 +312,12 @@ PaddleOCR 每处理完一个整页或局部视图就更新一次进度；模型�
 - 界面保留“识别精度”和“性价比”等级；识别精度是模型能力等级，不是未经实测的准确率百分比，后续可用场记单回归集的真实成绩替换。
 - 模型列表读取失败时，界面会明确警告，并暂时显示未验证的固定候选模型，不会把它们标记为当前 Key 已确认可用。
 
-## API 路由
+</details>
 
-### OpenAI 官方
+<details>
+<summary><strong>API 路由（OpenAI 官方 / OpenRouter / 兼容 API）</strong></summary>
 
-使用 **Responses API**：
+**OpenAI 官方** — Responses API：
 
 ```text
 POST https://api.openai.com/v1/responses
@@ -282,9 +328,7 @@ POST https://api.openai.com/v1/responses
 - Qwen 模型不在 OpenAI 官方服务中，因此选择 OpenAI 时不会显示 Qwen。
 - 服务端 API 仍兼容直接提交单个 Base64 `pdfDataUrl`，用于非网页客户端。
 
-### OpenRouter
-
-使用 OpenAI 兼容的 **Chat Completions API**。界面上传的 PDF 同样按来源页生成三张视图，并在同一个 `image_url` 消息中发送：
+**OpenRouter** — OpenAI 兼容的 Chat Completions API。界面上传的 PDF 同样按来源页生成三张视图，并在同一个 `image_url` 消息中发送：
 
 ```text
 POST https://openrouter.ai/api/v1/chat/completions
@@ -294,9 +338,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 - 支持原生结构化输出的模型使用 `response_format: json_schema`；Qwen 3.7 Flash 使用 `json_object`，并把完整 Schema 放进系统提示。
 - 两种模式都会启用 `provider.require_parameters`；如果某个原生结构化端点临时不可用，会自动降级为 `json_object` 重试一次。
 
-### OpenAI 兼容 API
-
-支持使用任意 Bearer API Key、自定义 Base URL 和模型 ID。默认调用常见的 Chat Completions 端点：
+**OpenAI 兼容 API** — 支持任意 Bearer API Key、自定义 Base URL 和模型 ID，默认调用 Chat Completions 端点：
 
 ```dotenv
 OPENAI_COMPATIBLE_API_KEY=your-key
@@ -317,92 +359,21 @@ OPENAI_COMPATIBLE_JSON_MODE=json_object
 | `json_object`（默认） | 发送 `response_format: json_object`，并在系统提示中附带 Schema |
 | `prompt` | 不发送 `response_format`，仅用系统提示约束 JSON，适合兼容度较低的端点 |
 
-其他规则：
-
 - 若 `json_object` 被端点明确拒绝，程序会自动降级到 `prompt` 后重试一次。
 - 自定义 Base URL 必须是 `http://` 或 `https://`，不能内嵌账号、密码、查询参数或 URL 片段。
 - 网页上传的 PDF 已转换为页面图片，因此兼容端点只需支持视觉图片输入；服务端直接提交 Base64 PDF 是否可用取决于该兼容服务对文件输入的支持。
 
-## 使用流程
-
-### 基本步骤
-
-1. **选择场记单**：上传单张图片或最多 20 页的 PDF，等待浏览器完成页面准备。
-2. **开始识别**：选择 API 与视觉模型；PDF 会裁去上下大面积白边，为每页生成整页图和上下两张核心列局部放大图，先由本地 PaddleOCR 提取文字证据，再最多同时处理 2 页多模态请求。
-3. **并行载入 CSV**：场记单文件准备完成后，Resolve CSV 入口立即开放；可以在场记单识别过程中载入或更换 CSV，不必等待模型完成。
-4. **选择素材目录（可选）**：CSV 载入后即可选择视频备份盘根目录，同样不必等待识别完成。程序按 CSV 中的素材编号定向搜索配置深度内以 `slate.txt` 结尾的文件，跳过无关素材目录，只解析 `Clip Name` 与 `Sensor FPS`；视频文件不会被读取或上传。不支持低 I/O 目录接口的浏览器会自动回退到兼容模式。
-5. **校对与合成**：识别完成后校对卷号、视频码、场次、镜和次；程序用结果匹配 CSV，并将 `slate.txt` 的 `Sensor FPS` 合成到 `Camera FPS`。
-6. **下载回填**：下载“已回填”的完整 Resolve CSV，再导入 Resolve。
-
-### 高精度模式
-
-界面默认启用高精度模式：
-
-- 每个来源页先做一次完整字段**主识别**，再做一次独立的核心字段**查漏**，并按“卷号 + 视频码”合并。
-- 两次结果的场、镜、次或状态互相冲突，或某个素材只在查漏结果中出现时，会发起第三次**定向复核**；只在查漏中出现但最终无法确认的素材会被移除，避免把假阳性写入 CSV。
-- 局部放大图始终与整页图归属于同一来源页，不会重复生成素材记录。
-- 因此每页通常消耗两次模型请求和更多图像 token，存在冲突或查漏候选的页面会消耗第三次请求。
-
-服务端 API 的旧 `imageDataUrl` / `imageDataUrls` 调用保持单次快速模式兼容；传入 `accuracyMode: "high"` 与 `imageDataGroups` 才启用上述流程。
-
-### 流式接口
-
-网页使用 `POST /api/recognize-stream` 接收换行分隔 JSON（NDJSON）进度事件与最终结果；旧的 `POST /api/recognize` JSON 接口仍保留，供已有客户端兼容使用。流式错误也会以结构化事件返回，前端会停止进度并显示可读原因。
-
-### 页内合并与跨页继承
-
-- 程序按页合并记录；同一页允许出现多个摄影机卷号。
-- 跨页留空的场次和镜会按同一卷号的上一条记录继承。
-- 程序还会校正两类有前后记录佐证的高置信错位：
-  - 被同镜连续 Take 前后夹住的单行镜/次误读；
-  - 至少两条连续素材共同把下一镜十位漏掉（例如 `17` 后的 `18` 被读成 `08`）。
-- 所有自动校正都会降低置信度并显示人工复核警告；单条或拍摄顺序不明确的情况不会自动改号。
-
-### 完整性对账
-
-识别完成后，程序会在浏览器本地把识别到的“卷号 + 视频码”与 Resolve CSV 的素材清单做完整性对账：
-
-- 结果区显示覆盖数；未识别素材会按连续范围列出，并在完整 CSV 预览中以**橙色**标记。
-- 该对账不会把 Resolve CSV 或其目录、时间码等字段发送给模型。
-
-### CSV 回填规则
-
-- **不虚构素材**：程序不会生成虚构的文件名，也不会新增不存在的素材行。
-- **匹配依据**：从 CSV 的 `Reel Name`（卷名）和 `File Name`（文件名）解析“卷号 + 条号”，与场记记录匹配后，用识别结果回填对应行的 `Scene`、`Shot`、`Take` 和 `Comments`；同时用 `slate.txt` 的 `Clip Name` 匹配同一素材，将 `Sensor FPS` 写入 `Camera FPS`。
-- **`Sensor FPS` 安全规则**：支持 UTF-8/UTF-16 `slate.txt`。若 txt 内已有 `Clip Name` 但无法识别、与 txt 文件名指向不同素材，或同一素材存在互相冲突的 `Sensor FPS`，该素材不会写入 `Camera FPS` 并显示警告。仅当 txt 完全缺少 `Clip Name` 时才允许用文件名识别素材。未找到有效 txt 时保留 CSV 原有 `Camera FPS`，不会清空。
-- **独立回填**：`Camera FPS` 只依赖可识别的素材编号、CSV 匹配行与有效 `Sensor FPS`；即使该条场记的 `Scene`、`Shot` 或 `Take` 不完整或互相冲突，可靠的 `Camera FPS` 仍可写入，而不完整的场记字段继续保持不写入。
-- **`Comments` 白名单**：成功匹配的行中，`Comments` 只能是 `_OK`、`_KP` 或空值；识别出的备注文字仅供人工校对，绝不写入 CSV。导出前对整列 `Comments` 执行白名单清洗：旧值 `OK`/`KP` 规范为 `_OK`/`_KP`，其他文字清空；未标记及废条会清空该字段，不会写入“过”“保”“废条”等其他字样。
-- **位数规范化**：导出前会按 `slatesync.config.json` 的 `resolve.fieldFormats` 规范化全表 `Scene`/`Shot`/`Take`；默认三位/两位/两位。
-- **其余内容不变**：同一素材在 CSV 中出现多行时会全部回填，其他行、列顺序和非目标字段保持不变。
-
-### 视频码规则
-
-视频码固定为 `C0XX`：表格预印 `C0`，按场记填写数字补足：
-
-| 场记填写 | 识别为 |
-| --- | --- |
-| `15` | `C015` |
-| `5` | `C005` |
-
-- 匹配时会忽略 C 后数字多余的前导零，因此场记中的 `D001 + C009` 可以匹配 Resolve 中的 `D001C0009_...MOV`。
-- 不同卷号上的相同条号不会串行。
-- `Scene`、`Shot` 和 `Take` 只保留数字，并按配置文件中的 `X` 位数补零。
-
-### 下载格式
-
-- 下载文件会沿用上传 CSV 的编码、BOM、分隔符、换行符和末尾换行设置。
-- 若原 CSV 缺少 `Shot`、`Scene`、`Take` 或 `Comments`，程序会按 Resolve 的英文字段名补充这些列；已选择有效 `slate.txt` 时，缺少的 `Camera FPS` 列也会自动补充。
+</details>
 
 ## 数据与隐私
 
 - API Key 只由 SlateSync Node 服务读取，不会返回浏览器。
 - Resolve CSV 只在浏览器内存中解析、匹配和下载，不会发送给 AI API，也不会上传到 SlateSync 服务。
 - 所选素材目录只用于浏览器本地筛选和读取 `slate.txt`；视频内容不会被读取，txt 内容也不会发送到 SlateSync 服务或 AI API。受浏览器安全限制，每次刷新页面后需要重新选择素材根目录。
-- PaddleOCR 在 SlateSync 服务所在设备运行。页面图像和 OCR 坐标证据只保存在进程内存中；模型权重默认缓存在项目内 `.paddlex-cache`，容器部署时保存在 `slatesync-ocr-cache` 卷，缓存不包含场记单内容。
+- PaddleOCR 在 SlateSync 服务所在设备运行。页面图像和 OCR 坐标证据只保存在进程内存中；模型权重默认缓存在项目内 `.paddlex-cache`（容器部署时为 `slatesync-ocr-cache` 卷），缓存不包含场记单内容。
 - 普通图片会被浏览器缩放到最长边不超过 2600 像素；PDF 使用 PDF.js 逐页渲染，自动裁去上下大面积白边后生成最长边不超过 2600 像素的整页图，以及最长边不超过 3000 像素、聚焦左侧核心表格列的两张局部放大图，再发送给 SlateSync 服务和所选 API 服务。原始 PDF 不会离开浏览器；所选 API 服务会收到页面图像及 OCR 证据文本。
 - 提交前会按服务端请求上限检查序列化大小；超限时自动逐级压缩页面图，仍无法满足限制时会提示拆分 PDF，不会先上传再由服务器拒绝。
-- PDF、逐页图像、预览和识别结果不写入磁盘，刷新或关闭页面后即释放。
-- 当前版本不在磁盘保存上传的 CSV、图片或识别结果。
+- PDF、逐页图像、预览和识别结果不写入磁盘，刷新或关闭页面后即释放；当前版本也不在磁盘保存上传的 CSV、图片或识别结果。
 - OpenAI、OpenRouter 或所配置兼容服务商各自的数据处理政策适用。
 
 ## 测试
@@ -420,3 +391,4 @@ OPENAI_COMPATIBLE_JSON_MODE=json_object
 - 高精度模式发现同一素材的场、镜、次或状态互相冲突时会定向复核；最终仍无法确认的冲突字段会留空、锁定继承并显示警告，不会把猜测值写入 CSV。内容相同的重复识别会自动合并。
 - 若 CSV 同一行的卷名与文件名解析为不同素材，该行会跳过并显示警告。
 - 手写识别必须人工校对；尤其要检查跨页继承的场次、镜和次。
+
