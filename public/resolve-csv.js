@@ -1,0 +1,1053 @@
+const HEADER_ALIASES = Object.freeze({
+  fileName: ["File Name", "Filename", "文件名"],
+  clipDirectory: ["Clip Directory", "片段目录", "素材目录"],
+  reelName: ["Reel Name", "Reel", "卷名"],
+  clipName: ["Clip Name", "条名", "片段名", "片段名称"],
+  shot: ["Shot", "镜次", "鏡次"],
+  scene: ["Scene", "场景", "場景"],
+  take: ["Take", "镜头", "鏡頭"],
+  comments: ["Comments", "Comment", "备注", "備註", "注释", "註釋"],
+  cameraFps: ["Camera FPS", "CameraFPS", "摄影机帧率", "攝影機幀率"],
+});
+
+const TARGET_COLUMNS = Object.freeze([
+  { field: "shot", header: "Shot" },
+  { field: "scene", header: "Scene" },
+  { field: "take", header: "Take" },
+  { field: "comments", header: "Comments" },
+]);
+
+const CAMERA_FPS_COLUMN = Object.freeze({
+  field: "cameraFps",
+  header: "Camera FPS",
+});
+
+const TARGET_COLUMN_FIELDS = new Set(
+  [...TARGET_COLUMNS, CAMERA_FPS_COLUMN].map((target) => target.field),
+);
+
+const FIXED_WIDTH_NUMERIC_FIELDS = Object.freeze([
+  { field: "scene", label: "Scene" },
+  { field: "shot", label: "Shot" },
+  { field: "take", label: "Take" },
+]);
+
+export const DEFAULT_RESOLVE_FIELD_FORMATS = Object.freeze({
+  scene: "XXX",
+  shot: "XX",
+  take: "XX",
+});
+
+export function decodeResolveCsv(input) {
+  const bytes =
+    input instanceof Uint8Array
+      ? input
+      : input instanceof ArrayBuffer
+        ? new Uint8Array(input)
+        : null;
+  if (!bytes?.length) throw new Error("CSV 文件为空");
+
+  const format = detectCsvFormat(bytes);
+  let text;
+  try {
+    text = new TextDecoder(format.encoding, { fatal: true }).decode(
+      bytes.subarray(format.bomBytes),
+    );
+  } catch {
+    throw new Error("无法读取 CSV 编码；请从 Resolve 重新导出 UTF-8 或 UTF-16 CSV。");
+  }
+
+  text = text.replace(/^\uFEFF/, "");
+  const delimiter = detectDelimiter(text);
+  const matrix = parseCsvText(text, delimiter);
+  if (!matrix.length || !matrix[0].some((value) => String(value).trim())) {
+    throw new Error("CSV 缺少表头");
+  }
+
+  const headers = matrix[0].map((value) => String(value));
+  const rows = matrix.slice(1).map((row) => normalizeRowWidth(row, headers.length));
+  const columns = resolveColumnIndexes(headers);
+  if (!hasIdentifierColumns(columns)) {
+    throw new Error(
+      "CSV 中未找到 File Name（文件名）、Reel Name（卷名）或 Clip Name（条名）列。",
+    );
+  }
+
+  return {
+    headers,
+    rows,
+    format: {
+      encoding: format.encoding,
+      bom: format.bomBytes > 0,
+      delimiter,
+      lineEnding: detectLineEnding(text),
+      finalNewline: /(?:\r\n|\n|\r)$/.test(text),
+    },
+  };
+}
+
+export function parseSlateMetadataText(input, sourceName = "slate.txt") {
+  const text = decodeSlateMetadataText(input);
+  const fields = new Map();
+  for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/)) {
+    const match = line.match(/^\s*([^:]+?)\.*\s*:\s*(.*?)\s*$/);
+    if (!match) continue;
+    const key = match[1].replace(/[.\s]+$/g, "").trim().toLowerCase();
+    if (key && !fields.has(key)) fields.set(key, match[2].trim());
+  }
+
+  const clipName = fields.get("clip name") || "";
+  const clipKey = extractCombinedMaterialKey(clipName);
+  const sourceBaseName = String(sourceName || "")
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .at(-1);
+  const sourceKey = extractCombinedMaterialKey(sourceBaseName);
+  if (fields.has("clip name") && !clipKey) {
+    throw new Error(`${sourceName} 的 Clip Name“${clipName}”无法识别`);
+  }
+  if (clipKey && sourceKey && clipKey !== sourceKey) {
+    throw new Error(
+      `${sourceName} 的 Clip Name“${clipName}”与文件名指向不同素材`,
+    );
+  }
+  const materialKey = clipKey || sourceKey;
+  if (!materialKey) {
+    throw new Error(`${sourceName} 缺少可识别的 Clip Name`);
+  }
+
+  const sensorFps = normalizeCameraFps(fields.get("sensor fps"));
+  if (!sensorFps) {
+    throw new Error(`${sourceName} 缺少有效的 Sensor FPS`);
+  }
+
+  return {
+    sourceName: String(sourceName || "slate.txt"),
+    clipName: clipName || canonicalKeyToMaterialPrefix(materialKey),
+    materialKey,
+    sensorFps,
+  };
+}
+
+export function buildSlateMetadataIndex(entries = []) {
+  const grouped = groupBy(
+    entries.filter((entry) => entry?.materialKey),
+    (entry) => entry.materialKey,
+  );
+  const byMaterialKey = new Map();
+  const warnings = [];
+
+  for (const [materialKey, group] of grouped) {
+    const normalizedValues = group.map((entry) =>
+      normalizeCameraFps(entry.sensorFps),
+    );
+    const sensorFpsValues = new Set(normalizedValues.filter(Boolean));
+    if (normalizedValues.some((value) => !value) || sensorFpsValues.size !== 1) {
+      warnings.push(
+        `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突或无效的 Sensor FPS，Camera FPS 不会写入。`,
+      );
+      continue;
+    }
+    byMaterialKey.set(materialKey, {
+      materialKey,
+      sensorFps: [...sensorFpsValues][0],
+      sourceNames: group.map((entry) => entry.sourceName).filter(Boolean),
+    });
+  }
+
+  return { byMaterialKey, warnings };
+}
+
+export function mergeSlateIntoResolveTable(
+  sourceTable,
+  records,
+  slateMetadata = [],
+  options = {},
+) {
+  if (!sourceTable?.headers || !Array.isArray(sourceTable.rows)) {
+    throw new Error("尚未载入有效的 Resolve CSV");
+  }
+
+  const headers = sourceTable.headers.map((value) => String(value));
+  const rows = sourceTable.rows.map((row) =>
+    normalizeRowWidth(row.map(stringValue), headers.length),
+  );
+  const warnings = [];
+  const addedColumns = [];
+  const fieldFormats = resolveFieldFormats(options.fieldFormats);
+  const slateIndex = buildSlateMetadataIndex(slateMetadata);
+  warnings.push(...slateIndex.warnings);
+
+  let columns = resolveColumnIndexes(headers);
+  const columnsToEnsure = slateMetadata.length
+    ? [...TARGET_COLUMNS, CAMERA_FPS_COLUMN]
+    : TARGET_COLUMNS;
+  for (const target of columnsToEnsure) {
+    if (columns[target.field] >= 0) continue;
+    headers.push(target.header);
+    for (const row of rows) row.push("");
+    addedColumns.push(target.header);
+    warnings.push(`原 CSV 缺少 ${target.header} 列，已按 Resolve 字段名添加。`);
+    columns = resolveColumnIndexes(headers);
+  }
+
+  const rowIndex = buildMetadataRowIndex(rows, columns, warnings);
+  const recognizedMaterialKeys = new Set(
+    records
+      .map((record) => canonicalMaterialKey(record.cardNumber, record.videoCode))
+      .filter(Boolean),
+  );
+  let cameraFpsMatchedMaterialCount = 0;
+  const updatedRows = new Set();
+  const cameraFpsMatchedRows = new Set();
+  const missingCameraFpsKeys = new Set();
+  const changes = [];
+
+  // Sensor FPS comes from the camera-generated sidecar and only needs a
+  // trustworthy material identity. Apply it independently so incomplete or
+  // conflicting Scene/Shot/Take recognition cannot suppress Camera FPS.
+  for (const key of recognizedMaterialKeys) {
+    const matchedRows = rowIndex.get(key) || [];
+    if (!matchedRows.length) continue;
+
+    const slateEntry = slateIndex.byMaterialKey.get(key);
+    if (!slateEntry) {
+      if (slateMetadata.length) missingCameraFpsKeys.add(key);
+      continue;
+    }
+
+    cameraFpsMatchedMaterialCount += 1;
+    for (const rowNumber of matchedRows) {
+      const row = rows[rowNumber];
+      const columnIndex = columns.cameraFps;
+      const previous = cleanValue(row[columnIndex]);
+      const next = slateEntry.sensorFps;
+      cameraFpsMatchedRows.add(rowNumber);
+      if (previous === next) continue;
+
+      row[columnIndex] = next;
+      changes.push({
+        rowIndex: rowNumber,
+        field: "cameraFps",
+        header: headers[columnIndex],
+        previous,
+        next,
+      });
+      updatedRows.add(rowNumber);
+      if (previous) {
+        const fileName = rowDisplayName(row, columns) ||
+          canonicalKeyToMaterialPrefix(key);
+        warnings.push(
+          `CSV 第 ${rowNumber + 2} 行 ${fileName} 已覆盖：${headers[columnIndex]}“${previous}”→“${next}”。`,
+        );
+      }
+    }
+  }
+
+  const unrecognizedMaterialKeys = [...rowIndex.keys()]
+    .filter((key) => !recognizedMaterialKeys.has(key))
+    .sort(compareCanonicalMaterialKeys);
+  const unrecognizedMaterials = unrecognizedMaterialKeys.map(
+    canonicalKeyToMaterialPrefix,
+  );
+  const unrecognizedRowIndexes = unrecognizedMaterialKeys.flatMap(
+    (key) => rowIndex.get(key) || [],
+  );
+  if (unrecognizedMaterials.length) {
+    warnings.push(
+      `完整性对账：Resolve CSV 中有 ${unrecognizedMaterials.length} 个素材未在场记识别结果中出现（${compactMaterialRanges(unrecognizedMaterialKeys)}）。这些行不会自动回填，请检查是否漏页或漏识别。`,
+    );
+  }
+  const statuses = Array.from({ length: records.length }, () => null);
+  const candidates = [];
+
+  for (const [recordIndex, record] of records.entries()) {
+    const key = canonicalMaterialKey(record.cardNumber, record.videoCode);
+    const fileName = materialPrefix(record.cardNumber, record.videoCode);
+    if (!key || !fileName) {
+      statuses[recordIndex] = {
+        recordIndex,
+        status: "missing-key",
+        fileName: null,
+      };
+      warnings.push(
+        `第 ${recordIndex + 1} 条缺少卷号，或视频码不是 C0XX 格式，不会写入 CSV。`,
+      );
+      continue;
+    }
+
+    const values = {
+      scene: normalizeSceneValue(record.scene, fieldFormats.scene),
+      shot: normalizeShotValue(record.shot, fieldFormats.shot),
+      take: normalizeTakeValue(record.take, fieldFormats.take),
+      takeStatus: normalizeTakeStatus(record.takeStatus, record.goodTake),
+    };
+    values.comments = commentValueForTakeStatus(values.takeStatus);
+    const missingFields = [
+      [values.scene, "场次"],
+      [values.shot, "镜"],
+      [values.take, "次"],
+    ]
+      .filter(([value]) => !value)
+      .map(([, label]) => label);
+
+    if (missingFields.length) {
+      statuses[recordIndex] = {
+        recordIndex,
+        status: "incomplete",
+        fileName,
+        missingFields,
+      };
+      warnings.push(
+        `第 ${recordIndex + 1} 条 ${fileName} 缺少${missingFields.join("、")}，Scene、Shot、Take 和 Comments 不会写入；有效的 Camera FPS 仍会独立回填。`,
+      );
+      continue;
+    }
+
+    candidates.push({
+      recordIndex,
+      key,
+      fileName,
+      values,
+      signature: `${values.scene}\u0000${values.shot}\u0000${values.take}\u0000${values.takeStatus}`,
+    });
+  }
+
+  const groupedRecords = groupBy(candidates, (candidate) => candidate.key);
+  let matchedRecordCount = 0;
+
+  for (const group of groupedRecords.values()) {
+    const signatures = new Set(group.map((candidate) => candidate.signature));
+    if (signatures.size > 1) {
+      for (const candidate of group) {
+        statuses[candidate.recordIndex] = {
+          recordIndex: candidate.recordIndex,
+          status: "conflict",
+          fileName: candidate.fileName,
+        };
+      }
+      warnings.push(
+        `${group[0].fileName} 在识别结果中出现了互相冲突的场、镜、次或条次状态，这些场记字段已停止写入，请人工校对；有效的 Camera FPS 仍会独立回填。`,
+      );
+      continue;
+    }
+
+    const primary = group[0];
+    for (const duplicate of group.slice(1)) {
+      statuses[duplicate.recordIndex] = {
+        recordIndex: duplicate.recordIndex,
+        status: "duplicate",
+        fileName: duplicate.fileName,
+      };
+    }
+
+    const matchedRows = rowIndex.get(primary.key) || [];
+    if (!matchedRows.length) {
+      statuses[primary.recordIndex] = {
+        recordIndex: primary.recordIndex,
+        status: "unmatched",
+        fileName: primary.fileName,
+      };
+      warnings.push(
+        `${primary.fileName} 未在 Resolve CSV 的卷名或文件名中找到，不会新增虚构素材行。`,
+      );
+      continue;
+    }
+
+    const matchedFileNames = [];
+    for (const rowNumber of matchedRows) {
+      const row = rows[rowNumber];
+      const rowChanges = [];
+      // Resolve Comments is a strict export field: only _OK, _KP, or an empty
+      // cell may be written, regardless of any OCR text in record.comments.
+      const fieldsToWrite = ["scene", "shot", "take", "comments"];
+      for (const field of fieldsToWrite) {
+        const columnIndex = columns[field];
+        const previous = cleanValue(row[columnIndex]);
+        const next = primary.values[field];
+        if (previous === next) continue;
+        row[columnIndex] = next;
+        const change = {
+          rowIndex: rowNumber,
+          field,
+          header: headers[columnIndex],
+          previous,
+          next,
+        };
+        changes.push(change);
+        rowChanges.push(change);
+      }
+
+      const fileName = rowDisplayName(row, columns) || primary.fileName;
+      matchedFileNames.push(fileName);
+      updatedRows.add(rowNumber);
+      const overwritten = rowChanges.filter((change) => change.previous);
+      if (overwritten.length) {
+        warnings.push(
+          `CSV 第 ${rowNumber + 2} 行 ${fileName} 已覆盖：${overwritten
+            .map(
+              (change) =>
+                `${change.header}“${change.previous}”→“${change.next}”`,
+            )
+            .join("，")}。`,
+        );
+      }
+    }
+
+    matchedRecordCount += 1;
+    statuses[primary.recordIndex] = {
+      recordIndex: primary.recordIndex,
+      status: "matched",
+      fileName: matchedFileNames[0] || primary.fileName,
+      fileNames: matchedFileNames,
+      rowIndexes: [...matchedRows],
+      matchedRows: matchedRows.length,
+    };
+  }
+
+  if (missingCameraFpsKeys.size) {
+    const sortedKeys = [...missingCameraFpsKeys].sort(compareCanonicalMaterialKeys);
+    warnings.push(
+      `Sensor FPS 对账：${sortedKeys.length} 个已识别且匹配 CSV 的素材没有可用 slate.txt（${compactMaterialRanges(sortedKeys)}），其 Camera FPS 保持原值。`,
+    );
+  }
+
+  // Scene/Shot/Take are strict Resolve export fields. Canonicalize the entire
+  // table, not only rows matched in this run, so legacy CSV values cannot
+  // bypass the fixed-width contract: Scene=XXX and Shot/Take=XX.
+  for (const [rowNumber, row] of rows.entries()) {
+    for (const target of FIXED_WIDTH_NUMERIC_FIELDS) {
+      const columnIndex = columns[target.field];
+      const previous = cleanValue(row[columnIndex]);
+      const next = normalizeMetadataField(
+        target.field,
+        previous,
+        fieldFormats,
+      );
+      if (previous === next) continue;
+      row[columnIndex] = next;
+      changes.push({
+        rowIndex: rowNumber,
+        field: target.field,
+        header: headers[columnIndex],
+        previous,
+        next,
+      });
+      updatedRows.add(rowNumber);
+      const fileName = rowDisplayName(row, columns) || "未知素材";
+      warnings.push(
+        `CSV 第 ${rowNumber + 2} 行 ${fileName} 的 ${target.label}“${previous}”已规范为“${next}”。`,
+      );
+    }
+  }
+
+  // Enforce the allowlist across the complete exported table, including rows
+  // that were not matched in this recognition run. This prevents legacy or
+  // previously misrecognized text from surviving in Resolve Comments.
+  for (const [rowNumber, row] of rows.entries()) {
+    const columnIndex = columns.comments;
+    const previous = cleanValue(row[columnIndex]);
+    const next = canonicalResolveComment(previous);
+    if (previous === next) continue;
+    row[columnIndex] = next;
+    changes.push({
+      rowIndex: rowNumber,
+      field: "comments",
+      header: headers[columnIndex],
+      previous,
+      next,
+    });
+    updatedRows.add(rowNumber);
+    const fileName = rowDisplayName(row, columns) || "未知素材";
+    warnings.push(
+      `CSV 第 ${rowNumber + 2} 行 ${fileName} 的 Comments“${previous}”已规范为“${next}”。`,
+    );
+  }
+
+  return {
+    table: {
+      headers,
+      rows,
+      format: { ...defaultFormat(), ...(sourceTable.format || {}) },
+    },
+    statuses,
+    warnings,
+    addedColumns,
+    matchedRecordCount,
+    cameraFpsMatchedMaterialCount,
+    cameraFpsMatchedRowCount: cameraFpsMatchedRows.size,
+    updatedRowCount: updatedRows.size,
+    changedCellCount: changes.length,
+    overwrittenCellCount: changes.filter((change) => change.previous).length,
+    changes,
+    exportableCount: updatedRows.size,
+    expectedMaterialCount: rowIndex.size,
+    recognizedMaterialCount: rowIndex.size - unrecognizedMaterialKeys.length,
+    unrecognizedMaterials,
+    unrecognizedRowIndexes,
+  };
+}
+
+export function encodeResolveCsv(table, options = {}) {
+  if (!table?.headers || !Array.isArray(table.rows)) {
+    throw new Error("没有可编码的 CSV 表格");
+  }
+  const format = { ...defaultFormat(), ...(table.format || {}) };
+  const delimiter = format.delimiter || ",";
+  const headers = table.headers.map(stringValue);
+  const columns = resolveColumnIndexes(headers);
+  const fieldFormats = resolveFieldFormats(options.fieldFormats);
+  const rows = table.rows.map((row) =>
+    normalizeRowWidth(row.map(stringValue), headers.length),
+  );
+  for (const row of rows) {
+    for (const target of FIXED_WIDTH_NUMERIC_FIELDS) {
+      const columnIndex = columns[target.field];
+      if (columnIndex < 0) continue;
+      row[columnIndex] = normalizeMetadataField(
+        target.field,
+        row[columnIndex],
+        fieldFormats,
+      );
+    }
+  }
+  const matrix = [
+    headers,
+    ...rows,
+  ];
+  let text = matrix
+    .map((row) => row.map((value) => csvCell(value, delimiter)).join(delimiter))
+    .join(format.lineEnding);
+  if (format.finalNewline) text += format.lineEnding;
+  return encodeText(text, format.encoding, format.bom);
+}
+
+export function parseCsvText(text, delimiter = ",") {
+  const source = String(text || "").replace(/^\uFEFF/, "");
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quoted) {
+      if (char === '"' && source[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        cell += char;
+      }
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === delimiter) {
+      row.push(cell);
+      cell = "";
+    } else if (char === "\r" || char === "\n") {
+      if (char === "\r" && source[index + 1] === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  if (quoted) throw new Error("CSV 中存在未闭合的引号");
+  if (cell || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows;
+}
+
+export function resolveColumnIndexes(headers) {
+  const indexes = {};
+  for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
+    const matches = findHeaderIndexes(headers, aliases);
+    if (TARGET_COLUMN_FIELDS.has(field) && matches.length > 1) {
+      throw new Error(
+        `CSV 中存在多个 ${aliases[0]} 对应列，无法确定应写入哪一列。`,
+      );
+    }
+    indexes[field] = TARGET_COLUMN_FIELDS.has(field)
+      ? (matches[0] ?? -1)
+      : matches;
+  }
+  return indexes;
+}
+
+export function collectResolveMaterialKeys(table) {
+  if (!table?.headers || !Array.isArray(table.rows)) {
+    throw new Error("尚未载入有效的 Resolve CSV");
+  }
+  const warnings = [];
+  const columns = resolveColumnIndexes(table.headers);
+  const index = buildMetadataRowIndex(table.rows, columns, warnings);
+  return {
+    keys: [...index.keys()].sort(compareCanonicalMaterialKeys),
+    warnings,
+  };
+}
+
+export function canonicalMaterialKey(cardNumber, videoCode) {
+  const card = parseCardNumber(cardNumber);
+  const video = normalizeClipNumber(videoCode);
+  if (!card || !video) return "";
+  return `${card.camera}:${card.reel}:${Number(video.slice(1))}`;
+}
+
+export function materialPrefix(cardNumber, videoCode) {
+  const card = normalizeToken(cardNumber);
+  const video = normalizeClipNumber(videoCode);
+  if (!parseCardNumber(card) || !video) return null;
+  return `${card}${video}`;
+}
+
+export function normalizeClipNumber(value) {
+  let video = normalizeToken(value);
+  const combined = video.match(/^[A-Z]+\d+C(\d+)$/);
+  if (combined) video = combined[1];
+
+  const match = video.match(/^C?(\d+)$/);
+  if (!match) return "";
+
+  let digits = match[1];
+  while (digits.length > 3 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+  if (digits.length > 3) return "";
+
+  digits = digits.padStart(3, "0");
+  if (!digits.startsWith("0")) return "";
+  return `C${digits}`;
+}
+
+export function normalizeSceneValue(value, format = "XXX") {
+  return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 3));
+}
+
+export function normalizeShotValue(value, format = "XX") {
+  return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 2));
+}
+
+export function normalizeTakeValue(value, format = "XX") {
+  return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 2));
+}
+
+export function normalizeCameraFps(value) {
+  const normalized = cleanValue(value).replace(",", ".");
+  const match = normalized.match(/^(\d{1,4}(?:\.\d{1,6})?)\s*(?:fps)?$/i);
+  if (!match) return "";
+  const number = Number(match[1]);
+  if (!Number.isFinite(number) || number <= 0 || number > 1000) return "";
+  return String(number);
+}
+
+function normalizeFixedWidthNumber(value, width) {
+  const match = cleanValue(value).match(/\d+/);
+  if (!match) return "";
+  const number = Number(match[0]);
+  if (!Number.isSafeInteger(number) || number < 0 || number >= 10 ** width) {
+    return "";
+  }
+  return String(number).padStart(width, "0");
+}
+
+function resolveFieldFormats(value = {}) {
+  return Object.fromEntries(
+    Object.entries(DEFAULT_RESOLVE_FIELD_FORMATS).map(([field, fallback]) => {
+      const format = String(value?.[field] || "").trim().toUpperCase();
+      return [field, /^X{1,6}$/.test(format) ? format : fallback];
+    }),
+  );
+}
+
+function fieldFormatWidth(value, fallback) {
+  const format = String(value || "").trim().toUpperCase();
+  return /^X{1,6}$/.test(format) ? format.length : fallback;
+}
+
+function normalizeMetadataField(field, value, formats) {
+  if (field === "scene") return normalizeSceneValue(value, formats.scene);
+  if (field === "shot") return normalizeShotValue(value, formats.shot);
+  if (field === "take") return normalizeTakeValue(value, formats.take);
+  return cleanValue(value);
+}
+
+function normalizeTakeStatus(value, legacyGoodTake) {
+  const normalized = cleanValue(value);
+  if (normalized === "过" || normalized === "_OK") return "过";
+  if (normalized === "保" || normalized === "_KP") return "保";
+  if (normalized === "废条") return "废条";
+  if (legacyGoodTake === true) return "过";
+  if (legacyGoodTake === false) return "保";
+  return "";
+}
+
+function commentValueForTakeStatus(takeStatus) {
+  if (takeStatus === "过") return "_OK";
+  if (takeStatus === "保") return "_KP";
+  return "";
+}
+
+function canonicalResolveComment(value) {
+  const normalized = cleanValue(value).toUpperCase();
+  if (normalized === "OK" || normalized === "_OK") return "_OK";
+  if (normalized === "KP" || normalized === "_KP") return "_KP";
+  return "";
+}
+
+function buildMetadataRowIndex(rows, columns, warnings) {
+  const index = new Map();
+  for (const [rowNumber, row] of rows.entries()) {
+    const identity = identifyMetadataRow(row, columns);
+    if (identity.conflict) {
+      warnings.push(
+        `CSV 第 ${rowNumber + 2} 行的卷名与文件名指向不同素材，已跳过该行。`,
+      );
+      continue;
+    }
+    if (!identity.key) continue;
+    if (!index.has(identity.key)) index.set(identity.key, []);
+    index.get(identity.key).push(rowNumber);
+  }
+  return index;
+}
+
+function compareCanonicalMaterialKeys(left, right) {
+  const leftParts = parseCanonicalMaterialKey(left);
+  const rightParts = parseCanonicalMaterialKey(right);
+  if (!leftParts || !rightParts) return String(left).localeCompare(String(right));
+  return (
+    leftParts.camera.localeCompare(rightParts.camera) ||
+    leftParts.reel - rightParts.reel ||
+    leftParts.clip - rightParts.clip
+  );
+}
+
+function canonicalKeyToMaterialPrefix(key) {
+  const parsed = parseCanonicalMaterialKey(key);
+  if (!parsed) return String(key);
+  return `${parsed.camera}${String(parsed.reel).padStart(3, "0")}C${String(parsed.clip).padStart(3, "0")}`;
+}
+
+function compactMaterialRanges(keys) {
+  const groups = new Map();
+  for (const key of keys) {
+    const parsed = parseCanonicalMaterialKey(key);
+    if (!parsed) continue;
+    const reelKey = `${parsed.camera}:${parsed.reel}`;
+    const clips = groups.get(reelKey) || [];
+    clips.push(parsed.clip);
+    groups.set(reelKey, clips);
+  }
+
+  const ranges = [];
+  for (const [reelKey, clips] of groups) {
+    const [camera, reel] = reelKey.split(":");
+    const reelLabel = `${camera}${String(Number(reel)).padStart(3, "0")}`;
+    clips.sort((left, right) => left - right);
+    let start = clips[0];
+    let end = clips[0];
+    const flush = () => {
+      const startLabel = `C${String(start).padStart(3, "0")}`;
+      const endLabel = `C${String(end).padStart(3, "0")}`;
+      ranges.push(`${reelLabel} ${start === end ? startLabel : `${startLabel}–${endLabel}`}`);
+    };
+    for (const clip of clips.slice(1)) {
+      if (clip === end + 1) {
+        end = clip;
+      } else {
+        flush();
+        start = clip;
+        end = clip;
+      }
+    }
+    flush();
+  }
+  return ranges.join("、");
+}
+
+function parseCanonicalMaterialKey(key) {
+  const match = String(key || "").match(/^([^:]+):(\d+):(\d+)$/);
+  if (!match) return null;
+  return {
+    camera: match[1],
+    reel: Number(match[2]),
+    clip: Number(match[3]),
+  };
+}
+
+function identifyMetadataRow(row, columns) {
+  const reelKeys = uniqueKeys(
+    columns.reelName.map((index) => extractCombinedMaterialKey(row[index])),
+  );
+  const fileKeys = uniqueKeys([
+    ...columns.fileName.map((index) => extractCombinedMaterialKey(row[index])),
+    ...columns.clipName.map((index) => extractCombinedMaterialKey(row[index])),
+    ...columns.clipDirectory.map((index) =>
+      extractCombinedMaterialKey(row[index]),
+    ),
+  ]);
+
+  if (reelKeys.length > 1 || fileKeys.length > 1) {
+    return { key: "", conflict: true };
+  }
+  if (reelKeys[0] && fileKeys[0] && reelKeys[0] !== fileKeys[0]) {
+    return { key: "", conflict: true };
+  }
+
+  const cards = uniqueCards(
+    columns.reelName.map((index) => parseCardNumber(row[index])),
+  );
+  const clips = uniqueClipOrdinals([
+    ...columns.clipName.map((index) => extractLooseClipOrdinal(row[index])),
+    ...columns.fileName.map((index) => extractLooseClipOrdinal(row[index])),
+  ]);
+  if (cards.length > 1 || clips.length > 1) {
+    return { key: "", conflict: true };
+  }
+  const separateKey =
+    cards[0] && clips[0] != null
+      ? `${cards[0].camera}:${cards[0].reel}:${clips[0]}`
+      : "";
+  const combinedKey = reelKeys[0] || fileKeys[0] || "";
+  if (separateKey && combinedKey && separateKey !== combinedKey) {
+    return { key: "", conflict: true };
+  }
+  if (reelKeys[0] || separateKey || fileKeys[0]) {
+    return {
+      key: reelKeys[0] || separateKey || fileKeys[0],
+      conflict: false,
+    };
+  }
+  return { key: "", conflict: false };
+}
+
+export function extractCombinedMaterialKey(value) {
+  const text = String(value || "").toUpperCase();
+  const match = text.match(
+    /(?:^|[^A-Z0-9])([A-Z]+)[\s_-]*0*(\d+)[\s_-]*C[\s_-]*0*(\d+)(?=[^0-9]|$)/,
+  );
+  if (!match) return "";
+  return `${match[1]}:${Number(match[2])}:${Number(match[3])}`;
+}
+
+function extractLooseClipOrdinal(value) {
+  const text = String(value || "").toUpperCase();
+  const match = text.match(/(?:^|[^A-Z0-9])C[\s_-]*0*(\d+)(?=[^0-9]|$)/);
+  return match ? Number(match[1]) : null;
+}
+
+function parseCardNumber(value) {
+  const match = normalizeToken(value).match(/^([A-Z]+)0*(\d+)$/);
+  if (!match) return null;
+  return { camera: match[1], reel: Number(match[2]) };
+}
+
+function rowDisplayName(row, columns) {
+  for (const index of columns.fileName) {
+    if (cleanValue(row[index])) return cleanValue(row[index]);
+  }
+  for (const index of columns.reelName) {
+    if (cleanValue(row[index])) return cleanValue(row[index]);
+  }
+  return "";
+}
+
+function hasIdentifierColumns(columns) {
+  return (
+    columns.fileName.length > 0 ||
+    columns.reelName.length > 0 ||
+    columns.clipName.length > 0
+  );
+}
+
+function findHeaderIndexes(headers, aliases) {
+  const accepted = new Set(aliases.map(normalizeHeader));
+  return headers
+    .map((header, index) => (accepted.has(normalizeHeader(header)) ? index : -1))
+    .filter((index) => index >= 0);
+}
+
+function normalizeHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+}
+
+function detectCsvFormat(bytes) {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return { encoding: "utf-16le", bomBytes: 2 };
+  }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return { encoding: "utf-16be", bomBytes: 2 };
+  }
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return { encoding: "utf-8", bomBytes: 3 };
+  }
+
+  const sampleLength = Math.min(bytes.length, 2048);
+  let evenZeros = 0;
+  let oddZeros = 0;
+  for (let index = 0; index < sampleLength; index += 1) {
+    if (bytes[index] !== 0) continue;
+    if (index % 2) oddZeros += 1;
+    else evenZeros += 1;
+  }
+  if (oddZeros > sampleLength / 8 && oddZeros > evenZeros * 4) {
+    return { encoding: "utf-16le", bomBytes: 0 };
+  }
+  if (evenZeros > sampleLength / 8 && evenZeros > oddZeros * 4) {
+    return { encoding: "utf-16be", bomBytes: 0 };
+  }
+  return { encoding: "utf-8", bomBytes: 0 };
+}
+
+function decodeSlateMetadataText(input) {
+  if (typeof input === "string") return input;
+  const bytes =
+    input instanceof Uint8Array
+      ? input
+      : input instanceof ArrayBuffer
+        ? new Uint8Array(input)
+        : null;
+  if (!bytes?.length) throw new Error("slate.txt 文件为空");
+
+  const format = detectCsvFormat(bytes);
+  try {
+    return new TextDecoder(format.encoding, { fatal: true }).decode(
+      bytes.subarray(format.bomBytes),
+    );
+  } catch {
+    throw new Error("无法读取 slate.txt 编码；仅支持 UTF-8 或 UTF-16 文本。");
+  }
+}
+
+function detectDelimiter(text) {
+  const counts = new Map([
+    [",", 0],
+    ["\t", 0],
+    [";", 0],
+  ]);
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      if (quoted && text[index + 1] === '"') index += 1;
+      else quoted = !quoted;
+      continue;
+    }
+    if (!quoted && (char === "\r" || char === "\n")) break;
+    if (!quoted && counts.has(char)) counts.set(char, counts.get(char) + 1);
+  }
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0][0];
+}
+
+function detectLineEnding(text) {
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      if (quoted && text[index + 1] === '"') index += 1;
+      else quoted = !quoted;
+      continue;
+    }
+    if (quoted) continue;
+    if (char === "\r") return text[index + 1] === "\n" ? "\r\n" : "\r";
+    if (char === "\n") return "\n";
+  }
+  return "\r\n";
+}
+
+function encodeText(text, encoding, includeBom) {
+  if (encoding === "utf-16le" || encoding === "utf-16be") {
+    const bomBytes = includeBom ? 2 : 0;
+    const bytes = new Uint8Array(bomBytes + text.length * 2);
+    const littleEndian = encoding === "utf-16le";
+    if (includeBom) {
+      bytes[0] = littleEndian ? 0xff : 0xfe;
+      bytes[1] = littleEndian ? 0xfe : 0xff;
+    }
+    for (let index = 0; index < text.length; index += 1) {
+      const codeUnit = text.charCodeAt(index);
+      const offset = bomBytes + index * 2;
+      bytes[offset] = littleEndian ? codeUnit & 0xff : codeUnit >> 8;
+      bytes[offset + 1] = littleEndian ? codeUnit >> 8 : codeUnit & 0xff;
+    }
+    return bytes;
+  }
+
+  const encoded = new TextEncoder().encode(text);
+  if (!includeBom) return encoded;
+  const bytes = new Uint8Array(encoded.length + 3);
+  bytes.set([0xef, 0xbb, 0xbf], 0);
+  bytes.set(encoded, 3);
+  return bytes;
+}
+
+function defaultFormat() {
+  return {
+    encoding: "utf-16le",
+    bom: true,
+    delimiter: ",",
+    lineEnding: "\r\n",
+    finalNewline: true,
+  };
+}
+
+function normalizeRowWidth(row, width) {
+  const normalized = Array.from(row || [], stringValue).slice(0, width);
+  while (normalized.length < width) normalized.push("");
+  return normalized;
+}
+
+function uniqueKeys(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function uniqueCards(values) {
+  const byKey = new Map();
+  for (const card of values.filter(Boolean)) {
+    byKey.set(`${card.camera}:${card.reel}`, card);
+  }
+  return [...byKey.values()];
+}
+
+function uniqueClipOrdinals(values) {
+  return [...new Set(values.filter((value) => value != null))];
+}
+
+function groupBy(values, keyOf) {
+  const groups = new Map();
+  for (const value of values) {
+    const key = keyOf(value);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(value);
+  }
+  return groups;
+}
+
+function normalizeToken(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function cleanValue(value) {
+  return value == null ? "" : String(value).trim();
+}
+
+function stringValue(value) {
+  return value == null ? "" : String(value);
+}
+
+function csvCell(value, delimiter) {
+  const string = value == null ? "" : String(value);
+  return string.includes(delimiter) || /["\r\n]/.test(string)
+    ? `"${string.replaceAll('"', '""')}"`
+    : string;
+}

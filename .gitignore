@@ -1,0 +1,10 @@
+.env
+.DS_Store
+node_modules/
+.venv-paddleocr/
+.paddlex-cache/
+__pycache__/
+*.pyc
+data/
+coverage/
+tmp/

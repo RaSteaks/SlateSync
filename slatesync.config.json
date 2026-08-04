@@ -1,0 +1,12 @@
+{
+  "slate": {
+    "maxDirectoryDepth": 4
+  },
+  "resolve": {
+    "fieldFormats": {
+      "scene": "XXX",
+      "shot": "XX",
+      "take": "XX"
+    }
+  }
+}

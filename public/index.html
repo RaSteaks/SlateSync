@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="识别影视场记单并导出 DaVinci Resolve 可导入的 CSV"
+    />
+    <title>SlateSync · 场记单识别</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="SlateSync 首页">
+        <span class="brand-mark">S</span>
+        <span>
+          <strong>SlateSync</strong>
+          <small>场记单 → Resolve CSV</small>
+        </span>
+      </a>
+      <div id="api-status" class="api-status">正在检查 API…</div>
+    </header>
+
+    <main class="page-shell">
+      <section class="hero">
+        <h1>场记单识别与回填</h1>
+        <p>上传场记单与 Resolve CSV，校对后下载。</p>
+      </section>
+
+      <section class="workspace">
+        <aside class="control-panel">
+          <div class="panel-scroll">
+            <div class="panel-group">
+              <div class="panel-group-title">文件</div>
+
+              <div class="upload-section report-upload-section">
+                <div class="upload-section-title">
+                  <span>1</span>
+                  <strong>场记单</strong>
+                </div>
+
+                <label id="dropzone" class="dropzone" for="image-input">
+                  <input
+                    id="image-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,.pdf"
+                  />
+                  <span class="upload-icon" aria-hidden="true">↥</span>
+                  <strong>选择或拖入场记单</strong>
+                  <small>PDF、JPEG、PNG、WebP · 最大 20 MB</small>
+                </label>
+
+                <div id="file-card" class="file-card" hidden>
+                  <div class="file-thumb">
+                    <img id="file-thumb" alt="场记单缩略图" />
+                  </div>
+                  <div>
+                    <strong id="file-name"></strong>
+                    <small id="file-meta"></small>
+                  </div>
+                  <button id="remove-file" class="icon-button" type="button" aria-label="移除场记单">×</button>
+                </div>
+              </div>
+
+              <div class="upload-section">
+                <div class="upload-section-title">
+                  <span>2</span>
+                  <strong>Resolve 媒体元数据 CSV</strong>
+                </div>
+
+                <label id="metadata-dropzone" class="metadata-dropzone" for="metadata-input">
+                  <input id="metadata-input" type="file" accept=".csv,text/csv" disabled />
+                  <span class="csv-badge" aria-hidden="true">CSV</span>
+                  <span>
+                    <strong>选择或拖入 Resolve CSV</strong>
+                    <small id="metadata-help">请先选择场记单</small>
+                  </span>
+                </label>
+
+                <div id="metadata-card" class="file-card" hidden>
+                  <div class="csv-file-badge">CSV</div>
+                  <div>
+                    <strong id="metadata-file-name"></strong>
+                    <small id="metadata-file-meta"></small>
+                  </div>
+                  <button id="remove-metadata" class="icon-button" type="button" aria-label="移除 Resolve CSV">×</button>
+                </div>
+              </div>
+
+              <div class="upload-section">
+                <div class="upload-section-title">
+                  <span>3</span>
+                  <strong>素材目录中的 slate.txt（可选）</strong>
+                </div>
+
+                <button id="slate-directory-button" class="metadata-dropzone" type="button" disabled>
+                  <span class="txt-badge" aria-hidden="true">TXT</span>
+                  <span>
+                    <strong>选择素材根目录</strong>
+                    <small id="slate-help">请先载入 Resolve CSV</small>
+                  </span>
+                </button>
+                <input id="slate-input" type="file" webkitdirectory directory multiple hidden />
+
+                <div id="slate-card" class="file-card" hidden>
+                  <div class="txt-file-badge">TXT</div>
+                  <div>
+                    <strong id="slate-directory-name"></strong>
+                    <small id="slate-file-meta"></small>
+                  </div>
+                  <button id="remove-slates" class="icon-button" type="button" aria-label="移除 slate.txt 元数据">×</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-group">
+              <div class="panel-group-title">识别配置</div>
+
+              <label class="field">
+                <span>API 服务商</span>
+                <select id="provider-select"></select>
+              </label>
+
+              <div class="field model-field">
+                <div class="model-field-heading">
+                  <label for="model-select">识别模型</label>
+                  <button id="model-refresh" class="model-refresh" type="button">刷新列表</button>
+                </div>
+                <select id="model-select"></select>
+              </div>
+
+              <div id="model-note" class="model-note"></div>
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button id="recognize-button" class="primary-button" type="button" disabled>
+              <span>开始识别</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <div id="error-message" class="error-message" hidden></div>
+          </div>
+        </aside>
+
+        <section class="preview-panel">
+          <div id="empty-preview" class="empty-preview">
+            <div class="scan-frame">
+              <span></span><span></span><span></span><span></span>
+              <div class="paper-lines"></div>
+            </div>
+            <h2>等待上传</h2>
+          </div>
+          <img id="large-preview" class="large-preview" alt="待识别的场记单" hidden />
+          <div id="processing-overlay" class="processing-overlay" hidden>
+            <div class="scanner-line"></div>
+            <div class="processing-label" aria-live="polite">
+              <span class="spinner"></span>
+              <strong>正在识别场记单</strong>
+              <small>准备中</small>
+              <div
+                id="recognition-progress"
+                class="recognition-progress"
+                role="progressbar"
+                aria-label="识别进度"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
+                <span id="recognition-progress-bar"></span>
+              </div>
+              <div class="recognition-progress-meta">
+                <span id="recognition-progress-stage">准备中</span>
+                <span id="recognition-progress-percent">0%</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section id="results-section" class="results-section" hidden>
+        <div class="results-header">
+          <div class="results-tabs" role="tablist" aria-label="结果视图">
+            <button
+              id="tab-csv"
+              class="results-tab is-active"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="panel-csv"
+            >
+              回填预览
+              <span id="tab-csv-badge" class="tab-badge" hidden></span>
+            </button>
+            <button
+              id="tab-detail"
+              class="results-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-detail"
+            >
+              识别明细
+              <span id="tab-detail-badge" class="tab-badge" hidden></span>
+              <span id="tab-warning-dot" class="tab-dot" title="存在警告" hidden></span>
+            </button>
+          </div>
+          <div class="result-actions">
+            <button id="export-button" class="primary-button compact" type="button">
+              下载 Resolve CSV
+            </button>
+          </div>
+        </div>
+
+        <p id="result-summary" class="result-summary">识别完成</p>
+
+        <div id="panel-csv" class="tab-panel" role="tabpanel" aria-labelledby="tab-csv">
+          <p id="csv-preview-summary" class="csv-preview-summary">回填预览</p>
+          <div class="csv-preview-wrap">
+            <table class="csv-preview-table">
+              <thead id="csv-result-head"></thead>
+              <tbody id="csv-result-body"></tbody>
+            </table>
+            <p id="csv-result-empty" class="csv-result-empty" hidden>识别场记单后，可载入 Resolve CSV 生成合成表。</p>
+          </div>
+        </div>
+
+        <div id="panel-detail" class="tab-panel" role="tabpanel" aria-labelledby="tab-detail" hidden>
+          <div class="process-header">
+            <div class="metrics" id="metrics"></div>
+            <button id="add-row" class="secondary-button" type="button">＋ 添加一行</button>
+          </div>
+
+          <div id="warning-list" class="warning-list" hidden></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>页</th>
+                  <th>卡号</th>
+                  <th>视频码</th>
+                  <th>场次</th>
+                  <th>镜</th>
+                  <th>次</th>
+                  <th>状态</th>
+                  <th>拍摄内容</th>
+                  <th>备注</th>
+                  <th>景别</th>
+                  <th>机位</th>
+                  <th>CSV 匹配</th>
+                  <th>可信度</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="result-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>API Key 仅保存在服务器</span>
+    </footer>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

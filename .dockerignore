@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.DS_Store
+node_modules
+.venv-paddleocr
+.paddlex-cache
+coverage
+data
+tmp
+test
+test-support

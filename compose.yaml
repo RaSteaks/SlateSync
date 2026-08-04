@@ -1,0 +1,25 @@
+services:
+  slatesync:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4173
+      SLATESYNC_AUTH_USERNAME: "${SLATESYNC_AUTH_USERNAME:?请设置 SLATESYNC_AUTH_USERNAME}"
+      SLATESYNC_AUTH_PASSWORD: "${SLATESYNC_AUTH_PASSWORD:?请设置 SLATESYNC_AUTH_PASSWORD}"
+      PADDLEOCR_PYTHON: /opt/slatesync-ocr/bin/python
+      PADDLE_PDX_CACHE_HOME: /var/lib/slatesync/paddlex
+      MAX_CONCURRENT_RECOGNITIONS: ${MAX_CONCURRENT_RECOGNITIONS:-1}
+      SHUTDOWN_TIMEOUT_MS: 300000
+    ports:
+      - "127.0.0.1:${SLATESYNC_PORT:-4173}:4173"
+    volumes:
+      - ./slatesync.config.json:/app/slatesync.config.json:ro
+      - slatesync-ocr-cache:/var/lib/slatesync/paddlex
+    stop_grace_period: 5m30s
+
+volumes:
+  slatesync-ocr-cache:

@@ -1,0 +1,20 @@
+{
+  "name": "slatesync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "ocr:setup": "sh scripts/setup-paddleocr.sh",
+    "ocr:check": ".venv-paddleocr/bin/python scripts/paddleocr_runner.py --check",
+    "test": "node --test",
+    "check": "node --check server.mjs && node --check lib/ai-client.mjs && node --check lib/config.mjs && node --check lib/model-catalog.mjs && node --check lib/model-discovery.mjs && node --check lib/ocr/paddleocr.mjs && node --check lib/request-security.mjs && node --check public/app.js && node --check public/image-preprocess.js && node --check public/recognition-request.js && node --check public/recognition-stream.js && node --check public/resolve-csv.js && node --check public/slate-directory.js && node --check public/workflow-state.js && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('scripts/paddleocr_runner.py').read_text())\""
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^5.6.205"
+  }
+}
