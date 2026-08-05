@@ -44,7 +44,7 @@ const pdfModelResult = {
   })),
 };
 
-test("model routing only exposes qwen through OpenRouter", () => {
+test("model routing exposes each Qwen model only through its configured provider", () => {
   assert.equal(resolveModel("openai", "qwen/qwen3.7-flash"), null);
   assert.equal(
     resolveModel("openrouter", "qwen/qwen3.7-flash").apiId,
@@ -61,6 +61,11 @@ test("model routing only exposes qwen through OpenRouter", () => {
   assert.equal(
     resolveModel("openrouter", "openai/gpt-5.6-terra").apiId,
     "openai/gpt-5.6-terra",
+  );
+  assert.equal(resolveModel("openrouter", "qwen3.7-plus"), null);
+  assert.equal(
+    resolveModel("tokenplan", "qwen3.7-plus").apiId,
+    "qwen3.7-plus",
   );
 });
 
@@ -85,10 +90,10 @@ test("custom OpenAI-compatible routing resolves its configured model and transpo
 test("slate symbols normalize into Resolve Comments status values", () => {
   assert.equal(normalizeTakeStatus("☑️"), "过");
   assert.equal(normalizeTakeStatus("√"), "过");
-  assert.equal(normalizeTakeStatus("X"), "保");
-  assert.equal(normalizeTakeStatus("×"), "保");
-  assert.equal(normalizeTakeStatus("三角形"), "废条");
-  assert.equal(normalizeTakeStatus("△"), "废条");
+  assert.equal(normalizeTakeStatus("三角形"), "保");
+  assert.equal(normalizeTakeStatus("△"), "保");
+  assert.equal(normalizeTakeStatus("X"), "废条");
+  assert.equal(normalizeTakeStatus("×"), "废条");
   assert.equal(normalizeTakeStatus(""), null);
 });
 
@@ -96,6 +101,7 @@ test("public config never exposes API keys", () => {
   const config = publicConfig({
     OPENAI_API_KEY: "secret-openai",
     OPENROUTER_API_KEY: "secret-router",
+    TOKENPLAN_API_KEY: "secret-tokenplan",
     OPENAI_COMPATIBLE_API_KEY: "secret-compatible",
     OPENAI_COMPATIBLE_BASE_URL: "https://private-gateway.example/v1",
     OPENAI_COMPATIBLE_MODEL: "private/vision-model",
@@ -103,6 +109,7 @@ test("public config never exposes API keys", () => {
   assert.equal(config.providers.every((provider) => provider.configured), true);
   assert.equal(JSON.stringify(config).includes("secret-"), false);
   assert.equal(JSON.stringify(config).includes("private-gateway"), false);
+  assert.equal(JSON.stringify(config).includes("secret-tokenplan"), false);
   assert.equal(
     config.models.find((model) => model.id === CUSTOM_MODEL_ID).label,
     "private/vision-model",
@@ -141,6 +148,22 @@ test("Terra is exposed as a fixed model for OpenAI and OpenRouter", () => {
     (model) => model.id === "openai/gpt-5.6-terra",
   );
   assert.equal("prices" in publicTerra, false);
+});
+
+test("Token Plan exposes fixed visual models without publishing pricing", () => {
+  const tokenPlanModels = MODELS.filter((model) =>
+    model.providers.includes("tokenplan"),
+  );
+  assert.deepEqual(
+    tokenPlanModels.map((model) => model.id),
+    ["qwen3.7-plus", "qwen3.8-max", "qwen3.6-flash", "qwen3.6-plus"],
+  );
+  assert.equal(resolveProvider("tokenplan").chatJsonMode, "json_schema");
+  assert.equal(resolveProvider("tokenplan").supportsDirectPdf, false);
+  const publicModels = publicConfig({ TOKENPLAN_API_KEY: "test-key" }).models
+    .filter((model) => model.providers.includes("tokenplan"));
+  assert.equal(publicModels.length, 4);
+  assert.equal(JSON.stringify(publicModels).includes("price"), false);
 });
 
 test("OpenAI Responses request uses image input and parses structured output", async () => {
@@ -198,6 +221,8 @@ test("OpenAI Responses request uses image input and parses structured output", a
   assert.match(captured.body.input[0].content, /把“次”误读成了“镜”/);
   assert.match(captured.body.input[0].content, /最左侧三个共用列依次是“场次、镜、次”/);
   assert.match(captured.body.input[0].content, /镜 18 输出“18”.*绝不能只读成 08/s);
+  assert.match(captured.body.input[0].content, /三角形\/△ 写入“_KP”/);
+  assert.match(captured.body.input[0].content, /X\/× 或未标记时清空/);
   assert.match(captured.body.input[0].content, /comments.*绝不写入 Resolve Comments/s);
   assert.equal(result.result.records[0].scene, "012");
   assert.equal(result.result.records[0].shot, "02");
@@ -253,6 +278,137 @@ test("Qwen uses OpenRouter JSON object mode with the schema in its prompt", asyn
   assert.match(captured.body.messages[0].content, /严格遵守以下 Schema/);
   assert.equal(captured.body.response_format.json_schema, undefined);
   assert.equal(result.cost, 0.00002);
+});
+
+test("Token Plan uses the licensed DashScope-compatible endpoint for visual recognition", async () => {
+  let captured;
+  const fetchImpl = async (url, request) => {
+    captured = { url, request, body: JSON.parse(request.body) };
+    return jsonResponse({
+      choices: [{ message: { content: JSON.stringify(modelResult) } }],
+      usage: { prompt_tokens: 40, completion_tokens: 20 },
+    });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "tokenplan",
+      modelId: "qwen3.7-plus",
+      imageDataUrl,
+      filename: "prepared-pdf-page.jpg",
+    },
+    {
+      env: { TOKENPLAN_API_KEY: "licensed-test-key" },
+      fetchImpl,
+    },
+  );
+
+  assert.equal(
+    captured.url,
+    "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  );
+  assert.equal(
+    captured.request.headers.Authorization,
+    "Bearer licensed-test-key",
+  );
+  assert.equal(captured.body.model, "qwen3.7-plus");
+  assert.equal(captured.body.messages[1].content[1].type, "image_url");
+  assert.equal(captured.body.response_format.type, "json_schema");
+  assert.equal(captured.body.response_format.json_schema.strict, true);
+  assert.equal(captured.body.provider, undefined);
+  assert.equal(result.provider, "tokenplan");
+  assert.equal(result.model, "qwen3.7-plus");
+});
+
+test("Token Plan accepts a licensed team Base URL override", async () => {
+  let capturedUrl;
+  const fetchImpl = async (url) => {
+    capturedUrl = url;
+    return jsonResponse({
+      choices: [{ message: { content: JSON.stringify(modelResult) } }],
+    });
+  };
+
+  await recognizeSlate(
+    {
+      providerId: "tokenplan",
+      modelId: "qwen3.6-flash",
+      imageDataUrl,
+    },
+    {
+      env: {
+        TOKENPLAN_API_KEY: "licensed-test-key",
+        TOKENPLAN_BASE_URL: "https://team-tokenplan.example/v1/",
+      },
+      fetchImpl,
+    },
+  );
+
+  assert.equal(
+    capturedUrl,
+    "https://team-tokenplan.example/v1/chat/completions",
+  );
+});
+
+test("Token Plan progressively falls back when structured response modes are unavailable", async () => {
+  const requests = [];
+  const fetchImpl = async (_url, request) => {
+    const body = JSON.parse(request.body);
+    requests.push(body);
+    if (requests.length === 1) {
+      return jsonResponse(
+        { error: { message: "response_format json_schema is unsupported" } },
+        400,
+      );
+    }
+    if (requests.length === 2) {
+      return jsonResponse(
+        { error: { message: "response_format json_object is unsupported" } },
+        400,
+      );
+    }
+    return jsonResponse({
+      choices: [{ message: { content: JSON.stringify(modelResult) } }],
+    });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "tokenplan",
+      modelId: "qwen3.7-plus",
+      imageDataUrl,
+    },
+    {
+      env: { TOKENPLAN_API_KEY: "licensed-test-key" },
+      fetchImpl,
+    },
+  );
+
+  assert.equal(requests.length, 3);
+  assert.equal(requests[0].response_format.type, "json_schema");
+  assert.equal(requests[1].response_format.type, "json_object");
+  assert.equal(requests[2].response_format, undefined);
+  assert.match(requests[2].messages[0].content, /严格遵守以下 Schema/);
+  assert.equal(result.result.records[0].scene, "012");
+});
+
+test("Token Plan direct PDF input asks API clients to submit prepared page images", async () => {
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "tokenplan",
+        modelId: "qwen3.7-plus",
+        pdfDataUrl,
+        pageCount: 2,
+        filename: "slate.pdf",
+      },
+      {
+        env: { TOKENPLAN_API_KEY: "licensed-test-key" },
+        fetchImpl: async () => assert.fail("must not fetch"),
+      },
+    ),
+    /先把 PDF 转为页面图片.*imageDataGroups/,
+  );
 });
 
 test("OpenAI-compatible Chat Completions uses custom key, base URL and model without OpenRouter fields", async () => {

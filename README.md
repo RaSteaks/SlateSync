@@ -9,7 +9,7 @@
 
 </div>
 
-内置以下四个模型，并支持通过 OpenAI 兼容 API 接入任意视觉模型：
+内置以下视觉模型，并支持通过 OpenAI 兼容 API 接入任意视觉模型：
 
 | 模型 | 可用服务商 |
 | --- | --- |
@@ -17,10 +17,14 @@
 | `openai/gpt-5.6-luna` | OpenAI 官方 / OpenRouter |
 | `openai/gpt-5.6-terra` | OpenAI 官方 / OpenRouter |
 | `openai/gpt-4o-mini` | OpenAI 官方 / OpenRouter |
+| `qwen3.7-plus` | 阿里云 Token Plan |
+| `qwen3.8-max` | 阿里云 Token Plan |
+| `qwen3.6-flash` | 阿里云 Token Plan |
+| `qwen3.6-plus` | 阿里云 Token Plan 团队版 |
 
 - **支持格式**：PDF、JPEG、PNG、WebP。
 - **工作顺序**：可以先识别场记单，再载入 DaVinci Resolve 从媒体池导出的媒体元数据 CSV；识别结果会保留，CSV 载入后立即完成素材匹配与合成。也可以沿用先载入 CSV、再识别场记单的顺序。
-- **写回内容**：校对后将 `Scene`、`Shot`、`Take`、`Comments` 写回上传的 CSV；选择素材目录后，还会把每个 `slate.txt` 的 `Sensor FPS` 写入 `Camera FPS`。原表的全部素材行和其他列保持不变。
+- **写回内容**：校对后将 `Scene`、`Shot`、`Take`、`Comments` 写回上传的 CSV；选择素材目录后，还会把每个 `slate.txt` 的 `Sensor FPS` 写入 `Camera FPS`、`Shot Date` 写入 `Shoot Day`。原表的全部素材行和其他列保持不变。
 
 > [!NOTE]
 > Silverstack CSV 不属于正常输入流程。
@@ -45,14 +49,15 @@
 | 镜 | `Shot` | 镜次 | 仅数字并补足两位 | `2` → `02` |
 | 次 | `Take` | 镜头 | 仅数字并补足两位 | `9` → `09` |
 | 素材旁 `slate.txt` 的 `Sensor FPS` | `Camera FPS` | 摄影机帧率 | 正数帧率，去除多余小数零 | `48` → `48`、`47.952 fps` → `47.952` |
+| 素材旁 `slate.txt` 的 `Shot Date` | `Shoot Day` | 拍摄日期 | 规范为 `YY-MM-DD` | `2026-08-01` → `26-08-01` |
 
 条次标记写入 `Comments` 的规则：
 
 | 场记单条次标记 | 含义 | 写入 `Comments` |
 | --- | --- | --- |
 | `☑` / `√` / `✓` | 过条 | `_OK` |
-| `X` / `×` | 保条 | `_KP` |
-| `△` / 三角形 | 废条 | 空值 |
+| `△` / 三角形 | 保条 | `_KP` |
+| `X` / `×` | 废条 | 空值 |
 
 - 识别出的备注文字仅供人工校对，**绝不写入** CSV `Comments`。
 - “景别”不会被误写为 `Scene`。
@@ -83,6 +88,10 @@ cp .env.example .env
 ```dotenv
 OPENAI_API_KEY=sk-...
 OPENROUTER_API_KEY=sk-or-v1-...
+
+# 已获得应用后端调用许可时，可配置 Token Plan 专属 Key
+TOKENPLAN_API_KEY=sk-sp-...
+TOKENPLAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 # 或配置任意 OpenAI 兼容端点
 OPENAI_COMPATIBLE_API_KEY=your-key
@@ -195,8 +204,8 @@ docker compose down
 1. **选择场记单**：上传单张图片或最多 20 页的 PDF，等待浏览器完成页面准备。
 2. **开始识别**：选择 API 与视觉模型；PDF 会裁去上下大面积白边，为每页生成整页图和上下两张核心列局部放大图，先由本地 PaddleOCR 提取文字证据，再最多同时处理 2 页多模态请求。
 3. **并行载入 CSV**：场记单文件准备完成后，Resolve CSV 入口立即开放；可以在场记单识别过程中载入或更换 CSV，不必等待模型完成。
-4. **选择素材目录（可选）**：CSV 载入后即可选择视频备份盘根目录，同样不必等待识别完成。程序按 CSV 中的素材编号定向搜索配置深度内以 `slate.txt` 结尾的文件，跳过无关素材目录，只解析 `Clip Name` 与 `Sensor FPS`；视频文件不会被读取或上传。不支持低 I/O 目录接口的浏览器会自动回退到兼容模式。
-5. **校对与合成**：识别完成后校对卷号、视频码、场次、镜和次；程序用结果匹配 CSV，并将 `slate.txt` 的 `Sensor FPS` 合成到 `Camera FPS`。
+4. **选择素材目录（可选）**：CSV 载入后即可选择视频备份盘根目录，同样不必等待识别完成。程序按 CSV 中的素材编号定向搜索配置深度内以 `slate.txt` 结尾的文件，跳过无关素材目录，只解析 `Clip Name`、`Sensor FPS` 与 `Shot Date`；视频文件不会被读取或上传。不支持低 I/O 目录接口的浏览器会自动回退到兼容模式。
+5. **校对与合成**：识别完成后校对卷号、视频码、场次、镜和次；程序用结果匹配 CSV，并将 `slate.txt` 的 `Sensor FPS` 合成到 `Camera FPS`、`Shot Date` 合成到 `Shoot Day`。
 6. **下载回填**：下载“已回填”的完整 Resolve CSV，再导入 Resolve。
 
 ### 校对与回填规则
@@ -212,8 +221,9 @@ docker compose down
 
 **回填**
 
-- **不虚构素材**：程序不会生成虚构的文件名，也不会新增不存在的素材行。程序从 `Reel Name`（卷名）和 `File Name`（文件名）解析“卷号 + 条号”，匹配后只回填对应行的 `Scene`、`Shot`、`Take`、`Comments`；同时用 `slate.txt` 的 `Clip Name` 匹配同一素材，将 `Sensor FPS` 写入 `Camera FPS`。
+- **不虚构素材**：程序不会生成虚构的文件名，也不会新增不存在的素材行。程序从 `Reel Name`（卷名）和 `File Name`（文件名）解析“卷号 + 条号”，匹配后只回填对应行的 `Scene`、`Shot`、`Take`、`Comments`；同时用 `slate.txt` 的 `Clip Name` 匹配同一素材，将 `Sensor FPS` 写入 `Camera FPS`、`Shot Date` 写入 `Shoot Day`。
 - **`Sensor FPS` 安全规则**：支持 UTF-8/UTF-16 `slate.txt`。txt 内已有 `Clip Name` 但无法识别、与 txt 文件名指向不同素材，或同一素材存在冲突 `Sensor FPS` 时，不写入并显示警告；仅当 txt 完全缺少 `Clip Name` 时才允许用文件名识别素材；未找到有效 txt 时保留 CSV 原有 `Camera FPS`，不会清空。即使场记字段不完整或互相冲突，可靠的 `Camera FPS` 仍可独立写入。
+- **`Shot Date` 安全规则**：支持 `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYYMMDD` 与 `YY-MM-DD`，写入时统一为 Resolve 使用的 `YY-MM-DD`。无效日期或同一素材存在互相冲突的日期时保留 CSV 原有 `Shoot Day`，不会清空，也不影响可靠的 `Camera FPS` 回填。
 - **`Comments` 白名单**：成功匹配的行中 `Comments` 只能是 `_OK`、`_KP` 或空值；导出前对整列清洗：旧值 `OK`/`KP` 规范为 `_OK`/`_KP`，其他文字清空，不会写入“过”“保”“废条”等字样。
 - **位数规范化**：导出前按 `slatesync.config.json` 的 `resolve.fieldFormats` 规范化全表 `Scene`/`Shot`/`Take`，默认三位/两位/两位。
 - **其余内容不变**：同一素材在 CSV 中出现多行时会全部回填，其他行、列顺序和非目标字段保持不变。
@@ -224,7 +234,7 @@ docker compose down
 
 **下载**
 
-- 下载文件沿用上传 CSV 的编码、BOM、分隔符、换行符和末尾换行设置；缺少的 `Scene`/`Shot`/`Take`/`Comments` 列会按 Resolve 英文字段名自动补充，已选有效 `slate.txt` 时缺少的 `Camera FPS` 列也会自动补充。
+- 下载文件沿用上传 CSV 的编码、BOM、分隔符、换行符和末尾换行设置；缺少的 `Scene`/`Shot`/`Take`/`Comments` 列会按 Resolve 英文字段名自动补充，已选有效 `slate.txt` 时缺少的 `Camera FPS` 与 `Shoot Day` 列也会自动补充。
 
 <details>
 <summary><strong>高精度模式与流式接口（NDJSON）</strong></summary>
@@ -295,6 +305,7 @@ PaddleOCR 每处理完一个整页或局部视图就更新一次进度；模型�
 | --- | --- |
 | OpenAI 官方 | `GET /api/models?provider=openai` |
 | OpenRouter | `GET /api/models?provider=openrouter` |
+| 阿里云 Token Plan | `GET /api/models?provider=tokenplan` |
 | OpenAI 兼容 | `GET /api/models?provider=openai-compatible` |
 
 服务端使用对应的 Bearer API Key 请求 `${BASE_URL}/models`，API Key 始终只保留在 SlateSync 服务端，不会返回浏览器。模型列表会缓存 **5 分钟**；“刷新列表”按钮可以强制重新读取。
@@ -315,7 +326,7 @@ PaddleOCR 每处理完一个整页或局部视图就更新一次进度；模型�
 </details>
 
 <details>
-<summary><strong>API 路由（OpenAI 官方 / OpenRouter / 兼容 API）</strong></summary>
+<summary><strong>API 路由（OpenAI 官方 / OpenRouter / Token Plan / 兼容 API）</strong></summary>
 
 **OpenAI 官方** — Responses API：
 
@@ -337,6 +348,20 @@ POST https://openrouter.ai/api/v1/chat/completions
 - 服务端 API 仍兼容单个 Base64 `file` PDF 输入。
 - 支持原生结构化输出的模型使用 `response_format: json_schema`；Qwen 3.7 Flash 使用 `json_object`，并把完整 Schema 放进系统提示。
 - 两种模式都会启用 `provider.require_parameters`；如果某个原生结构化端点临时不可用，会自动降级为 `json_object` 重试一次。
+
+**阿里云 Token Plan** — 使用已获应用后端调用许可的 Token Plan API Key，通过 OpenAI 兼容 Chat Completions 接入：
+
+```dotenv
+TOKENPLAN_API_KEY=sk-sp-...
+TOKENPLAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+- 默认发送到 `${TOKENPLAN_BASE_URL}/chat/completions`，使用 Bearer Authorization；团队版应把 Base URL 替换为控制台显示的套餐专属地址。
+- 固定提供 `qwen3.7-plus`、`qwen3.8-max`、`qwen3.6-flash` 和团队版 `qwen3.6-plus`，实时模型列表会按当前 Key 实际权限过滤。
+- 优先使用严格 `json_schema` 结构化输出；端点若明确不支持，会自动降级为 `json_object`，再必要时降级为仅提示词约束。
+- 网页上传 PDF 时，原始 PDF 仍只在浏览器中处理；每页转换为整页图和两张局部放大图后，以 `image_url` 发送给 Token Plan，并同时附带本地 PaddleOCR 证据。
+- 服务端旧接口不向 Token Plan 直接发送 Base64 PDF；非网页客户端应通过 `imageDataGroups` 提交逐页图像。
+- Token Plan 官方默认使用范围有限制；此 Provider 只应在已取得自定义应用后端调用许可的情况下启用。参考[获取 API Key](https://platform.qianwenai.com/docs/api-reference/preparation/api-key)与[支持的视觉模型](https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-overview)。
 
 **OpenAI 兼容 API** — 支持任意 Bearer API Key、自定义 Base URL 和模型 ID，默认调用 Chat Completions 端点：
 
@@ -374,7 +399,7 @@ OPENAI_COMPATIBLE_JSON_MODE=json_object
 - 普通图片会被浏览器缩放到最长边不超过 2600 像素；PDF 使用 PDF.js 逐页渲染，自动裁去上下大面积白边后生成最长边不超过 2600 像素的整页图，以及最长边不超过 3000 像素、聚焦左侧核心表格列的两张局部放大图，再发送给 SlateSync 服务和所选 API 服务。原始 PDF 不会离开浏览器；所选 API 服务会收到页面图像及 OCR 证据文本。
 - 提交前会按服务端请求上限检查序列化大小；超限时自动逐级压缩页面图，仍无法满足限制时会提示拆分 PDF，不会先上传再由服务器拒绝。
 - PDF、逐页图像、预览和识别结果不写入磁盘，刷新或关闭页面后即释放；当前版本也不在磁盘保存上传的 CSV、图片或识别结果。
-- OpenAI、OpenRouter 或所配置兼容服务商各自的数据处理政策适用。
+- OpenAI、OpenRouter、阿里云 Token Plan 或所配置兼容服务商各自的数据处理政策适用。
 
 ## 测试
 
@@ -391,4 +416,3 @@ OPENAI_COMPATIBLE_JSON_MODE=json_object
 - 高精度模式发现同一素材的场、镜、次或状态互相冲突时会定向复核；最终仍无法确认的冲突字段会留空、锁定继承并显示警告，不会把猜测值写入 CSV。内容相同的重复识别会自动合并。
 - 若 CSV 同一行的卷名与文件名解析为不同素材，该行会跳过并显示警告。
 - 手写识别必须人工校对；尤其要检查跨页继承的场次、镜和次。
-

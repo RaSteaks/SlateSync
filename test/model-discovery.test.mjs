@@ -137,6 +137,59 @@ test("OpenRouter discovery trusts declared modalities, uses live prices, and exc
   );
 });
 
+test("Token Plan discovery keeps licensed visual models and supports static fallback", async () => {
+  clearModelDiscoveryCache();
+  let captured;
+  const fetchImpl = async (url, request) => {
+    captured = { url, request };
+    return jsonResponse({
+      data: [
+        { id: "qwen3.7-plus" },
+        routerModel("qwen3.8-max", ["text", "image"], ["text"], {}),
+        routerModel("qwen3.7-max", ["text"], ["text"], {}),
+        routerModel("vendor/vision-model", ["text", "image"], ["text"], {}),
+      ],
+    });
+  };
+
+  const env = { TOKENPLAN_API_KEY: "licensed-test-key" };
+  const result = await discoverVisionModels("tokenplan", {
+    env,
+    fetchImpl,
+    cache: false,
+  });
+
+  assert.equal(
+    captured.url,
+    "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+  );
+  assert.equal(
+    captured.request.headers.Authorization,
+    "Bearer licensed-test-key",
+  );
+  assert.deepEqual(
+    result.models.map((model) => model.id),
+    ["qwen3.7-plus", "qwen3.8-max", "vendor/vision-model"],
+  );
+  assert.equal(result.models[0].fixed, true);
+  assert.equal(result.models[1].fixed, true);
+  assert.equal(result.models[2].fixed, false);
+  assert.equal(result.models[0].qualityLabel, "A");
+  assert.equal(result.models[0].valueLabel, "A");
+  assert.equal(result.models.some((model) => model.id === "qwen3.7-max"), false);
+
+  const fallback = staticProviderModels("tokenplan", env);
+  assert.deepEqual(
+    fallback.map((model) => model.id),
+    ["qwen3.7-plus", "qwen3.8-max", "qwen3.6-flash", "qwen3.6-plus"],
+  );
+  assert.equal(
+    fallback.find((model) => model.id === "qwen3.6-flash").valueLabel,
+    "A+",
+  );
+  assert.equal(fallback.every((model) => model.verifiedAvailable === false), true);
+});
+
 test("OpenAI-compatible discovery keeps the configured model fixed and exposes declared vision models", async () => {
   clearModelDiscoveryCache();
   const env = {
@@ -195,6 +248,10 @@ test("model discovery rejects missing configuration and unsafe base URLs", async
       cache: false,
     }),
     /只支持 http:\/\/ 或 https:\/\//,
+  );
+  await assert.rejects(
+    discoverVisionModels("tokenplan", { env: {}, cache: false }),
+    /尚未配置 TOKENPLAN_API_KEY/,
   );
 });
 

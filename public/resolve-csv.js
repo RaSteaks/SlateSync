@@ -8,6 +8,7 @@ const HEADER_ALIASES = Object.freeze({
   take: ["Take", "镜头", "鏡頭"],
   comments: ["Comments", "Comment", "备注", "備註", "注释", "註釋"],
   cameraFps: ["Camera FPS", "CameraFPS", "摄影机帧率", "攝影機幀率"],
+  shootDay: ["Shoot Day", "ShootDay", "拍摄日期", "拍攝日期"],
 });
 
 const TARGET_COLUMNS = Object.freeze([
@@ -22,8 +23,18 @@ const CAMERA_FPS_COLUMN = Object.freeze({
   header: "Camera FPS",
 });
 
+const SHOOT_DAY_COLUMN = Object.freeze({
+  field: "shootDay",
+  header: "Shoot Day",
+});
+
+const SLATE_METADATA_COLUMNS = Object.freeze([
+  CAMERA_FPS_COLUMN,
+  SHOOT_DAY_COLUMN,
+]);
+
 const TARGET_COLUMN_FIELDS = new Set(
-  [...TARGET_COLUMNS, CAMERA_FPS_COLUMN].map((target) => target.field),
+  [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS].map((target) => target.field),
 );
 
 const FIXED_WIDTH_NUMERIC_FIELDS = Object.freeze([
@@ -117,8 +128,9 @@ export function parseSlateMetadataText(input, sourceName = "slate.txt") {
   }
 
   const sensorFps = normalizeCameraFps(fields.get("sensor fps"));
-  if (!sensorFps) {
-    throw new Error(`${sourceName} 缺少有效的 Sensor FPS`);
+  const shootDay = normalizeShootDay(fields.get("shot date"));
+  if (!sensorFps && !shootDay) {
+    throw new Error(`${sourceName} 缺少有效的 Sensor FPS 或 Shot Date`);
   }
 
   return {
@@ -126,6 +138,7 @@ export function parseSlateMetadataText(input, sourceName = "slate.txt") {
     clipName: clipName || canonicalKeyToMaterialPrefix(materialKey),
     materialKey,
     sensorFps,
+    shootDay,
   };
 }
 
@@ -138,19 +151,35 @@ export function buildSlateMetadataIndex(entries = []) {
   const warnings = [];
 
   for (const [materialKey, group] of grouped) {
-    const normalizedValues = group.map((entry) =>
-      normalizeCameraFps(entry.sensorFps),
+    const sensorFpsValues = new Set(
+      group.map((entry) => normalizeCameraFps(entry.sensorFps)).filter(Boolean),
     );
-    const sensorFpsValues = new Set(normalizedValues.filter(Boolean));
-    if (normalizedValues.some((value) => !value) || sensorFpsValues.size !== 1) {
+    let sensorFps = "";
+    if (sensorFpsValues.size > 1) {
       warnings.push(
         `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突或无效的 Sensor FPS，Camera FPS 不会写入。`,
       );
-      continue;
+    } else if (sensorFpsValues.size === 1) {
+      sensorFps = [...sensorFpsValues][0];
     }
+
+    const shootDayValues = new Set(
+      group.map((entry) => normalizeShootDay(entry.shootDay)).filter(Boolean),
+    );
+    let shootDay = "";
+    if (shootDayValues.size > 1) {
+      warnings.push(
+        `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突的 Shot Date，Shoot Day 不会写入。`,
+      );
+    } else if (shootDayValues.size === 1) {
+      shootDay = [...shootDayValues][0];
+    }
+
+    if (!sensorFps && !shootDay) continue;
     byMaterialKey.set(materialKey, {
       materialKey,
-      sensorFps: [...sensorFpsValues][0],
+      sensorFps,
+      shootDay,
       sourceNames: group.map((entry) => entry.sourceName).filter(Boolean),
     });
   }
@@ -180,7 +209,7 @@ export function mergeSlateIntoResolveTable(
 
   let columns = resolveColumnIndexes(headers);
   const columnsToEnsure = slateMetadata.length
-    ? [...TARGET_COLUMNS, CAMERA_FPS_COLUMN]
+    ? [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS]
     : TARGET_COLUMNS;
   for (const target of columnsToEnsure) {
     if (columns[target.field] >= 0) continue;
@@ -198,48 +227,73 @@ export function mergeSlateIntoResolveTable(
       .filter(Boolean),
   );
   let cameraFpsMatchedMaterialCount = 0;
+  let shootDayMatchedMaterialCount = 0;
   const updatedRows = new Set();
   const cameraFpsMatchedRows = new Set();
+  const shootDayMatchedRows = new Set();
   const missingCameraFpsKeys = new Set();
+  const missingShootDayKeys = new Set();
   const changes = [];
 
-  // Sensor FPS comes from the camera-generated sidecar and only needs a
+  // Camera metadata comes from the camera-generated sidecar and only needs a
   // trustworthy material identity. Apply it independently so incomplete or
-  // conflicting Scene/Shot/Take recognition cannot suppress Camera FPS.
+  // conflicting Scene/Shot/Take recognition cannot suppress these fields.
   for (const key of recognizedMaterialKeys) {
     const matchedRows = rowIndex.get(key) || [];
     if (!matchedRows.length) continue;
 
     const slateEntry = slateIndex.byMaterialKey.get(key);
-    if (!slateEntry) {
-      if (slateMetadata.length) missingCameraFpsKeys.add(key);
-      continue;
-    }
-
-    cameraFpsMatchedMaterialCount += 1;
-    for (const rowNumber of matchedRows) {
-      const row = rows[rowNumber];
-      const columnIndex = columns.cameraFps;
-      const previous = cleanValue(row[columnIndex]);
-      const next = slateEntry.sensorFps;
-      cameraFpsMatchedRows.add(rowNumber);
-      if (previous === next) continue;
-
-      row[columnIndex] = next;
-      changes.push({
-        rowIndex: rowNumber,
+    const slateFields = [
+      {
         field: "cameraFps",
-        header: headers[columnIndex],
-        previous,
-        next,
-      });
-      updatedRows.add(rowNumber);
-      if (previous) {
-        const fileName = rowDisplayName(row, columns) ||
-          canonicalKeyToMaterialPrefix(key);
-        warnings.push(
-          `CSV 第 ${rowNumber + 2} 行 ${fileName} 已覆盖：${headers[columnIndex]}“${previous}”→“${next}”。`,
-        );
+        value: slateEntry?.sensorFps || "",
+        matchedRows: cameraFpsMatchedRows,
+        missingKeys: missingCameraFpsKeys,
+      },
+      {
+        field: "shootDay",
+        value: slateEntry?.shootDay || "",
+        matchedRows: shootDayMatchedRows,
+        missingKeys: missingShootDayKeys,
+      },
+    ];
+
+    for (const slateField of slateFields) {
+      if (!slateField.value) {
+        if (slateMetadata.length) slateField.missingKeys.add(key);
+        continue;
+      }
+
+      if (slateField.field === "cameraFps") {
+        cameraFpsMatchedMaterialCount += 1;
+      } else {
+        shootDayMatchedMaterialCount += 1;
+      }
+
+      for (const rowNumber of matchedRows) {
+        const row = rows[rowNumber];
+        const columnIndex = columns[slateField.field];
+        const previous = cleanValue(row[columnIndex]);
+        const next = slateField.value;
+        slateField.matchedRows.add(rowNumber);
+        if (previous === next) continue;
+
+        row[columnIndex] = next;
+        changes.push({
+          rowIndex: rowNumber,
+          field: slateField.field,
+          header: headers[columnIndex],
+          previous,
+          next,
+        });
+        updatedRows.add(rowNumber);
+        if (previous) {
+          const fileName = rowDisplayName(row, columns) ||
+            canonicalKeyToMaterialPrefix(key);
+          warnings.push(
+            `CSV 第 ${rowNumber + 2} 行 ${fileName} 已覆盖：${headers[columnIndex]}“${previous}”→“${next}”。`,
+          );
+        }
       }
     }
   }
@@ -299,7 +353,7 @@ export function mergeSlateIntoResolveTable(
         missingFields,
       };
       warnings.push(
-        `第 ${recordIndex + 1} 条 ${fileName} 缺少${missingFields.join("、")}，Scene、Shot、Take 和 Comments 不会写入；有效的 Camera FPS 仍会独立回填。`,
+        `第 ${recordIndex + 1} 条 ${fileName} 缺少${missingFields.join("、")}，Scene、Shot、Take 和 Comments 不会写入；有效的 Camera FPS 和 Shoot Day 仍会独立回填。`,
       );
       continue;
     }
@@ -327,7 +381,7 @@ export function mergeSlateIntoResolveTable(
         };
       }
       warnings.push(
-        `${group[0].fileName} 在识别结果中出现了互相冲突的场、镜、次或条次状态，这些场记字段已停止写入，请人工校对；有效的 Camera FPS 仍会独立回填。`,
+        `${group[0].fileName} 在识别结果中出现了互相冲突的场、镜、次或条次状态，这些场记字段已停止写入，请人工校对；有效的 Camera FPS 和 Shoot Day 仍会独立回填。`,
       );
       continue;
     }
@@ -412,6 +466,15 @@ export function mergeSlateIntoResolveTable(
     );
   }
 
+  if (missingShootDayKeys.size) {
+    const sortedKeys = [...missingShootDayKeys].sort(
+      compareCanonicalMaterialKeys,
+    );
+    warnings.push(
+      `Shoot Day 对账：${sortedKeys.length} 个已识别且匹配 CSV 的素材没有可用 Shot Date（${compactMaterialRanges(sortedKeys)}），其 Shoot Day 保持原值。`,
+    );
+  }
+
   // Scene/Shot/Take are strict Resolve export fields. Canonicalize the entire
   // table, not only rows matched in this run, so legacy CSV values cannot
   // bypass the fixed-width contract: Scene=XXX and Shot/Take=XX.
@@ -476,6 +539,8 @@ export function mergeSlateIntoResolveTable(
     matchedRecordCount,
     cameraFpsMatchedMaterialCount,
     cameraFpsMatchedRowCount: cameraFpsMatchedRows.size,
+    shootDayMatchedMaterialCount,
+    shootDayMatchedRowCount: shootDayMatchedRows.size,
     updatedRowCount: updatedRows.size,
     changedCellCount: changes.length,
     overwrittenCellCount: changes.filter((change) => change.previous).length,
@@ -647,6 +712,31 @@ export function normalizeCameraFps(value) {
   return String(number);
 }
 
+export function normalizeShootDay(value) {
+  const normalized = cleanValue(value);
+  const compact = normalized.match(/^(\d{2}|\d{4})(\d{2})(\d{2})$/);
+  const separated = normalized.match(
+    /^(\d{2}|\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:[T\s].*)?$/,
+  );
+  const match = compact || separated;
+  if (!match) return "";
+
+  const yearText = match[1];
+  const fullYear = yearText.length === 2
+    ? 2000 + Number(yearText)
+    : Number(yearText);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(fullYear, month - 1, day));
+  if (
+    date.getUTCFullYear() !== fullYear ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return "";
+
+  return `${String(fullYear).slice(-2)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function normalizeFixedWidthNumber(value, width) {
   const match = cleanValue(value).match(/\d+/);
   if (!match) return "";
@@ -681,8 +771,12 @@ function normalizeMetadataField(field, value, formats) {
 function normalizeTakeStatus(value, legacyGoodTake) {
   const normalized = cleanValue(value);
   if (normalized === "过" || normalized === "_OK") return "过";
-  if (normalized === "保" || normalized === "_KP") return "保";
-  if (normalized === "废条") return "废条";
+  if (
+    normalized === "保" ||
+    normalized === "_KP" ||
+    /^(?:三角形?|triangle|△|▲)$/i.test(normalized)
+  ) return "保";
+  if (/^(?:废条|废|ng|x|×|✕|✖)$/i.test(normalized)) return "废条";
   if (legacyGoodTake === true) return "过";
   if (legacyGoodTake === false) return "保";
   return "";

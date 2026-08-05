@@ -9,6 +9,7 @@ import {
   mergeSlateIntoResolveTable,
   normalizeClipNumber,
   normalizeCameraFps,
+  normalizeShootDay,
   normalizeSceneValue,
   normalizeShotValue,
   normalizeTakeValue,
@@ -109,6 +110,7 @@ test("Kinefinity slate.txt maps Clip Name and Sensor FPS to canonical metadata",
       "# SLATE.TXT Revision 2.0",
       "Clip Name...........: A004C004_DEMO001",
       "Sensor FPS..........: 48",
+      "Shot Date...........: 2026-08-04",
       "Project FPS.........: 24",
     ].join("\r\n"),
     "A004C004_DEMO001/A004C004_DEMO001-slate.txt",
@@ -120,9 +122,14 @@ test("Kinefinity slate.txt maps Clip Name and Sensor FPS to canonical metadata",
     clipName: "A004C004_DEMO001",
     materialKey: "A:4:4",
     sensorFps: "48",
+    shootDay: "26-08-04",
   });
   assert.equal(normalizeCameraFps("47.952 fps"), "47.952");
   assert.equal(normalizeCameraFps("0"), "");
+  assert.equal(normalizeShootDay("2026/8/1"), "26-08-01");
+  assert.equal(normalizeShootDay("20260801"), "26-08-01");
+  assert.equal(normalizeShootDay("26-08-01"), "26-08-01");
+  assert.equal(normalizeShootDay("2026-02-30"), "");
   assert.throws(
     () =>
       parseSlateMetadataText(
@@ -155,13 +162,13 @@ test("Kinefinity slate.txt maps Clip Name and Sensor FPS to canonical metadata",
   );
 });
 
-test("slate.txt Sensor FPS is written to Resolve Camera FPS", () => {
+test("slate.txt Sensor FPS and Shot Date map to Resolve Camera FPS and Shoot Day", () => {
   const source = sourceTable([
     ["A004C004_DEMO001.mov", "/fixtures/media/A004", "A004C004", "", "", "", "", ""],
   ]);
   const slateMetadata = [
     parseSlateMetadataText(
-      "Clip Name...........: A004C004_DEMO001\r\nSensor FPS..........: 48\r\n",
+      "Clip Name...........: A004C004_DEMO001\r\nSensor FPS..........: 48\r\nShot Date...........: 2026-08-04\r\n",
       "A004C004_DEMO001-slate.txt",
     ),
   ];
@@ -181,15 +188,86 @@ test("slate.txt Sensor FPS is written to Resolve Camera FPS", () => {
   const columns = resolveColumnIndexes(output.table.headers);
 
   assert.equal(output.table.rows[0][columns.cameraFps], "48");
-  assert.deepEqual(output.addedColumns, ["Camera FPS"]);
+  assert.equal(output.table.rows[0][columns.shootDay], "26-08-04");
+  assert.deepEqual(output.addedColumns, ["Camera FPS", "Shoot Day"]);
   assert.equal(output.cameraFpsMatchedMaterialCount, 1);
   assert.equal(output.cameraFpsMatchedRowCount, 1);
+  assert.equal(output.shootDayMatchedMaterialCount, 1);
+  assert.equal(output.shootDayMatchedRowCount, 1);
   assert.equal(
     output.changes.some(
       (change) => change.field === "cameraFps" && change.next === "48",
     ),
     true,
   );
+  assert.equal(
+    output.changes.some(
+      (change) => change.field === "shootDay" && change.next === "26-08-04",
+    ),
+    true,
+  );
+});
+
+test("Shot Date can populate an existing Shoot Day without Sensor FPS", () => {
+  const headers = [...ENGLISH_HEADERS, "Shoot Day"];
+  const source = sourceTable(
+    [["A001C001.mov", "/A", "A001C001", "", "", "", "", "", "25-12-31"]],
+    { headers },
+  );
+  const metadata = [
+    parseSlateMetadataText(
+      "Clip Name: A001C001\nShot Date: 2026/08/01",
+      "A001C001-slate.txt",
+    ),
+  ];
+  const output = mergeSlateIntoResolveTable(
+    source,
+    [completeRecord()],
+    metadata,
+  );
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.rows[0][columns.shootDay], "26-08-01");
+  assert.equal(output.table.rows[0][columns.cameraFps], "");
+  assert.deepEqual(output.addedColumns, ["Camera FPS"]);
+  assert.equal(output.shootDayMatchedMaterialCount, 1);
+  assert.equal(output.cameraFpsMatchedMaterialCount, 0);
+  assert.match(output.warnings.join("\n"), /Camera FPS 保持原值/);
+});
+
+test("conflicting Shot Date preserves Shoot Day without suppressing Camera FPS", () => {
+  const headers = [...ENGLISH_HEADERS, "Camera FPS", "Shoot Day"];
+  const source = sourceTable(
+    [["A001C001.mov", "/A", "A001C001", "", "", "", "", "", "24", "25-12-31"]],
+    { headers },
+  );
+  const metadata = [
+    {
+      sourceName: "copy-1-slate.txt",
+      materialKey: "A:1:1",
+      sensorFps: "48",
+      shootDay: "26-08-01",
+    },
+    {
+      sourceName: "copy-2-slate.txt",
+      materialKey: "A:1:1",
+      sensorFps: "48",
+      shootDay: "26-08-02",
+    },
+  ];
+  const output = mergeSlateIntoResolveTable(
+    source,
+    [completeRecord()],
+    metadata,
+  );
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.rows[0][columns.cameraFps], "48");
+  assert.equal(output.table.rows[0][columns.shootDay], "25-12-31");
+  assert.equal(output.cameraFpsMatchedMaterialCount, 1);
+  assert.equal(output.shootDayMatchedMaterialCount, 0);
+  assert.match(output.warnings.join("\n"), /冲突.*Shoot Day 不会写入/);
+  assert.match(output.warnings.join("\n"), /Shoot Day 保持原值/);
 });
 
 test("missing or conflicting Sensor FPS preserves an existing Camera FPS", () => {
@@ -292,7 +370,7 @@ test("Camera FPS is filled even when duplicate slate records conflict", () => {
     ),
     ["", "", "", ""],
   );
-  assert.match(output.warnings.join("\n"), /Camera FPS 仍会独立回填/);
+  assert.match(output.warnings.join("\n"), /Camera FPS 和 Shoot Day 仍会独立回填/);
 });
 
 test("CSV decoding and encoding preserve UTF-16LE BOM, LF and quoted cells", () => {
@@ -477,6 +555,21 @@ test("matched rows restrict Resolve Comments to _OK, _KP, or an empty value", ()
   assert.match(output.warnings.join("\n"), /Comments“OK”→“_KP”/);
   assert.match(output.warnings.join("\n"), /Comments“原备注”→“”/);
   assert.match(output.warnings.join("\n"), /Comments“旧值”→“”/);
+});
+
+test("raw triangle exports _KP while raw X exports an empty Resolve Comment", () => {
+  const source = sourceTable([
+    ["A001C001.mov", "/fixtures/A", "A001C001", "", "", "", "", ""],
+    ["A001C002.mov", "/fixtures/A", "A001C002", "", "", "", "", "old"],
+  ]);
+  const output = mergeSlateIntoResolveTable(source, [
+    completeRecord({ videoCode: "C001", takeStatus: "△" }),
+    completeRecord({ videoCode: "C002", takeStatus: "X" }),
+  ]);
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.rows[0][columns.comments], "_KP");
+  assert.equal(output.table.rows[1][columns.comments], "");
 });
 
 test("different OCR remarks do not conflict when export metadata matches", () => {

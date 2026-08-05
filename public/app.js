@@ -353,7 +353,7 @@ function applySlateDirectoryResult({
     elements.slateCard.hidden = true;
     elements.slateDropzone.hidden = false;
     if (state.records.length) renderTable();
-    showError("找到的 slate.txt 均缺少有效的 Clip Name 或 Sensor FPS。");
+    showError("找到的 slate.txt 均缺少有效的 Clip Name、Sensor FPS 或 Shot Date。");
     return;
   }
 
@@ -361,12 +361,19 @@ function applySlateDirectoryResult({
   state.slateMetadata = metadata;
   state.slateWarnings = compactSlateWarnings(warnings);
   elements.slateDirectoryName.textContent = directoryName;
+  const indexedSlateEntries = [...slateIndex.byMaterialKey.values()];
+  const cameraFpsCount = indexedSlateEntries.filter(
+    (entry) => entry.sensorFps,
+  ).length;
+  const shootDayCount = indexedSlateEntries.filter(
+    (entry) => entry.shootDay,
+  ).length;
   const warningCount = warnings.length + slateIndex.warnings.length;
   const scanLabel = compatibilityMode
     ? "兼容模式"
     : `访问 ${stats.visitedDirectories} 个目录 · 剪枝 ${stats.prunedDirectories} 个`;
   const cacheLabel = stats.cacheHits ? ` · 缓存 ${stats.cacheHits}` : "";
-  elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个 slate.txt · ${slateIndex.byMaterialKey.size} 个素材有可用 Sensor FPS · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
+  elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个 slate.txt · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材 · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
   elements.slateCard.hidden = false;
   elements.slateDropzone.hidden = true;
   if (state.records.length) renderTable();
@@ -1188,8 +1195,8 @@ function renderTable() {
           <select data-field="takeStatus">
             <option value="" ${record.takeStatus == null ? "selected" : ""}>未标记（留空）</option>
             <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → _OK</option>
-            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>X / × → _KP</option>
-            <option value="废条" ${record.takeStatus === "废条" ? "selected" : ""}>△ → 留空</option>
+            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → _KP</option>
+            <option value="废条" ${record.takeStatus === "废条" ? "selected" : ""}>X / × → 留空</option>
           </select>
         </td>
         ${textCell("description", record.description, "min-width:180px")}
@@ -1249,6 +1256,7 @@ function renderCsvPreview(output) {
     columns.take,
     columns.comments,
     columns.cameraFps,
+    columns.shootDay,
   ]);
   const matchedRowIndexes = new Set();
   for (const status of output.statuses || []) {
@@ -1315,7 +1323,7 @@ function renderResultSummary(output) {
   const title = state.latestResponse?.result?.sheetTitle || "未命名场记单";
   const base = `${title} · 识别 ${state.records.length} 条`;
   elements.resultSummary.textContent = state.metadataTable
-    ? `${base} · 覆盖 ${output.recognizedMaterialCount}/${output.expectedMaterialCount} 个 CSV 素材 · 可回填 ${output.matchedRecordCount} 条 / ${output.updatedRowCount} 行${state.slateMetadata.length ? ` · Camera FPS ${output.cameraFpsMatchedMaterialCount} 个素材 / ${output.cameraFpsMatchedRowCount} 行` : ""}`
+    ? `${base} · 覆盖 ${output.recognizedMaterialCount}/${output.expectedMaterialCount} 个 CSV 素材 · 可回填 ${output.matchedRecordCount} 条 / ${output.updatedRowCount} 行${state.slateMetadata.length ? ` · Camera FPS ${output.cameraFpsMatchedMaterialCount} 个素材 / ${output.cameraFpsMatchedRowCount} 行 · Shoot Day ${output.shootDayMatchedMaterialCount} 个素材 / ${output.shootDayMatchedRowCount} 行` : ""}`
     : `${base} · 待载入 CSV`;
 }
 

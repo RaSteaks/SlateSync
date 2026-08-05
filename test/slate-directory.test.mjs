@@ -5,7 +5,7 @@ import { scanSlateDirectory } from "../public/slate-directory.js";
 test("scanner reaches a matching slate.txt four directories below the root", async () => {
   const slate = mockFile(
     "A001C001_DEMO001-slate.txt",
-    "Clip Name: A001C001_DEMO001\nSensor FPS: 48",
+    "Clip Name: A001C001_DEMO001\nSensor FPS: 48\nShot Date: 2026-08-01",
   );
   const video = mockFile("A001C001_DEMO001.mov", "video bytes");
   const root = mockDirectory("Video", {
@@ -32,6 +32,7 @@ test("scanner reaches a matching slate.txt four directories below the root", asy
   assert.equal(result.metadata.length, 1);
   assert.equal(result.metadata[0].materialKey, "A:1:1");
   assert.equal(result.metadata[0].sensorFps, "48");
+  assert.equal(result.metadata[0].shootDay, "26-08-01");
   assert.equal(slate.arrayBufferCalls, 1);
   assert.equal(video.getFileCalls, 0, "video content must never be opened");
   assert.equal(result.stats.visitedDirectories, 5);
