@@ -80,6 +80,7 @@ const elements = {
   slateCard: document.querySelector("#slate-card"),
   slateDirectoryName: document.querySelector("#slate-directory-name"),
   slateFileMeta: document.querySelector("#slate-file-meta"),
+  slateStatus: document.querySelector("#slate-status"),
   removeSlates: document.querySelector("#remove-slates"),
   dropzone: document.querySelector("#dropzone"),
   imageInput: document.querySelector("#image-input"),
@@ -200,8 +201,6 @@ async function selectSlateDirectory() {
     state.slateCache = new Map();
     state.slateMetadata = [];
     state.slateWarnings = [];
-    elements.slateCard.hidden = true;
-    elements.slateDropzone.hidden = false;
     await loadSlateDirectoryHandle(rootHandle);
   } catch (error) {
     if (error?.name !== "AbortError") {
@@ -219,6 +218,7 @@ async function loadSlateDirectoryHandle(rootHandle) {
   state.slateScanController = controller;
   state.slateScanning = true;
   updateSlateDirectoryState();
+  showSlateScanningState(rootHandle.name || "已选素材目录");
 
   try {
     const result = await scanSlateDirectory(rootHandle, {
@@ -235,6 +235,13 @@ async function loadSlateDirectoryHandle(rootHandle) {
       directoryName: rootHandle.name || "已选素材目录",
       compatibilityMode: false,
     });
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      showSlateScanFailure(
+        rootHandle.name || "已选素材目录",
+        error.message || "无法读取所选素材目录。",
+      );
+    }
   } finally {
     if (state.slateScanController === controller) {
       state.slateScanning = false;
@@ -279,9 +286,14 @@ async function loadSlateDirectory(fileList) {
     );
     return !key || expectedKeys.has(key);
   });
+  const firstPath = files[0]?.webkitRelativePath || files[0]?.name || "";
+  const directoryName = firstPath.split("/").filter(Boolean)[0] || "已选素材目录";
   if (!slateFiles.length) {
     elements.slateInput.value = "";
-    showError(`所选目录的前 ${maxDepth} 层中没有找到匹配的 slate.txt。`);
+    showSlateScanFailure(
+      directoryName,
+      `所选目录的前 ${maxDepth} 层中没有找到匹配的 slate.txt，请检查目录结构与素材编号。`,
+    );
     return;
   }
 
@@ -294,6 +306,7 @@ async function loadSlateDirectory(fileList) {
 
   state.slateScanning = true;
   updateSlateDirectoryState();
+  showSlateScanningState(directoryName);
   try {
     for (let offset = 0; offset < readable.length; offset += 4) {
       const batch = readable.slice(offset, offset + 4);
@@ -322,7 +335,6 @@ async function loadSlateDirectory(fileList) {
     updateSlateDirectoryState();
   }
 
-  const firstPath = slateFiles[0].webkitRelativePath || "";
   applySlateDirectoryResult({
     metadata: parsed,
     warnings,
@@ -334,8 +346,7 @@ async function loadSlateDirectory(fileList) {
       prunedDirectories: allSlateFiles.length - slateFiles.length - skippedDeep,
       skippedDeepDirectories: skippedDeep,
     },
-    directoryName:
-      firstPath.split("/").filter(Boolean)[0] || "已选素材目录",
+    directoryName,
     compatibilityMode: true,
   });
 }
@@ -350,10 +361,12 @@ function applySlateDirectoryResult({
   if (!metadata.length) {
     state.slateMetadata = [];
     state.slateWarnings = compactSlateWarnings(warnings);
-    elements.slateCard.hidden = true;
-    elements.slateDropzone.hidden = false;
+    const discovered = stats.discoveredSlateFiles || 0;
+    const reason = discovered
+      ? `找到 ${discovered} 个 slate.txt，但均缺少有效的 Clip Name、Sensor FPS 或 Shot Date。`
+      : `未找到与 CSV 素材匹配的 slate.txt（已搜索前 ${slateMaxDirectoryDepth()} 层），请检查目录结构。`;
+    showSlateScanFailure(directoryName, reason);
     if (state.records.length) renderTable();
-    showError("找到的 slate.txt 均缺少有效的 Clip Name、Sensor FPS 或 Shot Date。");
     return;
   }
 
@@ -376,7 +389,36 @@ function applySlateDirectoryResult({
   elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个 slate.txt · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材 · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
   elements.slateCard.hidden = false;
   elements.slateDropzone.hidden = true;
+  clearSlateStatus();
   if (state.records.length) renderTable();
+}
+
+function showSlateScanningState(directoryName) {
+  elements.slateDirectoryName.textContent = directoryName;
+  elements.slateFileMeta.textContent = "正在定向查找 slate.txt…";
+  elements.slateCard.hidden = false;
+  elements.slateDropzone.hidden = true;
+  setSlateStatus("正在定向查找 slate.txt…", "loading");
+}
+
+function showSlateScanFailure(directoryName, reason) {
+  elements.slateDirectoryName.textContent = directoryName;
+  elements.slateFileMeta.textContent = reason;
+  elements.slateCard.hidden = false;
+  elements.slateDropzone.hidden = false;
+  setSlateStatus(reason, "error");
+}
+
+function setSlateStatus(text, variant = "") {
+  elements.slateStatus.textContent = text;
+  elements.slateStatus.className = `slate-status${variant ? ` is-${variant}` : ""}`;
+  elements.slateStatus.hidden = false;
+}
+
+function clearSlateStatus() {
+  elements.slateStatus.textContent = "";
+  elements.slateStatus.className = "slate-status";
+  elements.slateStatus.hidden = true;
 }
 
 function relativeFileDirectoryDepth(path) {
@@ -432,6 +474,7 @@ function clearSlateMetadata() {
   elements.slateInput.value = "";
   elements.slateCard.hidden = true;
   elements.slateDropzone.hidden = false;
+  clearSlateStatus();
   updateSlateDirectoryState();
   if (state.records.length) renderTable();
 }

@@ -431,6 +431,46 @@ select {
   font-size: 12px;
 }
 
+.slate-status {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.slate-status.is-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+}
+
+.slate-status.is-loading::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--focus);
+  border-radius: 50%;
+  animation: slate-status-spin 0.8s linear infinite;
+}
+
+.slate-status.is-error {
+  border: 1px solid #f3d2cf;
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+@keyframes slate-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .icon-button {
   display: grid;
   place-items: center;
