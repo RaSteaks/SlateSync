@@ -3,13 +3,19 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recognizeSlate } from "./lib/ai-client.mjs";
-import { loadWorkflowConfig, publicConfig } from "./lib/config.mjs";
+import { recognizeSlate, configureModelHttpAgent } from "./lib/ai-client.mjs";
+import { loadWorkflowConfig, PROVIDERS, publicConfig } from "./lib/config.mjs";
 import {
   discoverVisionModels,
   staticProviderModels,
 } from "./lib/model-discovery.mjs";
 import { validateApiRequest } from "./lib/request-security.mjs";
+import {
+  createDiagnosticsStore,
+  createSessionCapture,
+} from "./lib/diagnostics.mjs";
+import { createKeyStore } from "./lib/key-store.mjs";
+import { createTaskStore } from "./lib/task-store.mjs";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT, "public");
@@ -24,6 +30,7 @@ const SECURITY_HEADERS = {
 };
 
 await loadLocalEnv(join(ROOT, ".env"));
+configureModelHttpAgent(process.env);
 
 const workflowConfigPath = resolve(
   ROOT,
@@ -32,8 +39,23 @@ const workflowConfigPath = resolve(
 const workflowConfig = await loadWorkflowConfig(workflowConfigPath);
 const settings = serverSettings(process.env);
 const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
+const diagnostics = createDiagnosticsStore(join(ROOT, "data"));
+const taskStore = createTaskStore(join(ROOT, "data"));
 const startedAt = Date.now();
 let shuttingDown = false;
+
+// API Keys are persisted to disk so they survive restarts.
+const keyStore = createKeyStore(join(ROOT, "data"));
+const runtimeProviderKeys = await keyStore.load();
+
+function runtimeEnv() {
+  const env = { ...process.env };
+  for (const [providerId, apiKey] of runtimeProviderKeys) {
+    const provider = PROVIDERS[providerId];
+    if (provider) env[provider.envKey] = apiKey;
+  }
+  return env;
+}
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -47,15 +69,20 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/readyz") {
-      const config = publicConfig(process.env, workflowConfig);
+      const config = publicConfig(runtimeEnv(), workflowConfig, {
+        ocrAutoEnable: true,
+      });
       const recognitionConfigured = config.providers.some(
         (provider) => provider.configured,
       );
-      const ocrAvailable = Boolean(config.ocr?.enabled && config.ocr?.available);
+      const ocrEngines = config.ocrEngines || [config.ocr];
+      const ocrAvailable = ocrEngines.some(
+        (engine) => engine.enabled && engine.available,
+      );
       const ready =
         !shuttingDown &&
         recognitionConfigured &&
-        (!config.ocr?.required || ocrAvailable);
+        (!ocrEngines.some((engine) => engine.required) || ocrAvailable);
       return sendJson(response, ready ? 200 : 503, {
         status: shuttingDown ? "stopping" : ready ? "ready" : "not-ready",
         recognitionConfigured,
@@ -77,11 +104,42 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, 200, clientConfig());
     }
 
+    if (request.method === "POST" && url.pathname === "/api/provider-key") {
+      validateApiRequest(request.headers);
+      const body = await readJsonBody(request, settings.maxBodyBytes);
+      const providerId = String(body?.provider || "").trim();
+      const provider = PROVIDERS[providerId];
+      if (!provider) {
+        const error = new Error("未知 API 服务商");
+        error.status = 400;
+        throw error;
+      }
+      if (providerId === "openai-compatible") {
+        const error = new Error("OpenAI 兼容 API 需通过环境变量配置");
+        error.status = 400;
+        throw error;
+      }
+      const apiKey = String(body?.apiKey || "").trim();
+      if (apiKey) {
+        runtimeProviderKeys.set(providerId, apiKey);
+      } else {
+        runtimeProviderKeys.delete(providerId);
+      }
+      await keyStore.save(runtimeProviderKeys);
+      return sendJson(response, 200, {
+        provider: providerId,
+        configured: Boolean(
+          runtimeProviderKeys.get(providerId) || process.env[provider.envKey],
+        ),
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/api/models") {
       const providerId = url.searchParams.get("provider") || "";
       try {
         const result = await discoverVisionModels(providerId, {
           forceRefresh: url.searchParams.get("refresh") === "1",
+          env: runtimeEnv(),
         });
         return sendJson(response, 200, clientModelDiscovery(result));
       } catch (error) {
@@ -105,7 +163,10 @@ const server = http.createServer(async (request, response) => {
       const release = recognitionLimiter.acquire();
       try {
         const body = await readJsonBody(request, settings.maxBodyBytes);
-        const result = await recognizeSlate(recognitionInput(body));
+        const result = await recognizeSlate(recognitionInput(body), {
+          env: runtimeEnv(),
+          ocrAutoEnable: true,
+        });
         return sendJson(response, 200, clientRecognitionResult(result));
       } finally {
         release();
@@ -120,6 +181,45 @@ const server = http.createServer(async (request, response) => {
         return await streamRecognition(response, recognitionInput(body));
       } finally {
         release();
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/tasks") {
+      const tasks = await taskStore.listTasks();
+      return sendJson(response, 200, { tasks });
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/api/tasks/")) {
+      const taskId = url.pathname.slice("/api/tasks/".length);
+      try {
+        const task = await taskStore.loadTask(taskId);
+        return sendJson(response, 200, task);
+      } catch {
+        return sendJson(response, 404, { error: "任务不存在" });
+      }
+    }
+
+    if (request.method === "PUT" && url.pathname.startsWith("/api/tasks/")) {
+      validateApiRequest(request.headers);
+      const taskId = url.pathname.slice("/api/tasks/".length);
+      const body = await readJsonBody(request, settings.maxBodyBytes);
+      try {
+        const existing = await taskStore.loadTask(taskId);
+        const updated = { ...existing, ...body, id: taskId };
+        await taskStore.saveTask(updated);
+        return sendJson(response, 200, { id: taskId, saved: true });
+      } catch {
+        return sendJson(response, 404, { error: "任务不存在" });
+      }
+    }
+
+    if (request.method === "DELETE" && url.pathname.startsWith("/api/tasks/")) {
+      const taskId = url.pathname.slice("/api/tasks/".length);
+      try {
+        await taskStore.deleteTask(taskId);
+        return sendJson(response, 200, { deleted: taskId });
+      } catch {
+        return sendJson(response, 404, { error: "任务不存在" });
       }
     }
 
@@ -163,6 +263,8 @@ function recognitionInput(body) {
     pageCount: body.pageCount,
     filename: body.filename,
     accuracyMode: body.accuracyMode,
+    customPrompt: body.customPrompt,
+    slateCsvRecords: body.slateCsvRecords || null,
     fieldFormats: workflowConfig.resolve.fieldFormats,
   };
 }
@@ -177,6 +279,7 @@ async function streamRecognition(response, input) {
     response.write(`${JSON.stringify(event)}\n`);
   };
 
+  const capture = createSessionCapture();
   try {
     response.writeHead(200, {
       ...SECURITY_HEADERS,
@@ -185,9 +288,38 @@ async function streamRecognition(response, input) {
       "X-Accel-Buffering": "no",
     });
     response.flushHeaders?.();
-    const result = await recognizeSlate(input, { onProgress: sendEvent });
-    sendEvent({ type: "result", data: clientRecognitionResult(result) });
+    const result = await recognizeSlate(input, {
+      env: runtimeEnv(),
+      ocrAutoEnable: true,
+      onProgress: sendEvent,
+      capture,
+    });
+    const sessionId = await diagnostics.saveSession(capture.session);
+    const taskId = await taskStore.saveTask({
+      status: "completed",
+      filename: input.filename,
+      pageCount: result.pageCount,
+      provider: result.provider,
+      model: result.model,
+      customPrompt: input.customPrompt || null,
+      accuracyMode: result.accuracyMode,
+      result: result.result,
+      usage: result.usage,
+      durationMs: result.durationMs,
+      ocrSummary: result.ocr,
+      diagnosticSessionId: sessionId,
+    });
+    sendEvent({
+      type: "result",
+      data: {
+        ...clientRecognitionResult(result),
+        diagnosticSessionId: sessionId,
+        taskId,
+      },
+    });
   } catch (error) {
+    capture.setError(error);
+    await diagnostics.saveSession(capture.session).catch(() => {});
     const { status, message } = publicError(error);
     if (status >= 500) console.error(error);
     sendEvent({ type: "error", status, error: message });
@@ -365,7 +497,9 @@ function clientModelDiscovery(result) {
 }
 
 function clientConfig() {
-  const config = publicConfig(process.env, workflowConfig);
+  const config = publicConfig(runtimeEnv(), workflowConfig, {
+    ocrAutoEnable: true,
+  });
   return {
     ...config,
     upload: {

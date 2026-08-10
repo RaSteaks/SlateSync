@@ -1,0 +1,43 @@
+appId: com.slatesync.app
+productName: SlateSync
+copyright: Copyright © 2026
+
+directories:
+  output: dist
+  buildResources: build
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  title: SlateSync
+  window:
+    width: 540
+    height: 380
+
+files:
+  - electron/**/*
+  - lib/**/*
+  - public/**/*
+  - package.json
+
+extraResources:
+  - from: scripts/
+    to: app/scripts/
+  - from: bin/
+    to: app/bin/
+  - from: slatesync.config.json
+    to: app/slatesync.config.json
+
+asarUnpack:
+  - scripts/**/*
+  - bin/**/*

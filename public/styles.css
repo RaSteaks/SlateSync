@@ -145,6 +145,59 @@ select {
   background: var(--success);
 }
 
+/* ---------- 任务切换器 ---------- */
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-select {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 12px;
+  max-width: 220px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.task-select:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+}
+
+.task-delete {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.task-delete:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
 /* ---------- 页面骨架 ---------- */
 
 .page-shell {
@@ -534,6 +587,80 @@ select:focus {
 
 .model-field {
   margin-top: 14px;
+}
+
+.api-key-field {
+  margin-top: 14px;
+}
+
+.api-key-field > label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.api-key-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 13px;
+  outline: none;
+  transition: 140ms ease;
+}
+
+.api-key-row input:hover {
+  border-color: var(--line-strong);
+}
+
+.api-key-row input:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-soft);
+}
+
+.api-key-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.api-key-note.error {
+  color: var(--warning);
+}
+
+.custom-prompt-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: 140ms ease;
+}
+
+.custom-prompt-input:hover {
+  border-color: var(--line-strong);
+}
+
+.custom-prompt-input:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-soft);
 }
 
 .model-field-heading {

@@ -320,8 +320,8 @@ test("optional direct PDF OCR skip is included in result warnings", async () => 
   );
 
   assert.equal(result.ocr.used, false);
-  assert.match(result.ocr.warning, /未运行 PaddleOCR/);
-  assert.match(result.result.warnings[0], /未运行 PaddleOCR/);
+  assert.match(result.ocr.warning, /未运行本地 OCR/);
+  assert.match(result.result.warnings[0], /未运行本地 OCR/);
 });
 
 test("public config exposes OCR readiness without leaking its Python path", () => {

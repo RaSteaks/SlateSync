@@ -5,7 +5,7 @@
 **可本地运行或部署到服务器的场记单识别与 DaVinci Resolve CSV 导出工具**
 
 ![Node.js ≥ 20.19](https://img.shields.io/badge/Node.js-%E2%89%A520.19-339933.png?logo=nodedotjs&logoColor=white)
-![部署方式](https://img.shields.io/badge/%E9%83%A8%E7%BD%B2-Node.js%20%7C%20Docker-blue.png)
+![部署方式](https://img.shields.io/badge/%E9%83%A8%E7%BD%B2-Node.js%20%7C%20Docker%20%7C%20Electron-blue.png)
 
 </div>
 
@@ -77,6 +77,13 @@
 
 **环境要求**：Node.js **20.19** 或更高版本。项目使用内置 PDF.js 校验 PDF 并生成页面视图，不需要安装 Poppler、`pdftoppm` 或其他系统组件。
 
+SlateSync 支持两种运行模式：
+
+| 模式 | 启动命令 | 说明 |
+| --- | --- | --- |
+| **Web 模式** | `npm start` | 启动 Node.js HTTP 服务，通过浏览器访问 |
+| **Electron 桌面模式** | `npm run electron:dev` | 启动原生桌面窗口（仅 macOS），API Key 持久化保存，原生文件对话框 |
+
 ### 1. 配置环境变量
 
 ```bash
@@ -109,9 +116,22 @@ npm run ocr:setup
 npm start
 ```
 
-### 3. 打开浏览器
+### 3. 打开浏览器（Web 模式）
 
 访问 <http://127.0.0.1:4173>。
+
+### 3'. 启动桌面应用（Electron 模式）
+
+```bash
+npm run electron:dev
+```
+
+Electron 模式与 Web 模式的差异：
+
+- API Key 持久化到用户数据目录，重启后无需重新输入。
+- 文件导出使用原生保存对话框，可自由选择保存路径。
+- 素材目录选择使用原生目录选择对话框，不受浏览器安全限制。
+- 打包分发：`npm run electron:build` 生成 `.dmg` 和 `.zip` 安装包（macOS，arm64 + x64）。
 
 关于 `npm run ocr:setup`：
 
@@ -392,7 +412,7 @@ OPENAI_COMPATIBLE_JSON_MODE=json_object
 
 ## 数据与隐私
 
-- API Key 只由 SlateSync Node 服务读取，不会返回浏览器。
+- API Key 只由 SlateSync Node 服务读取，不会返回浏览器。Electron 模式下 API Key 持久化到用户数据目录（`~/Library/Application Support/slatesync/provider-keys.json`），文件权限为仅所有者可读写（0o600）。
 - Resolve CSV 只在浏览器内存中解析、匹配和下载，不会发送给 AI API，也不会上传到 SlateSync 服务。
 - 所选素材目录只用于浏览器本地筛选和读取 `slate.txt`；视频内容不会被读取，txt 内容也不会发送到 SlateSync 服务或 AI API。受浏览器安全限制，每次刷新页面后需要重新选择素材根目录。
 - PaddleOCR 在 SlateSync 服务所在设备运行。页面图像和 OCR 坐标证据只保存在进程内存中；模型权重默认缓存在项目内 `.paddlex-cache`（容器部署时为 `slatesync-ocr-cache` 卷），缓存不包含场记单内容。

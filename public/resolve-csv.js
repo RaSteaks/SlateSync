@@ -703,6 +703,23 @@ export function normalizeTakeValue(value, format = "XX") {
   return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 2));
 }
 
+// Builds a Resolve-compatible table straight from recognized records, so a
+// slate can be processed without loading an existing metadata CSV. Rows with
+// incomplete Scene/Shot/Take are skipped; Comments pass through as recognized.
+export function buildStandaloneResolveTable(records = [], options = {}) {
+  const fieldFormats = resolveFieldFormats(options.fieldFormats);
+  const headers = ["Scene", "Shot", "Take", "Comments"];
+  const rows = [];
+  for (const record of records) {
+    const scene = normalizeSceneValue(record?.scene, fieldFormats.scene);
+    const shot = normalizeShotValue(record?.shot, fieldFormats.shot);
+    const take = normalizeTakeValue(record?.take, fieldFormats.take);
+    if (!scene || !shot || !take) continue;
+    rows.push([scene, shot, take, String(record?.comments || "")]);
+  }
+  return { headers, rows };
+}
+
 export function normalizeCameraFps(value) {
   const normalized = cleanValue(value).replace(",", ".");
   const match = normalized.match(/^(\d{1,4}(?:\.\d{1,6})?)\s*(?:fps)?$/i);

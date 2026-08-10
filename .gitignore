@@ -8,3 +8,7 @@ __pycache__/
 data/
 coverage/
 tmp/
+bin/
+dist/
+out/
+public/vendor/

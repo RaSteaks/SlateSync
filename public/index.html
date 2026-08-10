@@ -7,8 +7,12 @@
       name="description"
       content="识别影视场记单并导出 DaVinci Resolve 可导入的 CSV"
     />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none';"
+    />
     <title>SlateSync · 场记单识别</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="topbar">
@@ -19,13 +23,21 @@
           <small>场记单 → Resolve CSV</small>
         </span>
       </a>
-      <div id="api-status" class="api-status">正在检查 API…</div>
+      <div class="topbar-right">
+        <div id="task-switcher" class="task-switcher" hidden>
+          <select id="task-select" class="task-select" aria-label="切换识别任务">
+            <option value="">新任务</option>
+          </select>
+          <button id="task-delete" class="icon-button task-delete" type="button" aria-label="删除当前任务" title="删除当前任务" hidden>×</button>
+        </div>
+        <div id="api-status" class="api-status">正在检查 API…</div>
+      </div>
     </header>
 
     <main class="page-shell">
       <section class="hero">
         <h1>场记单识别与回填</h1>
-        <p>上传场记单与 Resolve CSV，校对后下载。</p>
+        <p>上传场记单即可识别；可选载入 Resolve CSV 回填，校对后下载。</p>
       </section>
 
       <section class="workspace">
@@ -66,7 +78,7 @@
               <div class="upload-section">
                 <div class="upload-section-title">
                   <span>2</span>
-                  <strong>Resolve 媒体元数据 CSV</strong>
+                  <strong>Resolve 媒体元数据 CSV（可选）</strong>
                 </div>
 
                 <label id="metadata-dropzone" class="metadata-dropzone" for="metadata-input">
@@ -74,7 +86,7 @@
                   <span class="csv-badge" aria-hidden="true">CSV</span>
                   <span>
                     <strong>选择或拖入 Resolve CSV</strong>
-                    <small id="metadata-help">请先选择场记单</small>
+                    <small id="metadata-help">可选 · 请先选择场记单</small>
                   </span>
                 </label>
 
@@ -91,6 +103,31 @@
               <div class="upload-section">
                 <div class="upload-section-title">
                   <span>3</span>
+                  <strong>场记系统 CSV（可选）</strong>
+                </div>
+
+                <label id="slate-csv-dropzone" class="metadata-dropzone" for="slate-csv-input">
+                  <input id="slate-csv-input" type="file" accept=".csv,text/csv" disabled />
+                  <span class="csv-badge" aria-hidden="true">CSV</span>
+                  <span>
+                    <strong>选择或拖入场记系统 CSV</strong>
+                    <small id="slate-csv-help">可选 · 高可信度场记记录，辅助识别校验</small>
+                  </span>
+                </label>
+
+                <div id="slate-csv-card" class="file-card" hidden>
+                  <div class="csv-file-badge">CSV</div>
+                  <div>
+                    <strong id="slate-csv-file-name"></strong>
+                    <small id="slate-csv-file-meta"></small>
+                  </div>
+                  <button id="remove-slate-csv" class="icon-button" type="button" aria-label="移除场记 CSV">×</button>
+                </div>
+              </div>
+
+              <div class="upload-section">
+                <div class="upload-section-title">
+                  <span>4</span>
                   <strong>素材目录中的 slate.txt（可选）</strong>
                 </div>
 
@@ -123,6 +160,21 @@
                 <select id="provider-select"></select>
               </label>
 
+              <div class="field api-key-field" id="provider-key-field" hidden>
+                <label for="api-key-input">API Key</label>
+                <div class="api-key-row">
+                  <input
+                    id="api-key-input"
+                    type="password"
+                    placeholder="粘贴 API Key"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button id="save-key-button" class="secondary-button" type="button">保存</button>
+                </div>
+                <small id="api-key-note" class="api-key-note">未配置 · 粘贴 Key 后点保存</small>
+              </div>
+
               <div class="field model-field">
                 <div class="model-field-heading">
                   <label for="model-select">识别模型</label>
@@ -132,6 +184,18 @@
               </div>
 
               <div id="model-note" class="model-note"></div>
+
+              <label class="field">
+                <span>自定义提示词（可选）</span>
+                <textarea
+                  id="custom-prompt-input"
+                  class="custom-prompt-input"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="填写项目背景、场记单约定等，帮助模型理解，如：本片为民国题材，场记单使用繁体字；A 机为主机…"
+                ></textarea>
+                <small class="api-key-note">随识别请求发送给模型，仅辅助理解，不会覆盖识别规则</small>
+              </label>
             </div>
           </div>
 
@@ -266,6 +330,6 @@
       <span>API Key 仅保存在服务器</span>
     </footer>
 
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>

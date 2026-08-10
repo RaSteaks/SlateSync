@@ -17,6 +17,7 @@ test("server exposes health endpoints and stops gracefully", async () => {
       OPENAI_COMPATIBLE_API_KEY: "",
       PADDLEOCR_ENABLED: "false",
       PADDLEOCR_REQUIRED: "false",
+      VISIONOCR_ENABLED: "false",
       SLATESYNC_AUTH_USERNAME: "review-user",
       SLATESYNC_AUTH_PASSWORD: "review-password",
       SHUTDOWN_TIMEOUT_MS: "5000",
@@ -156,6 +157,7 @@ test("readiness rejects missing providers and unavailable required OCR", async (
         OPENAI_BASE_URL: "http://127.0.0.1:1/v1",
         PADDLEOCR_ENABLED: "false",
         PADDLEOCR_REQUIRED: "true",
+        VISIONOCR_ENABLED: "false",
       },
     },
   ];
@@ -169,6 +171,7 @@ test("readiness rejects missing providers and unavailable required OCR", async (
         PORT: "0",
         OPENROUTER_API_KEY: "",
         TOKENPLAN_API_KEY: "",
+        DASHSCOPE_API_KEY: "",
         OPENAI_COMPATIBLE_API_KEY: "",
         SLATESYNC_AUTH_USERNAME: "",
         SLATESYNC_AUTH_PASSWORD: "",
@@ -198,6 +201,88 @@ test("readiness rejects missing providers and unavailable required OCR", async (
       if (child.exitCode == null && child.signalCode == null) {
         child.kill("SIGKILL");
       }
+    }
+  }
+});
+
+test("web-submitted API key configures a provider until cleared", async () => {
+  const child = spawn(process.execPath, ["server.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      PORT: "0",
+      OPENAI_API_KEY: "",
+      OPENAI_BASE_URL: "http://127.0.0.1:1/v1",
+      OPENROUTER_API_KEY: "",
+      TOKENPLAN_API_KEY: "",
+      DASHSCOPE_API_KEY: "",
+      OPENAI_COMPATIBLE_API_KEY: "",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "false",
+      VISIONOCR_ENABLED: "false",
+      SLATESYNC_AUTH_USERNAME: "",
+      SLATESYNC_AUTH_PASSWORD: "",
+      SHUTDOWN_TIMEOUT_MS: "5000",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let output = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
+
+  try {
+    const port = await waitForPort(child, () => output);
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const postKey = (provider, apiKey) =>
+      fetch(`${baseUrl}/api/provider-key`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({ provider, apiKey }),
+      });
+
+    let config = await (await fetch(`${baseUrl}/api/config`)).json();
+    assert.equal(
+      config.providers.find((provider) => provider.id === "openai").configured,
+      false,
+    );
+
+    const saved = await postKey("openai", "runtime-secret");
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).configured, true);
+
+    config = await (await fetch(`${baseUrl}/api/config`)).json();
+    assert.equal(
+      config.providers.find((provider) => provider.id === "openai").configured,
+      true,
+    );
+
+    const cleared = await postKey("openai", "");
+    assert.equal((await cleared.json()).configured, false);
+    config = await (await fetch(`${baseUrl}/api/config`)).json();
+    assert.equal(
+      config.providers.find((provider) => provider.id === "openai").configured,
+      false,
+    );
+
+    const unknown = await postKey("no-such-provider", "x");
+    assert.equal(unknown.status, 400);
+
+    child.kill("SIGTERM");
+    assert.equal(await waitForExit(child), 0, output);
+  } finally {
+    if (child.exitCode == null && child.signalCode == null) {
+      child.kill("SIGKILL");
     }
   }
 });

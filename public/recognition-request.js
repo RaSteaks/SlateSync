@@ -7,14 +7,20 @@ export const REQUEST_COMPRESSION_PROFILES = [
 ];
 
 export function serializeRecognitionRequest(input) {
-  return JSON.stringify({
+  const payload = {
     provider: input.provider,
     model: input.model,
     filename: input.filename,
     imageDataGroups: input.imageDataGroups,
     pageCount: input.pageCount,
     accuracyMode: "high",
-  });
+  };
+  const customPrompt = String(input.customPrompt || "").trim();
+  if (customPrompt) payload.customPrompt = customPrompt;
+  if (Array.isArray(input.slateCsvRecords) && input.slateCsvRecords.length) {
+    payload.slateCsvRecords = input.slateCsvRecords;
+  }
+  return JSON.stringify(payload);
 }
 
 export function requestBodyBytes(value) {

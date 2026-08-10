@@ -102,6 +102,7 @@ test("public config never exposes API keys", () => {
     OPENAI_API_KEY: "secret-openai",
     OPENROUTER_API_KEY: "secret-router",
     TOKENPLAN_API_KEY: "secret-tokenplan",
+    DASHSCOPE_API_KEY: "secret-dashscope",
     OPENAI_COMPATIBLE_API_KEY: "secret-compatible",
     OPENAI_COMPATIBLE_BASE_URL: "https://private-gateway.example/v1",
     OPENAI_COMPATIBLE_MODEL: "private/vision-model",
@@ -1256,6 +1257,59 @@ function jsonResponse(value, status = 200) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+test("custom prompt context is appended to every recognition stage", async () => {
+  const requests = [];
+  const fetchImpl = async (_url, request) => {
+    const body = JSON.parse(request.body);
+    requests.push(body);
+    return jsonResponse({
+      output_text: JSON.stringify(modelResult),
+      usage: { input_tokens: 30, output_tokens: 20 },
+    });
+  };
+
+  const context = "本片为民国题材，场记单使用繁体字，A 机为主机。";
+  await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+      accuracyMode: "high",
+      customPrompt: context,
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  assert.ok(requests.length >= 2, "高精度模式应至少发起主识别与核心查漏两次请求");
+  for (const body of requests) {
+    const system = body.input[0].content;
+    assert.match(system, /项目背景补充/);
+    assert.match(system, /民国题材/);
+    assert.match(system, /繁体字/);
+  }
+});
+
+test("empty or missing custom prompt leaves the system prompt untouched", async () => {
+  let captured;
+  const fetchImpl = async (_url, request) => {
+    captured = JSON.parse(request.body);
+    return jsonResponse({
+      output_text: JSON.stringify(modelResult),
+      usage: { input_tokens: 30, output_tokens: 20 },
+    });
+  };
+
+  await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+  assert.equal(captured.input[0].content.includes("项目背景补充"), false);
+});
 
 function materialRange(cardNumber, start, end) {
   return Array.from(

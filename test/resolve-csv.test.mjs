@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   canonicalMaterialKey,
   buildSlateMetadataIndex,
+  buildStandaloneResolveTable,
   decodeResolveCsv,
   encodeResolveCsv,
   materialPrefix,
@@ -667,6 +668,56 @@ test("CSV encoder enforces fixed widths even when merge is bypassed", () => {
 
   assert.deepEqual(decoded.rows[0].slice(3, 6), ["03", "004", "05"]);
   assert.deepEqual(decoded.rows[1].slice(3, 6), ["", "", ""]);
+});
+
+test("standalone table builds Resolve rows from records without a metadata CSV", () => {
+  const table = buildStandaloneResolveTable([
+    {
+      scene: "1",
+      shot: "3",
+      take: "2",
+      comments: "_OK",
+    },
+    {
+      scene: "7",
+      shot: "4",
+      take: "1",
+      comments: "",
+    },
+    {
+      scene: "2",
+      shot: "bad",
+      take: "9",
+      comments: "_KP",
+    },
+    {
+      scene: "3",
+      shot: "1",
+      take: null,
+      comments: "_OK",
+    },
+  ]);
+
+  assert.deepEqual(table.headers, ["Scene", "Shot", "Take", "Comments"]);
+  assert.deepEqual(table.rows, [
+    ["001", "03", "02", "_OK"],
+    ["007", "04", "01", ""],
+  ]);
+});
+
+test("standalone table honours custom field formats and encodes cleanly", () => {
+  const table = buildStandaloneResolveTable(
+    [{ scene: "12", shot: "4", take: "2", comments: "备注,含逗号" }],
+    { fieldFormats: { scene: "XXXX", shot: "XX", take: "XX" } },
+  );
+  assert.deepEqual(table.rows, [["0012", "04", "02", "备注,含逗号"]]);
+
+  const encoded = encodeResolveCsv(table, {
+    fieldFormats: { scene: "XXXX", shot: "XX", take: "XX" },
+  });
+  const text = new TextDecoder("utf-16le").decode(encoded.subarray(2));
+  assert.match(text, /Scene,Shot,Take,Comments/);
+  assert.match(text, /0012,04,02,"备注,含逗号"/);
 });
 
 test("consistent duplicate OCR rows merge once while conflicting rows write nothing", () => {

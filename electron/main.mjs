@@ -1,0 +1,152 @@
+import { app, BrowserWindow, ipcMain } from "electron";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { configureModelHttpAgent } from "../lib/ai-client.mjs";
+import { loadWorkflowConfig, PROVIDERS } from "../lib/config.mjs";
+import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.mjs";
+import { registerIpcHandlers } from "./ipc-handlers.mjs";
+import { createKeyStore } from "../lib/key-store.mjs";
+import { createFileDialogs } from "./file-dialogs.mjs";
+import { createSlateScanner } from "./slate-scanner.mjs";
+import { createDiagnosticsStore } from "../lib/diagnostics.mjs";
+import { createTaskStore } from "../lib/task-store.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const isDev = !app.isPackaged;
+
+// Set project root for OCR subprocess path resolution
+if (isDev) {
+  process.env.SLATESYNC_PROJECT_DIR = resolve(__dirname, "..");
+} else {
+  process.env.SLATESYNC_PROJECT_DIR = join(process.resourcesPath, "app");
+}
+
+// PaddleOCR model cache in userData to avoid writing to app install directory
+if (!process.env.PADDLE_PDX_CACHE_HOME) {
+  process.env.PADDLE_PDX_CACHE_HOME = join(
+    app.getPath("userData"),
+    "paddlex",
+  );
+}
+
+let mainWindow = null;
+
+async function initialize() {
+  // Load .env from project root (dev) or userData (packaged)
+  const envPath = isDev
+    ? join(resolve(__dirname, ".."), ".env")
+    : join(app.getPath("userData"), ".env");
+  await loadLocalEnv(envPath);
+  configureModelHttpAgent(process.env);
+
+  // Load workflow config
+  const configPath = isDev
+    ? resolve(
+        resolve(__dirname, ".."),
+        process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
+      )
+    : join(process.resourcesPath, "app", "slatesync.config.json");
+  const workflowConfig = await loadWorkflowConfig(configPath);
+
+  const settings = electronSettings(process.env);
+  const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
+
+  // Load persisted API keys
+  const keyStore = createKeyStore(app.getPath("userData"));
+  const runtimeProviderKeys = await keyStore.load();
+
+  function runtimeEnv() {
+    const env = { ...process.env };
+    for (const [providerId, apiKey] of runtimeProviderKeys) {
+      const provider = PROVIDERS[providerId];
+      if (provider) env[provider.envKey] = apiKey;
+    }
+    return env;
+  }
+
+  const fileDialogs = createFileDialogs(() => mainWindow);
+  const slateScanner = createSlateScanner();
+  const diagnostics = createDiagnosticsStore(
+    join(app.getPath("userData"), "data"),
+  );
+  const taskStore = createTaskStore(
+    join(app.getPath("userData"), "data"),
+  );
+
+  registerIpcHandlers(ipcMain, {
+    workflowConfig,
+    runtimeProviderKeys,
+    runtimeEnv,
+    recognitionLimiter,
+    settings,
+    keyStore,
+    fileDialogs,
+    slateScanner,
+    diagnostics,
+    taskStore,
+  });
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 960,
+    minHeight: 600,
+    title: "SlateSync",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      preload: join(__dirname, "preload.cjs"),
+    },
+  });
+
+  // Prevent navigation to external URLs
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const allowedDir = isDev
+    ? join(resolve(__dirname, ".."), "public")
+    : join(__dirname, "..", "public");
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith("file://")) {
+      event.preventDefault();
+      return;
+    }
+    const filePath = fileURLToPath(url);
+    if (!filePath.startsWith(allowedDir)) {
+      event.preventDefault();
+    }
+  });
+
+  const htmlPath = join(allowedDir, "index.html");
+  mainWindow.loadFile(htmlPath).catch((error) => {
+    console.error("Failed to load index.html:", error);
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+}
+
+app.whenReady().then(async () => {
+  try {
+    await initialize();
+  } catch (error) {
+    console.error("SlateSync initialization failed:", error);
+    app.quit();
+    return;
+  }
+  createWindow();
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on("window-all-closed", () => {
+  app.quit();
+});

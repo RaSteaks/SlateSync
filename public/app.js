@@ -1,5 +1,6 @@
 import {
   buildSlateMetadataIndex,
+  buildStandaloneResolveTable,
   collectResolveMaterialKeys,
   decodeResolveCsv,
   encodeResolveCsv,
@@ -21,19 +22,34 @@ import {
 import {
   canExportResolveCsv,
   canLoadResolveCsv,
+  canLoadSlateCsv,
   canSelectSlateDirectory,
   canStartRecognition,
+  canStartValidation,
 } from "./workflow-state.js";
-import { readRecognitionResponse } from "./recognition-stream.js";
+import {
+  isElectron,
+  fetchConfig,
+  saveProviderKeyApi,
+  fetchModelsApi,
+  recognizeStreamApi,
+  downloadFileApi,
+  pickDirectoryApi,
+  scanSlateDirectoryApi,
+  listTasksApi,
+  loadTaskApi,
+  saveTaskApi,
+  deleteTaskApi,
+} from "./electron-bridge.js";
 import {
   REQUEST_COMPRESSION_PROFILES,
   requestBodyBytes,
   requestBodyFits,
   serializeRecognitionRequest as serializeRecognitionPayload,
 } from "./recognition-request.js";
-import * as pdfjsLib from "/vendor/pdfjs/pdf.mjs";
+import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.mjs";
 const PDF_PREPARE_CONCURRENCY = 2;
 const MAX_DISCOVERED_MODELS = 24;
 
@@ -58,6 +74,10 @@ const state = {
   records: [],
   latestResponse: null,
   progressPercent: 0,
+  currentTaskId: null,
+  tasks: [],
+  slateCsvRecords: null,
+  slateCsvFileName: null,
 };
 
 const elements = {
@@ -116,6 +136,21 @@ const elements = {
   tabWarningDot: document.querySelector("#tab-warning-dot"),
   panelCsv: document.querySelector("#panel-csv"),
   panelDetail: document.querySelector("#panel-detail"),
+  providerKeyField: document.querySelector("#provider-key-field"),
+  apiKeyInput: document.querySelector("#api-key-input"),
+  saveKeyButton: document.querySelector("#save-key-button"),
+  apiKeyNote: document.querySelector("#api-key-note"),
+  customPromptInput: document.querySelector("#custom-prompt-input"),
+  taskSwitcher: document.querySelector("#task-switcher"),
+  taskSelect: document.querySelector("#task-select"),
+  taskDelete: document.querySelector("#task-delete"),
+  slateCsvDropzone: document.querySelector("#slate-csv-dropzone"),
+  slateCsvInput: document.querySelector("#slate-csv-input"),
+  slateCsvHelp: document.querySelector("#slate-csv-help"),
+  slateCsvCard: document.querySelector("#slate-csv-card"),
+  slateCsvFileName: document.querySelector("#slate-csv-file-name"),
+  slateCsvFileMeta: document.querySelector("#slate-csv-file-meta"),
+  removeSlateCsv: document.querySelector("#remove-slate-csv"),
 };
 
 init();
@@ -123,8 +158,7 @@ init();
 async function init() {
   bindEvents();
   try {
-    const response = await fetch("/api/config");
-    state.config = await response.json();
+    await loadConfig();
     renderSlateDirectoryConfig();
     renderProviderOptions();
     renderModelOptions();
@@ -133,13 +167,19 @@ async function init() {
     updateMetadataInputState();
     updateSlateDirectoryState();
     await loadProviderModels();
+    await loadTaskList();
   } catch {
     showError("无法读取服务配置，请确认 SlateSync 已启动。");
   }
 }
 
+async function loadConfig() {
+  state.config = await fetchConfig();
+}
+
 function bindEvents() {
   elements.provider.addEventListener("change", async () => {
+    updateApiKeyFieldState();
     renderModelOptions();
     updateRecognizeState();
     await loadProviderModels();
@@ -165,16 +205,25 @@ function bindEvents() {
   elements.removeSlates.addEventListener("click", clearSlateMetadata);
   elements.removeFile.addEventListener("click", clearReportFile);
   elements.recognizeButton.addEventListener("click", recognize);
+  elements.saveKeyButton.addEventListener("click", saveProviderKey);
   elements.addRow.addEventListener("click", () => {
     state.records.push(emptyRecord());
     renderTable();
+    saveCurrentTask();
   });
   elements.exportButton.addEventListener("click", exportCsv);
   elements.tabCsv.addEventListener("click", () => setResultsTab("csv"));
   elements.tabDetail.addEventListener("click", () => setResultsTab("detail"));
+  elements.taskSelect.addEventListener("change", switchTask);
+  elements.taskDelete.addEventListener("click", deleteCurrentTask);
+  elements.slateCsvInput.addEventListener("change", (event) => {
+    if (event.target.files?.[0]) loadSlateCsv(event.target.files[0]);
+  });
+  elements.removeSlateCsv.addEventListener("click", clearSlateCsv);
 
   bindFileDropzone(elements.metadataDropzone, elements.metadataInput, loadResolveCsv);
   bindFileDropzone(elements.dropzone, elements.imageInput, loadReportFile);
+  bindFileDropzone(elements.slateCsvDropzone, elements.slateCsvInput, loadSlateCsv);
 }
 
 async function selectSlateDirectory() {
@@ -186,6 +235,12 @@ async function selectSlateDirectory() {
     state.slateScanning
   ) return;
   hideError();
+
+  if (isElectron) {
+    await selectSlateDirectoryElectron();
+    return;
+  }
+
   if (typeof globalThis.showDirectoryPicker !== "function") {
     elements.slateInput.click();
     return;
@@ -206,6 +261,44 @@ async function selectSlateDirectory() {
     if (error?.name !== "AbortError") {
       showError(error.message || "无法读取所选素材目录。");
     }
+  }
+}
+
+async function selectSlateDirectoryElectron() {
+  try {
+    const result = await pickDirectoryApi();
+    if (!result) return;
+    state.slateRootHandle = null;
+    state.slateFallbackFiles = null;
+    state.slateCache = new Map();
+    state.slateMetadata = [];
+    state.slateWarnings = [];
+    elements.slateCard.hidden = true;
+    elements.slateDropzone.hidden = false;
+
+    const { keys, warnings: csvWarnings } = collectResolveMaterialKeys(
+      state.metadataTable,
+    );
+    state.slateScanning = true;
+    updateSlateDirectoryState();
+    try {
+      const scanResult = await scanSlateDirectoryApi(
+        result.dirPath,
+        keys,
+        slateMaxDirectoryDepth(),
+      );
+      applySlateDirectoryResult({
+        ...scanResult,
+        warnings: [...csvWarnings, ...scanResult.warnings],
+        directoryName: result.dirName || "已选素材目录",
+        compatibilityMode: false,
+      });
+    } finally {
+      state.slateScanning = false;
+      updateSlateDirectoryState();
+    }
+  } catch (error) {
+    showError(error.message || "无法读取所选素材目录。");
   }
 }
 
@@ -436,15 +529,24 @@ function renderSlateDirectoryConfig() {
 }
 
 function updateMetadataInputState() {
-  const enabled = canLoadResolveCsv({
-    reportReady: state.imageDataGroups.length > 0,
-  });
+  const reportReady = state.imageDataGroups.length > 0;
+  const slateCsvLoaded = Boolean(state.slateCsvRecords?.length);
+  const enabled = canLoadResolveCsv({ reportReady, slateCsvLoaded });
   elements.metadataInput.disabled = !enabled;
   elements.metadataDropzone.classList.toggle("is-disabled", !enabled);
   elements.metadataDropzone.setAttribute("aria-disabled", String(!enabled));
   elements.metadataHelp.textContent = enabled
-    ? "可在场记单识别过程中载入"
-    : "请先选择场记单";
+    ? "可选 · 载入后回填导出"
+    : "可选 · 请先选择场记单或场记 CSV";
+
+  // Slate CSV can always be loaded independently
+  const slateEnabled = canLoadSlateCsv();
+  elements.slateCsvInput.disabled = !slateEnabled;
+  elements.slateCsvDropzone.classList.toggle("is-disabled", !slateEnabled);
+  elements.slateCsvDropzone.setAttribute("aria-disabled", String(!slateEnabled));
+  elements.slateCsvHelp.textContent = slateEnabled
+    ? "可选 · 高可信度场记记录，辅助识别校验"
+    : "可选 · 请先选择场记单";
 }
 
 function updateSlateDirectoryState() {
@@ -509,6 +611,7 @@ function bindFileDropzone(dropzone, input, loader) {
 }
 
 function renderProviderOptions() {
+  const previous = elements.provider.value;
   elements.provider.innerHTML = state.config.providers
     .map(
       (provider) =>
@@ -516,9 +619,70 @@ function renderProviderOptions() {
     )
     .join("");
 
-  elements.provider.value =
-    state.config.providers.find((provider) => provider.configured)?.id ||
-    "openrouter";
+  if ([...elements.provider.options].some((option) => option.value === previous)) {
+    elements.provider.value = previous;
+  } else {
+    elements.provider.value =
+      state.config.providers.find((provider) => provider.configured)?.id ||
+      "openrouter";
+  }
+  updateApiKeyFieldState();
+}
+
+const WEB_CONFIGURABLE_PROVIDERS = [
+  "openai",
+  "openrouter",
+  "tokenplan",
+  "dashscope",
+];
+
+function updateApiKeyFieldState() {
+  const provider = selectedProvider();
+  const configurable = WEB_CONFIGURABLE_PROVIDERS.includes(provider?.id);
+  elements.providerKeyField.hidden = !configurable;
+  if (!configurable) return;
+  elements.apiKeyNote.textContent = provider.configured
+    ? "已配置 · 输入新 Key 可覆盖，留空保存可清除"
+    : "未配置 · 粘贴 Key 后点保存";
+  elements.apiKeyInput.placeholder = provider.configured
+    ? "已配置 · 输入新 Key 覆盖"
+    : "粘贴 API Key";
+}
+
+async function saveProviderKey() {
+  const provider = selectedProvider();
+  if (!provider) return;
+  hideError();
+  const apiKey = elements.apiKeyInput.value.trim();
+  try {
+    const data = await saveProviderKeyApi(provider.id, apiKey);
+    elements.apiKeyInput.value = "";
+    await loadConfig();
+    renderProviderOptions();
+    renderModelOptions();
+    renderApiStatus();
+    updateRecognizeState();
+    const discovery = await loadProviderModels(true);
+    updateApiKeySaveFeedback(discovery, Boolean(apiKey));
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+function updateApiKeySaveFeedback(discovery, keyProvided) {
+  const note = elements.apiKeyNote;
+  if (!keyProvided) {
+    note.textContent = "已清除 API Key";
+    note.classList.remove("error");
+    return;
+  }
+  if (discovery?.source === "api") {
+    note.textContent = `保存成功 · 已连接 ${discovery.visionModelCount} 个视觉模型`;
+    note.classList.remove("error");
+    return;
+  }
+  note.textContent = `保存成功，但 Key 验证失败：${discovery?.warning || "无法读取模型列表"}`;
+  note.classList.add("error");
 }
 
 function renderModelOptions() {
@@ -553,7 +717,7 @@ async function loadProviderModels(forceRefresh = false) {
   const provider = selectedProvider();
   if (!provider?.configured) {
     renderModelOptions();
-    return;
+    return provider ? state.modelDiscovery[provider.id] : undefined;
   }
 
   const providerId = provider.id;
@@ -563,28 +727,26 @@ async function loadProviderModels(forceRefresh = false) {
   renderModelNote();
 
   try {
-    const query = new URLSearchParams({ provider: providerId });
-    if (forceRefresh) query.set("refresh", "1");
-    const response = await fetch(`/api/models?${query}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "无法读取模型列表");
+    const data = await fetchModelsApi(providerId, forceRefresh);
     if (requestId !== state.modelRequestId || elements.provider.value !== providerId) {
-      return;
+      return state.modelDiscovery[providerId];
     }
     state.providerModels[providerId] = Array.isArray(data.models)
       ? data.models
       : [];
     state.modelDiscovery[providerId] = data;
     renderModelOptions();
+    return data;
   } catch (error) {
     if (requestId !== state.modelRequestId || elements.provider.value !== providerId) {
-      return;
+      return state.modelDiscovery[providerId];
     }
     state.modelDiscovery[providerId] = {
       source: "client-fallback",
       warning: error.message || "无法读取实时模型列表",
     };
     renderModelOptions();
+    return state.modelDiscovery[providerId];
   } finally {
     if (requestId === state.modelRequestId) {
       elements.modelRefresh.disabled = false;
@@ -669,9 +831,9 @@ function renderApiStatus() {
 
 async function loadResolveCsv(file) {
   hideError();
-  if (!canLoadResolveCsv({ reportReady: state.imageDataGroups.length > 0 })) {
+  if (!canLoadResolveCsv({ reportReady: state.imageDataGroups.length > 0, slateCsvLoaded: Boolean(state.slateCsvRecords?.length) })) {
     elements.metadataInput.value = "";
-    showError("请先选择并完成场记单文件准备，再载入 Resolve CSV。");
+    showError("请先选择场记单或场记 CSV，再载入 Resolve CSV。");
     return;
   }
   if (!/\.csv$/i.test(file.name)) {
@@ -734,6 +896,43 @@ function clearResolveCsv() {
   updateExportState();
   updateMetadataInputState();
   updateSlateDirectoryState();
+}
+
+async function loadSlateCsv(file) {
+  hideError();
+  if (!/\.csv$/i.test(file.name)) {
+    elements.slateCsvInput.value = "";
+    showError("请上传场记系统导出的 CSV 文件。");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    elements.slateCsvInput.value = "";
+    showError("场记 CSV 文件大小不能超过 10 MB。");
+    return;
+  }
+
+  try {
+    const text = await file.text();
+    const { parseSlateCsv } = await import("./slate-csv-parser.js");
+    const { records } = parseSlateCsv(text);
+    state.slateCsvRecords = records;
+    state.slateCsvFileName = file.name;
+    elements.slateCsvFileName.textContent = file.name;
+    elements.slateCsvFileMeta.textContent = `${records.length} 条场记记录`;
+    elements.slateCsvCard.hidden = false;
+    elements.slateCsvDropzone.hidden = true;
+  } catch (error) {
+    elements.slateCsvInput.value = "";
+    showError(error.message || "无法读取场记 CSV。");
+  }
+}
+
+function clearSlateCsv() {
+  state.slateCsvRecords = null;
+  state.slateCsvFileName = null;
+  elements.slateCsvInput.value = "";
+  elements.slateCsvCard.hidden = true;
+  elements.slateCsvDropzone.hidden = false;
 }
 
 async function loadReportFile(file) {
@@ -1084,27 +1283,79 @@ function resizeCanvas(sourceCanvas, maxDimension, allowUpscale = false) {
 }
 
 async function recognize() {
-  if (!recognitionReady()) return;
+  if (recognitionReady()) {
+    return recognizeWithPdf();
+  }
+  if (validationReady()) {
+    return validateWithSlateCsv();
+  }
+}
+
+async function recognizeWithPdf() {
   hideError();
   resetRecognitionResults();
   setProcessing(true);
 
   try {
     const requestBody = await recognitionRequestBody();
-    const response = await fetch("/api/recognize-stream", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/x-ndjson",
-      },
-      body: requestBody,
-    });
-    const data = await readRecognitionResponse(response, updateTaskProgress);
+    const data = await recognizeStreamApi(requestBody, updateTaskProgress);
 
     state.latestResponse = data;
     state.records = data.result.records.map(applyRecordFieldFormats);
     state.latestResponse.result.records = state.records;
+    if (data.taskId) {
+      state.currentTaskId = data.taskId;
+      await loadTaskList();
+    }
     renderResults(data);
+  } catch (error) {
+    markTaskProgressError(error.message);
+    showError(error.message);
+  } finally {
+    setProcessing(false);
+  }
+}
+
+async function validateWithSlateCsv() {
+  hideError();
+  resetRecognitionResults();
+  setProcessing(true);
+
+  try {
+    // Build records from slate CSV, using Resolve CSV material keys
+    const slateRecords = state.slateCsvRecords;
+    const records = slateRecords.map((sr, index) => ({
+      id: `slate-csv-${index}`,
+      cardNumber: sr.materialKey?.match(/^([A-Z]\d+)/)?.[1] || null,
+      videoCode: sr.materialKey?.match(/(C\d+)$/)?.[1] || null,
+      scene: sr.scene,
+      shot: sr.shot,
+      take: sr.take,
+      takeStatus: sr.comments,
+      description: null,
+      comments: null,
+      shotSize: null,
+      cameraPosition: null,
+      confidence: "high",
+    }));
+
+    state.records = records;
+    state.latestResponse = {
+      result: {
+        sheetTitle: state.slateCsvFileName || "场记 CSV",
+        records,
+        warnings: [],
+      },
+      provider: elements.provider.value,
+      model: elements.model.value,
+      inputMode: "slate-csv",
+      accuracyMode: "high",
+      durationMs: 0,
+      pageCount: 0,
+      usage: null,
+      ocr: { used: false, enabled: false },
+    };
+    renderResults(state.latestResponse);
   } catch (error) {
     markTaskProgressError(error.message);
     showError(error.message);
@@ -1142,6 +1393,8 @@ function serializeCurrentRecognitionRequest() {
     filename: state.reportFile.name,
     imageDataGroups: state.imageDataGroups,
     pageCount: state.pageCount,
+    customPrompt: elements.customPromptInput.value.trim(),
+    slateCsvRecords: state.slateCsvRecords,
   });
 }
 
@@ -1263,11 +1516,13 @@ function renderTable() {
           input.value,
         );
         renderTable();
+        saveCurrentTask();
       });
     }
     row.querySelector(".delete-row").addEventListener("click", () => {
       state.records.splice(index, 1);
       renderTable();
+      saveCurrentTask();
     });
   }
 
@@ -1285,7 +1540,7 @@ function renderCsvPreview(output) {
     elements.csvResultHead.innerHTML = "";
     elements.csvResultBody.innerHTML = "";
     elements.csvResultEmpty.textContent = state.records.length
-      ? "载入 Resolve CSV 后自动匹配。"
+      ? "未载入 Resolve CSV · 可在详情页校对后直接导出。"
       : "识别后显示回填结果。";
     elements.csvResultEmpty.hidden = false;
     return;
@@ -1367,7 +1622,7 @@ function renderResultSummary(output) {
   const base = `${title} · 识别 ${state.records.length} 条`;
   elements.resultSummary.textContent = state.metadataTable
     ? `${base} · 覆盖 ${output.recognizedMaterialCount}/${output.expectedMaterialCount} 个 CSV 素材 · 可回填 ${output.matchedRecordCount} 条 / ${output.updatedRowCount} 行${state.slateMetadata.length ? ` · Camera FPS ${output.cameraFpsMatchedMaterialCount} 个素材 / ${output.cameraFpsMatchedRowCount} 行 · Shoot Day ${output.shootDayMatchedMaterialCount} 个素材 / ${output.shootDayMatchedRowCount} 行` : ""}`
-    : `${base} · 待载入 CSV`;
+    : `${base} · 可直接导出识别结果`;
 }
 
 function renderWarnings(output) {
@@ -1404,26 +1659,40 @@ function exportLabel(status, record) {
   return `<span class="match-status">${label}</span>`;
 }
 
-function exportCsv() {
-  if (!state.metadataTable || !state.metadataFile) {
-    showError("请先载入 Resolve 导出的媒体元数据 CSV。");
-    return;
-  }
-  const output = currentMergeOutput();
-  if (!output.exportableCount) {
-    showError("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
+async function exportCsv() {
+  if (state.metadataTable && state.metadataFile) {
+    const output = currentMergeOutput();
+    if (!output.exportableCount) {
+      showError("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
+      return;
+    }
+    const bytes = encodeResolveCsv(output.table, {
+      fieldFormats: resolveFieldFormats(),
+    });
+    downloadCsv(bytes, `${baseName(state.metadataFile.name)}_场记已回填.csv`);
     return;
   }
 
-  const bytes = encodeResolveCsv(output.table, {
+  if (!state.records.length) {
+    showError("没有可导出的识别记录。");
+    return;
+  }
+  const table = buildStandaloneResolveTable(state.records, {
     fieldFormats: resolveFieldFormats(),
   });
-  const blob = new Blob([bytes], { type: "text/csv" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `${baseName(state.metadataFile.name)}_场记已回填.csv`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 0);
+  if (!table.rows.length) {
+    showError("没有场次、镜、次完整的识别记录可导出。");
+    return;
+  }
+  const title = state.latestResponse?.result?.sheetTitle || "场记单";
+  const bytes = encodeResolveCsv(table, {
+    fieldFormats: resolveFieldFormats(),
+  });
+  downloadCsv(bytes, `${baseName(title)}_场记识别.csv`);
+}
+
+async function downloadCsv(bytes, filename) {
+  await downloadFileApi(bytes, filename);
 }
 
 function emptyRecord() {
@@ -1539,7 +1808,7 @@ const PROGRESS_PHASES = {
   preparing: ["正在准备场记单页面", "图像预处理"],
   "prepare-complete": ["场记单页面准备完成", "准备完成"],
   starting: ["正在启动识别任务", "准备识别"],
-  ocr: ["PaddleOCR 正在提取文字", "OCR 证据层"],
+  ocr: ["本地 OCR 正在提取文字", "OCR 证据层"],
   primary: ["多模态模型正在主识别", "主识别"],
   audit: ["模型正在独立查漏", "核心字段查漏"],
   review: ["模型正在定向复核", "冲突复核"],
@@ -1589,20 +1858,40 @@ function markTaskProgressError(message) {
 }
 
 function updateRecognizeState() {
-  elements.recognizeButton.disabled = state.recognizing || !recognitionReady();
+  const canRecognize = recognitionReady();
+  const canValidate = !canRecognize && validationReady();
+  elements.recognizeButton.disabled = state.recognizing || (!canRecognize && !canValidate);
+  elements.recognizeButton.querySelector("span").textContent = state.recognizing
+    ? "识别中…"
+    : canValidate
+      ? "AI 校验"
+      : "开始识别";
 }
 
 function updateExportState(output = currentMergeOutput()) {
-  elements.exportButton.disabled = !canExportResolveCsv({
-    metadataLoaded: Boolean(state.metadataTable),
-    recordCount: state.records.length,
-    exportableCount: output?.exportableCount,
-  });
+  const recordCount = state.records.length;
+  const enabled = state.metadataTable
+    ? canExportResolveCsv({
+        metadataLoaded: true,
+        recordCount,
+        exportableCount: output?.exportableCount,
+      })
+    : recordCount > 0;
+  elements.exportButton.disabled = !enabled;
 }
 
 function recognitionReady() {
   return canStartRecognition({
     reportReady: state.imageDataGroups.length > 0,
+    providerConfigured: Boolean(selectedProvider()?.configured),
+    modelSelected: Boolean(selectedModel()),
+  });
+}
+
+function validationReady() {
+  return canStartValidation({
+    slateCsvLoaded: Boolean(state.slateCsvRecords?.length),
+    metadataLoaded: Boolean(state.metadataTable),
     providerConfigured: Boolean(selectedProvider()?.configured),
     modelSelected: Boolean(selectedModel()),
   });
@@ -1618,6 +1907,144 @@ function selectedModel() {
   return modelsForProvider(elements.provider.value).find(
     (model) => model.id === elements.model.value,
   );
+}
+
+async function loadTaskList() {
+  try {
+    const data = await listTasksApi();
+    state.tasks = Array.isArray(data) ? data : data.tasks || [];
+    renderTaskSwitcher();
+  } catch {
+    state.tasks = [];
+  }
+}
+
+function renderTaskSwitcher() {
+  const tasks = state.tasks;
+  elements.taskSwitcher.hidden = tasks.length === 0;
+  elements.taskSelect.innerHTML =
+    '<option value="">新任务</option>' +
+    tasks
+      .map(
+        (task) =>
+          `<option value="${escapeHtml(task.id)}" ${task.id === state.currentTaskId ? "selected" : ""}>${escapeHtml(task.filename || "未命名")} · ${task.recordCount} 条 · ${formatTaskDate(task.updatedAt)}</option>`,
+      )
+      .join("");
+  elements.taskDelete.hidden = !state.currentTaskId;
+}
+
+async function switchTask() {
+  const taskId = elements.taskSelect.value;
+  if (!taskId) {
+    // "新任务" — reset workspace
+    state.currentTaskId = null;
+    clearReportFile();
+    clearResolveCsv();
+    resetRecognitionResults();
+    renderTaskSwitcher();
+    return;
+  }
+  if (taskId === state.currentTaskId) return;
+  if (state.recognizing) {
+    elements.taskSelect.value = state.currentTaskId || "";
+    showError("识别进行中，无法切换任务。");
+    return;
+  }
+
+  try {
+    const task = await loadTaskApi(taskId);
+    restoreTask(task);
+  } catch (error) {
+    showError(error.message || "无法加载任务。");
+    elements.taskSelect.value = state.currentTaskId || "";
+  }
+}
+
+function restoreTask(task) {
+  state.currentTaskId = task.id;
+
+  // Clear current state
+  clearReportFile();
+  clearResolveCsv();
+  resetRecognitionResults();
+
+  // Restore recognition config
+  if (task.provider) elements.provider.value = task.provider;
+  if (task.customPrompt) elements.customPromptInput.value = task.customPrompt;
+  updateApiKeyFieldState();
+  renderModelOptions();
+  if (task.model) {
+    // Wait for models to load, then select
+    loadProviderModels().then(() => {
+      if ([...elements.model.options].some((o) => o.value === task.model)) {
+        elements.model.value = task.model;
+        renderModelNote();
+      }
+    });
+  }
+
+  // Restore recognition result
+  if (task.result?.records?.length) {
+    state.records = task.editedRecords || task.result.records;
+    state.latestResponse = {
+      result: task.result,
+      provider: task.provider,
+      model: task.model,
+      usage: task.usage,
+      durationMs: task.durationMs,
+      ocr: task.ocrSummary,
+      pageCount: task.pageCount,
+      accuracyMode: task.accuracyMode,
+      inputMode: "images",
+    };
+    state.pageCount = task.pageCount || 0;
+    elements.results.hidden = false;
+    renderResults(state.latestResponse);
+  }
+
+  renderTaskSwitcher();
+  updateRecognizeState();
+}
+
+async function deleteCurrentTask() {
+  if (!state.currentTaskId) return;
+  const task = state.tasks.find((t) => t.id === state.currentTaskId);
+  const label = task?.filename || "未命名";
+  if (!confirm(`确定删除任务"${label}"吗？此操作不可撤销。`)) return;
+
+  try {
+    await deleteTaskApi(state.currentTaskId);
+    state.currentTaskId = null;
+    clearReportFile();
+    clearResolveCsv();
+    resetRecognitionResults();
+    await loadTaskList();
+  } catch (error) {
+    showError(error.message || "删除任务失败。");
+  }
+}
+
+async function saveCurrentTask() {
+  if (!state.currentTaskId || !state.latestResponse) return;
+  try {
+    await saveTaskApi({
+      id: state.currentTaskId,
+      editedRecords: state.records,
+      status: "edited",
+    });
+  } catch {
+    // best-effort save
+  }
+}
+
+function formatTaskDate(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${month}-${day} ${hours}:${minutes}`;
 }
 
 function showError(message) {

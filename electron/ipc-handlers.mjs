@@ -1,0 +1,220 @@
+import { recognizeSlate } from "../lib/ai-client.mjs";
+import { PROVIDERS, publicConfig } from "../lib/config.mjs";
+import {
+  discoverVisionModels,
+  staticProviderModels,
+} from "../lib/model-discovery.mjs";
+import {
+  createDiagnosticsStore,
+  createSessionCapture,
+} from "../lib/diagnostics.mjs";
+import { createTaskStore } from "../lib/task-store.mjs";
+
+export function registerIpcHandlers(ipcMain, context) {
+  const {
+    workflowConfig,
+    runtimeProviderKeys,
+    runtimeEnv,
+    recognitionLimiter,
+    settings,
+    keyStore,
+    fileDialogs,
+    slateScanner,
+    diagnostics,
+    taskStore,
+  } = context;
+
+  ipcMain.handle("get-config", async () => {
+    const config = publicConfig(runtimeEnv(), workflowConfig, {
+      ocrAutoEnable: true,
+    });
+    return {
+      ...config,
+      upload: {
+        ...config.upload,
+        maxRequestBytes: settings.maxBodyBytes,
+      },
+    };
+  });
+
+  ipcMain.handle("save-provider-key", async (_event, body) => {
+    const providerId = String(body?.provider || "").trim();
+    const provider = PROVIDERS[providerId];
+    if (!provider) {
+      throw new Error("未知 API 服务商");
+    }
+    if (providerId === "openai-compatible") {
+      throw new Error("OpenAI 兼容 API 需通过环境变量配置");
+    }
+    const apiKey = String(body?.apiKey || "").trim();
+    if (apiKey) {
+      runtimeProviderKeys.set(providerId, apiKey);
+    } else {
+      runtimeProviderKeys.delete(providerId);
+    }
+    if (keyStore) {
+      await keyStore.save(runtimeProviderKeys);
+    }
+    return {
+      provider: providerId,
+      configured: Boolean(
+        runtimeProviderKeys.get(providerId) || process.env[provider.envKey],
+      ),
+    };
+  });
+
+  ipcMain.handle("get-models", async (_event, { providerId, forceRefresh }) => {
+    try {
+      const result = await discoverVisionModels(providerId, {
+        forceRefresh: Boolean(forceRefresh),
+        env: runtimeEnv(),
+      });
+      return clientModelDiscovery(result);
+    } catch (error) {
+      if (Number(error.status) === 400) throw error;
+      const fallback = staticProviderModels(providerId);
+      return {
+        provider: providerId,
+        source: "static-fallback",
+        refreshedAt: new Date().toISOString(),
+        availableModelCount: null,
+        visionModelCount: fallback.length,
+        fixedModelCount: fallback.length,
+        warning: error.message || "无法读取实时模型列表",
+        models: fallback.map(withoutPricing),
+      };
+    }
+  });
+
+  ipcMain.handle("recognize", async (event, body) => {
+    const release = recognitionLimiter.acquire();
+    const capture = createSessionCapture();
+    try {
+      const input = recognitionInput(body, workflowConfig);
+      const result = await recognizeSlate(input, {
+        env: runtimeEnv(),
+        ocrAutoEnable: true,
+        onProgress: (progressEvent) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send("recognition-progress", progressEvent);
+          }
+        },
+        capture,
+      });
+      const sessionId = diagnostics
+        ? await diagnostics.saveSession(capture.session)
+        : null;
+      const taskId = taskStore
+        ? await taskStore.saveTask({
+            status: "completed",
+            filename: input.filename,
+            pageCount: result.pageCount,
+            provider: result.provider,
+            model: result.model,
+            customPrompt: input.customPrompt || null,
+            accuracyMode: result.accuracyMode,
+            result: result.result,
+            usage: result.usage,
+            durationMs: result.durationMs,
+            ocrSummary: result.ocr,
+            diagnosticSessionId: sessionId,
+          })
+        : null;
+      return {
+        ...clientRecognitionResult(result),
+        diagnosticSessionId: sessionId,
+        taskId,
+      };
+    } catch (error) {
+      capture.setError(error);
+      if (diagnostics) {
+        await diagnostics.saveSession(capture.session).catch(() => {});
+      }
+      throw error;
+    } finally {
+      release();
+    }
+  });
+
+  ipcMain.handle("save-file", async (_event, { defaultFilename, data }) => {
+    if (!fileDialogs) throw new Error("文件对话框不可用");
+    return fileDialogs.saveFile(defaultFilename, data);
+  });
+
+  ipcMain.handle("select-directory", async () => {
+    if (!fileDialogs) throw new Error("文件对话框不可用");
+    return fileDialogs.selectDirectory();
+  });
+
+  ipcMain.handle(
+    "scan-slate-directory",
+    async (_event, { dirPath, expectedKeys, maxDepth }) => {
+      if (!slateScanner) throw new Error("目录扫描不可用");
+      return slateScanner.scan(dirPath, { expectedKeys, maxDepth });
+    },
+  );
+
+  ipcMain.handle("list-tasks", async () => {
+    if (!taskStore) return { tasks: [] };
+    return taskStore.listTasks();
+  });
+
+  ipcMain.handle("load-task", async (_event, { id }) => {
+    if (!taskStore) throw new Error("任务存储不可用");
+    return taskStore.loadTask(id);
+  });
+
+  ipcMain.handle("save-task", async (_event, task) => {
+    if (!taskStore) throw new Error("任务存储不可用");
+    return taskStore.saveTask(task);
+  });
+
+  ipcMain.handle("delete-task", async (_event, { id }) => {
+    if (!taskStore) throw new Error("任务存储不可用");
+    await taskStore.deleteTask(id);
+    return { deleted: id };
+  });
+}
+
+function recognitionInput(body, workflowConfig) {
+  return {
+    providerId: body.provider,
+    modelId: body.model,
+    imageDataUrl: body.imageDataUrl,
+    imageDataUrls: body.imageDataUrls,
+    imageDataGroups: body.imageDataGroups,
+    pdfDataUrl: body.pdfDataUrl,
+    pageCount: body.pageCount,
+    filename: body.filename,
+    accuracyMode: body.accuracyMode,
+    customPrompt: body.customPrompt,
+    slateCsvRecords: body.slateCsvRecords || null,
+    fieldFormats: workflowConfig.resolve.fieldFormats,
+  };
+}
+
+function clientModelDiscovery(result) {
+  return {
+    ...result,
+    models: (result.models || []).map(withoutPricing),
+  };
+}
+
+function withoutPricing(model) {
+  const publicModel = { ...model };
+  delete publicModel.price;
+  delete publicModel.prices;
+  delete publicModel.pricePerMillion;
+  delete publicModel.priceUpdatedAt;
+  return publicModel;
+}
+
+function clientRecognitionResult(result) {
+  const publicResult = { ...result };
+  delete publicResult.cost;
+  if (publicResult.usage && typeof publicResult.usage === "object") {
+    publicResult.usage = { ...publicResult.usage };
+    delete publicResult.usage.cost;
+  }
+  return publicResult;
+}
