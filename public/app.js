@@ -921,6 +921,8 @@ async function loadSlateCsv(file) {
     elements.slateCsvFileMeta.textContent = `${records.length} 条场记记录`;
     elements.slateCsvCard.hidden = false;
     elements.slateCsvDropzone.hidden = true;
+    updateMetadataInputState();
+    updateRecognizeState();
   } catch (error) {
     elements.slateCsvInput.value = "";
     showError(error.message || "无法读取场记 CSV。");
@@ -933,6 +935,8 @@ function clearSlateCsv() {
   elements.slateCsvInput.value = "";
   elements.slateCsvCard.hidden = true;
   elements.slateCsvDropzone.hidden = false;
+  updateMetadataInputState();
+  updateRecognizeState();
 }
 
 async function loadReportFile(file) {
