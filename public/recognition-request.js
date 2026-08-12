@@ -6,6 +6,14 @@ export const REQUEST_COMPRESSION_PROFILES = [
   { maxDimension: 1500, quality: 0.68 },
 ];
 
+export function selectRecognitionImageGroups(imageDataGroups, accuracyMode) {
+  if (!Array.isArray(imageDataGroups)) return [];
+  if (accuracyMode !== "standard") return imageDataGroups;
+  return imageDataGroups.map((group) =>
+    Array.isArray(group) ? group.slice(0, 1) : group,
+  );
+}
+
 export function serializeRecognitionRequest(input) {
   const payload = {
     provider: input.provider,
@@ -13,7 +21,7 @@ export function serializeRecognitionRequest(input) {
     filename: input.filename,
     imageDataGroups: input.imageDataGroups,
     pageCount: input.pageCount,
-    accuracyMode: "high",
+    accuracyMode: input.accuracyMode === "standard" ? "standard" : "high",
   };
   const customPrompt = String(input.customPrompt || "").trim();
   if (customPrompt) payload.customPrompt = customPrompt;

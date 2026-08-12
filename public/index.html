@@ -186,6 +186,15 @@
               <div id="model-note" class="model-note"></div>
 
               <label class="field">
+                <span>识别模式</span>
+                <select id="accuracy-mode-select">
+                  <option value="high">精确 · 主识别与核心查漏</option>
+                  <option value="standard">快速 · 单次主识别</option>
+                </select>
+                <small class="api-key-note">精确模式并行执行两路识别；快速模式适合清晰、格式稳定的场记单</small>
+              </label>
+
+              <label class="field">
                 <span>自定义提示词（可选）</span>
                 <textarea
                   id="custom-prompt-input"

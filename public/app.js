@@ -46,6 +46,7 @@ import {
   REQUEST_COMPRESSION_PROFILES,
   requestBodyBytes,
   requestBodyFits,
+  selectRecognitionImageGroups,
   serializeRecognitionRequest as serializeRecognitionPayload,
 } from "./recognition-request.js";
 import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
@@ -85,6 +86,7 @@ const elements = {
   apiStatus: document.querySelector("#api-status"),
   provider: document.querySelector("#provider-select"),
   model: document.querySelector("#model-select"),
+  accuracyMode: document.querySelector("#accuracy-mode-select"),
   modelRefresh: document.querySelector("#model-refresh"),
   modelNote: document.querySelector("#model-note"),
   metadataDropzone: document.querySelector("#metadata-dropzone"),
@@ -189,6 +191,7 @@ function bindEvents() {
     renderModelNote();
     updateRecognizeState();
   });
+  elements.accuracyMode.addEventListener("change", updateRecognizeState);
   elements.modelRefresh.addEventListener("click", () => {
     loadProviderModels(true);
   });
@@ -1394,20 +1397,30 @@ async function recognitionRequestBody() {
 }
 
 function serializeCurrentRecognitionRequest() {
+  const accuracyMode = elements.accuracyMode.value;
   return serializeRecognitionPayload({
     provider: elements.provider.value,
     model: elements.model.value,
     filename: state.reportFile.name,
-    imageDataGroups: state.imageDataGroups,
+    imageDataGroups: selectRecognitionImageGroups(
+      state.imageDataGroups,
+      accuracyMode,
+    ),
     pageCount: state.pageCount,
+    accuracyMode,
     customPrompt: elements.customPromptInput.value.trim(),
     slateCsvRecords: state.slateCsvRecords,
   });
 }
 
 async function recompressImageGroups({ maxDimension, quality }) {
-  for (const group of state.imageDataGroups) {
-    for (let index = 0; index < group.length; index += 1) {
+  const images = state.imageDataGroups.flatMap((group) =>
+    group.map((_dataUrl, index) => ({ group, index })),
+  );
+  await mapWithConcurrency(
+    images,
+    PDF_PREPARE_CONCURRENCY,
+    async ({ group, index }) => {
       const image = await loadImage(group[index]);
       const scale = Math.min(
         1,
@@ -1425,8 +1438,8 @@ async function recompressImageGroups({ maxDimension, quality }) {
       group[index] = canvas.toDataURL("image/jpeg", quality);
       canvas.width = 1;
       canvas.height = 1;
-    }
-  }
+    },
+  );
 }
 
 
@@ -1978,6 +1991,9 @@ function restoreTask(task) {
 
   // Restore recognition config
   if (task.provider) elements.provider.value = task.provider;
+  if (["high", "standard"].includes(task.accuracyMode)) {
+    elements.accuracyMode.value = task.accuracyMode;
+  }
   if (task.customPrompt) elements.customPromptInput.value = task.customPrompt;
   updateApiKeyFieldState();
   renderModelOptions();

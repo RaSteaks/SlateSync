@@ -1099,12 +1099,16 @@ test("high-accuracy multi-view recognition recovers 30 synthetic omissions and r
   );
 
   assert.equal(calls.length, 3);
-  for (const body of calls) {
+  assert.equal(
+    calls[0].input[1].content.filter((part) => part.type === "input_image").length,
+    3,
+  );
+  for (const body of calls.slice(1)) {
     assert.equal(
       body.input[1].content.filter((part) => part.type === "input_image").length,
-      3,
+      2,
     );
-    assert.match(body.input[1].content[0].text, /同一个来源页/);
+    assert.match(body.input[1].content[0].text, /核心字段局部放大视图/);
   }
   const auditRecordSchema =
     calls[1].text.format.schema.properties.records.items.properties;
@@ -1184,6 +1188,44 @@ test("an audit-only material is removed when the independent final review cannot
   assert.equal(call, 3);
   assert.equal(result.result.records.length, 0);
   assert.match(result.result.warnings.join("\n"), /最终定向复核未确认.*已从结果移除/);
+});
+
+test("high-accuracy primary and independent audit start concurrently", async () => {
+  let startedCalls = 0;
+  let releaseInitialCalls;
+  const bothStarted = new Promise((resolve) => {
+    releaseInitialCalls = resolve;
+  });
+  const fetchImpl = async () => {
+    startedCalls += 1;
+    if (startedCalls === 2) releaseInitialCalls();
+    await Promise.race([
+      bothStarted,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("initial recognition calls were serialized")), 100),
+      ),
+    ]);
+    return jsonResponse({
+      output_text: JSON.stringify({
+        sheetTitle: "parallel test",
+        records: [modelResult.records[0]],
+        warnings: [],
+      }),
+    });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+      accuracyMode: "high",
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  assert.equal(startedCalls, 2);
+  assert.equal(result.result.records.length, 1);
 });
 
 test("an unresolved high-accuracy conflict is left blank instead of exporting a guessed value", async () => {

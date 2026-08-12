@@ -4,6 +4,7 @@ import {
   requestBodyBytes,
   requestBodyFits,
   requestBodyTargetBytes,
+  selectRecognitionImageGroups,
   serializeRecognitionRequest,
 } from "../public/recognition-request.js";
 
@@ -38,4 +39,34 @@ test("recognition request carries the custom prompt only when non-empty", () => 
 
   const withoutPrompt = JSON.parse(serializeRecognitionRequest(base));
   assert.equal("customPrompt" in withoutPrompt, false);
+});
+
+test("recognition request preserves an explicit fast mode and defaults safely", () => {
+  const base = {
+    provider: "openai",
+    model: "openai/gpt-4o-mini",
+    filename: "slate.jpg",
+    imageDataGroups: [["data:image/jpeg;base64,ZmFrZQ=="]],
+    pageCount: 1,
+  };
+
+  assert.equal(
+    JSON.parse(serializeRecognitionRequest({ ...base, accuracyMode: "standard" })).accuracyMode,
+    "standard",
+  );
+  assert.equal(
+    JSON.parse(serializeRecognitionRequest({ ...base, accuracyMode: "invalid" })).accuracyMode,
+    "high",
+  );
+});
+
+test("fast mode sends only the full-page view while precise mode keeps detail views", () => {
+  const groups = [["full-1", "detail-1a", "detail-1b"], ["full-2", "detail-2a"]];
+
+  assert.deepEqual(selectRecognitionImageGroups(groups, "standard"), [
+    ["full-1"],
+    ["full-2"],
+  ]);
+  assert.equal(selectRecognitionImageGroups(groups, "high"), groups);
+  assert.equal(groups[0].length, 3);
 });
