@@ -166,6 +166,9 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("save-task", async (_event, task) => {
     if (!taskStore) throw new Error("任务存储不可用");
+    if (task?.id) {
+      return taskStore.updateTask(task.id, task);
+    }
     return taskStore.saveTask(task);
   });
 

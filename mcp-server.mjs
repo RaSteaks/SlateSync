@@ -43,11 +43,15 @@ const workflowConfigPath = resolve(
   process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
 );
 const workflowConfig = await loadWorkflowConfig(workflowConfigPath);
-const diagnostics = createDiagnosticsStore(join(ROOT, "data"));
-const taskStore = createTaskStore(join(ROOT, "data"));
+const dataDir = resolve(
+  ROOT,
+  String(process.env.SLATESYNC_DATA_DIR || "data").trim() || "data",
+);
+const diagnostics = createDiagnosticsStore(dataDir);
+const taskStore = createTaskStore(dataDir);
 
-// API Keys persisted to disk, shared with Web/Electron modes
-const keyStore = createKeyStore(join(ROOT, "data"));
+// API Keys persisted to the configured Web/MCP data directory.
+const keyStore = createKeyStore(dataDir);
 const runtimeProviderKeys = await keyStore.load();
 
 function runtimeEnv() {
@@ -111,7 +115,7 @@ const TOOLS = [
   {
     name: "save_provider_key",
     description:
-      "保存 API Key 到内存（重启后丢失）。provider 参数：openai、openrouter、tokenplan、dashscope",
+      "将 API Key 持久化到 SlateSync 数据目录。provider 参数：openai、openrouter、tokenplan、dashscope",
     inputSchema: {
       type: "object",
       properties: {

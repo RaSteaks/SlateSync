@@ -25,7 +25,8 @@ import {
   canLoadSlateCsv,
   canSelectSlateDirectory,
   canStartRecognition,
-  canStartValidation,
+  canMergeSlateCsv,
+  shouldResetSlateCsvResults,
 } from "./workflow-state.js";
 import {
   isElectron,
@@ -545,7 +546,7 @@ function updateMetadataInputState() {
   elements.slateCsvDropzone.classList.toggle("is-disabled", !slateEnabled);
   elements.slateCsvDropzone.setAttribute("aria-disabled", String(!slateEnabled));
   elements.slateCsvHelp.textContent = slateEnabled
-    ? "可选 · 高可信度场记记录，辅助识别校验"
+    ? "可辅助图片识别，也可直接合并 Resolve CSV"
     : "可选 · 请先选择场记单";
 }
 
@@ -921,6 +922,9 @@ async function loadSlateCsv(file) {
     elements.slateCsvFileMeta.textContent = `${records.length} 条场记记录`;
     elements.slateCsvCard.hidden = false;
     elements.slateCsvDropzone.hidden = true;
+    if (shouldResetSlateCsvResults(state.latestResponse?.inputMode)) {
+      resetRecognitionResults();
+    }
     updateMetadataInputState();
     updateRecognizeState();
   } catch (error) {
@@ -930,11 +934,15 @@ async function loadSlateCsv(file) {
 }
 
 function clearSlateCsv() {
+  const clearMergedResults = shouldResetSlateCsvResults(
+    state.latestResponse?.inputMode,
+  );
   state.slateCsvRecords = null;
   state.slateCsvFileName = null;
   elements.slateCsvInput.value = "";
   elements.slateCsvCard.hidden = true;
   elements.slateCsvDropzone.hidden = false;
+  if (clearMergedResults) resetRecognitionResults();
   updateMetadataInputState();
   updateRecognizeState();
 }
@@ -1290,8 +1298,8 @@ async function recognize() {
   if (recognitionReady()) {
     return recognizeWithPdf();
   }
-  if (validationReady()) {
-    return validateWithSlateCsv();
+  if (slateCsvMergeReady()) {
+    return mergeSlateCsv();
   }
 }
 
@@ -1320,15 +1328,15 @@ async function recognizeWithPdf() {
   }
 }
 
-async function validateWithSlateCsv() {
+function mergeSlateCsv() {
   hideError();
   resetRecognitionResults();
-  setProcessing(true);
+  state.currentTaskId = null;
+  renderTaskSwitcher();
 
-  try {
-    // Build records from slate CSV, using Resolve CSV material keys
-    const slateRecords = state.slateCsvRecords;
-    const records = slateRecords.map((sr, index) => ({
+  // Build records from slate CSV, using Resolve CSV material keys.
+  const records = state.slateCsvRecords.map((sr, index) =>
+    applyRecordFieldFormats({
       id: `slate-csv-${index}`,
       cardNumber: sr.materialKey?.match(/^([A-Z]\d+)/)?.[1] || null,
       videoCode: sr.materialKey?.match(/(C\d+)$/)?.[1] || null,
@@ -1341,31 +1349,26 @@ async function validateWithSlateCsv() {
       shotSize: null,
       cameraPosition: null,
       confidence: "high",
-    }));
+    }),
+  );
 
-    state.records = records;
-    state.latestResponse = {
-      result: {
-        sheetTitle: state.slateCsvFileName || "场记 CSV",
-        records,
-        warnings: [],
-      },
-      provider: elements.provider.value,
-      model: elements.model.value,
-      inputMode: "slate-csv",
-      accuracyMode: "high",
-      durationMs: 0,
-      pageCount: 0,
-      usage: null,
-      ocr: { used: false, enabled: false },
-    };
-    renderResults(state.latestResponse);
-  } catch (error) {
-    markTaskProgressError(error.message);
-    showError(error.message);
-  } finally {
-    setProcessing(false);
-  }
+  state.records = records;
+  state.latestResponse = {
+    result: {
+      sheetTitle: state.slateCsvFileName || "场记 CSV",
+      records,
+      warnings: [],
+    },
+    provider: null,
+    model: null,
+    inputMode: "slate-csv",
+    accuracyMode: null,
+    durationMs: 0,
+    pageCount: 0,
+    usage: null,
+    ocr: { used: false, enabled: false },
+  };
+  renderResults(state.latestResponse);
 }
 
 async function recognitionRequestBody() {
@@ -1442,13 +1445,15 @@ function renderResults(data) {
   elements.resultSummary.textContent = `${data.result.sheetTitle || "未命名场记单"} · ${count} 条记录`;
 
   const usage = data.usage || {};
-  const metrics = [
-    `API ${data.provider}`,
-    `MODEL ${data.model}`,
-    `MODE ${data.inputMode === "pdf" ? "PDF" : data.accuracyMode === "high" ? "HIGH ACCURACY" : "IMAGE"}`,
-    `PAGES ${state.pageCount}`,
-    `TIME ${(data.durationMs / 1000).toFixed(1)}s`,
-  ];
+  const metrics = data.inputMode === "slate-csv"
+    ? ["SOURCE SLATE CSV", "MODE LOCAL MERGE", `ROWS ${count}`]
+    : [
+        `API ${data.provider}`,
+        `MODEL ${data.model}`,
+        `MODE ${data.inputMode === "pdf" ? "PDF" : data.accuracyMode === "high" ? "HIGH ACCURACY" : "IMAGE"}`,
+        `PAGES ${state.pageCount}`,
+        `TIME ${(data.durationMs / 1000).toFixed(1)}s`,
+      ];
   if (usage.input_tokens ?? usage.prompt_tokens) {
     metrics.push(`IN ${usage.input_tokens ?? usage.prompt_tokens} TOKENS`);
   }
@@ -1863,12 +1868,13 @@ function markTaskProgressError(message) {
 
 function updateRecognizeState() {
   const canRecognize = recognitionReady();
-  const canValidate = !canRecognize && validationReady();
-  elements.recognizeButton.disabled = state.recognizing || (!canRecognize && !canValidate);
+  const canMerge = !canRecognize && slateCsvMergeReady();
+  elements.recognizeButton.disabled =
+    state.recognizing || (!canRecognize && !canMerge);
   elements.recognizeButton.querySelector("span").textContent = state.recognizing
     ? "识别中…"
-    : canValidate
-      ? "AI 校验"
+    : canMerge
+      ? "合并 CSV"
       : "开始识别";
 }
 
@@ -1892,12 +1898,10 @@ function recognitionReady() {
   });
 }
 
-function validationReady() {
-  return canStartValidation({
+function slateCsvMergeReady() {
+  return canMergeSlateCsv({
     slateCsvLoaded: Boolean(state.slateCsvRecords?.length),
     metadataLoaded: Boolean(state.metadataTable),
-    providerConfigured: Boolean(selectedProvider()?.configured),
-    modelSelected: Boolean(selectedModel()),
   });
 }
 

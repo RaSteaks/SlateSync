@@ -39,13 +39,17 @@ const workflowConfigPath = resolve(
 const workflowConfig = await loadWorkflowConfig(workflowConfigPath);
 const settings = serverSettings(process.env);
 const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
-const diagnostics = createDiagnosticsStore(join(ROOT, "data"));
-const taskStore = createTaskStore(join(ROOT, "data"));
+const dataDir = resolve(
+  ROOT,
+  cleanSetting(process.env.SLATESYNC_DATA_DIR) || "data",
+);
+const diagnostics = createDiagnosticsStore(dataDir);
+const taskStore = createTaskStore(dataDir);
 const startedAt = Date.now();
 let shuttingDown = false;
 
 // API Keys are persisted to disk so they survive restarts.
-const keyStore = createKeyStore(join(ROOT, "data"));
+const keyStore = createKeyStore(dataDir);
 const runtimeProviderKeys = await keyStore.load();
 
 function runtimeEnv() {
@@ -204,9 +208,7 @@ const server = http.createServer(async (request, response) => {
       const taskId = url.pathname.slice("/api/tasks/".length);
       const body = await readJsonBody(request, settings.maxBodyBytes);
       try {
-        const existing = await taskStore.loadTask(taskId);
-        const updated = { ...existing, ...body, id: taskId };
-        await taskStore.saveTask(updated);
+        await taskStore.updateTask(taskId, body);
         return sendJson(response, 200, { id: taskId, saved: true });
       } catch {
         return sendJson(response, 404, { error: "任务不存在" });

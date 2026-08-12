@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=4173 \
+    SLATESYNC_DATA_DIR=/var/lib/slatesync/data \
     PADDLEOCR_PYTHON=/opt/slatesync-ocr/bin/python \
     PADDLE_PDX_CACHE_HOME=/var/lib/slatesync/paddlex \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -34,7 +35,7 @@ COPY lib ./lib
 COPY public ./public
 COPY scripts/paddleocr_runner.py ./scripts/paddleocr_runner.py
 
-RUN mkdir -p /var/lib/slatesync/paddlex \
+RUN mkdir -p /var/lib/slatesync/paddlex /var/lib/slatesync/data \
     && chown -R node:node /var/lib/slatesync
 
 USER node

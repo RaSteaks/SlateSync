@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 test("server exposes health endpoints and stops gracefully", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-server-"));
   const child = spawn(process.execPath, ["server.mjs"], {
     cwd: new URL("..", import.meta.url),
     env: {
@@ -20,6 +24,7 @@ test("server exposes health endpoints and stops gracefully", async () => {
       VISIONOCR_ENABLED: "false",
       SLATESYNC_AUTH_USERNAME: "review-user",
       SLATESYNC_AUTH_PASSWORD: "review-password",
+      SLATESYNC_DATA_DIR: dataDir,
       SHUTDOWN_TIMEOUT_MS: "5000",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -137,6 +142,7 @@ test("server exposes health endpoints and stops gracefully", async () => {
     if (child.exitCode == null && child.signalCode == null) {
       child.kill("SIGKILL");
     }
+    await rm(dataDir, { recursive: true, force: true });
   }
 });
 
@@ -163,6 +169,7 @@ test("readiness rejects missing providers and unavailable required OCR", async (
   ];
 
   for (const scenario of cases) {
+    const dataDir = await mkdtemp(join(tmpdir(), "slatesync-server-"));
     const child = spawn(process.execPath, ["server.mjs"], {
       cwd: new URL("..", import.meta.url),
       env: {
@@ -175,6 +182,7 @@ test("readiness rejects missing providers and unavailable required OCR", async (
         OPENAI_COMPATIBLE_API_KEY: "",
         SLATESYNC_AUTH_USERNAME: "",
         SLATESYNC_AUTH_PASSWORD: "",
+        SLATESYNC_DATA_DIR: dataDir,
         SHUTDOWN_TIMEOUT_MS: "5000",
         ...scenario.env,
       },
@@ -201,11 +209,13 @@ test("readiness rejects missing providers and unavailable required OCR", async (
       if (child.exitCode == null && child.signalCode == null) {
         child.kill("SIGKILL");
       }
+      await rm(dataDir, { recursive: true, force: true });
     }
   }
 });
 
 test("web-submitted API key configures a provider until cleared", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-server-"));
   const child = spawn(process.execPath, ["server.mjs"], {
     cwd: new URL("..", import.meta.url),
     env: {
@@ -223,6 +233,7 @@ test("web-submitted API key configures a provider until cleared", async () => {
       VISIONOCR_ENABLED: "false",
       SLATESYNC_AUTH_USERNAME: "",
       SLATESYNC_AUTH_PASSWORD: "",
+      SLATESYNC_DATA_DIR: dataDir,
       SHUTDOWN_TIMEOUT_MS: "5000",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -284,6 +295,7 @@ test("web-submitted API key configures a provider until cleared", async () => {
     if (child.exitCode == null && child.signalCode == null) {
       child.kill("SIGKILL");
     }
+    await rm(dataDir, { recursive: true, force: true });
   }
 });
 

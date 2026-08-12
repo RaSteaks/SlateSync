@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   canExportResolveCsv,
   canLoadResolveCsv,
+  canMergeSlateCsv,
   canSelectSlateDirectory,
   canStartRecognition,
+  shouldResetSlateCsvResults,
 } from "../public/workflow-state.js";
 
 test("slate recognition can start before Resolve CSV is loaded", () => {
@@ -56,4 +58,25 @@ test("CSV unlocks after report preparation and stays available during recognitio
     canSelectSlateDirectory({ reportReady: true, metadataLoaded: true }),
     true,
   );
+});
+
+test("slate and Resolve CSVs can merge without an AI provider", () => {
+  assert.equal(
+    canMergeSlateCsv({ slateCsvLoaded: true, metadataLoaded: true }),
+    true,
+  );
+  assert.equal(
+    canMergeSlateCsv({ slateCsvLoaded: true, metadataLoaded: false }),
+    false,
+  );
+  assert.equal(
+    canMergeSlateCsv({ slateCsvLoaded: false, metadataLoaded: true }),
+    false,
+  );
+});
+
+test("changing a slate CSV clears only results produced by local CSV merge", () => {
+  assert.equal(shouldResetSlateCsvResults("slate-csv"), true);
+  assert.equal(shouldResetSlateCsvResults("images"), false);
+  assert.equal(shouldResetSlateCsvResults(null), false);
 });

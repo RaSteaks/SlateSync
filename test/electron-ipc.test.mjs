@@ -58,6 +58,10 @@ describe("electron IPC handlers", () => {
       "save-file",
       "select-directory",
       "scan-slate-directory",
+      "list-tasks",
+      "load-task",
+      "save-task",
+      "delete-task",
     ];
     for (const channel of expectedChannels) {
       assert.ok(
@@ -162,5 +166,26 @@ describe("electron IPC handlers", () => {
         }),
       { message: "目录扫描不可用" },
     );
+  });
+
+  it("save-task updates an existing task without replacing it", async () => {
+    const calls = [];
+    const taskStore = {
+      updateTask: async (id, patch) => {
+        calls.push({ id, patch });
+        return id;
+      },
+      saveTask: async () => assert.fail("existing task must be updated"),
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({ taskStore }));
+
+    const patch = {
+      id: "task-123",
+      editedRecords: [{ scene: "001", shot: "01", take: "01" }],
+      status: "edited",
+    };
+    assert.equal(await ipcMain.invoke("save-task", patch), "task-123");
+    assert.deepEqual(calls, [{ id: "task-123", patch }]);
   });
 });

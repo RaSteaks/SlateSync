@@ -6,15 +6,11 @@ export function canStartRecognition({
   return Boolean(reportReady && providerConfigured && modelSelected);
 }
 
-export function canStartValidation({
+export function canMergeSlateCsv({
   slateCsvLoaded,
   metadataLoaded,
-  providerConfigured,
-  modelSelected,
 }) {
-  return Boolean(
-    slateCsvLoaded && metadataLoaded && providerConfigured && modelSelected,
-  );
+  return Boolean(slateCsvLoaded && metadataLoaded);
 }
 
 export function canExportResolveCsv({
@@ -34,6 +30,10 @@ export function canLoadResolveCsv({ reportReady, slateCsvLoaded }) {
 export function canLoadSlateCsv() {
   // Slate CSV can always be loaded independently.
   return true;
+}
+
+export function shouldResetSlateCsvResults(inputMode) {
+  return inputMode === "slate-csv";
 }
 
 export function canSelectSlateDirectory({ reportReady, metadataLoaded }) {
