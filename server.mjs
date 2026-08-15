@@ -25,6 +25,7 @@ import {
 } from "./lib/diagnostics.mjs";
 import { createKeyStore } from "./lib/key-store.mjs";
 import { createTaskStore } from "./lib/task-store.mjs";
+import { createScenarioStore } from "./lib/scenario/store.mjs";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT, "public");
@@ -55,6 +56,9 @@ const dataDir = resolve(
 );
 const diagnostics = createDiagnosticsStore(dataDir);
 const taskStore = createTaskStore(dataDir);
+const scenarioStore = createScenarioStore(dataDir, {
+  matching: async () => (await getWorkflowConfig()).scenario?.matching,
+});
 const startedAt = Date.now();
 let shuttingDown = false;
 
@@ -116,6 +120,42 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/config") {
       return sendJson(response, 200, await clientConfig());
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/scenarios") {
+      return sendJson(response, 200, {
+        scenarios: await scenarioStore.listProfiles(),
+      });
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/api/scenarios/")) {
+      const scenarioId = url.pathname.slice("/api/scenarios/".length);
+      try {
+        return sendJson(response, 200, await scenarioStore.getProfile(scenarioId));
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          return sendJson(response, 404, { error: "场记结构不存在" });
+        }
+        throw error;
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/scenarios/import") {
+      validateApiRequest(request.headers);
+      const body = await readJsonBody(request, settings.maxBodyBytes);
+      // Accept both the bridge envelope ({ profile }) and a raw Profile so
+      // command-line/API clients can import the same portable JSON document.
+      try {
+        return sendJson(
+          response,
+          201,
+          await scenarioStore.importProfile(body?.profile || body),
+        );
+      } catch (error) {
+        // A malformed portable Profile is a client error, not a server fault.
+        error.status = Number(error.status) || 400;
+        throw error;
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/api/provider-key") {
@@ -182,6 +222,7 @@ const server = http.createServer(async (request, response) => {
           {
             env: runtimeEnv(),
             ocrAutoEnable: true,
+            scenarioStore,
           },
         );
         return sendJson(response, 200, clientRecognitionResult(result));
@@ -281,6 +322,7 @@ function recognitionInput(body, workflowConfig) {
     pageCount: body.pageCount,
     filename: body.filename,
     accuracyMode: body.accuracyMode,
+    scenarioId: body.scenarioId,
     customPrompt: body.customPrompt,
     slateCsvRecords: body.slateCsvRecords || null,
     fieldFormats: workflowConfig.resolve.fieldFormats,
@@ -310,6 +352,7 @@ async function streamRecognition(response, input) {
     const result = await recognizeSlate(input, {
       env: runtimeEnv(),
       ocrAutoEnable: true,
+      scenarioStore,
       onProgress: sendEvent,
       capture,
     });
@@ -320,6 +363,9 @@ async function streamRecognition(response, input) {
       pageCount: result.pageCount,
       provider: result.provider,
       model: result.model,
+      scenarioId: result.scenario?.id || null,
+      scenarioMatch: result.scenario?.match || null,
+      scenarioFingerprint: result.scenario?.fingerprint || null,
       customPrompt: input.customPrompt || null,
       accuracyMode: result.accuracyMode,
       result: result.result,
@@ -395,13 +441,20 @@ function gracefulShutdown(signal) {
   }, settings.shutdownTimeoutMs);
   deadline.unref();
 
-  server.close((error) => {
+  server.close(async (error) => {
     clearTimeout(deadline);
     if (error) {
       console.error("服务器停止失败：", error);
       process.exitCode = 1;
       return;
     }
+    // Close every SQLite connection after HTTP drains so WAL checkpoints and
+    // file descriptors are released cleanly in Docker and local Web mode.
+    await Promise.allSettled([
+      diagnostics.close(),
+      taskStore.close(),
+      scenarioStore.close(),
+    ]);
     console.log("SlateSync 已安全停止。");
   });
   server.closeIdleConnections?.();
@@ -525,6 +578,7 @@ async function clientConfig() {
       ...config.upload,
       maxRequestBytes: settings.maxBodyBytes,
     },
+    scenarios: await scenarioStore.listProfiles(),
   };
 }
 

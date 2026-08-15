@@ -30,6 +30,7 @@ export function serializeRecognitionRequest(input) {
   };
   const customPrompt = String(input.customPrompt || "").trim();
   if (customPrompt) payload.customPrompt = customPrompt;
+  if (input.scenarioId) payload.scenarioId = String(input.scenarioId);
   if (Array.isArray(input.slateCsvRecords) && input.slateCsvRecords.length) {
     payload.slateCsvRecords = input.slateCsvRecords;
   }

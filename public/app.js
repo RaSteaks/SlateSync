@@ -49,6 +49,7 @@ import {
 import {
   isElectron,
   fetchConfig,
+  listScenariosApi,
   saveProviderKeyApi,
   fetchModelsApi,
   recognizeStreamApi,
@@ -96,6 +97,7 @@ const state = {
   pageCount: 0,
   records: [],
   latestResponse: null,
+  scenarioProfiles: [],
   progressPercent: 0,
   currentTaskId: null,
   tasks: [],
@@ -113,6 +115,7 @@ const elements = {
   provider: document.querySelector("#provider-select"),
   model: document.querySelector("#model-select"),
   accuracyMode: document.querySelector("#accuracy-mode-select"),
+  scenario: document.querySelector("#scenario-select"),
   modelRefresh: document.querySelector("#model-refresh"),
   modelNote: document.querySelector("#model-note"),
   metadataDropzone: document.querySelector("#metadata-dropzone"),
@@ -212,6 +215,7 @@ async function init() {
     updateMetadataInputState();
     updateSlateDirectoryState();
     await loadProviderModels();
+    await refreshScenarioProfiles();
     await loadTaskList();
   } catch {
     showError("无法读取服务配置，请确认 SlateSync 已启动。");
@@ -220,6 +224,37 @@ async function init() {
 
 async function loadConfig() {
   state.config = await fetchConfig();
+  state.scenarioProfiles = Array.isArray(state.config?.scenarios)
+    ? state.config.scenarios
+    : [];
+  renderScenarioOptions();
+}
+
+async function refreshScenarioProfiles() {
+  try {
+    state.scenarioProfiles = await listScenariosApi();
+    renderScenarioOptions();
+  } catch {
+    // Profile listing is advisory; recognition remains usable if it is unavailable.
+  }
+}
+
+function renderScenarioOptions(selectedId = elements.scenario?.value || "") {
+  if (!elements.scenario) return;
+  const options = [
+    '<option value="">自动识别并学习版式</option>',
+    ...state.scenarioProfiles.map((profile) => {
+      const sampleCount = Number(profile.sampleCount) || 0;
+      const label = `${profile.label || "未命名结构"}${sampleCount ? ` · 已用 ${sampleCount} 次` : ""}`;
+      return `<option value="${escapeHtml(profile.id)}">${escapeHtml(label)}</option>`;
+    }),
+  ];
+  elements.scenario.innerHTML = options.join("");
+  elements.scenario.value = state.scenarioProfiles.some(
+    (profile) => profile.id === selectedId,
+  )
+    ? selectedId
+    : "";
 }
 
 async function refreshRuntimeConfig() {
@@ -242,6 +277,7 @@ function bindEvents() {
     updateRecognizeState();
   });
   elements.accuracyMode.addEventListener("change", updateRecognizeState);
+  elements.scenario.addEventListener("change", updateRecognizeState);
   elements.modelRefresh.addEventListener("click", () => {
     loadProviderModels(true);
   });
@@ -1541,6 +1577,7 @@ async function recognizeWithPdf() {
       await loadTaskList();
     }
     renderResults(data);
+    await refreshScenarioProfiles();
   } catch (error) {
     markTaskProgressError(error.message);
     showError(error.message);
@@ -1627,6 +1664,7 @@ function serializeCurrentRecognitionRequest() {
     pageCount: state.pageCount,
     accuracyMode,
     customPrompt: elements.customPromptInput.value.trim(),
+    scenarioId: elements.scenario.value || null,
     slateCsvRecords: state.slateCsvRecords,
   });
 }
@@ -1712,6 +1750,16 @@ function renderResults(data) {
     if (data.ocr.cacheHit) metrics.push("OCR CACHE HIT");
   } else if (data.ocr?.enabled) {
     metrics.push("OCR FALLBACK");
+  }
+  if (data.scenario?.id) {
+    const profile = state.scenarioProfiles.find(
+      (candidate) => candidate.id === data.scenario.id,
+    );
+    metrics.push(
+      `SCENARIO ${profile?.label || data.scenario.id} ${data.scenario.match || "matched"}`,
+    );
+  } else if (data.scenario?.warning) {
+    metrics.push("SCENARIO FALLBACK");
   }
   elements.metrics.innerHTML = metrics
     .map((metric) => `<span class="metric">${escapeHtml(metric)}</span>`)
@@ -2042,6 +2090,9 @@ function renderResultSummary(output) {
 function renderWarnings(output) {
   const warnings = [
     ...(state.latestResponse?.result?.warnings || []),
+    ...(state.latestResponse?.scenario?.warning
+      ? [state.latestResponse.scenario.warning]
+      : []),
     ...state.slateWarnings,
     ...(output?.warnings || []),
   ];
@@ -2501,6 +2552,7 @@ async function switchTask() {
   if (!taskId) {
     // "新任务" — reset workspace
     state.currentTaskId = null;
+    elements.scenario.value = "";
     clearReportFile();
     clearResolveCsv();
     resetRecognitionResults();
@@ -2532,6 +2584,7 @@ function restoreTask(task) {
   resetRecognitionResults();
 
   restoreResolveCsvState(task);
+  renderScenarioOptions(task.scenarioId || "");
 
   // Restore recognition config
   if (task.provider) elements.provider.value = task.provider;
@@ -2569,6 +2622,13 @@ function restoreTask(task) {
       pageCount: task.pageCount,
       accuracyMode: task.accuracyMode,
       inputMode: "images",
+      scenario: task.scenarioId
+        ? {
+            id: task.scenarioId,
+            match: task.scenarioMatch || "selected",
+            fingerprint: task.scenarioFingerprint || null,
+          }
+        : null,
     };
     state.pageCount = task.pageCount || 0;
     elements.results.hidden = false;

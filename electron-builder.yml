@@ -1,6 +1,13 @@
 appId: com.slatesync.app
 productName: SlateSync
 copyright: Copyright © 2026
+npmRebuild: true
+
+publish:
+  provider: github
+  owner: RaSteaks
+  repo: SlateSync
+  releaseType: release
 
 directories:
   output: dist
@@ -41,3 +48,4 @@ extraResources:
 asarUnpack:
   - scripts/**/*
   - bin/**/*
+  - node_modules/better-sqlite3/build/Release/**/*

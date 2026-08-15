@@ -1,5 +1,6 @@
 services:
   slatesync:
+    image: "${SLATESYNC_IMAGE:-ghcr.io/rasteaks/slatesync:latest}"
     build: .
     init: true
     restart: unless-stopped

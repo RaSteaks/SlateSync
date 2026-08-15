@@ -2,6 +2,12 @@
   "slate": {
     "maxDirectoryDepth": 4
   },
+  "scenario": {
+    "matching": {
+      "threshold": 0.85,
+      "ambiguityMargin": 0.05
+    }
+  },
   "resolve": {
     "fieldFormats": {
       "scene": "XX",

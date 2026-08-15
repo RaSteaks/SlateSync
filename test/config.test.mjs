@@ -30,6 +30,9 @@ test("workflow config accepts scan depth and fixed-width X templates", () => {
     }),
     {
       slate: { maxDirectoryDepth: 6 },
+      scenario: {
+        matching: { threshold: 0.85, ambiguityMargin: 0.05 },
+      },
       resolve: {
         fieldFormats: { scene: "XXXX", shot: "XXX", take: "X" },
         comments: { goodTake: "_OK", holdTake: "_KP" },

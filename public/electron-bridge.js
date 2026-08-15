@@ -18,6 +18,40 @@ export async function fetchConfig() {
   return response.json();
 }
 
+export async function listScenariosApi() {
+  if (isElectron) {
+    return globalThis.electronAPI.listScenarios();
+  }
+  const response = await fetch("/api/scenarios");
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "无法读取场记结构列表");
+  return data.scenarios || [];
+}
+
+export async function loadScenarioApi(id) {
+  if (isElectron) {
+    return globalThis.electronAPI.loadScenario(id);
+  }
+  const response = await fetch(`/api/scenarios/${encodeURIComponent(id)}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "场记结构不存在");
+  return data.scenario || data;
+}
+
+export async function importScenarioApi(profile) {
+  if (isElectron) {
+    return globalThis.electronAPI.importScenario(profile);
+  }
+  const response = await fetch("/api/scenarios/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profile }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "场记结构导入失败");
+  return data;
+}
+
 export async function saveProviderKeyApi(providerId, apiKey) {
   if (isElectron) {
     return globalThis.electronAPI.saveProviderKey(providerId, apiKey);

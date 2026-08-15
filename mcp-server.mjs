@@ -34,6 +34,7 @@ import {
 } from "./lib/diagnostics.mjs";
 import { createKeyStore } from "./lib/key-store.mjs";
 import { createTaskStore } from "./lib/task-store.mjs";
+import { createScenarioStore } from "./lib/scenario/store.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname);
@@ -54,6 +55,9 @@ const dataDir = resolve(
 );
 const diagnostics = createDiagnosticsStore(dataDir);
 const taskStore = createTaskStore(dataDir);
+const scenarioStore = createScenarioStore(dataDir, {
+  matching: async () => (await getWorkflowConfig()).scenario?.matching,
+});
 
 // API Keys persisted to the configured Web/MCP data directory.
 const keyStore = createKeyStore(dataDir);
@@ -146,6 +150,10 @@ const TOOLS = [
         },
         pageCount: { type: "number", description: "页数" },
         filename: { type: "string", description: "来源文件名" },
+        scenarioId: {
+          type: "string",
+          description: "可选的已学习场记结构 Profile ID；留空则自动匹配并学习",
+        },
         customPrompt: { type: "string", description: "自定义提示词（可选）" },
         accuracyMode: {
           type: "string",
@@ -155,6 +163,33 @@ const TOOLS = [
         },
       },
       required: ["provider", "model", "imageDataGroups"],
+    },
+  },
+  {
+    name: "list_scenarios",
+    description: "列出已学习的场记结构 Profile，供识别任务选择和复用",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_scenario",
+    description: "获取一个场记结构 Profile 的完整版式、字段区域和输出配置",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "场记结构 Profile ID" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "import_scenario",
+    description: "导入一个可迁移的场记结构 Profile JSON；相同指纹不会重复创建",
+    inputSchema: {
+      type: "object",
+      properties: {
+        profile: { type: "object", description: "场记结构 Profile JSON" },
+      },
+      required: ["profile"],
     },
   },
   {
@@ -260,7 +295,43 @@ async function handleGetConfig() {
     ocrAutoEnable: true,
   });
   return {
-    content: [{ type: "text", text: JSON.stringify(config, null, 2) }],
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          { ...config, scenarios: await scenarioStore.listProfiles() },
+          null,
+          2,
+        ),
+      },
+    ],
+  };
+}
+
+async function handleListScenarios() {
+  return {
+    content: [
+      { type: "text", text: JSON.stringify(await scenarioStore.listProfiles(), null, 2) },
+    ],
+  };
+}
+
+async function handleGetScenario({ id }) {
+  return {
+    content: [
+      { type: "text", text: JSON.stringify(await scenarioStore.getProfile(id), null, 2) },
+    ],
+  };
+}
+
+async function handleImportScenario({ profile }) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(await scenarioStore.importProfile(profile), null, 2),
+      },
+    ],
   };
 }
 
@@ -332,6 +403,7 @@ async function handleRecognizeSlate(params) {
         imageDataGroups: params.imageDataGroups,
         pageCount: params.pageCount || params.imageDataGroups.length,
         filename: params.filename || "mcp-input",
+        scenarioId: params.scenarioId,
         accuracyMode: params.accuracyMode || "high",
         customPrompt: params.customPrompt,
         fieldFormats: (await getWorkflowConfig()).resolve.fieldFormats,
@@ -340,6 +412,7 @@ async function handleRecognizeSlate(params) {
       {
         env: runtimeEnv(),
         ocrAutoEnable: true,
+        scenarioStore,
         capture,
       },
     );
@@ -513,6 +586,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return handleSaveProviderKey(args);
     case "recognize_slate":
       return handleRecognizeSlate(args);
+    case "list_scenarios":
+      return handleListScenarios();
+    case "get_scenario":
+      return handleGetScenario(args);
+    case "import_scenario":
+      return handleImportScenario(args);
     case "list_diagnostic_sessions":
       return handleListDiagnosticSessions();
     case "get_diagnostic_session":

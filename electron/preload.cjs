@@ -59,6 +59,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   deleteTask: (id) => ipcRenderer.invoke("delete-task", { id }),
 
+  // Scenario profiles are shared by the desktop and web data models so the
+  // renderer can inspect or import reusable slate structures in either mode.
+  listScenarios: () => ipcRenderer.invoke("list-scenarios"),
+
+  loadScenario: (id) => ipcRenderer.invoke("load-scenario", { id }),
+
+  importScenario: (profile) =>
+    ipcRenderer.invoke("import-scenario", { profile }),
+
   getOcrSettings: () => ipcRenderer.invoke("get-ocr-settings"),
 
   saveOcrSettings: (settings) =>

@@ -6,6 +6,9 @@ node_modules/
 __pycache__/
 *.pyc
 data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 coverage/
 tmp/
 bin/

@@ -1,0 +1,83 @@
+name: Release macOS application
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: macos-14
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build local Vision OCR bridge
+        run: |
+          mkdir -p bin
+          if [ "${{ matrix.arch }}" = "x64" ]; then
+            xcrun swiftc -O -target x86_64-apple-macos13 -o bin/vision-ocr scripts/vision_ocr.swift
+          else
+            xcrun swiftc -O -target arm64-apple-macos13 -o bin/vision-ocr scripts/vision_ocr.swift
+          fi
+
+      - name: Verify source and tests
+        run: |
+          npm run check
+          npm test
+
+      - name: Build macOS artifacts
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+
+      - name: Upload architecture artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: slatesync-macos-${{ matrix.arch }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SlateSync $GITHUB_REF_NAME" \
+            --generate-notes

@@ -19,10 +19,11 @@
 - 识别 PDF、JPEG、PNG、WebP 场记单，最多 20 页，预览区支持逐页滚动核对。
 - 结合本地 OCR 与云端多模态模型，提高中文、数字和手写内容的识别率。
 - 支持 OpenAI、OpenRouter、阿里云 Token Plan、DashScope 和 OpenAI 兼容接口。
+- 自动从 OCR 表头、坐标和页面形状学习场记结构 Profile；相似版式可跨任务、Web、Electron 和 MCP 复用。
 - 自动回填 Resolve 的 `Scene`、`Shot`、`Take`、`Comments`。
 - 从素材目录中的 `slate.txt` 补充 `Camera FPS` 和 `Shoot Day`。
 - 条号断档、次序异常自动告警，并在回填预览中标红提示。
-- 识别任务自动保存，可在多个任务之间切换与恢复。
+- 识别任务、诊断会话和场记结构统一保存到 SQLite，可在多个任务之间切换与恢复。
 - 内置 MCP 服务器，可把识别与诊断能力接入 AI 客户端。
 - 无需 API Key 即可在本地合并“场记系统 CSV + Resolve CSV”。
 
@@ -192,7 +193,7 @@ docker compose up -d --build
 ### AI 识别
 
 1. 上传场记单（多页 PDF 会在预览区逐页展示），可选加载场记系统 CSV 作为辅助数据。
-2. 选择 API、模型和识别模式，开始识别。
+2. 选择 API、模型、识别模式和场记结构。首次使用可保持“自动识别并学习版式”，开始识别。
 3. 载入 Resolve CSV；需要时选择素材目录扫描 `slate.txt`。
 4. 根据警告清单与回填预览中的标红行进行校对，然后下载 CSV。
 
@@ -200,6 +201,15 @@ docker compose up -d --build
 | --- | --- | --- |
 | 精确 | 并行执行主识别与核心字段查漏，冲突时定向复核 | 手写较多、表格复杂、准确率优先 |
 | 快速 | 只上传整页视图并调用一次模型 | 页面清晰、格式稳定、速度优先 |
+
+### 场记结构 Profile
+
+场记结构不是写死在网页里的模板。启用本地 OCR 后，SlateSync 会把表头、字段坐标、摄影机区块、行列带和页面形状整理成 Profile，并以布局指纹进行匹配：
+
+- 首次识别自动创建 Profile，不需要用户确认；相似版式达到匹配阈值后自动复用。
+- 在“场记结构”下拉框中可以显式选择已学习 Profile；留空则自动匹配并继续学习新结构。
+- Profile 不包含原始 PDF 或图片，只保存结构化布局、字段别名和 Resolve 输出规则。
+- Web、Electron 和 MCP 共享同一数据目录，因此同一台机器上的多个入口可以复用 Profile。
 
 ### 识别质量保障
 
@@ -255,6 +265,12 @@ SlateSync 只更新匹配到的素材，不创建虚构行；原 CSV 的其他�
   "slate": {
     "maxDirectoryDepth": 4
   },
+  "scenario": {
+    "matching": {
+      "threshold": 0.85,
+      "ambiguityMargin": 0.05
+    }
+  },
   "resolve": {
     "fieldFormats": {
       "scene": "XXX",
@@ -272,6 +288,7 @@ SlateSync 只更新匹配到的素材，不创建虚构行；原 CSV 的其他�
 - `fieldFormats` 中 `X` 的个数表示该字段的**最小位数**：识别输出不足时补前导零，超出时原样保留。例如 `take: "X"` 时，次 9 输出 `9`、次 11 输出 `11`。
 - `comments` 定义写入 Resolve `Comments` 的条次标记：`goodTake` 对应过条（默认 `_OK`），`holdTake` 对应保条（默认 `_KP`）；废条和未标记始终写空值。每个标记须为 1–32 个字符且不含换行。已有 CSV 中的 `_OK`/`_KP`（大小写不限）在合并时会自动转换为配置的标记。
 - `maxDirectoryDepth` 是扫描素材目录时递归的最大深度，范围 1–12。
+- `scenario.matching.threshold` 是自动复用 Profile 的最低相似度，范围 0.5–1；`ambiguityMargin` 是最佳与次佳结果的最小差值，范围 0–0.5。无法确认时会创建新 Profile，不强行套用旧版式。
 - 配置文件支持**热加载**：修改保存后无需重启服务，下一次识别或导出即按新配置执行（界面上无需刷新页面）；若改坏文件，服务会继续使用最后一份有效配置。
 
 ## 数据与安全
@@ -280,6 +297,7 @@ SlateSync 只更新匹配到的素材，不创建虚构行；原 CSV 的其他�
 - Resolve CSV、素材目录和 `slate.txt` 始终在本地处理。
 - 原始 PDF 不离开浏览器；云端模型接收处理后的页面图像、OCR 证据和可选辅助字段。
 - 原始文件和页面图像不写入磁盘；结构化任务结果与诊断文本会持久化。
+- `slatesync.sqlite` 是任务、诊断和场记结构的权威数据源；旧版本的 `data/tasks/*.json` 与 `data/diagnostics/*.json` 会在首次启动时迁移，并暂时保留为兼容快照。
 - Web 数据位于 `SLATESYNC_DATA_DIR`，Electron 数据位于应用用户目录，Docker 数据位于 `slatesync-data` 卷。
 
 ## 限制
@@ -318,7 +336,35 @@ npm run ocr:check   # 检查 PaddleOCR 安装
 }
 ```
 
-可用工具包括配置与模型查询、API Key 保存、场记单识别、任务管理，以及诊断会话与 OCR 证据的检索（用于排查识别问题）。
+可用工具包括配置与模型查询、API Key 保存、场记结构 Profile 查询、场记单识别、任务管理，以及诊断会话与 OCR 证据的检索（用于排查识别问题）。`recognize_slate` 的 `scenarioId` 可指定 Profile；省略时自动匹配并学习。
+
+Web API 也提供相同的 Profile 能力：`GET /api/scenarios`、`GET /api/scenarios/:id` 和 `POST /api/scenarios/import`。识别请求可选传 `scenarioId`。
+
+## 开源发布
+
+项目采用 [MIT License](./LICENSE)。发布前先更新 `package.json` 的版本号，完成本地检查并创建版本标签：
+
+```bash
+npm ci
+npm run check
+npm test
+git add package.json package-lock.json
+git commit -m "Release v0.2.0"
+git tag v0.2.0
+git push origin main --follow-tags
+```
+
+推送 `v*` 标签后，GitHub Actions 会在 macOS runner 上构建 arm64/x64 的 DMG、ZIP，并创建 GitHub Release。发布签名版本前，在仓库 Secrets 配置 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD` 和 `APPLE_TEAM_ID`；未配置签名时 workflow 仍可生成未签名测试包，但 macOS 用户可能需要手动允许打开。
+
+Docker workflow 会把 `main` 和版本标签推送到 `ghcr.io/rasteaks/slatesync`。部署指定版本：
+
+```bash
+export SLATESYNC_IMAGE=ghcr.io/rasteaks/slatesync:0.2.0
+docker compose pull
+docker compose up -d
+```
+
+生产环境请保留 `SLATESYNC_AUTH_USERNAME`、`SLATESYNC_AUTH_PASSWORD` 和持久化 `slatesync-data` 卷，不要把 `.env` 或 `data/` 提交到仓库。
 
 ## 常见问题
 
@@ -327,6 +373,8 @@ npm run ocr:check   # 检查 PaddleOCR 安装
 - **模型接口频繁限流或超时**：将 `MODEL_PAGE_CONCURRENCY` 降为 `1`，或适当增加 `MODEL_REQUEST_TIMEOUT_MS`。
 
 - **Electron 编译时找不到 `swiftc`**：运行 `xcode-select --install`，完成安装后重新编译 Vision OCR。
+
+- **Electron 打包后 Node 测试提示 `NODE_MODULE_VERSION` 不匹配**：Electron Builder 会把工作区的 `better-sqlite3` 重建为 Electron ABI；执行 `npm rebuild better-sqlite3`（或重新执行 `npm ci`）即可恢复 Node 开发环境。
 
 - **端口 4173 已被占用**：在 `.env` 中修改 `PORT`；Docker 部署则修改 `SLATESYNC_PORT`。
 

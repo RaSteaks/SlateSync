@@ -17,6 +17,7 @@ import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";
 import { createDiagnosticsStore } from "../lib/diagnostics.mjs";
 import { createTaskStore } from "../lib/task-store.mjs";
+import { createScenarioStore } from "../lib/scenario/store.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -85,6 +86,10 @@ async function initialize() {
   const taskStore = createTaskStore(
     join(app.getPath("userData"), "data"),
   );
+  const scenarioStore = createScenarioStore(
+    join(app.getPath("userData"), "data"),
+    { matching: async () => (await getWorkflowConfig()).scenario?.matching },
+  );
 
   registerIpcHandlers(ipcMain, {
     getWorkflowConfig,
@@ -97,6 +102,7 @@ async function initialize() {
     slateScanner,
     diagnostics,
     taskStore,
+    scenarioStore,
     settingsStore,
     runtimeSettings,
   });

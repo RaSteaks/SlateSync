@@ -29,6 +29,7 @@ export function registerIpcHandlers(ipcMain, context) {
     slateScanner,
     diagnostics,
     taskStore,
+    scenarioStore,
     settingsStore,
     runtimeSettings,
     checkOcr = checkPaddleOcr,
@@ -44,7 +45,22 @@ export function registerIpcHandlers(ipcMain, context) {
         ...config.upload,
         maxRequestBytes: settings.maxBodyBytes,
       },
+      scenarios: scenarioStore ? await scenarioStore.listProfiles() : [],
     };
+  });
+
+  ipcMain.handle("list-scenarios", async () =>
+    scenarioStore ? scenarioStore.listProfiles() : [],
+  );
+
+  ipcMain.handle("load-scenario", async (_event, { id }) => {
+    if (!scenarioStore) throw new Error("场记结构存储不可用");
+    return scenarioStore.getProfile(id);
+  });
+
+  ipcMain.handle("import-scenario", async (_event, { profile }) => {
+    if (!scenarioStore) throw new Error("场记结构存储不可用");
+    return scenarioStore.importProfile(profile);
   });
 
   ipcMain.handle("save-provider-key", async (_event, body) => {
@@ -104,6 +120,7 @@ export function registerIpcHandlers(ipcMain, context) {
       const result = await recognizeSlate(input, {
         env: runtimeEnv(),
         ocrAutoEnable: true,
+        scenarioStore,
         onProgress: (progressEvent) => {
           if (!event.sender.isDestroyed()) {
             event.sender.send("recognition-progress", progressEvent);
@@ -121,6 +138,9 @@ export function registerIpcHandlers(ipcMain, context) {
             pageCount: result.pageCount,
             provider: result.provider,
             model: result.model,
+            scenarioId: result.scenario?.id || null,
+            scenarioMatch: result.scenario?.match || null,
+            scenarioFingerprint: result.scenario?.fingerprint || null,
             customPrompt: input.customPrompt || null,
             accuracyMode: result.accuracyMode,
             result: result.result,
@@ -248,6 +268,7 @@ function recognitionInput(body, workflowConfig) {
     pageCount: body.pageCount,
     filename: body.filename,
     accuracyMode: body.accuracyMode,
+    scenarioId: body.scenarioId,
     customPrompt: body.customPrompt,
     slateCsvRecords: body.slateCsvRecords || null,
     fieldFormats: workflowConfig.resolve.fieldFormats,

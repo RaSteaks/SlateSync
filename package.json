@@ -2,6 +2,17 @@
   "name": "slatesync",
   "version": "0.1.0",
   "private": true,
+  "author": "RaSteaks",
+  "description": "通用场记单识别、场记结构学习与 DaVinci Resolve CSV 回填工具",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RaSteaks/SlateSync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RaSteaks/SlateSync/issues"
+  },
+  "homepage": "https://github.com/RaSteaks/SlateSync#readme",
   "type": "module",
   "main": "electron/main.mjs",
   "scripts": {
@@ -13,14 +24,18 @@
     "electron:dev": "electron electron/main.mjs",
     "electron:build": "electron-builder",
     "electron:build:dir": "electron-builder --dir",
+    "release:mac": "npm run check && npm test && electron-builder --mac",
+    "release:mac:publish": "npm run check && npm test && electron-builder --mac --publish always",
+    "docker:build": "docker build -t slatesync:local .",
     "test": "node --test",
-    "check": "node --check server.mjs && node --check lib/ai-client.mjs && node --check lib/config.mjs && node --check lib/model-catalog.mjs && node --check lib/model-discovery.mjs && node --check lib/ocr/paddleocr.mjs && node --check lib/ocr/vision.mjs && node --check lib/request-security.mjs && node --check electron/main.mjs && node --check electron/ipc-handlers.mjs && node --check electron/env-loader.mjs && node --check electron/file-dialogs.mjs && node --check electron/slate-scanner.mjs && node --check electron/key-store.mjs && node --check electron/settings-store.mjs && node --check mcp-server.mjs && node --check lib/diagnostics.mjs && node --check lib/key-store.mjs && node --check lib/task-store.mjs && node --check lib/slate-csv.mjs && node --check public/app.js && node --check public/electron-bridge.js && node --check public/slate-csv-parser.js && node --check public/image-preprocess.js && node --check public/recognition-request.js && node --check public/recognition-stream.js && node --check public/resolve-csv.js && node --check public/metadata-common.js && node --check public/metadata-structure.js && node --check public/metadata-sources/index.js && node --check public/metadata-sources/kinefinity.js && node --check public/task-persistence.js && node --check public/slate-directory.js && node --check public/workflow-state.js && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('scripts/paddleocr_runner.py').read_text())\""
+    "check": "node --check server.mjs && node --check lib/ai-client.mjs && node --check lib/config.mjs && node --check lib/model-catalog.mjs && node --check lib/model-discovery.mjs && node --check lib/ocr/paddleocr.mjs && node --check lib/ocr/vision.mjs && node --check lib/request-security.mjs && node --check electron/main.mjs && node --check electron/ipc-handlers.mjs && node --check electron/env-loader.mjs && node --check electron/file-dialogs.mjs && node --check electron/slate-scanner.mjs && node --check electron/key-store.mjs && node --check electron/settings-store.mjs && node --check mcp-server.mjs && node --check lib/diagnostics.mjs && node --check lib/key-store.mjs && node --check lib/task-store.mjs && node --check lib/sqlite-store.mjs && node --check lib/scenario/profile.mjs && node --check lib/scenario/store.mjs && node --check lib/slate-csv.mjs && node --check public/app.js && node --check public/electron-bridge.js && node --check public/slate-csv-parser.js && node --check public/image-preprocess.js && node --check public/recognition-request.js && node --check public/recognition-stream.js && node --check public/resolve-csv.js && node --check public/metadata-common.js && node --check public/metadata-structure.js && node --check public/metadata-sources/index.js && node --check public/metadata-sources/kinefinity.js && node --check public/task-persistence.js && node --check public/slate-directory.js && node --check public/workflow-state.js && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('scripts/paddleocr_runner.py').read_text())\""
   },
   "engines": {
     "node": ">=20.19"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^12.11.1",
     "pdfjs-dist": "^5.6.205",
     "undici": "^8.10.0"
   },

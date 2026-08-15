@@ -41,6 +41,20 @@ test("recognition request carries the custom prompt only when non-empty", () => 
   assert.equal("customPrompt" in withoutPrompt, false);
 });
 
+test("recognition request carries an explicitly selected scenario Profile", () => {
+  const body = JSON.parse(
+    serializeRecognitionRequest({
+      provider: "openai",
+      model: "openai/gpt-4o-mini",
+      filename: "slate.jpg",
+      imageDataGroups: [["data:image/jpeg;base64,ZmFrZQ=="]],
+      pageCount: 1,
+      scenarioId: "scenario-0123456789abcdef",
+    }),
+  );
+  assert.equal(body.scenarioId, "scenario-0123456789abcdef");
+});
+
 test("recognition request preserves an explicit fast mode and defaults safely", () => {
   const base = {
     provider: "openai",

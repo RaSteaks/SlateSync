@@ -64,6 +64,9 @@ describe("electron IPC handlers", () => {
       "load-task",
       "save-task",
       "delete-task",
+      "list-scenarios",
+      "load-scenario",
+      "import-scenario",
       "get-ocr-settings",
       "save-ocr-settings",
       "check-ocr",
@@ -86,6 +89,28 @@ describe("electron IPC handlers", () => {
     assert.ok(config.upload);
     assert.equal(typeof config.upload.maxRequestBytes, "number");
     assert.ok(config.workflow);
+  });
+
+  it("dispatches scenario Profile operations through IPC", async () => {
+    const scenarioStore = {
+      listProfiles: async () => [{ id: "scenario-0123456789abcdef" }],
+      getProfile: async (id) => ({ id }),
+      importProfile: async (profile) => ({ ...profile, imported: true }),
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({ scenarioStore }));
+
+    assert.deepEqual(await ipcMain.invoke("list-scenarios"), [
+      { id: "scenario-0123456789abcdef" },
+    ]);
+    assert.deepEqual(
+      await ipcMain.invoke("load-scenario", { id: "scenario-0123456789abcdef" }),
+      { id: "scenario-0123456789abcdef" },
+    );
+    assert.deepEqual(
+      await ipcMain.invoke("import-scenario", { profile: { label: "Imported" } }),
+      { label: "Imported", imported: true },
+    );
   });
 
   it("save-provider-key rejects unknown provider", async () => {

@@ -88,11 +88,50 @@ test("server exposes health endpoints and stops gracefully", async () => {
     assert.equal(publicConfig.upload.maxRequestBytes, 80 * 1024 * 1024);
     assert.deepEqual(publicConfig.workflow, {
       slate: { maxDirectoryDepth: 4 },
+      scenario: {
+        matching: { threshold: 0.85, ambiguityMargin: 0.05 },
+      },
       resolve: {
         fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
         comments: { goodTake: "_OK", holdTake: "_KP" },
       },
     });
+
+    const scenarioListResponse = await fetch(`${baseUrl}/api/scenarios`, {
+      headers: { Authorization: authorization },
+    });
+    assert.equal(scenarioListResponse.status, 200);
+    assert.deepEqual((await scenarioListResponse.json()).scenarios, []);
+
+    const scenarioImportResponse = await fetch(`${baseUrl}/api/scenarios/import`, {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        profile: {
+          label: "测试版式",
+          layout: {
+            pages: [],
+            headerTokens: ["场次"],
+            cameraGroups: [],
+            columnBands: [],
+            rowBands: [],
+          },
+        },
+      }),
+    });
+    assert.equal(scenarioImportResponse.status, 201);
+    const importedScenario = await scenarioImportResponse.json();
+    assert.match(importedScenario.id, /^scenario-[a-f0-9]{16}$/);
+
+    const loadedScenarioResponse = await fetch(
+      `${baseUrl}/api/scenarios/${importedScenario.id}`,
+      { headers: { Authorization: authorization } },
+    );
+    assert.equal(loadedScenarioResponse.status, 200);
+    assert.equal((await loadedScenarioResponse.json()).id, importedScenario.id);
 
     const modelsResponse = await fetch(`${baseUrl}/api/models?provider=openai`, {
       headers: { Authorization: authorization },
