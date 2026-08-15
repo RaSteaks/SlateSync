@@ -32,8 +32,32 @@ test("workflow config accepts scan depth and fixed-width X templates", () => {
       slate: { maxDirectoryDepth: 6 },
       resolve: {
         fieldFormats: { scene: "XXXX", shot: "XXX", take: "X" },
+        comments: { goodTake: "_OK", holdTake: "_KP" },
       },
     },
+  );
+});
+
+test("workflow config accepts custom Resolve Comments markers", () => {
+  assert.deepEqual(
+    normalizeWorkflowConfig({
+      resolve: { comments: { goodTake: "OK!", holdTake: "HOLD" } },
+    }).resolve.comments,
+    { goodTake: "OK!", holdTake: "HOLD" },
+  );
+  assert.throws(
+    () =>
+      normalizeWorkflowConfig({
+        resolve: { comments: { goodTake: "  " } },
+      }),
+    /resolve\.comments\.goodTake/,
+  );
+  assert.throws(
+    () =>
+      normalizeWorkflowConfig({
+        resolve: { comments: { holdTake: "a\nb" } },
+      }),
+    /1–32 个字符/,
   );
 });
 

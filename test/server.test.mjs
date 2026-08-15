@@ -90,6 +90,7 @@ test("server exposes health endpoints and stops gracefully", async () => {
       slate: { maxDirectoryDepth: 4 },
       resolve: {
         fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+        comments: { goodTake: "_OK", holdTake: "_KP" },
       },
     });
 

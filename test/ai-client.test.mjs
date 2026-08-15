@@ -239,8 +239,8 @@ test("OpenAI Responses request uses image input and parses structured output", a
   assert.match(captured.body.input[0].content, /把“次”误读成了“镜”/);
   assert.match(captured.body.input[0].content, /最左侧三个共用列依次是“场次、镜、次”/);
   assert.match(captured.body.input[0].content, /镜 18 输出“18”.*绝不能只读成 08/s);
-  assert.match(captured.body.input[0].content, /三角形\/△ 写入“_KP”/);
-  assert.match(captured.body.input[0].content, /X\/× 或未标记时清空/);
+  assert.match(captured.body.input[0].content, /三角形\/△\/▲ → “保”/);
+  assert.match(captured.body.input[0].content, /“废条”，未标记或看不清 → null/);
   assert.match(captured.body.input[0].content, /comments.*绝不写入 Resolve Comments/s);
   assert.equal(result.result.records[0].scene, "012");
   assert.equal(result.result.records[0].shot, "02");

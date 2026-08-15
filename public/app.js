@@ -1824,8 +1824,8 @@ function renderTable() {
         <td>
           <select data-field="takeStatus">
             <option value="" ${record.takeStatus == null ? "selected" : ""}>未标记（留空）</option>
-            <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → _OK</option>
-            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → _KP</option>
+            <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → ${escapeHtml(resolveCommentsConfig().goodTake)}</option>
+            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → ${escapeHtml(resolveCommentsConfig().holdTake)}</option>
             <option value="废条" ${record.takeStatus === "废条" ? "selected" : ""}>X / × → 留空</option>
           </select>
         </td>
@@ -2012,7 +2012,10 @@ function currentMergeOutput() {
       state.metadataTable,
       state.records,
       state.slateMetadata,
-      { fieldFormats: resolveFieldFormats() },
+      {
+        fieldFormats: resolveFieldFormats(),
+        comments: resolveCommentsConfig(),
+      },
     );
   }
   return {
@@ -2095,7 +2098,8 @@ async function exportCsv() {
     }
     const bytes = encodeResolveCsv(applyCsvEdits(output.table), {
       fieldFormats: resolveFieldFormats(),
-      // Resolve Comments only accepts the canonical _OK/_KP/empty values.
+      comments: resolveCommentsConfig(),
+      // Resolve Comments only accepts the configured take-status markers.
       canonicalizeComments: true,
     });
     downloadCsv(bytes, `${baseName(state.metadataFile.name)}_场记已回填.csv`);
@@ -2108,6 +2112,7 @@ async function exportCsv() {
   }
   const table = buildStandaloneResolveTable(state.records, {
     fieldFormats: resolveFieldFormats(),
+    comments: resolveCommentsConfig(),
   });
   if (!table.rows.length) {
     showError("没有场次、镜、次完整的识别记录可导出。");
@@ -2116,6 +2121,7 @@ async function exportCsv() {
   const title = state.latestResponse?.result?.sheetTitle || "场记单";
   const bytes = encodeResolveCsv(table, {
     fieldFormats: resolveFieldFormats(),
+    comments: resolveCommentsConfig(),
   });
   downloadCsv(bytes, `${baseName(title)}_场记识别.csv`);
 }
@@ -2146,6 +2152,13 @@ function resolveFieldFormats() {
     scene: "XXX",
     shot: "XX",
     take: "XX",
+  };
+}
+
+function resolveCommentsConfig() {
+  return state.config?.workflow?.resolve?.comments || {
+    goodTake: "_OK",
+    holdTake: "_KP",
   };
 }
 
@@ -2205,12 +2218,14 @@ function fieldForColumn(columns, columnIndex) {
 }
 
 // 归一化预览单元格编辑：scene/shot/take 复用明细页的零填充规范化，Comments
-// 只保留 Resolve 允许的 _OK、_KP 或空值，其余列去空格原样返回。
+// 只保留配置的条次标记或空值，其余列去空格原样返回。
 function normalizeCsvCellEdit(field, value) {
   if (field === "scene" || field === "shot" || field === "take") {
     return normalizeEditedField(field, value) || "";
   }
-  if (field === "comments") return canonicalResolveComment(value);
+  if (field === "comments") {
+    return canonicalResolveComment(value, resolveCommentsConfig());
+  }
   return typeof value === "string" ? value.trim() : "";
 }
 

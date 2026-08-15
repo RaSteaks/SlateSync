@@ -335,6 +335,7 @@ async function handleRecognizeSlate(params) {
         accuracyMode: params.accuracyMode || "high",
         customPrompt: params.customPrompt,
         fieldFormats: (await getWorkflowConfig()).resolve.fieldFormats,
+        comments: (await getWorkflowConfig()).resolve.comments,
       },
       {
         env: runtimeEnv(),

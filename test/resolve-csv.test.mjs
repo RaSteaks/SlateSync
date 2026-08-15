@@ -751,6 +751,42 @@ test("CSV encoder pads to the configured width and keeps wider numbers", () => {
   assert.deepEqual(decoded.rows[1].slice(3, 6), ["", "1000", "101"]);
 });
 
+test("configured Comments markers flow through merge and export", () => {
+  const comments = { goodTake: "OK!", holdTake: "HOLD" };
+  const source = sourceTable([
+    ["A001C001.mov", "/A", "A001C001", "1", "1", "1", "√", ""],
+    ["A001C002.mov", "/A", "A001C002", "1", "1", "2", "△", ""],
+    ["A001C003.mov", "/A", "A001C003", "", "", "", "", "_OK"],
+    ["A001C004.mov", "/A", "A001C004", "", "", "", "", "kp"],
+    ["A001C005.mov", "/A", "A001C005", "", "", "", "", "自由文本"],
+  ]);
+  const output = mergeSlateIntoResolveTable(
+    source,
+    [
+      completeRecord({ videoCode: "C001", takeStatus: "过" }),
+      completeRecord({ videoCode: "C002", takeStatus: "保" }),
+    ],
+    [],
+    { comments },
+  );
+  const columns = resolveColumnIndexes(output.table.headers);
+  const exported = output.table.rows.map((row) => row[columns.comments]);
+
+  assert.deepEqual(exported, ["OK!", "HOLD", "OK!", "HOLD", ""]);
+  assert.match(
+    output.warnings.join("\n"),
+    /Comments“_OK”已规范为“OK!”/,
+  );
+
+  const decoded = decodeResolveCsv(
+    encodeResolveCsv(output.table, { comments, canonicalizeComments: true }),
+  );
+  assert.deepEqual(
+    decoded.rows.map((row) => row[columns.comments]),
+    ["OK!", "HOLD", "OK!", "HOLD", ""],
+  );
+});
+
 test("standalone table builds Resolve rows from records without a metadata CSV", () => {
   const table = buildStandaloneResolveTable([
     {

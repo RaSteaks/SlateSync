@@ -284,6 +284,7 @@ function recognitionInput(body, workflowConfig) {
     customPrompt: body.customPrompt,
     slateCsvRecords: body.slateCsvRecords || null,
     fieldFormats: workflowConfig.resolve.fieldFormats,
+    comments: workflowConfig.resolve.comments,
   };
 }
 

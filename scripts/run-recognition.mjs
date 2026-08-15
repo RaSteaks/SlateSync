@@ -70,6 +70,7 @@ try {
       accuracyMode: "high",
       customPrompt: input.customPrompt || undefined,
       fieldFormats: workflowConfig.resolve.fieldFormats,
+      comments: workflowConfig.resolve.comments,
     },
     {
       env: process.env,

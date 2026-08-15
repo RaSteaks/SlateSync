@@ -74,6 +74,14 @@ export const DEFAULT_RESOLVE_FIELD_FORMATS = Object.freeze({
   take: "XX",
 });
 
+// Resolve Comments markers written for recognized take statuses. Mirrored in
+// lib/config.mjs (DEFAULT_WORKFLOW_CONFIG.resolve.comments) and configurable
+// through slatesync.config.json.
+export const DEFAULT_RESOLVE_COMMENTS = Object.freeze({
+  goodTake: "_OK",
+  holdTake: "_KP",
+});
+
 const FIELD_NUMBER_LIMIT = 10 ** 6;
 
 export function decodeResolveCsv(input) {
@@ -186,6 +194,7 @@ export function mergeSlateIntoResolveTable(
   const warnings = [];
   const addedColumns = [];
   const fieldFormats = resolveFieldFormats(options.fieldFormats);
+  const commentsConfig = resolveCommentsConfig(options.comments);
   const slateIndex = buildSlateMetadataIndex(slateMetadata);
   warnings.push(...slateIndex.warnings);
 
@@ -324,7 +333,7 @@ export function mergeSlateIntoResolveTable(
       take: normalizeTakeValue(record.take, fieldFormats.take),
       takeStatus: normalizeTakeStatus(record.takeStatus, record.goodTake),
     };
-    values.comments = commentValueForTakeStatus(values.takeStatus);
+    values.comments = commentValueForTakeStatus(values.takeStatus, commentsConfig);
     const missingFields = [
       [values.scene, "场次"],
       [values.shot, "镜"],
@@ -498,7 +507,7 @@ export function mergeSlateIntoResolveTable(
   for (const [rowNumber, row] of rows.entries()) {
     const columnIndex = columns.comments;
     const previous = cleanValue(row[columnIndex]);
-    const next = canonicalResolveComment(previous);
+    const next = canonicalResolveComment(previous, commentsConfig);
     if (previous === next) continue;
     row[columnIndex] = next;
     changes.push({
@@ -551,6 +560,7 @@ export function encodeResolveCsv(table, options = {}) {
   const headers = table.headers.map(stringValue);
   const columns = resolveColumnIndexes(headers);
   const fieldFormats = resolveFieldFormats(options.fieldFormats);
+  const commentsConfig = resolveCommentsConfig(options.comments);
   const canonicalizeComments = options.canonicalizeComments === true;
   const rows = table.rows.map((row) =>
     normalizeRowWidth(row.map(stringValue), headers.length),
@@ -568,7 +578,10 @@ export function encodeResolveCsv(table, options = {}) {
     if (canonicalizeComments && columns.comments >= 0) {
       // Metadata-backed Resolve exports must not let manual edits reintroduce
       // arbitrary text into the strict Comments allowlist.
-      row[columns.comments] = canonicalResolveComment(row[columns.comments]);
+      row[columns.comments] = canonicalResolveComment(
+        row[columns.comments],
+        commentsConfig,
+      );
     }
   }
   const matrix = [
@@ -885,6 +898,17 @@ function resolveFieldFormats(value = {}) {
   );
 }
 
+function resolveCommentsConfig(value = {}) {
+  return Object.fromEntries(
+    Object.entries(DEFAULT_RESOLVE_COMMENTS).map(([field, fallback]) => {
+      const token = typeof value?.[field] === "string" ? value[field].trim() : "";
+      const valid =
+        token && token.length <= 32 && !/[\r\n]/.test(token) ? token : fallback;
+      return [field, valid];
+    }),
+  );
+}
+
 function fieldFormatWidth(value, fallback) {
   const format = String(value || "").trim().toUpperCase();
   return /^X{1,6}$/.test(format) ? format.length : fallback;
@@ -911,17 +935,24 @@ function normalizeTakeStatus(value, legacyGoodTake) {
   return "";
 }
 
-function commentValueForTakeStatus(takeStatus) {
-  if (takeStatus === "过") return "_OK";
-  if (takeStatus === "保") return "_KP";
+function commentValueForTakeStatus(takeStatus, comments) {
+  if (takeStatus === "过") return comments.goodTake;
+  if (takeStatus === "保") return comments.holdTake;
   return "";
 }
 
-// Resolve serializes take status in Comments as _OK, _KP, or an empty value.
-export function canonicalResolveComment(value) {
+// Resolve serializes take status in Comments using the configured markers;
+// anything outside the marker set (or its legacy _OK/_KP aliases) is cleared.
+export function canonicalResolveComment(value, comments = DEFAULT_RESOLVE_COMMENTS) {
   const normalized = cleanValue(value).toUpperCase();
-  if (normalized === "OK" || normalized === "_OK") return "_OK";
-  if (normalized === "KP" || normalized === "_KP") return "_KP";
+  if (normalized === cleanValue(comments.goodTake).toUpperCase()) {
+    return comments.goodTake;
+  }
+  if (normalized === cleanValue(comments.holdTake).toUpperCase()) {
+    return comments.holdTake;
+  }
+  if (normalized === "OK" || normalized === "_OK") return comments.goodTake;
+  if (normalized === "KP" || normalized === "_KP") return comments.holdTake;
   return "";
 }
 
