@@ -41,6 +41,8 @@ function createMockContext(overrides = {}) {
     keyStore: null,
     fileDialogs: null,
     slateScanner: null,
+    settingsStore: null,
+    runtimeSettings: { ocrPythonPath: "", ocrSetupCompleted: false, ocrSetupSkipped: false },
     ...overrides,
   };
 }
@@ -62,6 +64,9 @@ describe("electron IPC handlers", () => {
       "load-task",
       "save-task",
       "delete-task",
+      "get-ocr-settings",
+      "save-ocr-settings",
+      "check-ocr",
     ];
     for (const channel of expectedChannels) {
       assert.ok(
@@ -187,5 +192,112 @@ describe("electron IPC handlers", () => {
     };
     assert.equal(await ipcMain.invoke("save-task", patch), "task-123");
     assert.deepEqual(calls, [{ id: "task-123", patch }]);
+  });
+
+  it("get-ocr-settings returns the persisted OCR settings", async () => {
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(
+      ipcMain,
+      createMockContext({
+        runtimeSettings: {
+          ocrPythonPath: "/venv/bin/python",
+          ocrSetupCompleted: true,
+          ocrSetupSkipped: false,
+        },
+      }),
+    );
+
+    const settings = await ipcMain.invoke("get-ocr-settings");
+    assert.deepEqual(settings, {
+      pythonPath: "/venv/bin/python",
+      setupCompleted: true,
+      setupSkipped: false,
+    });
+  });
+
+  it("save-ocr-settings persists a python path and marks setup complete", async () => {
+    const saved = [];
+    const settingsStore = {
+      save: async (settings) => {
+        saved.push(settings);
+      },
+    };
+    const runtimeSettings = {
+      ocrPythonPath: "",
+      ocrSetupCompleted: false,
+      ocrSetupSkipped: false,
+    };
+    const checkOcr = async ({ pythonPath }) => ({
+      ok: true,
+      pythonPath,
+    });
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(
+      ipcMain,
+      createMockContext({ settingsStore, runtimeSettings, checkOcr }),
+    );
+
+    const result = await ipcMain.invoke("save-ocr-settings", {
+      pythonPath: "/venv/bin/python",
+    });
+    assert.equal(result.pythonPath, "/venv/bin/python");
+    assert.equal(result.setupCompleted, true);
+    assert.equal(result.setupSkipped, false);
+    assert.equal(runtimeSettings.ocrPythonPath, "/venv/bin/python");
+    assert.equal(saved.length, 1);
+  });
+
+  it("rejects an OCR path when validation fails without persisting it", async () => {
+    const saved = [];
+    const settingsStore = { save: async (settings) => saved.push(settings) };
+    const runtimeSettings = {
+      ocrPythonPath: "",
+      ocrSetupCompleted: false,
+      ocrSetupSkipped: false,
+    };
+    const checkOcr = async () => ({
+      ok: false,
+      error: { code: "spawn_failed", message: "无法启动 Python" },
+    });
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(
+      ipcMain,
+      createMockContext({ settingsStore, runtimeSettings, checkOcr }),
+    );
+
+    await assert.rejects(
+      () =>
+        ipcMain.invoke("save-ocr-settings", {
+          pythonPath: "/missing/python",
+        }),
+      { message: "无法启动 Python" },
+    );
+    assert.deepEqual(runtimeSettings, {
+      ocrPythonPath: "",
+      ocrSetupCompleted: false,
+      ocrSetupSkipped: false,
+    });
+    assert.equal(saved.length, 0);
+  });
+
+  it("save-ocr-settings skip marks setup skipped without a path", async () => {
+    const runtimeSettings = {
+      ocrPythonPath: "",
+      ocrSetupCompleted: false,
+      ocrSetupSkipped: false,
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(
+      ipcMain,
+      createMockContext({
+        settingsStore: { save: async () => {} },
+        runtimeSettings,
+      }),
+    );
+
+    const result = await ipcMain.invoke("save-ocr-settings", { skip: true });
+    assert.equal(result.setupSkipped, true);
+    assert.equal(runtimeSettings.ocrSetupSkipped, true);
+    assert.equal(runtimeSettings.ocrPythonPath, "");
   });
 });

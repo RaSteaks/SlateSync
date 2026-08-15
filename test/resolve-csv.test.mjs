@@ -4,7 +4,9 @@ import {
   canonicalMaterialKey,
   buildSlateMetadataIndex,
   buildStandaloneResolveTable,
+  canonicalResolveComment,
   decodeResolveCsv,
+  detectSlateSequenceAnomalies,
   encodeResolveCsv,
   materialPrefix,
   mergeSlateIntoResolveTable,
@@ -77,13 +79,66 @@ test("video codes use C0XX while metadata matching ignores extra leading zeroes"
   assert.equal(canonicalMaterialKey("D001", "C009"), "D:1:9");
 });
 
-test("scene, shot and take keep numeric content and use fixed-width zero padding", () => {
-  assert.equal(normalizeSceneValue("第 37A 场"), "037");
+test("scene suffixes stay uppercase while numeric fields keep zero padding up to the configured width", () => {
+  assert.equal(normalizeSceneValue("第 37A 场"), "37A");
+  assert.equal(normalizeSceneValue("87a"), "87A");
+  assert.equal(normalizeSceneValue("16/72a"), "16 / 72A");
+  assert.equal(normalizeSceneValue("57、58"), "57 / 58");
+  assert.equal(normalizeSceneValue("57a/58"), "57A / 58");
+  assert.equal(normalizeSceneValue("58 / 59 场"), "58 / 59");
   assert.equal(normalizeSceneValue("1"), "001");
   assert.equal(normalizeShotValue("镜 2"), "02");
   assert.equal(normalizeTakeValue("9 次"), "09");
-  assert.equal(normalizeSceneValue("1000"), "");
-  assert.equal(normalizeShotValue("100"), "");
+  assert.equal(normalizeSceneValue("1000"), "1000");
+  assert.equal(normalizeShotValue("100"), "100");
+});
+
+test("numbers wider than the configured template are kept, not truncated", () => {
+  assert.equal(normalizeTakeValue("11", "X"), "11");
+  assert.equal(normalizeShotValue("11 次", "X"), "11");
+  assert.equal(normalizeTakeValue("9", "XX"), "09");
+  assert.equal(normalizeTakeValue("11", "XX"), "11");
+  assert.equal(normalizeTakeValue("1234567", "X"), "");
+});
+
+test("full-width digits and Chinese numerals normalize into padded numbers", () => {
+  assert.equal(normalizeTakeValue("０９"), "09");
+  assert.equal(normalizeTakeValue("十一"), "11");
+  assert.equal(normalizeShotValue("十"), "10");
+  assert.equal(normalizeSceneValue("二十三"), "023");
+  assert.equal(normalizeSceneValue("十一A"), "11A");
+  assert.equal(normalizeSceneValue("五十七、五十八"), "57 / 58");
+});
+
+test("clip gaps map to the material key after the gap without cross-camera noise", () => {
+  const anomalies = detectSlateSequenceAnomalies([
+    { cardNumber: "A001", videoCode: "C003", scene: "012", shot: "01", take: "01" },
+    { cardNumber: "A001", videoCode: "C006", scene: "012", shot: "01", take: "02" },
+    { cardNumber: "B001", videoCode: "C001", scene: "012", shot: "01", take: "01" },
+  ]);
+  assert.equal(anomalies.length, 1);
+  assert.equal(anomalies[0].type, "clip-gap");
+  assert.equal(anomalies[0].key, "A:1:6");
+  assert.match(anomalies[0].message, /C003 断档到 C006/);
+  assert.match(anomalies[0].message, /缺少 C004、C005/);
+  assert.match(anomalies[0].message, /可能漏 2 条/);
+});
+
+test("take sequence anomalies flag duplicates and non-restarting takes", () => {
+  const anomalies = detectSlateSequenceAnomalies([
+    { cardNumber: "A001", videoCode: "C001", scene: "012", shot: "01", take: "01" },
+    { cardNumber: "A001", videoCode: "C002", scene: "012", shot: "01", take: "01" },
+    { cardNumber: "A001", videoCode: "C003", scene: "012", shot: "02", take: "03" },
+  ]);
+  assert.deepEqual(
+    anomalies.map((anomaly) => [anomaly.type, anomaly.key]),
+    [
+      ["take-sequence", "A:1:2"],
+      ["take-sequence", "A:1:3"],
+    ],
+  );
+  assert.match(anomalies[0].message, /次序可能重复/);
+  assert.match(anomalies[1].message, /通常应从 1 开始/);
 });
 
 test("configured X templates control Scene, Shot and Take output widths", () => {
@@ -437,7 +492,7 @@ test("merge preserves every original column and row while canonicalizing target 
     " /Volumes/A ",
     "A001C015",
     "02",
-    "037",
+    "37A",
     "03",
     " keep spaces ",
     "",
@@ -456,6 +511,18 @@ test("merge preserves every original column and row while canonicalizing target 
   assert.equal(output.updatedRowCount, 2);
   assert.equal(output.overwrittenCellCount, 6);
   assert.equal(output.statuses[0].status, "matched");
+});
+
+test("Resolve backfill preserves both scenes from a multi-scene slate value", () => {
+  const source = sourceTable([
+    ["A001C001.mov", "/A", "A001C001", "", "", "", ""],
+  ]);
+  const output = mergeSlateIntoResolveTable(source, [
+    completeRecord({ scene: "58 / 59 场" }),
+  ]);
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.rows[0][columns.scene], "58 / 59");
 });
 
 test("metadata coverage audit exposes the exact 30 missing materials from the synthetic regression", () => {
@@ -613,6 +680,20 @@ test("all exported Comments are globally canonicalized to the allowlist", () => 
   );
 });
 
+test("strict Resolve CSV encoding canonicalizes manually edited Comments", () => {
+  assert.equal(canonicalResolveComment(" ok "), "_OK");
+  assert.equal(canonicalResolveComment("kp"), "_KP");
+  assert.equal(canonicalResolveComment("invalid"), "");
+
+  const source = sourceTable([
+    ["A001C001.mov", "/A", "A001C001", "", "", "", "", "invalid"],
+  ]);
+  const encoded = encodeResolveCsv(source, { canonicalizeComments: true });
+  const decoded = decodeResolveCsv(encoded);
+  const columns = resolveColumnIndexes(decoded.headers);
+  assert.equal(decoded.rows[0][columns.comments], "");
+});
+
 test("encoded CSV keeps zero-padded Scene, Shot and Take text", () => {
   const source = sourceTable([
     ["A001C001_suffix.mov", "/Volumes/A", "A001C001", "", "", "", ""],
@@ -626,7 +707,7 @@ test("encoded CSV keeps zero-padded Scene, Shot and Take text", () => {
   assert.deepEqual(decoded.rows[0].slice(3, 6), ["01", "037", "02"]);
 });
 
-test("all exported Scene, Shot and Take values obey XXX/XX/XX", () => {
+test("all exported Scene, Shot and Take values obey scene-suffix or numeric-width rules", () => {
   const source = sourceTable([
     ["A001C001.mov", "/A", "A001C001", "1", "7", "9", ""],
     ["A001C002.mov", "/A", "A001C002", "镜 2", "第 37A 场", "8 次", ""],
@@ -644,22 +725,22 @@ test("all exported Scene, Shot and Take values obey XXX/XX/XX", () => {
     ]),
     [
       ["007", "01", "09"],
-      ["037", "02", "08"],
-      ["", "", ""],
+      ["37A", "02", "08"],
+      ["1000", "100", ""],
       ["", "", ""],
     ],
   );
   assert.equal(
     output.table.rows.every((row) =>
-      (!row[columns.scene] || /^\d{3}$/.test(row[columns.scene])) &&
-      (!row[columns.shot] || /^\d{2}$/.test(row[columns.shot])) &&
-      (!row[columns.take] || /^\d{2}$/.test(row[columns.take])),
+      (!row[columns.scene] || /^(?:\d{3,}|\d{1,3}[A-Z]+)$/.test(row[columns.scene])) &&
+      (!row[columns.shot] || /^\d{2,}$/.test(row[columns.shot])) &&
+      (!row[columns.take] || /^\d{2,}$/.test(row[columns.take])),
     ),
     true,
   );
 });
 
-test("CSV encoder enforces fixed widths even when merge is bypassed", () => {
+test("CSV encoder pads to the configured width and keeps wider numbers", () => {
   const source = sourceTable([
     ["A001C001.mov", "/A", "A001C001", "3", "4", "5", ""],
     ["A001C002.mov", "/A", "A001C002", "bad", "1000", "101", ""],
@@ -667,7 +748,7 @@ test("CSV encoder enforces fixed widths even when merge is bypassed", () => {
   const decoded = decodeResolveCsv(encodeResolveCsv(source));
 
   assert.deepEqual(decoded.rows[0].slice(3, 6), ["03", "004", "05"]);
-  assert.deepEqual(decoded.rows[1].slice(3, 6), ["", "", ""]);
+  assert.deepEqual(decoded.rows[1].slice(3, 6), ["", "1000", "101"]);
 });
 
 test("standalone table builds Resolve rows from records without a metadata CSV", () => {

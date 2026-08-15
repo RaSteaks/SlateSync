@@ -1,13 +1,20 @@
+// Electron main process: composition root and window lifecycle.
+//
+// Loads .env + workflow config, wires up persisted keys/settings and the OCR
+// Python path, registers IPC handlers, then opens the sandboxed BrowserWindow
+// that loads public/index.html. The window blocks external navigation and only
+// allows file:// URLs under the app's public directory.
 import { app, BrowserWindow, ipcMain } from "electron";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureModelHttpAgent } from "../lib/ai-client.mjs";
-import { loadWorkflowConfig, PROVIDERS } from "../lib/config.mjs";
+import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
 import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.mjs";
 import { registerIpcHandlers } from "./ipc-handlers.mjs";
 import { createKeyStore } from "../lib/key-store.mjs";
 import { createFileDialogs } from "./file-dialogs.mjs";
 import { createSlateScanner } from "./slate-scanner.mjs";
+import { createSettingsStore } from "./settings-store.mjs";
 import { createDiagnosticsStore } from "../lib/diagnostics.mjs";
 import { createTaskStore } from "../lib/task-store.mjs";
 
@@ -46,20 +53,26 @@ async function initialize() {
         process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
       )
     : join(process.resourcesPath, "app", "slatesync.config.json");
-  const workflowConfig = await loadWorkflowConfig(configPath);
+  const getWorkflowConfig = createWorkflowConfigProvider(configPath);
+  await getWorkflowConfig();
 
   const settings = electronSettings(process.env);
   const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
 
-  // Load persisted API keys
+  // Load persisted API keys and app settings
   const keyStore = createKeyStore(app.getPath("userData"));
   const runtimeProviderKeys = await keyStore.load();
+  const settingsStore = createSettingsStore(app.getPath("userData"));
+  const runtimeSettings = await settingsStore.load();
 
   function runtimeEnv() {
     const env = { ...process.env };
     for (const [providerId, apiKey] of runtimeProviderKeys) {
       const provider = PROVIDERS[providerId];
       if (provider) env[provider.envKey] = apiKey;
+    }
+    if (runtimeSettings.ocrPythonPath) {
+      env.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
     }
     return env;
   }
@@ -74,7 +87,7 @@ async function initialize() {
   );
 
   registerIpcHandlers(ipcMain, {
-    workflowConfig,
+    getWorkflowConfig,
     runtimeProviderKeys,
     runtimeEnv,
     recognitionLimiter,
@@ -84,6 +97,8 @@ async function initialize() {
     slateScanner,
     diagnostics,
     taskStore,
+    settingsStore,
+    runtimeSettings,
   });
 }
 

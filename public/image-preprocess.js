@@ -1,3 +1,8 @@
+// Client-side image preprocessing for slate page recognition.
+//
+// Finds the dense content band of a scanned page (to crop dead margin), splits
+// a page into header + overlapping body segments for higher detail, and
+// computes the core-column crop width used by the "high accuracy" audit pass.
 const DEFAULT_DARK_THRESHOLD = 225;
 const DEFAULT_ROW_DENSITY = 0.02;
 

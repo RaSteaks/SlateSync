@@ -1,3 +1,8 @@
+// Persisted provider API keys for the Electron build.
+//
+// Keys are stored as JSON at <userData>/provider-keys.json, written atomically
+// (tmp + rename) with 0600 permissions. Mirrors lib/key-store.mjs, which the
+// standalone server uses against its own data directory.
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 

@@ -1,3 +1,8 @@
+// Registers every ipcMain.handle channel that the renderer's preload bridge
+// (electron/preload.cjs) invokes. Each handler adapts a main-process service —
+// recognition, model discovery, key/settings/task/diagnostic stores, file
+// dialogs, slate directory scanning — into a JSON-safe IPC response, stripping
+// pricing/cost fields before returning them to the client.
 import { recognizeSlate } from "../lib/ai-client.mjs";
 import { PROVIDERS, publicConfig } from "../lib/config.mjs";
 import {
@@ -9,10 +14,12 @@ import {
   createSessionCapture,
 } from "../lib/diagnostics.mjs";
 import { createTaskStore } from "../lib/task-store.mjs";
+import { checkPaddleOcr } from "../lib/ocr/paddleocr.mjs";
 
 export function registerIpcHandlers(ipcMain, context) {
   const {
     workflowConfig,
+    getWorkflowConfig = async () => workflowConfig,
     runtimeProviderKeys,
     runtimeEnv,
     recognitionLimiter,
@@ -22,10 +29,13 @@ export function registerIpcHandlers(ipcMain, context) {
     slateScanner,
     diagnostics,
     taskStore,
+    settingsStore,
+    runtimeSettings,
+    checkOcr = checkPaddleOcr,
   } = context;
 
   ipcMain.handle("get-config", async () => {
-    const config = publicConfig(runtimeEnv(), workflowConfig, {
+    const config = publicConfig(runtimeEnv(), await getWorkflowConfig(), {
       ocrAutoEnable: true,
     });
     return {
@@ -90,7 +100,7 @@ export function registerIpcHandlers(ipcMain, context) {
     const release = recognitionLimiter.acquire();
     const capture = createSessionCapture();
     try {
-      const input = recognitionInput(body, workflowConfig);
+      const input = recognitionInput(body, await getWorkflowConfig());
       const result = await recognizeSlate(input, {
         env: runtimeEnv(),
         ocrAutoEnable: true,
@@ -177,6 +187,54 @@ export function registerIpcHandlers(ipcMain, context) {
     await taskStore.deleteTask(id);
     return { deleted: id };
   });
+
+  ipcMain.handle("get-ocr-settings", async () => ({
+    pythonPath: runtimeSettings?.ocrPythonPath || "",
+    setupCompleted: Boolean(runtimeSettings?.ocrSetupCompleted),
+    setupSkipped: Boolean(runtimeSettings?.ocrSetupSkipped),
+  }));
+
+  ipcMain.handle("save-ocr-settings", async (_event, body) => {
+    if (!settingsStore) throw new Error("设置存储不可用");
+    let nextSettings;
+    if (body?.skip === true) {
+      nextSettings = {
+        ...runtimeSettings,
+        ocrPythonPath: "",
+        ocrSetupCompleted: false,
+        ocrSetupSkipped: true,
+      };
+    } else {
+      const pythonPath = String(body?.pythonPath ?? "").trim();
+      if (!pythonPath) throw new Error("请先填写 PaddleOCR Python 环境路径。");
+
+      // Validate before changing memory or disk, so a failed check cannot make
+      // an unusable interpreter look like a completed OCR setup.
+      const checkResult = await checkOcr({ pythonPath });
+      if (!checkResult?.ok) {
+        throw new Error(
+          checkResult?.error?.message || "PaddleOCR 检测失败，未保存设置。",
+        );
+      }
+      nextSettings = {
+        ...runtimeSettings,
+        ocrPythonPath: pythonPath,
+        ocrSetupCompleted: true,
+        ocrSetupSkipped: false,
+      };
+    }
+    const savedSettings = await settingsStore.save(nextSettings);
+    Object.assign(runtimeSettings, savedSettings || nextSettings);
+    return {
+      pythonPath: runtimeSettings.ocrPythonPath,
+      setupCompleted: runtimeSettings.ocrSetupCompleted,
+      setupSkipped: runtimeSettings.ocrSetupSkipped,
+    };
+  });
+
+  ipcMain.handle("check-ocr", async (_event, body) =>
+    checkOcr({ pythonPath: String(body?.pythonPath ?? "").trim() }),
+  );
 }
 
 function recognitionInput(body, workflowConfig) {

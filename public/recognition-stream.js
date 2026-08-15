@@ -1,3 +1,7 @@
+// Recognition response reading (JSON or NDJSON streaming).
+//
+// Reads a streaming NDJSON response, dispatching progress events as they arrive
+// and resolving with the final result event.
 export async function readRecognitionResponse(response, onProgress) {
   const contentType = response.headers.get("content-type") || "";
   if (!response.ok) {

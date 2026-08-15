@@ -1,3 +1,7 @@
+// Pure workflow gating predicates for the renderer.
+//
+// Centralizes the "can I do X yet?" rules (start recognition, load a CSV,
+// merge slate metadata, export) so the UI stays consistent as state changes.
 export function canStartRecognition({
   reportReady,
   providerConfigured,
@@ -17,8 +21,15 @@ export function canExportResolveCsv({
   metadataLoaded,
   recordCount,
   exportableCount,
+  hasManualEdits = false,
 }) {
-  return Boolean(metadataLoaded && recordCount > 0 && exportableCount > 0);
+  // A user-edited preview is itself a valid export change, even when the
+  // automatic merge did not alter any Resolve rows.
+  return Boolean(
+    metadataLoaded &&
+      recordCount > 0 &&
+      (exportableCount > 0 || hasManualEdits),
+  );
 }
 
 export function canLoadResolveCsv({ reportReady, slateCsvLoaded }) {

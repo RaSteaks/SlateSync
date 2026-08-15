@@ -1,3 +1,28 @@
+// DaVinci Resolve CSV parsing and slate metadata backfill.
+//
+// Decodes Resolve's exported CSV, matches its rows to recognized slate records
+// and camera sidecar metadata (frame rate, shoot day), merges them into a
+// Resolve-ready table, and encodes the result back to CSV. Also re-exports the
+// shared metadata helpers from metadata-common.js / metadata-sources/.
+import {
+  canonicalKeyToMaterialPrefix,
+  chineseNumeralsToArabic,
+  cleanValue,
+  detectCsvFormat,
+  extractCombinedMaterialKey,
+  normalizeCameraFps,
+  normalizeShootDay,
+  parseCanonicalMaterialKey,
+} from "./metadata-common.js";
+import { parseSlateMetadataText } from "./metadata-sources/kinefinity.js";
+
+export {
+  extractCombinedMaterialKey,
+  normalizeCameraFps,
+  normalizeShootDay,
+  parseSlateMetadataText,
+};
+
 const HEADER_ALIASES = Object.freeze({
   fileName: ["File Name", "Filename", "文件名"],
   clipDirectory: ["Clip Directory", "片段目录", "素材目录"],
@@ -37,7 +62,7 @@ const TARGET_COLUMN_FIELDS = new Set(
   [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS].map((target) => target.field),
 );
 
-const FIXED_WIDTH_NUMERIC_FIELDS = Object.freeze([
+const FIXED_WIDTH_METADATA_FIELDS = Object.freeze([
   { field: "scene", label: "Scene" },
   { field: "shot", label: "Shot" },
   { field: "take", label: "Take" },
@@ -48,6 +73,8 @@ export const DEFAULT_RESOLVE_FIELD_FORMATS = Object.freeze({
   shot: "XX",
   take: "XX",
 });
+
+const FIELD_NUMBER_LIMIT = 10 ** 6;
 
 export function decodeResolveCsv(input) {
   const bytes =
@@ -94,51 +121,6 @@ export function decodeResolveCsv(input) {
       lineEnding: detectLineEnding(text),
       finalNewline: /(?:\r\n|\n|\r)$/.test(text),
     },
-  };
-}
-
-export function parseSlateMetadataText(input, sourceName = "slate.txt") {
-  const text = decodeSlateMetadataText(input);
-  const fields = new Map();
-  for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/)) {
-    const match = line.match(/^\s*([^:]+?)\.*\s*:\s*(.*?)\s*$/);
-    if (!match) continue;
-    const key = match[1].replace(/[.\s]+$/g, "").trim().toLowerCase();
-    if (key && !fields.has(key)) fields.set(key, match[2].trim());
-  }
-
-  const clipName = fields.get("clip name") || "";
-  const clipKey = extractCombinedMaterialKey(clipName);
-  const sourceBaseName = String(sourceName || "")
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .at(-1);
-  const sourceKey = extractCombinedMaterialKey(sourceBaseName);
-  if (fields.has("clip name") && !clipKey) {
-    throw new Error(`${sourceName} 的 Clip Name“${clipName}”无法识别`);
-  }
-  if (clipKey && sourceKey && clipKey !== sourceKey) {
-    throw new Error(
-      `${sourceName} 的 Clip Name“${clipName}”与文件名指向不同素材`,
-    );
-  }
-  const materialKey = clipKey || sourceKey;
-  if (!materialKey) {
-    throw new Error(`${sourceName} 缺少可识别的 Clip Name`);
-  }
-
-  const sensorFps = normalizeCameraFps(fields.get("sensor fps"));
-  const shootDay = normalizeShootDay(fields.get("shot date"));
-  if (!sensorFps && !shootDay) {
-    throw new Error(`${sourceName} 缺少有效的 Sensor FPS 或 Shot Date`);
-  }
-
-  return {
-    sourceName: String(sourceName || "slate.txt"),
-    clipName: clipName || canonicalKeyToMaterialPrefix(materialKey),
-    materialKey,
-    sensorFps,
-    shootDay,
   };
 }
 
@@ -221,6 +203,12 @@ export function mergeSlateIntoResolveTable(
   }
 
   const rowIndex = buildMetadataRowIndex(rows, columns, warnings);
+  // Invert the key→rows index so the caller can map each output row back to its
+  // canonical material key (used by the UI to flag rows whose sidecar is missing).
+  const rowKeys = new Array(rows.length).fill("");
+  for (const [key, rowNumbers] of rowIndex) {
+    for (const rowNumber of rowNumbers) rowKeys[rowNumber] = key;
+  }
   const recognizedMaterialKeys = new Set(
     records
       .map((record) => canonicalMaterialKey(record.cardNumber, record.videoCode))
@@ -475,11 +463,11 @@ export function mergeSlateIntoResolveTable(
     );
   }
 
-  // Scene/Shot/Take are strict Resolve export fields. Canonicalize the entire
-  // table, not only rows matched in this run, so legacy CSV values cannot
-  // bypass the fixed-width contract: Scene=XXX and Shot/Take=XX.
+  // Canonicalize the entire Scene/Shot/Take table, not only rows matched in
+  // this run. Numeric scenes use XXX, while suffixes and multi-scene values
+  // are kept and uppercased (87a becomes 87A, 58 / 59 stays 58 / 59).
   for (const [rowNumber, row] of rows.entries()) {
-    for (const target of FIXED_WIDTH_NUMERIC_FIELDS) {
+    for (const target of FIXED_WIDTH_METADATA_FIELDS) {
       const columnIndex = columns[target.field];
       const previous = cleanValue(row[columnIndex]);
       const next = normalizeMetadataField(
@@ -550,6 +538,7 @@ export function mergeSlateIntoResolveTable(
     recognizedMaterialCount: rowIndex.size - unrecognizedMaterialKeys.length,
     unrecognizedMaterials,
     unrecognizedRowIndexes,
+    rowKeys,
   };
 }
 
@@ -562,11 +551,12 @@ export function encodeResolveCsv(table, options = {}) {
   const headers = table.headers.map(stringValue);
   const columns = resolveColumnIndexes(headers);
   const fieldFormats = resolveFieldFormats(options.fieldFormats);
+  const canonicalizeComments = options.canonicalizeComments === true;
   const rows = table.rows.map((row) =>
     normalizeRowWidth(row.map(stringValue), headers.length),
   );
   for (const row of rows) {
-    for (const target of FIXED_WIDTH_NUMERIC_FIELDS) {
+    for (const target of FIXED_WIDTH_METADATA_FIELDS) {
       const columnIndex = columns[target.field];
       if (columnIndex < 0) continue;
       row[columnIndex] = normalizeMetadataField(
@@ -574,6 +564,11 @@ export function encodeResolveCsv(table, options = {}) {
         row[columnIndex],
         fieldFormats,
       );
+    }
+    if (canonicalizeComments && columns.comments >= 0) {
+      // Metadata-backed Resolve exports must not let manual edits reintroduce
+      // arbitrary text into the strict Comments allowlist.
+      row[columns.comments] = canonicalResolveComment(row[columns.comments]);
     }
   }
   const matrix = [
@@ -672,6 +667,119 @@ export function materialPrefix(cardNumber, videoCode) {
   return `${card}${video}`;
 }
 
+// Warning-only sequence checks over recognized records, keyed by canonical
+// material key so the merge preview can flag the affected rows in red.
+// Detects clip-number gaps and Scene/Shot/Take sequence anomalies; nothing
+// is auto-corrected here.
+export function detectSlateSequenceAnomalies(records = []) {
+  const anomalies = [];
+  const byReel = new Map();
+  records.forEach((record, index) => {
+    const card = parseCardNumber(record?.cardNumber);
+    const clipCode = normalizeClipNumber(record?.videoCode);
+    if (!card || !clipCode) return;
+    const reelKey = `${card.camera}${card.reel}`;
+    const group = byReel.get(reelKey) || [];
+    group.push({ record, index, clip: Number(clipCode.slice(1)) });
+    byReel.set(reelKey, group);
+  });
+
+  const numberValue = (value) =>
+    /^\d+$/.test(String(value || "")) ? Number(value) : null;
+  const needsReview = (record, field) =>
+    Array.isArray(record?.reviewRequiredFields) &&
+    record.reviewRequiredFields.includes(field);
+  const clipLabel = (clip) => `C${String(clip).padStart(3, "0")}`;
+
+  for (const group of byReel.values()) {
+    group.sort((left, right) => left.clip - right.clip || left.index - right.index);
+    for (let index = 1; index < group.length; index += 1) {
+      const previous = group[index - 1];
+      const current = group[index];
+      const key = canonicalMaterialKey(
+        current.record.cardNumber,
+        current.record.videoCode,
+      );
+
+      if (current.clip > previous.clip + 1) {
+        const missingCount = current.clip - previous.clip - 1;
+        const missingLabels = [];
+        for (let clip = previous.clip + 1; clip <= current.clip - 1; clip += 1) {
+          if (missingLabels.length === 5) {
+            missingLabels.push(`等 ${missingCount} 条`);
+            break;
+          }
+          missingLabels.push(clipLabel(clip));
+        }
+        anomalies.push({
+          key,
+          type: "clip-gap",
+          message: `条号从 ${clipLabel(previous.clip)} 断档到 ${clipLabel(current.clip)}，缺少 ${missingLabels.join("、")}，可能漏 ${missingCount} 条`,
+        });
+        continue;
+      }
+
+      if (
+        needsReview(current.record, "scene") ||
+        needsReview(current.record, "shot") ||
+        needsReview(current.record, "take")
+      ) {
+        continue;
+      }
+      const previousTake = numberValue(previous.record.take);
+      const currentTake = numberValue(current.record.take);
+      const previousShot = numberValue(previous.record.shot);
+      const currentShot = numberValue(current.record.shot);
+      if (
+        previousTake == null ||
+        currentTake == null ||
+        !previous.record.scene ||
+        !current.record.scene ||
+        previous.record.scene !== current.record.scene
+      ) {
+        continue;
+      }
+
+      if (previousShot != null && currentShot != null && previousShot === currentShot) {
+        if (currentTake === previousTake) {
+          anomalies.push({
+            key,
+            type: "take-sequence",
+            message: `与上一条同为 ${current.record.scene} ${current.record.shot} 镜 ${currentTake} 次，次序可能重复`,
+          });
+        } else if (currentTake > previousTake + 1) {
+          anomalies.push({
+            key,
+            type: "take-sequence",
+            message: `${current.record.scene} ${current.record.shot} 镜的次从 ${previousTake} 跳到 ${currentTake}，中间可能漏 ${currentTake - previousTake - 1} 条`,
+          });
+        } else if (currentTake < previousTake) {
+          anomalies.push({
+            key,
+            type: "take-sequence",
+            message: `${current.record.scene} ${current.record.shot} 镜的次从 ${previousTake} 回落到 ${currentTake}`,
+          });
+        }
+        continue;
+      }
+
+      if (
+        previousShot != null &&
+        currentShot != null &&
+        currentShot !== previousShot &&
+        currentTake > 1
+      ) {
+        anomalies.push({
+          key,
+          type: "take-sequence",
+          message: `进入 ${current.record.scene} ${current.record.shot} 镜的第一条次为 ${currentTake}，通常应从 1 开始`,
+        });
+      }
+    }
+  }
+  return anomalies;
+}
+
 export function normalizeClipNumber(value) {
   let video = normalizeToken(value);
   const combined = video.match(/^[A-Z]+\d+C(\d+)$/);
@@ -692,15 +800,24 @@ export function normalizeClipNumber(value) {
 }
 
 export function normalizeSceneValue(value, format = "XXX") {
-  return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 3));
+  return normalizeSceneCode(
+    chineseNumeralsToArabic(value),
+    fieldFormatWidth(format, 3),
+  );
 }
 
 export function normalizeShotValue(value, format = "XX") {
-  return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 2));
+  return normalizeFixedWidthNumber(
+    chineseNumeralsToArabic(value),
+    fieldFormatWidth(format, 2),
+  );
 }
 
 export function normalizeTakeValue(value, format = "XX") {
-  return normalizeFixedWidthNumber(value, fieldFormatWidth(format, 2));
+  return normalizeFixedWidthNumber(
+    chineseNumeralsToArabic(value),
+    fieldFormatWidth(format, 2),
+  );
 }
 
 // Builds a Resolve-compatible table straight from recognized records, so a
@@ -720,48 +837,43 @@ export function buildStandaloneResolveTable(records = [], options = {}) {
   return { headers, rows };
 }
 
-export function normalizeCameraFps(value) {
-  const normalized = cleanValue(value).replace(",", ".");
-  const match = normalized.match(/^(\d{1,4}(?:\.\d{1,6})?)\s*(?:fps)?$/i);
-  if (!match) return "";
-  const number = Number(match[1]);
-  if (!Number.isFinite(number) || number <= 0 || number > 1000) return "";
-  return String(number);
-}
-
-export function normalizeShootDay(value) {
-  const normalized = cleanValue(value);
-  const compact = normalized.match(/^(\d{2}|\d{4})(\d{2})(\d{2})$/);
-  const separated = normalized.match(
-    /^(\d{2}|\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:[T\s].*)?$/,
-  );
-  const match = compact || separated;
-  if (!match) return "";
-
-  const yearText = match[1];
-  const fullYear = yearText.length === 2
-    ? 2000 + Number(yearText)
-    : Number(yearText);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(Date.UTC(fullYear, month - 1, day));
-  if (
-    date.getUTCFullYear() !== fullYear ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) return "";
-
-  return `${String(fullYear).slice(-2)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 function normalizeFixedWidthNumber(value, width) {
   const match = cleanValue(value).match(/\d+/);
   if (!match) return "";
   const number = Number(match[0]);
-  if (!Number.isSafeInteger(number) || number < 0 || number >= 10 ** width) {
+  if (
+    !Number.isSafeInteger(number) ||
+    number < 0 ||
+    number >= FIELD_NUMBER_LIMIT
+  ) {
     return "";
   }
   return String(number).padStart(width, "0");
+}
+
+// Keep every scene token and use the canonical " / " separator for
+// multi-scene values instead of dropping all but the last number; suffix
+// letters are always uppercase.
+function normalizeSceneCode(value, width) {
+  const normalized = cleanValue(value).toUpperCase();
+  const matches = [...normalized.matchAll(/(\d+)\s*([A-Z]+)?/g)];
+  if (!matches.length) return "";
+
+  const parts = matches.map((match) => {
+    const number = Number(match[1]);
+    if (
+      !Number.isSafeInteger(number) ||
+      number < 0 ||
+      number >= FIELD_NUMBER_LIMIT
+    ) {
+      return null;
+    }
+    const suffix = match[2] || "";
+    return suffix ? `${number}${suffix}` : String(number);
+  });
+  if (parts.some((part) => part == null)) return "";
+  if (parts.length > 1 || /[A-Z]/.test(parts[0])) return parts.join(" / ");
+  return parts[0].padStart(width, "0");
 }
 
 function resolveFieldFormats(value = {}) {
@@ -805,7 +917,8 @@ function commentValueForTakeStatus(takeStatus) {
   return "";
 }
 
-function canonicalResolveComment(value) {
+// Resolve serializes take status in Comments as _OK, _KP, or an empty value.
+export function canonicalResolveComment(value) {
   const normalized = cleanValue(value).toUpperCase();
   if (normalized === "OK" || normalized === "_OK") return "_OK";
   if (normalized === "KP" || normalized === "_KP") return "_KP";
@@ -838,12 +951,6 @@ function compareCanonicalMaterialKeys(left, right) {
     leftParts.reel - rightParts.reel ||
     leftParts.clip - rightParts.clip
   );
-}
-
-function canonicalKeyToMaterialPrefix(key) {
-  const parsed = parseCanonicalMaterialKey(key);
-  if (!parsed) return String(key);
-  return `${parsed.camera}${String(parsed.reel).padStart(3, "0")}C${String(parsed.clip).padStart(3, "0")}`;
 }
 
 function compactMaterialRanges(keys) {
@@ -881,16 +988,6 @@ function compactMaterialRanges(keys) {
     flush();
   }
   return ranges.join("、");
-}
-
-function parseCanonicalMaterialKey(key) {
-  const match = String(key || "").match(/^([^:]+):(\d+):(\d+)$/);
-  if (!match) return null;
-  return {
-    camera: match[1],
-    reel: Number(match[2]),
-    clip: Number(match[3]),
-  };
 }
 
 function identifyMetadataRow(row, columns) {
@@ -939,15 +1036,6 @@ function identifyMetadataRow(row, columns) {
   return { key: "", conflict: false };
 }
 
-export function extractCombinedMaterialKey(value) {
-  const text = String(value || "").toUpperCase();
-  const match = text.match(
-    /(?:^|[^A-Z0-9])([A-Z]+)[\s_-]*0*(\d+)[\s_-]*C[\s_-]*0*(\d+)(?=[^0-9]|$)/,
-  );
-  if (!match) return "";
-  return `${match[1]}:${Number(match[2])}:${Number(match[3])}`;
-}
-
 function extractLooseClipOrdinal(value) {
   const text = String(value || "").toUpperCase();
   const match = text.match(/(?:^|[^A-Z0-9])C[\s_-]*0*(\d+)(?=[^0-9]|$)/);
@@ -990,54 +1078,6 @@ function normalizeHeader(value) {
     .trim()
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
-}
-
-function detectCsvFormat(bytes) {
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return { encoding: "utf-16le", bomBytes: 2 };
-  }
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
-    return { encoding: "utf-16be", bomBytes: 2 };
-  }
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return { encoding: "utf-8", bomBytes: 3 };
-  }
-
-  const sampleLength = Math.min(bytes.length, 2048);
-  let evenZeros = 0;
-  let oddZeros = 0;
-  for (let index = 0; index < sampleLength; index += 1) {
-    if (bytes[index] !== 0) continue;
-    if (index % 2) oddZeros += 1;
-    else evenZeros += 1;
-  }
-  if (oddZeros > sampleLength / 8 && oddZeros > evenZeros * 4) {
-    return { encoding: "utf-16le", bomBytes: 0 };
-  }
-  if (evenZeros > sampleLength / 8 && evenZeros > oddZeros * 4) {
-    return { encoding: "utf-16be", bomBytes: 0 };
-  }
-  return { encoding: "utf-8", bomBytes: 0 };
-}
-
-function decodeSlateMetadataText(input) {
-  if (typeof input === "string") return input;
-  const bytes =
-    input instanceof Uint8Array
-      ? input
-      : input instanceof ArrayBuffer
-        ? new Uint8Array(input)
-        : null;
-  if (!bytes?.length) throw new Error("slate.txt 文件为空");
-
-  const format = detectCsvFormat(bytes);
-  try {
-    return new TextDecoder(format.encoding, { fatal: true }).decode(
-      bytes.subarray(format.bomBytes),
-    );
-  } catch {
-    throw new Error("无法读取 slate.txt 编码；仅支持 UTF-8 或 UTF-16 文本。");
-  }
 }
 
 function detectDelimiter(text) {
@@ -1146,10 +1186,6 @@ function groupBy(values, keyOf) {
 
 function normalizeToken(value) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-function cleanValue(value) {
-  return value == null ? "" : String(value).trim();
 }
 
 function stringValue(value) {

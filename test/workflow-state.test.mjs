@@ -28,7 +28,7 @@ test("slate recognition can start before Resolve CSV is loaded", () => {
   );
 });
 
-test("CSV export becomes available only after recognized rows can be merged", () => {
+test("CSV export becomes available after automatic or manual changes", () => {
   assert.equal(
     canExportResolveCsv({
       metadataLoaded: false,
@@ -44,6 +44,24 @@ test("CSV export becomes available only after recognized rows can be merged", ()
       exportableCount: 8,
     }),
     true,
+  );
+  assert.equal(
+    canExportResolveCsv({
+      metadataLoaded: true,
+      recordCount: 12,
+      exportableCount: 0,
+      hasManualEdits: true,
+    }),
+    true,
+  );
+  assert.equal(
+    canExportResolveCsv({
+      metadataLoaded: true,
+      recordCount: 12,
+      exportableCount: 0,
+      hasManualEdits: false,
+    }),
+    false,
   );
 });
 

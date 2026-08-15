@@ -1,3 +1,9 @@
+// CLI harness for running a single recognition job outside the UI.
+//
+// Loads .env + workflow config, runs recognizeSlate against a prepared input
+// JSON (see /tmp/slatesync-pages/recognition-input.json), persists the task and
+// diagnostic session, and prints the results. Useful for debugging recognition
+// without the browser or Electron.
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";

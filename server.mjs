@@ -1,10 +1,19 @@
+// Standalone HTTP server (web mode).
+//
+// Serves public/ as the SlateSync UI and exposes the same recognition, model
+// discovery, task/diagnostic, and slate-directory APIs that the Electron build
+// offers over IPC, with same-origin request guards and optional basic auth.
 import http from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recognizeSlate, configureModelHttpAgent } from "./lib/ai-client.mjs";
-import { loadWorkflowConfig, PROVIDERS, publicConfig } from "./lib/config.mjs";
+import {
+  createWorkflowConfigProvider,
+  PROVIDERS,
+  publicConfig,
+} from "./lib/config.mjs";
 import {
   discoverVisionModels,
   staticProviderModels,
@@ -36,7 +45,8 @@ const workflowConfigPath = resolve(
   ROOT,
   process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
 );
-const workflowConfig = await loadWorkflowConfig(workflowConfigPath);
+const getWorkflowConfig = createWorkflowConfigProvider(workflowConfigPath);
+await getWorkflowConfig();
 const settings = serverSettings(process.env);
 const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
 const dataDir = resolve(
@@ -73,7 +83,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/readyz") {
-      const config = publicConfig(runtimeEnv(), workflowConfig, {
+      const config = publicConfig(runtimeEnv(), await getWorkflowConfig(), {
         ocrAutoEnable: true,
       });
       const recognitionConfigured = config.providers.some(
@@ -105,7 +115,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/config") {
-      return sendJson(response, 200, clientConfig());
+      return sendJson(response, 200, await clientConfig());
     }
 
     if (request.method === "POST" && url.pathname === "/api/provider-key") {
@@ -167,10 +177,13 @@ const server = http.createServer(async (request, response) => {
       const release = recognitionLimiter.acquire();
       try {
         const body = await readJsonBody(request, settings.maxBodyBytes);
-        const result = await recognizeSlate(recognitionInput(body), {
-          env: runtimeEnv(),
-          ocrAutoEnable: true,
-        });
+        const result = await recognizeSlate(
+          recognitionInput(body, await getWorkflowConfig()),
+          {
+            env: runtimeEnv(),
+            ocrAutoEnable: true,
+          },
+        );
         return sendJson(response, 200, clientRecognitionResult(result));
       } finally {
         release();
@@ -182,7 +195,10 @@ const server = http.createServer(async (request, response) => {
       const release = recognitionLimiter.acquire();
       try {
         const body = await readJsonBody(request, settings.maxBodyBytes);
-        return await streamRecognition(response, recognitionInput(body));
+        return await streamRecognition(
+          response,
+          recognitionInput(body, await getWorkflowConfig()),
+        );
       } finally {
         release();
       }
@@ -254,7 +270,7 @@ server.on("error", (error) => {
   process.exitCode = 1;
 });
 
-function recognitionInput(body) {
+function recognitionInput(body, workflowConfig) {
   return {
     providerId: body.provider,
     modelId: body.model,
@@ -498,8 +514,8 @@ function clientModelDiscovery(result) {
   };
 }
 
-function clientConfig() {
-  const config = publicConfig(runtimeEnv(), workflowConfig, {
+async function clientConfig() {
+  const config = publicConfig(runtimeEnv(), await getWorkflowConfig(), {
     ocrAutoEnable: true,
   });
   return {

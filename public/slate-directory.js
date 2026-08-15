@@ -1,9 +1,26 @@
+// Browser-side metadata discovery (File System Access API).
+//
+// Walks the selected material root and locates each clip's camera sidecar
+// (slate.txt today; XML/ALE for other cameras later). The walk is driven by
+// the Resolve CSV's material keys: directories whose name does not resolve to
+// an expected material are pruned without enumerating their contents.
+//
+// The sidecar naming convention is learned per camera (机位): the first clip of
+// a camera is enumerated to learn how its sidecar is named, then the remaining
+// clips are found by a direct probe — falling back to enumeration when the
+// probe misses, so nothing is silently dropped. Clips that end up with no
+// sidecar are reported back via `missingKeys`.
+import { extractCombinedMaterialKey } from "./metadata-common.js";
 import {
-  extractCombinedMaterialKey,
-  parseSlateMetadataText,
-} from "./resolve-csv.js";
+  METADATA_FILE_PATTERN,
+  parseMetadataFile,
+} from "./metadata-sources/index.js";
+import {
+  defaultMetadataStructure,
+  learnStructure,
+  probeNames,
+} from "./metadata-structure.js";
 
-const SLATE_FILE_PATTERN = /slate\.txt$/i;
 const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 export async function scanSlateDirectory(rootHandle, options = {}) {
@@ -28,6 +45,7 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
   const signal = options.signal;
   const warnings = [];
   const candidates = new Map();
+  const structureByCamera = new Map();
   const stats = {
     visitedDirectories: 0,
     prunedDirectories: 0,
@@ -35,6 +53,7 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
     discoveredSlateFiles: 0,
     readSlateFiles: 0,
     cacheHits: 0,
+    learnedStructures: 0,
   };
 
   const rememberCandidate = (handle, pathParts) => {
@@ -44,17 +63,19 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
     stats.discoveredSlateFiles += 1;
   };
 
-  const enumerateFilesOnly = async (directoryHandle, pathParts) => {
+  const listMetadataFiles = async (directoryHandle, pathParts) => {
+    const found = [];
     try {
       for await (const [name, handle] of directoryHandle.entries()) {
         throwIfAborted(signal);
-        if (handle.kind !== "file" || !SLATE_FILE_PATTERN.test(name)) continue;
-        rememberCandidate(handle, [...pathParts, name]);
+        if (handle.kind !== "file" || !METADATA_FILE_PATTERN.test(name)) continue;
+        found.push({ name, handle });
       }
     } catch (error) {
       if (error?.name === "AbortError") throw error;
       warnings.push(`${pathParts.join("/")} 无法读取：${error.message}`);
     }
+    return found;
   };
 
   const walk = async (directoryHandle, pathParts, depth, isRoot = false) => {
@@ -70,14 +91,34 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
         return;
       }
 
-      const exactName = `${directoryHandle.name}-slate.txt`;
-      const exactHandle = await optionalFileHandle(directoryHandle, exactName);
-      if (exactHandle) {
-        rememberCandidate(exactHandle, [...pathParts, exactName]);
-        return;
+      const camera = directoryKey.split(":")[0];
+      let structure = structureByCamera.get(camera);
+      if (!structure) {
+        structure = defaultMetadataStructure();
+        structureByCamera.set(camera, structure);
       }
 
-      await enumerateFilesOnly(directoryHandle, pathParts);
+      // Probe the known naming convention directly (no enumeration).
+      for (const candidateName of probeNames(structure, directoryHandle.name)) {
+        const handle = await optionalFileHandle(directoryHandle, candidateName);
+        if (handle) {
+          rememberCandidate(handle, [...pathParts, candidateName]);
+          return;
+        }
+      }
+
+      // Probe missed → enumerate once, learn the real structure, remember.
+      const found = await listMetadataFiles(directoryHandle, pathParts);
+      if (found.length) {
+        structureByCamera.set(
+          camera,
+          learnStructure(directoryHandle.name, found.map((file) => file.name)),
+        );
+        stats.learnedStructures += 1;
+        for (const { name, handle } of found) {
+          rememberCandidate(handle, [...pathParts, name]);
+        }
+      }
       return;
     }
 
@@ -86,7 +127,7 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
       for await (const [name, handle] of directoryHandle.entries()) {
         throwIfAborted(signal);
         if (handle.kind === "file") {
-          if (!SLATE_FILE_PATTERN.test(name)) continue;
+          if (!METADATA_FILE_PATTERN.test(name)) continue;
           const fileKey = extractCombinedMaterialKey(name);
           if (!fileKey || expectedKeys.has(fileKey)) {
             rememberCandidate(handle, [...pathParts, name]);
@@ -140,7 +181,7 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
 
         stats.readSlateFiles += 1;
         const result = {
-          metadata: parseSlateMetadataText(await file.arrayBuffer(), sourceName),
+          metadata: parseMetadataFile(await file.arrayBuffer(), sourceName),
         };
         cache.set(cacheKey, result);
         return result;
@@ -163,13 +204,19 @@ export async function scanSlateDirectory(rootHandle, options = {}) {
     if (result?.metadata) metadata.push(result.metadata);
     if (result?.warning) warnings.push(result.warning);
   }
+  // Reconcile after parsing so expected clips with an entirely absent
+  // directory are reported just like clips with an empty directory.
+  const foundKeys = new Set(
+    metadata.map((entry) => entry.materialKey).filter(Boolean),
+  );
+  const missingKeys = [...expectedKeys].filter((key) => !foundKeys.has(key));
   if (stats.skippedDeepDirectories) {
     warnings.push(
       `${stats.skippedDeepDirectories} 个目录超过配置的 ${maxDepth} 层搜索范围，未继续进入。`,
     );
   }
 
-  return { metadata, warnings, stats, cache };
+  return { metadata, warnings, stats, cache, missingKeys: [...missingKeys] };
 }
 
 async function optionalFileHandle(directoryHandle, name) {

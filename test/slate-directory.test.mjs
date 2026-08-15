@@ -117,6 +117,46 @@ test("scanner falls back to another slate.txt name and reuses session cache", as
   assert.equal(slate.arrayBufferCalls, 1);
 });
 
+test("learns a fixed-name structure once and probes it for later clips of the same camera", async () => {
+  const clipA = mockFile("camera-slate.txt", "Clip Name: A004C001\nSensor FPS: 48");
+  const clipB = mockFile("camera-slate.txt", "Clip Name: A004C002\nSensor FPS: 48");
+  const root = mockDirectory("Video", {
+    A004C001: mockDirectory("A004C001", { "camera-slate.txt": clipA }),
+    A004C002: mockDirectory("A004C002", { "camera-slate.txt": clipB }),
+  });
+
+  const result = await scanSlateDirectory(root, {
+    expectedKeys: ["A:4:1", "A:4:2"],
+    maxDepth: 4,
+  });
+
+  assert.equal(result.metadata.length, 2);
+  assert.deepEqual(
+    result.metadata.map((entry) => entry.materialKey).sort(),
+    ["A:4:1", "A:4:2"],
+  );
+  assert.equal(result.stats.learnedStructures, 1);
+});
+
+test("records empty and absent materials in missingKeys", async () => {
+  const clipA = mockFile(
+    "A001C001-slate.txt",
+    "Clip Name: A001C001\nSensor FPS: 48",
+  );
+  const root = mockDirectory("Video", {
+    A001C001: mockDirectory("A001C001", { "A001C001-slate.txt": clipA }),
+    A001C002: mockDirectory("A001C002", {}),
+  });
+
+  const result = await scanSlateDirectory(root, {
+    expectedKeys: ["A:1:1", "A:1:2", "A:1:3"],
+    maxDepth: 4,
+  });
+
+  assert.equal(result.metadata.length, 1);
+  assert.deepEqual(result.missingKeys, ["A:1:2", "A:1:3"]);
+});
+
 function mockDirectory(name, entries) {
   return {
     kind: "directory",

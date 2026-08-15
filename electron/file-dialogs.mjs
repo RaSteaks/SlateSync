@@ -1,3 +1,8 @@
+// Electron native file dialogs (save CSV, pick directory).
+//
+// The sandboxed renderer cannot show native dialogs itself; the main process
+// exposes these through IPC so the UI can ask the user for a save path or a
+// material root directory.
 import { dialog } from "electron";
 import { writeFile } from "node:fs/promises";
 

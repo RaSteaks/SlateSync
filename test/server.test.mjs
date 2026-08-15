@@ -1,19 +1,28 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 test("server exposes health endpoints and stops gracefully", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "slatesync-server-"));
+  const configPath = join(dataDir, "slatesync.config.json");
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      slate: { maxDirectoryDepth: 4 },
+      resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" } },
+    }),
+  );
   const child = spawn(process.execPath, ["server.mjs"], {
     cwd: new URL("..", import.meta.url),
     env: {
       ...process.env,
       HOST: "127.0.0.1",
       PORT: "0",
+      SLATESYNC_CONFIG_PATH: configPath,
       OPENAI_API_KEY: "test-key",
       OPENAI_BASE_URL: "http://127.0.0.1:1/v1",
       OPENROUTER_API_KEY: "",

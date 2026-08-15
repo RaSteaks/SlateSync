@@ -4,9 +4,9 @@
   },
   "resolve": {
     "fieldFormats": {
-      "scene": "XXX",
-      "shot": "XX",
-      "take": "XX"
+      "scene": "XX",
+      "shot": "X",
+      "take": "X"
     }
   }
 }

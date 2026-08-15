@@ -8,7 +8,7 @@ import {
   resolveModel,
   resolveProvider,
 } from "../lib/config.mjs";
-import { normalizeTakeStatus } from "../lib/schema.mjs";
+import { normalizeSlateResult, normalizeTakeStatus } from "../lib/schema.mjs";
 import {
   materialKey,
   syntheticProductionDayGroundTruth,
@@ -95,6 +95,23 @@ test("slate symbols normalize into Resolve Comments status values", () => {
   assert.equal(normalizeTakeStatus("X"), "废条");
   assert.equal(normalizeTakeStatus("×"), "废条");
   assert.equal(normalizeTakeStatus(""), null);
+});
+
+test("recognition preserves every scene in a multi-scene value", () => {
+  const result = normalizeSlateResult({
+    sheetTitle: "测试场记单",
+    records: [{ ...modelResult.records[0], scene: "58 / 59" }],
+    warnings: [],
+  });
+
+  assert.equal(result.records[0].scene, "58 / 59");
+
+  const suffixResult = normalizeSlateResult({
+    sheetTitle: "测试场记单",
+    records: [{ ...modelResult.records[0], scene: "57a/58" }],
+    warnings: [],
+  });
+  assert.equal(suffixResult.records[0].scene, "57A / 58");
 });
 
 test("public config never exposes API keys", () => {
@@ -694,6 +711,67 @@ test("OpenRouter retries without native structured outputs when routing rejects 
   assert.equal(result.result.records[0].videoCode, "C001");
 });
 
+test("clip gaps and take sequence anomalies surface as review warnings", async () => {
+  const fetchImpl = async () =>
+    jsonResponse({
+      output_text: JSON.stringify({
+        sheetTitle: "测试场记单",
+        records: [
+          {
+            ...modelResult.records[0],
+            cardNumber: "A001",
+            videoCode: "03",
+            scene: "12",
+            shot: "1",
+            take: "1",
+          },
+          {
+            ...modelResult.records[0],
+            cardNumber: "A001",
+            videoCode: "06",
+            scene: "12",
+            shot: "1",
+            take: "3",
+          },
+          {
+            ...modelResult.records[0],
+            cardNumber: "A001",
+            videoCode: "07",
+            scene: "12",
+            shot: "1",
+            take: "3",
+          },
+          {
+            ...modelResult.records[0],
+            cardNumber: "A001",
+            videoCode: "08",
+            scene: "12",
+            shot: "2",
+            take: "5",
+          },
+        ],
+        warnings: [],
+      }),
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+      filename: "sheet.jpg",
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  const warnings = result.result.warnings.join("\n");
+  assert.match(warnings, /A001 条号从 C003 断档到 C006，缺少 C004、C005，可能漏 2 条，请人工核对/);
+  assert.match(warnings, /同为 012 01 镜 3 次/);
+  assert.match(warnings, /进入 012 02 镜的第一条次为 5/);
+  assert.match(warnings, /快速模式仅执行单次识别，以上 3 条序列异常/);
+});
+
 test("multiple pages are recognized separately and cross-page fields inherit by reel", async () => {
   const captured = [];
   const fetchImpl = async (_url, request) => {
@@ -814,10 +892,10 @@ test("page recognition runs two requests in parallel while preserving page order
 
 test("A-camera C006 inherits shot 02 by clip order even when model rows are out of order", async () => {
   const pageRecords = [
-    { ...modelResult.records[0], videoCode: "C001", scene: "89A", shot: "1", take: "1" },
+    { ...modelResult.records[0], videoCode: "C001", scene: "89a", shot: "1", take: "1" },
     { ...modelResult.records[0], videoCode: "C003", scene: null, shot: null, take: "3" },
-    { ...modelResult.records[0], videoCode: "C006", scene: "89A", shot: null, take: "3" },
-    { ...modelResult.records[0], videoCode: "C004", scene: "89A", shot: "2", take: "1" },
+    { ...modelResult.records[0], videoCode: "C006", scene: "89a", shot: null, take: "3" },
+    { ...modelResult.records[0], videoCode: "C004", scene: "89a", shot: "2", take: "1" },
     { ...modelResult.records[0], videoCode: "C005", scene: null, shot: null, take: "2" },
   ];
   const fetchImpl = async () =>
@@ -842,7 +920,7 @@ test("A-camera C006 inherits shot 02 by clip order even when model rows are out 
     (record) => record.cardNumber === "A001" && record.videoCode === "C006",
   );
 
-  assert.equal(c006.scene, "089");
+  assert.equal(c006.scene, "89A");
   assert.equal(c006.shot, "02");
   assert.equal(c006.take, "03");
   assert.match(result.result.warnings.join("\n"), /C006.*镜.*条号顺序/);
@@ -854,7 +932,7 @@ test("A-camera C002 inherits merged Shot 01 while keeping row Take 02", async ()
       ...modelResult.records[0],
       cardNumber: "A001",
       videoCode: "C001",
-      scene: "89A",
+      scene: "89a",
       shot: "1",
       take: "1",
     },
@@ -889,7 +967,7 @@ test("A-camera C002 inherits merged Shot 01 while keeping row Take 02", async ()
     (record) => record.cardNumber === "A001" && record.videoCode === "C002",
   );
 
-  assert.equal(c002.scene, "089");
+  assert.equal(c002.scene, "89A");
   assert.equal(c002.shot, "01");
   assert.equal(c002.take, "02");
   assert.match(result.result.warnings.join("\n"), /C002.*场次、镜.*继承/);
@@ -901,7 +979,7 @@ test("E-camera C005 inherits merged Scene and Shot from the previous clip", asyn
       ...modelResult.records[0],
       cardNumber: "E001",
       videoCode: "C004",
-      scene: "37A",
+      scene: "37a",
       shot: "1",
       take: "4",
     },
@@ -937,7 +1015,7 @@ test("E-camera C005 inherits merged Scene and Shot from the previous clip", asyn
     (record) => record.cardNumber === "E001" && record.videoCode === "C005",
   );
 
-  assert.equal(c005.scene, "037");
+  assert.equal(c005.scene, "37A");
   assert.equal(c005.shot, "01");
   assert.equal(c005.take, "05");
   assert.equal(c005.takeStatus, "过");
