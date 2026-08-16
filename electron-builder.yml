@@ -15,7 +15,8 @@ directories:
 
 mac:
   category: public.app-category.productivity
-  # Keep the selected PNG in build/ so electron-builder converts it for each target.
+  # Use the layered Icon Composer asset for macOS and keep the PNG as a fallback.
+  icon: build/slatesync.icon
   target:
     - target: dmg
       arch: [arm64, x64]
