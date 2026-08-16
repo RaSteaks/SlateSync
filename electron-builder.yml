@@ -15,6 +15,7 @@ directories:
 
 mac:
   category: public.app-category.productivity
+  # Keep the selected PNG in build/ so electron-builder converts it for each target.
   target:
     - target: dmg
       arch: [arm64, x64]
