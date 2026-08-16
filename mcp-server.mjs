@@ -19,7 +19,11 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 
 import { recognizeSlate, configureModelHttpAgent } from "./lib/ai-client.mjs";
-import { loadWorkflowConfig, publicConfig, PROVIDERS } from "./lib/config.mjs";
+import {
+  createWorkflowConfigProvider,
+  publicConfig,
+  PROVIDERS,
+} from "./lib/config.mjs";
 import {
   discoverVisionModels,
   staticProviderModels,
@@ -42,7 +46,8 @@ const workflowConfigPath = resolve(
   ROOT,
   process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
 );
-const workflowConfig = await loadWorkflowConfig(workflowConfigPath);
+const getWorkflowConfig = createWorkflowConfigProvider(workflowConfigPath);
+await getWorkflowConfig();
 const dataDir = resolve(
   ROOT,
   String(process.env.SLATESYNC_DATA_DIR || "data").trim() || "data",
@@ -251,7 +256,7 @@ const TOOLS = [
 // --- Tool handlers ---
 
 async function handleGetConfig() {
-  const config = publicConfig(runtimeEnv(), workflowConfig, {
+  const config = publicConfig(runtimeEnv(), await getWorkflowConfig(), {
     ocrAutoEnable: true,
   });
   return {
@@ -329,7 +334,8 @@ async function handleRecognizeSlate(params) {
         filename: params.filename || "mcp-input",
         accuracyMode: params.accuracyMode || "high",
         customPrompt: params.customPrompt,
-        fieldFormats: workflowConfig.resolve.fieldFormats,
+        fieldFormats: (await getWorkflowConfig()).resolve.fieldFormats,
+        comments: (await getWorkflowConfig()).resolve.comments,
       },
       {
         env: runtimeEnv(),

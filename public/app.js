@@ -1,8 +1,19 @@
+// Renderer UI — the SlateSync single-page application.
+//
+// Owns the page state machine, DOM wiring, and all user interactions: loading
+// the slate report / Resolve CSV, running recognition, scanning the material
+// directory for metadata, the CSV backfill preview (with inline editing,
+// sorting, and clip search), and the OCR setup wizard. Talks to the backend
+// through public/electron-bridge.js, which switches between HTTP (web) and IPC
+// (Electron).
 import {
   buildSlateMetadataIndex,
   buildStandaloneResolveTable,
+  canonicalMaterialKey,
+  canonicalResolveComment,
   collectResolveMaterialKeys,
   decodeResolveCsv,
+  detectSlateSequenceAnomalies,
   encodeResolveCsv,
   extractCombinedMaterialKey,
   materialPrefix,
@@ -10,9 +21,16 @@ import {
   normalizeSceneValue,
   normalizeShotValue,
   normalizeTakeValue,
-  parseSlateMetadataText,
   resolveColumnIndexes,
 } from "./resolve-csv.js";
+import {
+  METADATA_FILE_PATTERN,
+  parseMetadataFile,
+} from "./metadata-sources/index.js";
+import {
+  restoreCsvPreviewState,
+  serializeCsvPreviewState,
+} from "./task-persistence.js";
 import { scanSlateDirectory } from "./slate-directory.js";
 import {
   calculateCoreColumnWidth,
@@ -41,6 +59,9 @@ import {
   loadTaskApi,
   saveTaskApi,
   deleteTaskApi,
+  getOcrSettingsApi,
+  saveOcrSettingsApi,
+  checkOcrApi,
 } from "./electron-bridge.js";
 import {
   REQUEST_COMPRESSION_PROFILES,
@@ -80,6 +101,11 @@ const state = {
   tasks: [],
   slateCsvRecords: null,
   slateCsvFileName: null,
+  ocrSettings: null,
+  csvEdits: new Map(),
+  detailSort: { field: null, direction: 1 },
+  detailSearch: "",
+  missingMetadataKeys: new Set(),
 };
 
 const elements = {
@@ -115,7 +141,7 @@ const elements = {
   recognizeButton: document.querySelector("#recognize-button"),
   error: document.querySelector("#error-message"),
   emptyPreview: document.querySelector("#empty-preview"),
-  largePreview: document.querySelector("#large-preview"),
+  previewScroll: document.querySelector("#preview-scroll"),
   processing: document.querySelector("#processing-overlay"),
   progress: document.querySelector("#recognition-progress"),
   progressBar: document.querySelector("#recognition-progress-bar"),
@@ -131,6 +157,7 @@ const elements = {
   csvResultEmpty: document.querySelector("#csv-result-empty"),
   resultBody: document.querySelector("#result-body"),
   addRow: document.querySelector("#add-row"),
+  detailSearch: document.querySelector("#detail-search"),
   exportButton: document.querySelector("#export-button"),
   tabCsv: document.querySelector("#tab-csv"),
   tabDetail: document.querySelector("#tab-detail"),
@@ -154,6 +181,19 @@ const elements = {
   slateCsvFileName: document.querySelector("#slate-csv-file-name"),
   slateCsvFileMeta: document.querySelector("#slate-csv-file-meta"),
   removeSlateCsv: document.querySelector("#remove-slate-csv"),
+  optionalInputs: document.querySelector("#optional-inputs"),
+  supportDataState: document.querySelector("#support-data-state"),
+  recognizeHint: document.querySelector("#recognize-hint"),
+  previewPanel: document.querySelector(".preview-panel"),
+  previewStatus: document.querySelector("#preview-status"),
+  ocrSetupLink: document.querySelector("#ocr-setup-link"),
+  ocrSetupOverlay: document.querySelector("#ocr-setup-overlay"),
+  ocrSetupClose: document.querySelector("#ocr-setup-close"),
+  ocrPythonPath: document.querySelector("#ocr-python-path"),
+  ocrCheckResult: document.querySelector("#ocr-check-result"),
+  ocrCheckButton: document.querySelector("#ocr-check-button"),
+  ocrSaveButton: document.querySelector("#ocr-save-button"),
+  ocrSkipButton: document.querySelector("#ocr-skip-button"),
 };
 
 init();
@@ -166,6 +206,8 @@ async function init() {
     renderProviderOptions();
     renderModelOptions();
     renderApiStatus();
+    renderOcrSetupLink();
+    await maybeShowOcrSetup();
     updateExportState();
     updateMetadataInputState();
     updateSlateDirectoryState();
@@ -178,6 +220,14 @@ async function init() {
 
 async function loadConfig() {
   state.config = await fetchConfig();
+}
+
+async function refreshRuntimeConfig() {
+  try {
+    await loadConfig();
+  } catch {
+    // keep the last known config when a refresh fails
+  }
 }
 
 function bindEvents() {
@@ -210,11 +260,28 @@ function bindEvents() {
   elements.removeFile.addEventListener("click", clearReportFile);
   elements.recognizeButton.addEventListener("click", recognize);
   elements.saveKeyButton.addEventListener("click", saveProviderKey);
+  elements.ocrSetupLink.addEventListener("click", openOcrSetup);
+  elements.ocrSetupClose.addEventListener("click", closeOcrSetup);
+  elements.ocrSkipButton.addEventListener("click", skipOcrSetup);
+  elements.ocrCheckButton.addEventListener("click", runOcrCheck);
+  elements.ocrSaveButton.addEventListener("click", saveOcrSettings);
+  elements.ocrSetupOverlay.addEventListener("click", (event) => {
+    if (event.target === elements.ocrSetupOverlay) closeOcrSetup();
+  });
   elements.addRow.addEventListener("click", () => {
+    state.detailSearch = "";
+    elements.detailSearch.value = "";
     state.records.push(emptyRecord());
     renderTable();
     saveCurrentTask();
   });
+  elements.detailSearch.addEventListener("input", () => {
+    state.detailSearch = elements.detailSearch.value;
+    renderTable();
+  });
+  for (const th of document.querySelectorAll("th[data-sort]")) {
+    th.addEventListener("click", () => toggleDetailSort(th.dataset.sort));
+  }
   elements.exportButton.addEventListener("click", exportCsv);
   elements.tabCsv.addEventListener("click", () => setResultsTab("csv"));
   elements.tabDetail.addEventListener("click", () => setResultsTab("detail"));
@@ -224,6 +291,31 @@ function bindEvents() {
     if (event.target.files?.[0]) loadSlateCsv(event.target.files[0]);
   });
   elements.removeSlateCsv.addEventListener("click", clearSlateCsv);
+  elements.apiKeyInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveProviderKey();
+    }
+  });
+
+  const resultTabs = [elements.tabCsv, elements.tabDetail];
+  for (const tab of resultTabs) {
+    tab.addEventListener("keydown", (event) => {
+      const currentIndex = resultTabs.indexOf(event.currentTarget);
+      let nextIndex = currentIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % resultTabs.length;
+      if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + resultTabs.length) % resultTabs.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = resultTabs.length - 1;
+      if (nextIndex === currentIndex && !["Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const name = nextIndex === 0 ? "csv" : "detail";
+      setResultsTab(name);
+      resultTabs[nextIndex].focus();
+    });
+  }
+
+  document.addEventListener("keydown", handleRecognitionShortcut);
 
   bindFileDropzone(elements.metadataDropzone, elements.metadataInput, loadResolveCsv);
   bindFileDropzone(elements.dropzone, elements.imageInput, loadReportFile);
@@ -367,14 +459,16 @@ async function loadSlateDirectory(fileList) {
   const expectedKeys = new Set(keys);
   const maxDepth = slateMaxDirectoryDepth();
   const warnings = [...csvWarnings];
-  const allSlateFiles = files.filter((file) => /slate\.txt$/i.test(file.name));
+  const allSlateFiles = files.filter((file) =>
+    METADATA_FILE_PATTERN.test(file.name),
+  );
   const withinDepth = allSlateFiles.filter((file) =>
     relativeFileDirectoryDepth(file.webkitRelativePath || file.name) <= maxDepth,
   );
   const skippedDeep = allSlateFiles.length - withinDepth.length;
   if (skippedDeep) {
     warnings.push(
-      `${skippedDeep} 个 slate.txt 超过配置的 ${maxDepth} 层搜索范围，已跳过。`,
+      `${skippedDeep} 个元数据文件超过配置的 ${maxDepth} 层搜索范围，已跳过。`,
     );
   }
   const slateFiles = withinDepth.filter((file) => {
@@ -389,7 +483,7 @@ async function loadSlateDirectory(fileList) {
     elements.slateInput.value = "";
     showSlateScanFailure(
       directoryName,
-      `所选目录的前 ${maxDepth} 层中没有找到匹配的 slate.txt，请检查目录结构与素材编号。`,
+      `所选目录的前 ${maxDepth} 层中没有找到匹配的元数据文件，请检查目录结构与素材编号。`,
     );
     return;
   }
@@ -397,7 +491,7 @@ async function loadSlateDirectory(fileList) {
   const parsed = [];
   const oversized = slateFiles.filter((file) => file.size > 2 * 1024 * 1024);
   if (oversized.length) {
-    warnings.push(`${oversized.length} 个超过 2 MB 的 slate.txt 已跳过。`);
+    warnings.push(`${oversized.length} 个超过 2 MB 的元数据文件已跳过。`);
   }
   const readable = slateFiles.filter((file) => file.size <= 2 * 1024 * 1024);
 
@@ -412,7 +506,7 @@ async function loadSlateDirectory(fileList) {
           const sourceName = file.webkitRelativePath || file.name;
           try {
             return {
-              metadata: parseSlateMetadataText(
+              metadata: parseMetadataFile(
                 await file.arrayBuffer(),
                 sourceName,
               ),
@@ -432,6 +526,11 @@ async function loadSlateDirectory(fileList) {
     updateSlateDirectoryState();
   }
 
+  const foundKeys = new Set(
+    parsed.map((entry) => entry.materialKey).filter(Boolean),
+  );
+  const missingKeys = [...expectedKeys].filter((key) => !foundKeys.has(key));
+
   applySlateDirectoryResult({
     metadata: parsed,
     warnings,
@@ -445,6 +544,7 @@ async function loadSlateDirectory(fileList) {
     },
     directoryName,
     compatibilityMode: true,
+    missingKeys,
   });
 }
 
@@ -454,14 +554,17 @@ function applySlateDirectoryResult({
   stats,
   directoryName,
   compatibilityMode,
+  missingKeys,
 }) {
+  state.csvEdits.clear();
+  state.missingMetadataKeys = new Set(missingKeys || []);
   if (!metadata.length) {
     state.slateMetadata = [];
     state.slateWarnings = compactSlateWarnings(warnings);
     const discovered = stats.discoveredSlateFiles || 0;
     const reason = discovered
-      ? `找到 ${discovered} 个 slate.txt，但均缺少有效的 Clip Name、Sensor FPS 或 Shot Date。`
-      : `未找到与 CSV 素材匹配的 slate.txt（已搜索前 ${slateMaxDirectoryDepth()} 层），请检查目录结构。`;
+      ? `找到 ${discovered} 个元数据文件，但均缺少有效的 Clip Name、Sensor FPS 或 Shot Date。`
+      : `未找到与 CSV 素材匹配的元数据文件（已搜索前 ${slateMaxDirectoryDepth()} 层），请检查目录结构。`;
     showSlateScanFailure(directoryName, reason);
     if (state.records.length) renderTable();
     return;
@@ -479,11 +582,13 @@ function applySlateDirectoryResult({
     (entry) => entry.shootDay,
   ).length;
   const warningCount = warnings.length + slateIndex.warnings.length;
+  const missingCount = state.missingMetadataKeys.size;
   const scanLabel = compatibilityMode
     ? "兼容模式"
     : `访问 ${stats.visitedDirectories} 个目录 · 剪枝 ${stats.prunedDirectories} 个`;
   const cacheLabel = stats.cacheHits ? ` · 缓存 ${stats.cacheHits}` : "";
-  elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个 slate.txt · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材 · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
+  const missingLabel = missingCount ? ` · 无元数据 ${missingCount} 个素材` : "";
+  elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个元数据文件 · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材${missingLabel} · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
   elements.slateCard.hidden = false;
   elements.slateDropzone.hidden = true;
   clearSlateStatus();
@@ -492,10 +597,10 @@ function applySlateDirectoryResult({
 
 function showSlateScanningState(directoryName) {
   elements.slateDirectoryName.textContent = directoryName;
-  elements.slateFileMeta.textContent = "正在定向查找 slate.txt…";
+  elements.slateFileMeta.textContent = "正在定向查找元数据文件…";
   elements.slateCard.hidden = false;
   elements.slateDropzone.hidden = true;
-  setSlateStatus("正在定向查找 slate.txt…", "loading");
+  setSlateStatus("正在定向查找元数据文件…", "loading");
 }
 
 function showSlateScanFailure(directoryName, reason) {
@@ -561,17 +666,20 @@ function updateSlateDirectoryState() {
   elements.slateDirectoryButton.disabled = !enabled;
   elements.slateInput.disabled = !enabled;
   elements.slateHelp.textContent = state.slateScanning
-    ? "正在定向查找 slate.txt…"
+    ? "正在定向查找元数据文件…"
     : !state.imageDataGroups.length
       ? "请先选择场记单"
       : state.metadataTable
       ? `按 CSV 素材定向查找 · 最多 ${slateMaxDirectoryDepth()} 层`
       : "请先载入 Resolve CSV";
+  updateSupportDataSummary();
 }
 
 function clearSlateMetadata() {
   state.slateScanController?.abort();
   state.slateMetadata = [];
+  state.csvEdits.clear();
+  state.missingMetadataKeys = new Set();
   state.slateWarnings = [];
   state.slateRootHandle = null;
   state.slateFallbackFiles = null;
@@ -590,7 +698,7 @@ function compactSlateWarnings(warnings) {
   if (warnings.length <= limit) return warnings;
   return [
     ...warnings.slice(0, limit),
-    `另有 ${warnings.length - limit} 个 slate.txt 读取警告未逐条显示。`,
+    `另有 ${warnings.length - limit} 个元数据文件读取警告未逐条显示。`,
   ];
 }
 
@@ -833,6 +941,100 @@ function renderApiStatus() {
   elements.apiStatus.classList.toggle("ready", configured.length > 0);
 }
 
+function renderOcrSetupLink() {
+  elements.ocrSetupLink.hidden = !isElectron;
+}
+
+async function maybeShowOcrSetup() {
+  if (!isElectron || !state.config) return;
+
+  const ocrReady = state.config.ocr?.enabled && state.config.ocr?.available;
+  if (ocrReady) return;
+
+  let settings;
+  try {
+    settings = await getOcrSettingsApi();
+  } catch {
+    return;
+  }
+  state.ocrSettings = settings;
+  if (settings.setupCompleted || settings.setupSkipped) return;
+
+  if (settings.pythonPath) elements.ocrPythonPath.value = settings.pythonPath;
+  openOcrSetup();
+}
+
+async function openOcrSetup() {
+  hideError();
+  if (!elements.ocrPythonPath.value) {
+    try {
+      const settings = await getOcrSettingsApi();
+      if (settings.pythonPath) elements.ocrPythonPath.value = settings.pythonPath;
+    } catch {
+      // Web mode has no OCR settings; the wizard is Electron-only.
+    }
+  }
+  elements.ocrSetupOverlay.hidden = false;
+  elements.ocrPythonPath.focus();
+}
+
+function closeOcrSetup() {
+  elements.ocrSetupOverlay.hidden = true;
+}
+
+async function runOcrCheck() {
+  const pythonPath = elements.ocrPythonPath.value.trim();
+  const resultEl = elements.ocrCheckResult;
+  resultEl.hidden = false;
+  resultEl.className = "ocr-check-result";
+  resultEl.textContent = "正在检测…";
+  elements.ocrCheckButton.disabled = true;
+  try {
+    const result = await checkOcrApi(pythonPath);
+    if (result?.ok) {
+      resultEl.classList.add("is-ok");
+      resultEl.textContent = `✓ 检测通过 · PaddleOCR ${result.paddleOcrVersion || "unknown"}（Paddle ${result.paddleVersion || "unknown"}）`;
+    } else {
+      resultEl.classList.add("is-error");
+      resultEl.textContent = `✗ ${result?.error?.message || "检测失败"}`;
+    }
+  } catch (error) {
+    resultEl.classList.add("is-error");
+    resultEl.textContent = `✗ ${error.message}`;
+  } finally {
+    elements.ocrCheckButton.disabled = false;
+  }
+}
+
+async function saveOcrSettings() {
+  const pythonPath = elements.ocrPythonPath.value.trim();
+  if (!pythonPath) {
+    showError("请先填写 PaddleOCR Python 环境路径。");
+    return;
+  }
+  hideError();
+  elements.ocrSaveButton.disabled = true;
+  try {
+    await saveOcrSettingsApi({ pythonPath });
+    elements.ocrSetupOverlay.hidden = true;
+    await loadConfig();
+    renderApiStatus();
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    elements.ocrSaveButton.disabled = false;
+  }
+}
+
+async function skipOcrSetup() {
+  try {
+    await saveOcrSettingsApi({ skip: true });
+    elements.ocrSetupOverlay.hidden = true;
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
 async function loadResolveCsv(file) {
   hideError();
   if (!canLoadResolveCsv({ reportReady: state.imageDataGroups.length > 0, slateCsvLoaded: Boolean(state.slateCsvRecords?.length) })) {
@@ -856,6 +1058,7 @@ async function loadResolveCsv(file) {
     const table = decodeResolveCsv(await file.arrayBuffer());
     state.metadataFile = file;
     state.metadataTable = table;
+    state.csvEdits.clear();
     elements.metadataFileName.textContent = file.name;
     elements.metadataFileMeta.textContent = `${table.rows.length} 条素材 · ${table.headers.length} 列 · ${encodingLabel(table.format)}`;
     elements.metadataCard.hidden = false;
@@ -892,6 +1095,7 @@ function clearResolveCsv() {
   clearSlateMetadata();
   state.metadataFile = null;
   state.metadataTable = null;
+  state.csvEdits.clear();
   elements.metadataInput.value = "";
   elements.metadataCard.hidden = true;
   elements.metadataDropzone.hidden = false;
@@ -973,19 +1177,19 @@ async function loadReportFile(file) {
   try {
     setPreparing(true);
     let imageGroups = [];
-    let previewDataUrl;
+    let previewPages = [];
     let pageCount;
     let meta;
     if (isPdf) {
       const prepared = await preparePdf(file);
       imageGroups = prepared.imageDataGroups;
-      previewDataUrl = prepared.previewDataUrl;
+      previewPages = imageGroups.map((group) => group[0]);
       pageCount = prepared.pageCount;
       meta = `${formatBytes(file.size)} · ${pageCount} 页 · 多视图双重查漏`;
     } else {
       const processed = await prepareImage(file);
       imageGroups = [[processed.dataUrl]];
-      previewDataUrl = processed.dataUrl;
+      previewPages = [processed.dataUrl];
       pageCount = 1;
       meta = `${formatBytes(file.size)} · ${processed.width} × ${processed.height}`;
     }
@@ -993,14 +1197,14 @@ async function loadReportFile(file) {
     state.reportFile = file;
     state.imageDataGroups = imageGroups;
     state.pageCount = pageCount;
-    elements.fileThumb.src = previewDataUrl;
-    elements.largePreview.src = previewDataUrl;
+    elements.fileThumb.src = previewPages[0];
+    renderPreviewPages(previewPages);
     elements.fileName.textContent = file.name;
     elements.fileMeta.textContent = meta;
     elements.fileCard.hidden = false;
     elements.dropzone.hidden = true;
     elements.emptyPreview.hidden = true;
-    elements.largePreview.hidden = false;
+    elements.previewScroll.hidden = false;
     updateTaskProgress({
       phase: "prepare-complete",
       percent: 100,
@@ -1027,8 +1231,21 @@ function clearReportFile() {
   elements.fileCard.hidden = true;
   elements.dropzone.hidden = false;
   elements.emptyPreview.hidden = false;
-  elements.largePreview.hidden = true;
+  elements.previewScroll.hidden = true;
+  elements.previewScroll.innerHTML = "";
   updateRecognizeState();
+}
+
+function renderPreviewPages(pages) {
+  elements.previewScroll.innerHTML = pages
+    .map(
+      (src, index) => `
+        <figure class="preview-page">
+          <img src="${src}" alt="场记单第 ${index + 1} 页" loading="lazy" decoding="async" />
+          <figcaption>第 ${index + 1} 页 · 共 ${pages.length} 页</figcaption>
+        </figure>`,
+    )
+    .join("");
 }
 
 async function prepareImage(file) {
@@ -1298,6 +1515,7 @@ function resizeCanvas(sourceCanvas, maxDimension, allowUpscale = false) {
 }
 
 async function recognize() {
+  await refreshRuntimeConfig();
   if (recognitionReady()) {
     return recognizeWithPdf();
   }
@@ -1447,10 +1665,24 @@ function setResultsTab(name) {
   const showCsv = name === "csv";
   elements.tabCsv.classList.toggle("is-active", showCsv);
   elements.tabCsv.setAttribute("aria-selected", String(showCsv));
+  elements.tabCsv.tabIndex = showCsv ? 0 : -1;
   elements.tabDetail.classList.toggle("is-active", !showCsv);
   elements.tabDetail.setAttribute("aria-selected", String(!showCsv));
+  elements.tabDetail.tabIndex = showCsv ? -1 : 0;
   elements.panelCsv.hidden = !showCsv;
   elements.panelDetail.hidden = showCsv;
+}
+
+function handleRecognitionShortcut(event) {
+  if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) return;
+  const target = event.target;
+  if (
+    target instanceof HTMLElement &&
+    target.matches("input, textarea, select, button, [contenteditable='true']")
+  ) return;
+  if (elements.recognizeButton.disabled) return;
+  event.preventDefault();
+  recognize();
 }
 
 function renderResults(data) {
@@ -1491,14 +1723,94 @@ function renderResults(data) {
   elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// 识别明细的搜索 + 排序。只改变显示顺序/可见性，不改动原始索引——每项都
+// 携带原始 index，编辑/删除仍写回 state.records[index]。
+function detailSearchMatches(record, query) {
+  if (!query) return true;
+  const hay = [
+    record.cardNumber,
+    record.videoCode,
+    `${record.cardNumber || ""}${record.videoCode || ""}`,
+    record.scene,
+    record.shot,
+    record.take,
+  ]
+    .filter((value) => value != null && value !== "")
+    .join(" ")
+    .toUpperCase();
+  return hay.includes(query);
+}
+
+function detailSortKey(field, record) {
+  const value = record[field];
+  if (value == null || value === "") return null;
+  return String(value);
+}
+
+// 排序比较：空值恒排末尾；非空用 numeric localeCompare，兼顾 C009/C015 与
+// 001/037 的数值序和中文（状态/景别）的本地化排序。
+function compareDetailRecords(a, b) {
+  const av = detailSortKey(state.detailSort.field, a.record);
+  const bv = detailSortKey(state.detailSort.field, b.record);
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  return (
+    av.localeCompare(bv, undefined, { numeric: true }) *
+    state.detailSort.direction
+  );
+}
+
+// 返回搜索过滤 + 排序后的可见记录，元素带原始 index（供编辑/删除回写）。
+function visibleDetailRecords() {
+  const query = state.detailSearch.trim().toUpperCase();
+  const entries = [];
+  for (let index = 0; index < state.records.length; index++) {
+    if (!detailSearchMatches(state.records[index], query)) continue;
+    entries.push({ index, record: state.records[index] });
+  }
+  if (state.detailSort.field) {
+    entries.sort((a, b) => {
+      const cmp = compareDetailRecords(a, b);
+      return cmp !== 0 ? cmp : a.index - b.index;
+    });
+  }
+  return entries;
+}
+
+function toggleDetailSort(field) {
+  if (state.detailSort.field === field) {
+    state.detailSort.direction = state.detailSort.direction === 1 ? -1 : 1;
+  } else {
+    state.detailSort.field = field;
+    state.detailSort.direction = 1;
+  }
+  renderDetailSortIndicators();
+  renderTable();
+}
+
+function renderDetailSortIndicators() {
+  for (const th of document.querySelectorAll("th[data-sort]")) {
+    const indicator = th.querySelector(".sort-indicator");
+    if (!indicator) continue;
+    if (state.detailSort.field === th.dataset.sort) {
+      indicator.textContent = state.detailSort.direction === 1 ? "▲" : "▼";
+      th.classList.add("is-sorted");
+    } else {
+      indicator.textContent = "";
+      th.classList.remove("is-sorted");
+    }
+  }
+}
+
 function renderTable() {
   const output = currentMergeOutput();
   const statuses = output.statuses;
   elements.tabDetailBadge.textContent = String(state.records.length);
   elements.tabDetailBadge.hidden = state.records.length === 0;
   renderCsvPreview(output);
-  elements.resultBody.innerHTML = state.records
-    .map((record, index) => {
+  elements.resultBody.innerHTML = visibleDetailRecords()
+    .map(({ index, record }) => {
       const status = statuses[index];
       return `
       <tr data-index="${index}">
@@ -1512,8 +1824,8 @@ function renderTable() {
         <td>
           <select data-field="takeStatus">
             <option value="" ${record.takeStatus == null ? "selected" : ""}>未标记（留空）</option>
-            <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → _OK</option>
-            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → _KP</option>
+            <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → ${escapeHtml(resolveCommentsConfig().goodTake)}</option>
+            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → ${escapeHtml(resolveCommentsConfig().holdTake)}</option>
             <option value="废条" ${record.takeStatus === "废条" ? "selected" : ""}>X / × → 留空</option>
           </select>
         </td>
@@ -1521,7 +1833,7 @@ function renderTable() {
         ${textCell("comments", record.comments, "min-width:160px")}
         ${textCell("shotSize", record.shotSize)}
         ${textCell("cameraPosition", record.cameraPosition)}
-        <td>${exportLabel(status, record)}</td>
+        <td>${exportLabel(status, record)}${missingMetadataBadge(record)}</td>
         <td><span class="confidence ${escapeHtml(record.confidence)}">${confidenceLabel(record.confidence)}</span></td>
         <td><button class="delete-row" type="button" aria-label="删除这一行">×</button></td>
       </tr>`;
@@ -1568,8 +1880,9 @@ function renderCsvPreview(output) {
     return;
   }
 
-  const { headers, rows } = output.table;
-  const columns = resolveColumnIndexes(output.table.headers);
+  const table = applyCsvEdits(output.table);
+  const { headers, rows } = table;
+  const columns = resolveColumnIndexes(table.headers);
   const targetIndexes = new Set([
     columns.scene,
     columns.shot,
@@ -1587,7 +1900,29 @@ function renderCsvPreview(output) {
   }
   const unrecognizedRowIndexes = new Set(output.unrecognizedRowIndexes || []);
 
-  elements.csvPreviewSummary.textContent = `${rows.length} 行 × ${headers.length} 列`;
+  const anomalyMessagesByKey = new Map();
+  for (const anomaly of detectSlateSequenceAnomalies(state.records)) {
+    if (!anomaly.key) continue;
+    const existing = anomalyMessagesByKey.get(anomaly.key);
+    anomalyMessagesByKey.set(
+      anomaly.key,
+      existing ? `${existing}；${anomaly.message}` : anomaly.message,
+    );
+  }
+  const anomalyRowIndexes = new Set();
+  for (const [rowIndex, rowKey] of (output.rowKeys || []).entries()) {
+    if (rowKey && anomalyMessagesByKey.has(rowKey)) {
+      anomalyRowIndexes.add(rowIndex);
+    }
+  }
+  const flaggedRowCount = new Set([
+    ...anomalyRowIndexes,
+    ...unrecognizedRowIndexes,
+  ]).size;
+
+  elements.csvPreviewSummary.textContent =
+    `${rows.length} 行 × ${headers.length} 列` +
+    (flaggedRowCount ? ` · ${flaggedRowCount} 行异常已标红` : "");
   elements.tabCsvBadge.textContent = `${rows.length}×${headers.length}`;
   elements.tabCsvBadge.hidden = false;
   elements.csvResultHead.innerHTML = `<tr>${headers
@@ -1598,23 +1933,77 @@ function renderCsvPreview(output) {
     .join("")}</tr>`;
   elements.csvResultBody.innerHTML = rows
     .map((row, rowIndex) => {
+      const rowKey = output.rowKeys?.[rowIndex] || "";
+      const missing = Boolean(rowKey && state.missingMetadataKeys.has(rowKey));
+      const anomalyMessage = anomalyRowIndexes.has(rowIndex)
+        ? anomalyMessagesByKey.get(rowKey)
+        : null;
       const cells = headers
         .map((_, columnIndex) => {
-          const classes = targetIndexes.has(columnIndex) ? "csv-target-column" : "";
+          const classes = [
+            targetIndexes.has(columnIndex) ? "csv-target-column" : "",
+            state.csvEdits.has(`${rowIndex}:${columnIndex}`)
+              ? "csv-cell-edited"
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const flag =
+            missing && columnIndex === 0
+              ? `<span class="missing-metadata" title="素材目录中没有读取到元数据文件">无元数据</span>`
+              : "";
+          const cellClasses =
+            missing && columnIndex === 0 ? `${classes} csv-flag-cell`.trim() : classes;
           const value = String(row[columnIndex] ?? "");
-          return `<td class="${classes}" title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
+          return `<td class="${cellClasses}">${flag}<input data-row="${rowIndex}" data-col="${columnIndex}" value="${escapeHtml(value)}" /></td>`;
         })
         .join("");
-      const rowClass = matchedRowIndexes.has(rowIndex)
-        ? "csv-matched-row"
-        : unrecognizedRowIndexes.has(rowIndex)
-          ? "csv-unrecognized-row"
-          : "";
-      return `<tr class="${rowClass}">${cells}</tr>`;
+      const rowClass = [
+        matchedRowIndexes.has(rowIndex) ? "csv-matched-row" : "",
+        unrecognizedRowIndexes.has(rowIndex) ? "csv-unrecognized-row" : "",
+        missing ? "csv-missing-metadata-row" : "",
+        anomalyMessage ? "csv-anomaly-row" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const titleText = [
+        missing ? "无元数据：素材目录中没有读取到元数据文件" : "",
+        anomalyMessage ? `序列异常：${anomalyMessage}` : "",
+      ]
+        .filter(Boolean)
+        .join("；");
+      const rowTitle = titleText
+        ? ` title="${escapeHtml(titleText)}"`
+        : "";
+      return `<tr class="${rowClass}"${rowTitle}>${cells}</tr>`;
     })
     .join("");
+
+  bindCsvPreviewEdits(columns);
+
   elements.csvResultEmpty.textContent = "合成后的 CSV 没有数据行。";
   elements.csvResultEmpty.hidden = rows.length > 0;
+}
+
+function bindCsvPreviewEdits(columns) {
+  for (const input of elements.csvResultBody.querySelectorAll(
+    "[data-row][data-col]",
+  )) {
+    input.addEventListener("change", () => {
+      const rowIndex = Number(input.dataset.row);
+      const columnIndex = Number(input.dataset.col);
+      const value = normalizeCsvCellEdit(
+        fieldForColumn(columns, columnIndex),
+        input.value,
+      );
+      const key = `${rowIndex}:${columnIndex}`;
+      state.csvEdits.set(key, value);
+      renderCsvPreview(currentMergeOutput());
+      // Re-evaluate export and persist the override immediately after editing.
+      updateExportState();
+      saveCurrentTask();
+    });
+  }
 }
 
 function currentMergeOutput() {
@@ -1623,7 +2012,10 @@ function currentMergeOutput() {
       state.metadataTable,
       state.records,
       state.slateMetadata,
-      { fieldFormats: resolveFieldFormats() },
+      {
+        fieldFormats: resolveFieldFormats(),
+        comments: resolveCommentsConfig(),
+      },
     );
   }
   return {
@@ -1681,15 +2073,34 @@ function exportLabel(status, record) {
   return `<span class="match-status">${label}</span>`;
 }
 
+// 识别明细里，若某条记录对应的素材在目录扫描时没有读到元数据文件，
+// 在「CSV 匹配」列后追加一个「无元数据」徽标。
+function missingMetadataBadge(record) {
+  const key = canonicalMaterialKey(record.cardNumber, record.videoCode);
+  if (!key || !state.missingMetadataKeys.has(key)) return "";
+  return `<span class="missing-metadata" title="素材目录中没有读取到元数据文件">无元数据</span>`;
+}
+
 async function exportCsv() {
+  await refreshRuntimeConfig();
   if (state.metadataTable && state.metadataFile) {
     const output = currentMergeOutput();
-    if (!output.exportableCount) {
+    if (
+      !canExportResolveCsv({
+        metadataLoaded: true,
+        recordCount: state.records.length,
+        exportableCount: output?.exportableCount,
+        hasManualEdits: state.csvEdits.size > 0,
+      })
+    ) {
       showError("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
       return;
     }
-    const bytes = encodeResolveCsv(output.table, {
+    const bytes = encodeResolveCsv(applyCsvEdits(output.table), {
       fieldFormats: resolveFieldFormats(),
+      comments: resolveCommentsConfig(),
+      // Resolve Comments only accepts the configured take-status markers.
+      canonicalizeComments: true,
     });
     downloadCsv(bytes, `${baseName(state.metadataFile.name)}_场记已回填.csv`);
     return;
@@ -1701,6 +2112,7 @@ async function exportCsv() {
   }
   const table = buildStandaloneResolveTable(state.records, {
     fieldFormats: resolveFieldFormats(),
+    comments: resolveCommentsConfig(),
   });
   if (!table.rows.length) {
     showError("没有场次、镜、次完整的识别记录可导出。");
@@ -1709,6 +2121,7 @@ async function exportCsv() {
   const title = state.latestResponse?.result?.sheetTitle || "场记单";
   const bytes = encodeResolveCsv(table, {
     fieldFormats: resolveFieldFormats(),
+    comments: resolveCommentsConfig(),
   });
   downloadCsv(bytes, `${baseName(title)}_场记识别.csv`);
 }
@@ -1742,6 +2155,13 @@ function resolveFieldFormats() {
   };
 }
 
+function resolveCommentsConfig() {
+  return state.config?.workflow?.resolve?.comments || {
+    goodTake: "_OK",
+    holdTake: "_KP",
+  };
+}
+
 function applyRecordFieldFormats(record) {
   const formats = resolveFieldFormats();
   return {
@@ -1767,8 +2187,55 @@ function normalizeEditedField(field, value) {
   return cleaned;
 }
 
+// 把用户对「回填预览」的手工编辑作为最后一层覆盖到合并结果上。
+// 用 has() 而非值判空：这样「清空单元格」也能生效（存空串覆盖原值）。
+function applyCsvEdits(table) {
+  if (!state.csvEdits.size || !table) return table;
+  return {
+    ...table,
+    rows: table.rows.map((row, rowIndex) =>
+      row.map((cell, columnIndex) => {
+        const key = `${rowIndex}:${columnIndex}`;
+        return state.csvEdits.has(key) ? state.csvEdits.get(key) : cell;
+      }),
+    ),
+  };
+}
+
+// 反查某列属于哪个可编辑字段（scene/shot/take/comments/cameraFps/shootDay）。
+function fieldForColumn(columns, columnIndex) {
+  for (const field of [
+    "scene",
+    "shot",
+    "take",
+    "comments",
+    "cameraFps",
+    "shootDay",
+  ]) {
+    if (columns[field] === columnIndex) return field;
+  }
+  return undefined;
+}
+
+// 归一化预览单元格编辑：scene/shot/take 复用明细页的零填充规范化，Comments
+// 只保留配置的条次标记或空值，其余列去空格原样返回。
+function normalizeCsvCellEdit(field, value) {
+  if (field === "scene" || field === "shot" || field === "take") {
+    return normalizeEditedField(field, value) || "";
+  }
+  if (field === "comments") {
+    return canonicalResolveComment(value, resolveCommentsConfig());
+  }
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function resetRecognitionResults() {
   state.records = [];
+  state.csvEdits.clear();
+  state.detailSearch = "";
+  state.detailSort = { field: null, direction: 1 };
+  if (elements.detailSearch) elements.detailSearch.value = "";
+  renderDetailSortIndicators();
   state.latestResponse = null;
   elements.results.hidden = true;
   elements.resultBody.innerHTML = "";
@@ -1791,18 +2258,24 @@ function resetRecognitionResults() {
 
 function setPreparing(value) {
   elements.processing.hidden = !value;
+  elements.previewPanel.classList.toggle("is-busy", value);
+  elements.previewPanel.classList.remove("is-ready");
+  elements.previewStatus.textContent = value ? "正在准备文件" : "等待输入";
   if (value) {
     resetTaskProgress({
       phase: "preparing",
       percent: 2,
       message: "正在检查文件并准备场记单页面",
     });
+  } else {
+    updateWorkspaceStatus();
   }
 }
 
 function setProcessing(value) {
   state.recognizing = value;
   elements.processing.hidden = !value;
+  elements.previewPanel.classList.toggle("is-busy", value);
   const ocrReady = state.config?.ocr?.enabled && state.config?.ocr?.available;
   if (value) {
     resetTaskProgress({
@@ -1819,6 +2292,10 @@ function setProcessing(value) {
   elements.recognizeButton.querySelector("span").textContent = value
     ? "识别中…"
     : "开始识别";
+  if (value) {
+    elements.previewPanel.classList.remove("is-ready");
+    elements.previewStatus.textContent = "AI 识别进行中";
+  }
   updateMetadataInputState();
   updateSlateDirectoryState();
   if (!value) {
@@ -1889,15 +2366,80 @@ function updateRecognizeState() {
     : canMerge
       ? "合并 CSV"
       : "开始识别";
+  updateWorkspaceStatus({ canRecognize, canMerge });
+  updateSupportDataSummary();
+}
+
+function updateWorkspaceStatus(status = {}) {
+  const canRecognize = status.canRecognize ?? recognitionReady();
+  const canMerge = status.canMerge ?? (!canRecognize && slateCsvMergeReady());
+  const reportReady = state.imageDataGroups.length > 0;
+  const providerReady = Boolean(selectedProvider()?.configured);
+  const modelReady = Boolean(selectedModel());
+
+  elements.previewPanel.classList.toggle(
+    "is-ready",
+    !state.recognizing && (reportReady || canMerge),
+  );
+  elements.previewPanel.classList.toggle("is-busy", state.recognizing);
+
+  if (state.recognizing) {
+    elements.previewStatus.textContent = "AI 识别进行中";
+    elements.recognizeHint.textContent = "正在处理，请保持页面打开";
+    elements.recognizeHint.classList.remove("is-ready");
+    return;
+  }
+
+  if (reportReady) {
+    elements.previewStatus.textContent = `${state.pageCount || 1} 页 · 已就绪`;
+  } else if (canMerge) {
+    elements.previewStatus.textContent = "CSV 合并模式";
+  } else {
+    elements.previewStatus.textContent = "等待输入";
+  }
+
+  elements.recognizeHint.classList.toggle("is-ready", canRecognize || canMerge);
+  if (canRecognize) {
+    elements.recognizeHint.textContent = "准备完成 · 点击开始，或按 ⌘ / Ctrl + Enter";
+  } else if (canMerge) {
+    elements.recognizeHint.textContent = "两份 CSV 已就绪 · 无需调用 AI，可直接合并";
+  } else if (!reportReady && !state.slateCsvRecords?.length) {
+    elements.recognizeHint.textContent = "先添加场记单，再开始识别";
+  } else if (reportReady && !providerReady) {
+    elements.recognizeHint.textContent = "请选择已配置的 API 服务商，或填写 API Key";
+  } else if (reportReady && !modelReady) {
+    elements.recognizeHint.textContent = "请选择一个可用的视觉模型";
+  } else if (state.slateCsvRecords?.length && !state.metadataTable) {
+    elements.recognizeHint.textContent = "再添加 Resolve CSV，即可直接合并";
+  } else {
+    elements.recognizeHint.textContent = "补齐输入后即可继续";
+  }
+}
+
+function updateSupportDataSummary() {
+  const count = [
+    Boolean(state.metadataTable),
+    Boolean(state.slateCsvRecords?.length),
+    Boolean(
+      state.slateMetadata.length ||
+      state.slateRootHandle ||
+      state.slateFallbackFiles?.length,
+    ),
+  ].filter(Boolean).length;
+  elements.optionalInputs.classList.toggle("has-data", count > 0);
+  elements.supportDataState.textContent = count ? `已添加 ${count} 项` : "可选";
 }
 
 function updateExportState(output = currentMergeOutput()) {
   const recordCount = state.records.length;
+  // Manual preview edits must be able to unlock export when automatic merging
+  // found no rows to change.
   const enabled = state.metadataTable
     ? canExportResolveCsv({
         metadataLoaded: true,
         recordCount,
         exportableCount: output?.exportableCount,
+        hasManualEdits: state.csvEdits.size > 0,
       })
     : recordCount > 0;
   elements.exportButton.disabled = !enabled;
@@ -1989,6 +2531,8 @@ function restoreTask(task) {
   clearResolveCsv();
   resetRecognitionResults();
 
+  restoreResolveCsvState(task);
+
   // Restore recognition config
   if (task.provider) elements.provider.value = task.provider;
   if (["high", "standard"].includes(task.accuracyMode)) {
@@ -2009,9 +2553,14 @@ function restoreTask(task) {
 
   // Restore recognition result
   if (task.result?.records?.length) {
-    state.records = task.editedRecords || task.result.records;
+    // Re-apply field normalization so older saved tasks also display and
+    // export scene suffixes such as 87a as the canonical value 87A.
+    const restoredRecords = (task.editedRecords || task.result.records).map(
+      applyRecordFieldFormats,
+    );
+    state.records = restoredRecords;
     state.latestResponse = {
-      result: task.result,
+      result: { ...task.result, records: restoredRecords },
       provider: task.provider,
       model: task.model,
       usage: task.usage,
@@ -2028,6 +2577,34 @@ function restoreTask(task) {
 
   renderTaskSwitcher();
   updateRecognizeState();
+}
+
+function restoreResolveCsvState(task) {
+  const saved = restoreCsvPreviewState(task);
+  if (!saved) return;
+
+  state.metadataTable = saved.metadataTable;
+  // The restored task only needs the filename for export; the original File
+  // object cannot survive a reload, so keep a small compatible name object.
+  state.metadataFile = { name: saved.metadataFilename };
+  state.csvEdits.clear();
+  for (const [key, value] of saved.csvEdits) state.csvEdits.set(key, value);
+  state.slateMetadata = saved.slateMetadata;
+  state.slateWarnings = saved.slateWarnings;
+  state.missingMetadataKeys = new Set(saved.missingMetadataKeys);
+
+  elements.metadataFileName.textContent = saved.metadataFilename;
+  elements.metadataFileMeta.textContent = `${saved.metadataTable.rows.length} 条素材 · ${saved.metadataTable.headers.length} 列 · ${encodingLabel(saved.metadataTable.format)}`;
+  elements.metadataCard.hidden = false;
+  elements.metadataDropzone.hidden = true;
+
+  if (saved.slateMetadata.length) {
+    elements.slateDirectoryName.textContent =
+      saved.slateDirectoryName || "已保存的素材目录";
+    elements.slateFileMeta.textContent = `${saved.slateMetadata.length} 个已保存元数据文件`;
+    elements.slateCard.hidden = false;
+    elements.slateDropzone.hidden = true;
+  }
 }
 
 async function deleteCurrentTask() {
@@ -2051,10 +2628,22 @@ async function deleteCurrentTask() {
 async function saveCurrentTask() {
   if (!state.currentTaskId || !state.latestResponse) return;
   try {
+    // Keep the editable Resolve preview and its source metadata with the task,
+    // so a restored task can re-render and export the user's manual overrides.
+    const csvState = serializeCsvPreviewState({
+      metadataTable: state.metadataTable,
+      metadataFilename: state.metadataFile?.name,
+      csvEdits: state.csvEdits,
+      slateMetadata: state.slateMetadata,
+      slateWarnings: state.slateWarnings,
+      missingMetadataKeys: [...state.missingMetadataKeys],
+      slateDirectoryName: elements.slateDirectoryName.textContent,
+    });
     await saveTaskApi({
       id: state.currentTaskId,
       editedRecords: state.records,
       status: "edited",
+      ...csvState,
     });
   } catch {
     // best-effort save

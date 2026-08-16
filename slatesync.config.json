@@ -4,9 +4,13 @@
   },
   "resolve": {
     "fieldFormats": {
-      "scene": "XXX",
-      "shot": "XX",
-      "take": "XX"
+      "scene": "XX",
+      "shot": "X",
+      "take": "X"
+    },
+    "comments": {
+      "goodTake": "_OK",
+      "holdTake": "_KP"
     }
   }
 }

@@ -1,3 +1,8 @@
+// Recognition request sizing and compression.
+//
+// Selects how many image views to send per page per accuracy mode and
+// serializes the request payload, with helpers to measure the request body
+// against the server's upload limit.
 export const REQUEST_SIZE_SAFETY_RATIO = 0.94;
 
 export const REQUEST_COMPRESSION_PROFILES = [

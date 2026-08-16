@@ -1,11 +1,19 @@
+// Electron (Node fs) mirror of the browser metadata discovery in
+// public/slate-directory.js. Same walk/prune/learn/probe/fallback algorithm,
+// implemented against the filesystem instead of File System Access API handles.
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { extractCombinedMaterialKey } from "../public/metadata-common.js";
 import {
-  extractCombinedMaterialKey,
-  parseSlateMetadataText,
-} from "../public/resolve-csv.js";
+  METADATA_FILE_PATTERN,
+  parseMetadataFile,
+} from "../public/metadata-sources/index.js";
+import {
+  defaultMetadataStructure,
+  learnStructure,
+  probeNames,
+} from "../public/metadata-structure.js";
 
-const SLATE_FILE_PATTERN = /slate\.txt$/i;
 const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 export function createSlateScanner() {
@@ -27,12 +35,14 @@ async function scanSlateDirectory(dirPath, options = {}) {
   );
   const warnings = [];
   const candidates = [];
+  const structureByCamera = new Map();
   const stats = {
     visitedDirectories: 0,
     prunedDirectories: 0,
     skippedDeepDirectories: 0,
     discoveredSlateFiles: 0,
     readSlateFiles: 0,
+    learnedStructures: 0,
   };
 
   async function walk(currentPath, pathParts, depth, isRoot = false) {
@@ -47,21 +57,44 @@ async function scanSlateDirectory(dirPath, options = {}) {
         return;
       }
 
-      // Check for exact match: <dirname>-slate.txt
-      const exactName = `${dirName}-slate.txt`;
-      const exactPath = join(currentPath, exactName);
-      try {
-        const fileStat = await stat(exactPath);
-        if (fileStat.isFile()) {
-          candidates.push({ filePath: exactPath, sourceName: [...pathParts, exactName].join("/") });
-          stats.discoveredSlateFiles += 1;
-          return;
-        }
-      } catch {
-        // exact match not found, enumerate all slate.txt in this directory
+      const camera = directoryKey.split(":")[0];
+      let structure = structureByCamera.get(camera);
+      if (!structure) {
+        structure = defaultMetadataStructure();
+        structureByCamera.set(camera, structure);
       }
 
-      await enumerateFilesOnly(currentPath, pathParts);
+      // Probe the known naming convention directly (no enumeration).
+      for (const candidateName of probeNames(structure, dirName)) {
+        const candidatePath = join(currentPath, candidateName);
+        try {
+          const fileStat = await stat(candidatePath);
+          if (fileStat.isFile()) {
+            candidates.push({
+              filePath: candidatePath,
+              sourceName: [...pathParts, candidateName].join("/"),
+            });
+            stats.discoveredSlateFiles += 1;
+            return;
+          }
+        } catch {
+          // not found, try the next candidate
+        }
+      }
+
+      // Probe missed → enumerate once, learn the real structure, remember.
+      const found = await listMetadataFiles(currentPath, pathParts);
+      if (found.length) {
+        structureByCamera.set(
+          camera,
+          learnStructure(dirName, found.map((file) => file.name)),
+        );
+        stats.learnedStructures += 1;
+        for (const file of found) {
+          candidates.push({ filePath: file.filePath, sourceName: file.sourceName });
+          stats.discoveredSlateFiles += 1;
+        }
+      }
       return;
     }
 
@@ -76,7 +109,7 @@ async function scanSlateDirectory(dirPath, options = {}) {
     const childDirectories = [];
     for (const entry of entries) {
       if (entry.isFile()) {
-        if (!SLATE_FILE_PATTERN.test(entry.name)) continue;
+        if (!METADATA_FILE_PATTERN.test(entry.name)) continue;
         const fileKey = extractCombinedMaterialKey(entry.name);
         if (!fileKey || expectedKeys.has(fileKey)) {
           candidates.push({
@@ -106,23 +139,25 @@ async function scanSlateDirectory(dirPath, options = {}) {
     }
   }
 
-  async function enumerateFilesOnly(currentPath, pathParts) {
+  async function listMetadataFiles(currentPath, pathParts) {
+    const found = [];
     let entries;
     try {
       entries = await readdir(currentPath, { withFileTypes: true });
     } catch (error) {
       warnings.push(`${pathParts.join("/")} 无法读取：${error.message}`);
-      return;
+      return found;
     }
     for (const entry of entries) {
-      if (entry.isFile() && SLATE_FILE_PATTERN.test(entry.name)) {
-        candidates.push({
+      if (entry.isFile() && METADATA_FILE_PATTERN.test(entry.name)) {
+        found.push({
+          name: entry.name,
           filePath: join(currentPath, entry.name),
           sourceName: [...pathParts, entry.name].join("/"),
         });
-        stats.discoveredSlateFiles += 1;
       }
     }
+    return found;
   }
 
   const rootName = dirPath.split("/").filter(Boolean).pop() || "素材根目录";
@@ -145,11 +180,17 @@ async function scanSlateDirectory(dirPath, options = {}) {
         buffer.byteOffset,
         buffer.byteOffset + buffer.byteLength,
       );
-      metadata.push(parseSlateMetadataText(arrayBuffer, candidate.sourceName));
+      metadata.push(parseMetadataFile(arrayBuffer, candidate.sourceName));
     } catch (error) {
       warnings.push(error.message || `${candidate.sourceName} 无法读取`);
     }
   }
+  // Reconcile after parsing so expected clips with an entirely absent
+  // directory are reported just like clips with an empty directory.
+  const foundKeys = new Set(
+    metadata.map((entry) => entry.materialKey).filter(Boolean),
+  );
+  const missingKeys = [...expectedKeys].filter((key) => !foundKeys.has(key));
 
   if (stats.skippedDeepDirectories) {
     warnings.push(
@@ -157,7 +198,7 @@ async function scanSlateDirectory(dirPath, options = {}) {
     );
   }
 
-  return { metadata, warnings, stats };
+  return { metadata, warnings, stats, missingKeys: [...missingKeys] };
 }
 
 function boundedInteger(value, fallback, minimum, maximum) {

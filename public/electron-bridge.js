@@ -147,3 +147,24 @@ export async function deleteTaskApi(id) {
   });
   return response.json();
 }
+
+export async function getOcrSettingsApi() {
+  if (isElectron) {
+    return globalThis.electronAPI.getOcrSettings();
+  }
+  throw new Error("本地 OCR 配置仅桌面版支持");
+}
+
+export async function saveOcrSettingsApi(settings) {
+  if (isElectron) {
+    return globalThis.electronAPI.saveOcrSettings(settings);
+  }
+  throw new Error("本地 OCR 配置仅桌面版支持");
+}
+
+export async function checkOcrApi(pythonPath) {
+  if (isElectron) {
+    return globalThis.electronAPI.checkOcr(pythonPath);
+  }
+  throw new Error("本地 OCR 配置仅桌面版支持");
+}

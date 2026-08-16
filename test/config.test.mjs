@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  createWorkflowConfigProvider,
   DEFAULT_WORKFLOW_CONFIG,
   MODELS,
   normalizeWorkflowConfig,
@@ -28,8 +32,32 @@ test("workflow config accepts scan depth and fixed-width X templates", () => {
       slate: { maxDirectoryDepth: 6 },
       resolve: {
         fieldFormats: { scene: "XXXX", shot: "XXX", take: "X" },
+        comments: { goodTake: "_OK", holdTake: "_KP" },
       },
     },
+  );
+});
+
+test("workflow config accepts custom Resolve Comments markers", () => {
+  assert.deepEqual(
+    normalizeWorkflowConfig({
+      resolve: { comments: { goodTake: "OK!", holdTake: "HOLD" } },
+    }).resolve.comments,
+    { goodTake: "OK!", holdTake: "HOLD" },
+  );
+  assert.throws(
+    () =>
+      normalizeWorkflowConfig({
+        resolve: { comments: { goodTake: "  " } },
+      }),
+    /resolve\.comments\.goodTake/,
+  );
+  assert.throws(
+    () =>
+      normalizeWorkflowConfig({
+        resolve: { comments: { holdTake: "a\nb" } },
+      }),
+    /1–32 个字符/,
   );
 });
 
@@ -50,7 +78,10 @@ test("workflow config rejects unsafe depth and non-X field formats", () => {
 test("recognition results follow configured field widths before reaching the browser", () => {
   const result = formatSlateResultFields(
     {
-      records: [{ scene: "037", shot: "02", take: "09" }],
+      records: [
+        { scene: "037", shot: "02", take: "09" },
+        { scene: "9", shot: "11", take: "11" },
+      ],
       warnings: [],
     },
     { scene: "XXXX", shot: "XXX", take: "X" },
@@ -60,6 +91,48 @@ test("recognition results follow configured field widths before reaching the bro
     shot: "002",
     take: "9",
   });
+  assert.deepEqual(result.records[1], {
+    scene: "0009",
+    shot: "011",
+    take: "11",
+  });
+});
+
+test("recognition normalization folds full-width digits and Chinese numerals", () => {
+  const result = formatSlateResultFields(
+    {
+      records: [{ scene: "十一A", shot: "十", take: "０９" }],
+      warnings: [],
+    },
+  );
+  assert.deepEqual(result.records[0], {
+    scene: "11A",
+    shot: "10",
+    take: "09",
+  });
+});
+
+test("workflow config provider hot-reloads edits and keeps last valid config", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "slatesync-config-"));
+  const configPath = join(dir, "slatesync.config.json");
+  await writeFile(
+    configPath,
+    JSON.stringify({ resolve: { fieldFormats: { take: "X" } } }),
+  );
+  const getWorkflowConfig = createWorkflowConfigProvider(configPath);
+
+  assert.equal((await getWorkflowConfig()).resolve.fieldFormats.take, "X");
+
+  await writeFile(
+    configPath,
+    JSON.stringify({ resolve: { fieldFormats: { take: "XX" } } }),
+  );
+  await utimes(configPath, new Date(), new Date(Date.now() + 2000));
+  assert.equal((await getWorkflowConfig()).resolve.fieldFormats.take, "XX");
+
+  await writeFile(configPath, "{ invalid json");
+  await utimes(configPath, new Date(), new Date(Date.now() + 4000));
+  assert.equal((await getWorkflowConfig()).resolve.fieldFormats.take, "XX");
 });
 
 test("DashScope provider resolves with BaiLian defaults and fixed models", () => {
