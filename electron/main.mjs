@@ -4,7 +4,7 @@
 // Python path, registers IPC handlers, then opens the sandboxed BrowserWindow
 // that loads public/index.html. The window blocks external navigation and only
 // allows file:// URLs under the app's public directory.
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureModelHttpAgent } from "../lib/ai-client.mjs";
@@ -21,6 +21,15 @@ import { createScenarioStore } from "../lib/scenario/store.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+const ICON_COMPOSER_PATH = join(
+  resolve(__dirname, ".."),
+  "build",
+  "slatesync.icon",
+);
+// electron-builder consumes the .icon container, while the dev Dock/window
+// APIs need a raster image. This PNG is the artwork inside that same bundle,
+// so development and packaged builds use one source of truth.
+const DEV_ICON_PATH = join(ICON_COMPOSER_PATH, "Assets", "icon.png");
 
 // Set project root for OCR subprocess path resolution
 if (isDev) {
@@ -115,6 +124,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     title: "SlateSync",
+    ...(isDev ? { icon: DEV_ICON_PATH } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -151,7 +161,14 @@ function createWindow() {
   });
 }
 
+function configureDevelopmentIcon() {
+  if (!isDev || process.platform !== "darwin") return;
+  const icon = nativeImage.createFromPath(DEV_ICON_PATH);
+  if (!icon.isEmpty()) app.dock.setIcon(icon);
+}
+
 app.whenReady().then(async () => {
+  configureDevelopmentIcon();
   try {
     await initialize();
   } catch (error) {
