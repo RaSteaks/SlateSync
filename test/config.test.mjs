@@ -78,7 +78,7 @@ test("workflow config rejects unsafe depth and non-X field formats", () => {
   );
 });
 
-test("recognition results follow configured field widths before reaching the browser", () => {
+test("recognition results follow configured field widths before reaching the renderer", () => {
   const result = formatSlateResultFields(
     {
       records: [

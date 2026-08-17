@@ -32,9 +32,6 @@ export function registerIpcHandlers(ipcMain, context) {
     slateScanner,
     projectLibrary,
     projectRuntime,
-    diagnostics,
-    taskStore,
-    scenarioStore,
     settingsStore,
     runtimeSettings,
     libraryActions,
@@ -59,9 +56,6 @@ export function registerIpcHandlers(ipcMain, context) {
         ...config.upload,
         maxRequestBytes: settings.maxBodyBytes,
       },
-      // Electron Profiles are project-scoped and are loaded after the user
-      // selects a project. Keep the legacy fallback for Web-mode test hosts.
-      scenarios: scenarioStore ? await scenarioStore.listProfiles() : [],
     };
   });
 
@@ -289,8 +283,6 @@ export function registerIpcHandlers(ipcMain, context) {
       capture.setError(error);
       if (activeProjectId && projectContext?.diagnostics) {
         await projectContext.diagnostics.saveSession(capture.session).catch(() => {});
-      } else if (diagnostics) {
-        await diagnostics.saveSession(capture.session).catch(() => {});
       }
       throw error;
     } finally {
@@ -319,9 +311,7 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("list-tasks", async (_event, body = {}) => {
     const context = await resolveProjectContext(body.projectId, { readOnly: true });
-    // Keep the historical Electron return shape (an array); the renderer also
-    // accepts the Web API's { tasks } envelope, so project scoping is carried
-    // by the request without needlessly breaking existing preload clients.
+    // Keep the preload contract compact: task lists cross IPC as arrays.
     if (!context.taskStore) return [];
     return context.taskStore.listTasks();
   });
@@ -415,16 +405,9 @@ export function registerIpcHandlers(ipcMain, context) {
   );
 
   async function resolveProjectContext(projectId, { readOnly = false } = {}) {
-    if (projectRuntime) {
-      if (!projectId) throw new Error("请先选择项目");
-      return projectRuntime.get(projectId, { allowArchived: readOnly });
-    }
-    return {
-      project: null,
-      taskStore,
-      scenarioStore,
-      diagnostics,
-    };
+    if (!projectRuntime) throw new Error("项目运行时不可用");
+    if (!projectId) throw new Error("请先选择项目");
+    return projectRuntime.get(projectId, { allowArchived: readOnly });
   }
 
   function beginProjectWrite(projectId) {

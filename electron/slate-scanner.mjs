@@ -1,6 +1,6 @@
-// Electron (Node fs) mirror of the browser metadata discovery in
-// public/slate-directory.js. Same walk/prune/learn/probe/fallback algorithm,
-// implemented against the filesystem instead of File System Access API handles.
+// Electron metadata discovery implemented against Node.js filesystem APIs.
+// The scanner prunes unrelated material directories, learns camera-specific
+// filename structures, and falls back to bounded directory enumeration.
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { extractCombinedMaterialKey } from "../public/metadata-common.js";

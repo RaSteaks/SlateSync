@@ -2,7 +2,7 @@
 //
 // Selects how many image views to send per page per accuracy mode and
 // serializes the request payload, with helpers to measure the request body
-// against the server's upload limit.
+// against the Electron IPC request limit advertised by the main process.
 export const REQUEST_SIZE_SAFETY_RATIO = 0.94;
 
 export const REQUEST_COMPRESSION_PROFILES = [

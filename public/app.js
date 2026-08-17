@@ -3,8 +3,8 @@
 // Owns the page state machine, DOM wiring, and all user interactions: the
 // Electron Project Library, project-scoped settings/tasks/Profiles, slate
 // recognition, material metadata scanning, CSV backfill editing, and OCR
-// setup. Talks to the backend through public/electron-bridge.js, which keeps
-// Electron project databases separate from the legacy Web mode.
+// setup. All backend operations cross the context-isolated Electron preload
+// bridge in public/electron-bridge.js.
 import {
   buildSlateMetadataIndex,
   buildStandaloneResolveTable,
@@ -14,7 +14,6 @@ import {
   decodeResolveCsv,
   detectSlateSequenceAnomalies,
   encodeResolveCsv,
-  extractCombinedMaterialKey,
   materialPrefix,
   mergeSlateIntoResolveTable,
   normalizeSceneValue,
@@ -23,14 +22,9 @@ import {
   resolveColumnIndexes,
 } from "./resolve-csv.js";
 import {
-  METADATA_FILE_PATTERN,
-  parseMetadataFile,
-} from "./metadata-sources/index.js";
-import {
   restoreCsvPreviewState,
   serializeCsvPreviewState,
 } from "./task-persistence.js";
-import { scanSlateDirectory } from "./slate-directory.js";
 import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
@@ -46,7 +40,6 @@ import {
   shouldResetSlateCsvResults,
 } from "./workflow-state.js";
 import {
-  isElectron,
   fetchConfig,
   listProjectsApi,
   getLibraryInfoApi,
@@ -61,7 +54,7 @@ import {
   listScenariosApi,
   saveProviderKeyApi,
   fetchModelsApi,
-  recognizeStreamApi,
+  recognizeApi,
   downloadFileApi,
   pickDirectoryApi,
   scanSlateDirectoryApi,
@@ -98,10 +91,6 @@ const state = {
   metadataTable: null,
   slateMetadata: [],
   slateWarnings: [],
-  slateRootHandle: null,
-  slateFallbackFiles: null,
-  slateCache: new Map(),
-  slateScanController: null,
   slateScanning: false,
   recognizing: false,
   imageDataGroups: [],
@@ -123,7 +112,7 @@ const state = {
   currentProject: null,
   projects: [],
   libraryInfo: null,
-  route: isElectron ? "projects" : "workspace",
+  route: "projects",
   activeTaskSettings: null,
 };
 
@@ -143,7 +132,6 @@ const elements = {
   metadataFileName: document.querySelector("#metadata-file-name"),
   metadataFileMeta: document.querySelector("#metadata-file-meta"),
   removeMetadata: document.querySelector("#remove-metadata"),
-  slateInput: document.querySelector("#slate-input"),
   slateDirectoryButton: document.querySelector("#slate-directory-button"),
   slateHelp: document.querySelector("#slate-help"),
   slateDropzone: document.querySelector("#slate-directory-button"),
@@ -290,7 +278,6 @@ init();
 
 async function init() {
   bindEvents();
-  if (isElectron) document.body.classList.add("is-electron");
   try {
     await loadConfig();
     renderSlateDirectoryConfig();
@@ -303,27 +290,16 @@ async function init() {
     updateMetadataInputState();
     updateSlateDirectoryState();
     await loadProviderModels();
-    if (isElectron) {
-      renderGlobalProviderOptions();
-      await refreshLibrary();
-      renderRoute();
-    } else {
-      await refreshScenarioProfiles();
-      await loadTaskList();
-      renderRoute();
-    }
+    renderGlobalProviderOptions();
+    await refreshLibrary();
+    renderRoute();
   } catch {
-    showError("无法读取服务配置，请确认 SlateSync 已启动。");
+    showError("无法读取应用配置，请重启 SlateSync。");
   }
 }
 
 async function loadConfig() {
   state.config = await fetchConfig();
-  if (!isElectron) {
-    state.scenarioProfiles = Array.isArray(state.config?.scenarios)
-      ? state.config.scenarios
-      : [];
-  }
   renderScenarioOptions();
 }
 
@@ -376,14 +352,12 @@ async function refreshRuntimeConfig() {
 }
 
 function navigate(route) {
-  if (!isElectron) return;
   state.route = route;
   renderRoute();
   if (route === "projects") void refreshLibrary();
 }
 
 async function refreshLibrary() {
-  if (!isElectron) return;
   const token = libraryOperations.start();
   try {
     const [libraryInfo, projects] = await Promise.all([
@@ -404,15 +378,6 @@ async function refreshLibrary() {
 }
 
 function renderRoute() {
-  if (!isElectron) {
-    elements.appNav.hidden = true;
-    elements.workspacePage.hidden = false;
-    elements.projectHomePage.hidden = true;
-    elements.projectSettingsPage.hidden = true;
-    elements.globalSettingsPage.hidden = true;
-    return;
-  }
-
   elements.appNav.hidden = false;
   elements.workspacePage.hidden = state.route !== "workspace";
   elements.projectHomePage.hidden = state.route !== "projects";
@@ -434,7 +399,6 @@ function renderRoute() {
 }
 
 async function openProject(projectId, nextRoute = "workspace") {
-  if (!isElectron) return;
   const token = projectOperations.start();
   projectModelOperations.invalidate();
   taskOperations.invalidate();
@@ -492,17 +456,16 @@ function updateProjectContextLabel() {
   label.textContent = state.currentProject
     ? `${state.currentProject.name}${isProjectReadOnly() ? " · 只读" : ""}`
     : "未选择项目";
-  label.hidden = !isElectron || !state.currentProject;
+  label.hidden = !state.currentProject;
 }
 
 function isProjectReadOnly() {
   // The renderer mirrors the IPC archive guard for immediate feedback; the
   // main process remains authoritative and rechecks the archive flag per call.
-  return isElectron && Boolean(state.currentProject?.archivedAt);
+  return Boolean(state.currentProject?.archivedAt);
 }
 
 function renderProjectLibrary() {
-  if (!isElectron) return;
   const active = state.projects.filter((project) => !project.archivedAt);
   const archived = state.projects.filter((project) => project.archivedAt);
   elements.libraryLocation.textContent = state.libraryInfo?.path
@@ -892,7 +855,7 @@ function updateGlobalApiKeyFieldState() {
     (item) => item.id === elements.globalProvider?.value,
   );
   if (!provider || !elements.globalApiKeyNote) return;
-  const configurable = WEB_CONFIGURABLE_PROVIDERS.includes(provider.id);
+  const configurable = KEY_CONFIGURABLE_PROVIDERS.includes(provider.id);
   elements.globalApiKeyInput.disabled = !configurable;
   elements.globalSaveKeyButton.disabled = !configurable;
   elements.globalApiKeyNote.textContent = !configurable
@@ -1056,9 +1019,6 @@ function bindEvents() {
   elements.imageInput.addEventListener("change", (event) => {
     if (event.target.files?.[0]) loadReportFile(event.target.files[0]);
   });
-  elements.slateInput.addEventListener("change", (event) => {
-    if (event.target.files?.length) loadSlateDirectory(event.target.files);
-  });
   elements.slateDirectoryButton.addEventListener("click", selectSlateDirectory);
   elements.removeMetadata.addEventListener("click", clearResolveCsv);
   elements.removeSlates.addEventListener("click", clearSlateMetadata);
@@ -1137,7 +1097,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", handleRecognitionShortcut);
   window.addEventListener("beforeunload", (event) => {
-    if (!isElectron || allowWindowClose || !taskAutosave.hasPending()) return;
+    if (allowWindowClose || !taskAutosave.hasPending()) return;
     event.preventDefault();
     event.returnValue = false;
     // Keep the Electron window alive until its final pending edit is durable.
@@ -1162,42 +1122,9 @@ async function selectSlateDirectory() {
     state.slateScanning
   ) return;
   hideError();
-
-  if (isElectron) {
-    await selectSlateDirectoryElectron();
-    return;
-  }
-
-  if (typeof globalThis.showDirectoryPicker !== "function") {
-    elements.slateInput.click();
-    return;
-  }
-
-  try {
-    const rootHandle = await globalThis.showDirectoryPicker({
-      id: "slatesync-slate-root",
-      mode: "read",
-    });
-    state.slateRootHandle = rootHandle;
-    state.slateFallbackFiles = null;
-    state.slateCache = new Map();
-    state.slateMetadata = [];
-    state.slateWarnings = [];
-    await loadSlateDirectoryHandle(rootHandle);
-  } catch (error) {
-    if (error?.name !== "AbortError") {
-      showError(error.message || "无法读取所选素材目录。");
-    }
-  }
-}
-
-async function selectSlateDirectoryElectron() {
   try {
     const result = await pickDirectoryApi();
     if (!result) return;
-    state.slateRootHandle = null;
-    state.slateFallbackFiles = null;
-    state.slateCache = new Map();
     state.slateMetadata = [];
     state.slateWarnings = [];
     elements.slateCard.hidden = true;
@@ -1218,7 +1145,6 @@ async function selectSlateDirectoryElectron() {
         ...scanResult,
         warnings: [...csvWarnings, ...scanResult.warnings],
         directoryName: result.dirName || "已选素材目录",
-        compatibilityMode: false,
       });
     } finally {
       state.slateScanning = false;
@@ -1229,162 +1155,11 @@ async function selectSlateDirectoryElectron() {
   }
 }
 
-async function loadSlateDirectoryHandle(rootHandle) {
-  const { keys, warnings: csvWarnings } = collectResolveMaterialKeys(
-    state.metadataTable,
-  );
-  state.slateScanController?.abort();
-  const controller = new AbortController();
-  state.slateScanController = controller;
-  state.slateScanning = true;
-  updateSlateDirectoryState();
-  showSlateScanningState(rootHandle.name || "已选素材目录");
-
-  try {
-    const result = await scanSlateDirectory(rootHandle, {
-      expectedKeys: keys,
-      maxDepth: slateMaxDirectoryDepth(),
-      readConcurrency: 4,
-      cache: state.slateCache,
-      signal: controller.signal,
-    });
-    if (state.slateScanController !== controller) return;
-    applySlateDirectoryResult({
-      ...result,
-      warnings: [...csvWarnings, ...result.warnings],
-      directoryName: rootHandle.name || "已选素材目录",
-      compatibilityMode: false,
-    });
-  } catch (error) {
-    if (error?.name !== "AbortError") {
-      showSlateScanFailure(
-        rootHandle.name || "已选素材目录",
-        error.message || "无法读取所选素材目录。",
-      );
-    }
-  } finally {
-    if (state.slateScanController === controller) {
-      state.slateScanning = false;
-      updateSlateDirectoryState();
-    }
-  }
-}
-
-async function loadSlateDirectory(fileList) {
-  if (!canSelectSlateDirectory({
-    reportReady: state.imageDataGroups.length > 0,
-    metadataLoaded: Boolean(state.metadataTable),
-  })) {
-    elements.slateInput.value = "";
-    showError("请先选择场记单并载入 Resolve CSV，再选择素材根目录。");
-    return;
-  }
-
-  hideError();
-  state.slateRootHandle = null;
-  state.slateFallbackFiles = [...fileList];
-  const files = state.slateFallbackFiles;
-  const { keys, warnings: csvWarnings } = collectResolveMaterialKeys(
-    state.metadataTable,
-  );
-  const expectedKeys = new Set(keys);
-  const maxDepth = slateMaxDirectoryDepth();
-  const warnings = [...csvWarnings];
-  const allSlateFiles = files.filter((file) =>
-    METADATA_FILE_PATTERN.test(file.name),
-  );
-  const withinDepth = allSlateFiles.filter((file) =>
-    relativeFileDirectoryDepth(file.webkitRelativePath || file.name) <= maxDepth,
-  );
-  const skippedDeep = allSlateFiles.length - withinDepth.length;
-  if (skippedDeep) {
-    warnings.push(
-      `${skippedDeep} 个元数据文件超过配置的 ${maxDepth} 层搜索范围，已跳过。`,
-    );
-  }
-  const slateFiles = withinDepth.filter((file) => {
-    const key = extractCombinedMaterialKey(
-      file.webkitRelativePath || file.name,
-    );
-    return !key || expectedKeys.has(key);
-  });
-  const firstPath = files[0]?.webkitRelativePath || files[0]?.name || "";
-  const directoryName = firstPath.split("/").filter(Boolean)[0] || "已选素材目录";
-  if (!slateFiles.length) {
-    elements.slateInput.value = "";
-    showSlateScanFailure(
-      directoryName,
-      `所选目录的前 ${maxDepth} 层中没有找到匹配的元数据文件，请检查目录结构与素材编号。`,
-    );
-    return;
-  }
-
-  const parsed = [];
-  const oversized = slateFiles.filter((file) => file.size > 2 * 1024 * 1024);
-  if (oversized.length) {
-    warnings.push(`${oversized.length} 个超过 2 MB 的元数据文件已跳过。`);
-  }
-  const readable = slateFiles.filter((file) => file.size <= 2 * 1024 * 1024);
-
-  state.slateScanning = true;
-  updateSlateDirectoryState();
-  showSlateScanningState(directoryName);
-  try {
-    for (let offset = 0; offset < readable.length; offset += 4) {
-      const batch = readable.slice(offset, offset + 4);
-      const results = await Promise.all(
-        batch.map(async (file) => {
-          const sourceName = file.webkitRelativePath || file.name;
-          try {
-            return {
-              metadata: parseMetadataFile(
-                await file.arrayBuffer(),
-                sourceName,
-              ),
-            };
-          } catch (error) {
-            return { warning: error.message || `${sourceName} 无法读取` };
-          }
-        }),
-      );
-      for (const result of results) {
-        if (result.metadata) parsed.push(result.metadata);
-        if (result.warning) warnings.push(result.warning);
-      }
-    }
-  } finally {
-    state.slateScanning = false;
-    updateSlateDirectoryState();
-  }
-
-  const foundKeys = new Set(
-    parsed.map((entry) => entry.materialKey).filter(Boolean),
-  );
-  const missingKeys = [...expectedKeys].filter((key) => !foundKeys.has(key));
-
-  applySlateDirectoryResult({
-    metadata: parsed,
-    warnings,
-    stats: {
-      discoveredSlateFiles: slateFiles.length,
-      readSlateFiles: readable.length,
-      cacheHits: 0,
-      visitedDirectories: 0,
-      prunedDirectories: allSlateFiles.length - slateFiles.length - skippedDeep,
-      skippedDeepDirectories: skippedDeep,
-    },
-    directoryName,
-    compatibilityMode: true,
-    missingKeys,
-  });
-}
-
 function applySlateDirectoryResult({
   metadata,
   warnings,
   stats,
   directoryName,
-  compatibilityMode,
   missingKeys,
 }) {
   state.csvEdits.clear();
@@ -1414,9 +1189,7 @@ function applySlateDirectoryResult({
   ).length;
   const warningCount = warnings.length + slateIndex.warnings.length;
   const missingCount = state.missingMetadataKeys.size;
-  const scanLabel = compatibilityMode
-    ? "兼容模式"
-    : `访问 ${stats.visitedDirectories} 个目录 · 剪枝 ${stats.prunedDirectories} 个`;
+  const scanLabel = `访问 ${stats.visitedDirectories} 个目录 · 剪枝 ${stats.prunedDirectories} 个`;
   const cacheLabel = stats.cacheHits ? ` · 缓存 ${stats.cacheHits}` : "";
   const missingLabel = missingCount ? ` · 无元数据 ${missingCount} 个素材` : "";
   elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个元数据文件 · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材${missingLabel} · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
@@ -1452,11 +1225,6 @@ function clearSlateStatus() {
   elements.slateStatus.textContent = "";
   elements.slateStatus.className = "slate-status";
   elements.slateStatus.hidden = true;
-}
-
-function relativeFileDirectoryDepth(path) {
-  const parts = String(path || "").split("/").filter(Boolean);
-  return Math.max(0, parts.length - 2);
 }
 
 function slateMaxDirectoryDepth() {
@@ -1496,7 +1264,6 @@ function updateSlateDirectoryState() {
     metadataLoaded: Boolean(state.metadataTable),
   }) && !state.slateScanning;
   elements.slateDirectoryButton.disabled = !enabled;
-  elements.slateInput.disabled = !enabled;
   elements.slateHelp.textContent = state.slateScanning
     ? "正在定向查找元数据文件…"
     : !state.imageDataGroups.length
@@ -1508,16 +1275,11 @@ function updateSlateDirectoryState() {
 }
 
 function clearSlateMetadata() {
-  state.slateScanController?.abort();
   state.slateMetadata = [];
   state.csvEdits.clear();
   state.missingMetadataKeys = new Set();
   state.slateWarnings = [];
-  state.slateRootHandle = null;
-  state.slateFallbackFiles = null;
-  state.slateCache = new Map();
   state.slateScanning = false;
-  elements.slateInput.value = "";
   elements.slateCard.hidden = true;
   elements.slateDropzone.hidden = false;
   clearSlateStatus();
@@ -1573,7 +1335,9 @@ function renderProviderOptions() {
   updateApiKeyFieldState();
 }
 
-const WEB_CONFIGURABLE_PROVIDERS = [
+// OpenAI-compatible endpoints require additional environment configuration;
+// the remaining providers can safely persist their single API key in Electron.
+const KEY_CONFIGURABLE_PROVIDERS = [
   "openai",
   "openrouter",
   "tokenplan",
@@ -1582,7 +1346,7 @@ const WEB_CONFIGURABLE_PROVIDERS = [
 
 function updateApiKeyFieldState() {
   const provider = selectedProvider();
-  const configurable = WEB_CONFIGURABLE_PROVIDERS.includes(provider?.id);
+  const configurable = KEY_CONFIGURABLE_PROVIDERS.includes(provider?.id);
   elements.providerKeyField.hidden = !configurable;
   if (!configurable) return;
   elements.apiKeyNote.textContent = provider.configured
@@ -1774,7 +1538,7 @@ function renderApiStatus() {
 }
 
 function renderOcrSetupLink() {
-  elements.ocrSetupLink.hidden = !isElectron;
+  elements.ocrSetupLink.hidden = false;
   renderGlobalOcrStatus();
 }
 
@@ -1790,7 +1554,7 @@ function renderGlobalOcrStatus() {
 }
 
 async function maybeShowOcrSetup() {
-  if (!isElectron || !state.config) return;
+  if (!state.config) return;
 
   const ocrReady = state.config.ocr?.enabled && state.config.ocr?.available;
   if (ocrReady) return;
@@ -1816,7 +1580,7 @@ async function openOcrSetup() {
       const settings = await getOcrSettingsApi();
       if (settings.pythonPath) elements.ocrPythonPath.value = settings.pythonPath;
     } catch {
-      // Web mode has no OCR settings; the wizard is Electron-only.
+      // Keep the dialog usable when persisted OCR settings cannot be read.
     }
   }
   elements.ocrSetupOverlay.hidden = false;
@@ -1905,7 +1669,6 @@ async function loadResolveCsv(file) {
     return;
   }
 
-  let loaded = false;
   try {
     const table = decodeResolveCsv(await file.arrayBuffer());
     state.metadataFile = file;
@@ -1915,7 +1678,6 @@ async function loadResolveCsv(file) {
     elements.metadataFileMeta.textContent = `${table.rows.length} 条素材 · ${table.headers.length} 列 · ${encodingLabel(table.format)}`;
     elements.metadataCard.hidden = false;
     elements.metadataDropzone.hidden = true;
-    loaded = true;
     if (state.records.length) {
       renderTable();
       setResultsTab("csv");
@@ -1930,17 +1692,6 @@ async function loadResolveCsv(file) {
     updateSlateDirectoryState();
   }
 
-  if (loaded && state.slateRootHandle) {
-    try {
-      await loadSlateDirectoryHandle(state.slateRootHandle);
-    } catch (error) {
-      if (error?.name !== "AbortError") {
-        showError(error.message || "无法按新的 CSV 重新扫描素材目录。");
-      }
-    }
-  } else if (loaded && state.slateFallbackFiles?.length) {
-    await loadSlateDirectory(state.slateFallbackFiles);
-  }
 }
 
 function clearResolveCsv() {
@@ -2401,9 +2152,9 @@ async function recognizeWithPdf() {
 
   try {
     const requestBody = await recognitionRequestBody();
-    const data = await recognizeStreamApi(requestBody, updateTaskProgress);
+    const data = await recognizeApi(requestBody, updateTaskProgress);
     const resultProjectId = data.projectId || requestProjectId;
-    if (isElectron && resultProjectId !== state.currentProjectId) {
+    if (resultProjectId !== state.currentProjectId) {
       throw new Error("识别结果所属项目已变化，请返回原项目查看已保存任务。");
     }
 
@@ -3306,7 +3057,7 @@ function markTaskProgressError(message) {
 
 function updateRecognizeState() {
   const readOnly = isProjectReadOnly();
-  const projectManagedAccuracy = isElectron && Boolean(state.currentProject);
+  const projectManagedAccuracy = Boolean(state.currentProject);
   const canRecognize = !readOnly && recognitionReady();
   const canMerge = !readOnly && !canRecognize && slateCsvMergeReady();
   elements.recognizeButton.disabled =
@@ -3414,11 +3165,7 @@ function updateSupportDataSummary() {
   const count = [
     Boolean(state.metadataTable),
     Boolean(state.slateCsvRecords?.length),
-    Boolean(
-      state.slateMetadata.length ||
-      state.slateRootHandle ||
-      state.slateFallbackFiles?.length,
-    ),
+    Boolean(state.slateMetadata.length),
   ].filter(Boolean).length;
   elements.optionalInputs.classList.toggle("has-data", count > 0);
   elements.supportDataState.textContent = count ? `已添加 ${count} 项` : "可选";
@@ -3472,7 +3219,7 @@ async function loadTaskList(projectId = state.currentProjectId) {
     const data = await listTasksApi(projectId);
     if (
       !taskListOperations.isCurrent(token) ||
-      (isElectron && projectId !== state.currentProjectId)
+      projectId !== state.currentProjectId
     ) return false;
     state.tasks = taskListFromResponse(data);
     renderTaskSwitcher();
@@ -3674,12 +3421,12 @@ async function deleteCurrentTask() {
     taskListOperations.invalidate();
     await deleteTaskApi(taskId, projectId);
     const [project, taskData] = await Promise.all([
-      isElectron ? loadProjectApi(projectId) : Promise.resolve(null),
+      loadProjectApi(projectId),
       listTasksApi(projectId),
     ]);
     if (
       !taskOperations.isCurrent(token) ||
-      (isElectron && state.currentProjectId !== projectId)
+      state.currentProjectId !== projectId
     ) return;
 
     state.currentTaskId = null;

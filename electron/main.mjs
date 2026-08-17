@@ -12,7 +12,7 @@ import { configureModelHttpAgent } from "../lib/ai-client.mjs";
 import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
 import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.mjs";
 import { registerIpcHandlers } from "./ipc-handlers.mjs";
-import { createKeyStore } from "../lib/key-store.mjs";
+import { createKeyStore } from "./key-store.mjs";
 import { createFileDialogs } from "./file-dialogs.mjs";
 import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";

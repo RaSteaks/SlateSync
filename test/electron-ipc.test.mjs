@@ -173,23 +173,36 @@ describe("electron IPC handlers", () => {
   });
 
   it("dispatches scenario Profile operations through IPC", async () => {
+    const projectId = "project-scenarios";
     const scenarioStore = {
       listProfiles: async () => [{ id: "scenario-0123456789abcdef" }],
       getProfile: async (id) => ({ id }),
       importProfile: async (profile) => ({ ...profile, imported: true }),
     };
+    const projectRuntime = {
+      get: async (requestedId) => {
+        assert.equal(requestedId, projectId);
+        return { project: { id: projectId }, scenarioStore };
+      },
+    };
     const ipcMain = createMockIpcMain();
-    registerIpcHandlers(ipcMain, createMockContext({ scenarioStore }));
+    registerIpcHandlers(ipcMain, createMockContext({ projectRuntime }));
 
-    assert.deepEqual(await ipcMain.invoke("list-scenarios"), [
+    assert.deepEqual(await ipcMain.invoke("list-scenarios", { projectId }), [
       { id: "scenario-0123456789abcdef" },
     ]);
     assert.deepEqual(
-      await ipcMain.invoke("load-scenario", { id: "scenario-0123456789abcdef" }),
+      await ipcMain.invoke("load-scenario", {
+        projectId,
+        id: "scenario-0123456789abcdef",
+      }),
       { id: "scenario-0123456789abcdef" },
     );
     assert.deepEqual(
-      await ipcMain.invoke("import-scenario", { profile: { label: "Imported" } }),
+      await ipcMain.invoke("import-scenario", {
+        projectId,
+        profile: { label: "Imported" },
+      }),
       { label: "Imported", imported: true },
     );
   });
@@ -280,6 +293,7 @@ describe("electron IPC handlers", () => {
   });
 
   it("save-task updates an existing task without replacing it", async () => {
+    const projectId = "project-tasks";
     const calls = [];
     const taskStore = {
       updateTask: async (id, patch) => {
@@ -288,16 +302,28 @@ describe("electron IPC handlers", () => {
       },
       saveTask: async () => assert.fail("existing task must be updated"),
     };
+    const projectRuntime = {
+      get: async (requestedId) => {
+        assert.equal(requestedId, projectId);
+        return { project: { id: projectId }, taskStore };
+      },
+    };
     const ipcMain = createMockIpcMain();
-    registerIpcHandlers(ipcMain, createMockContext({ taskStore }));
+    registerIpcHandlers(ipcMain, createMockContext({ projectRuntime }));
 
     const patch = {
       id: "task-123",
       editedRecords: [{ scene: "001", shot: "01", take: "01" }],
       status: "edited",
     };
-    assert.equal(await ipcMain.invoke("save-task", patch), "task-123");
-    assert.deepEqual(calls, [{ id: "task-123", patch }]);
+    assert.equal(
+      await ipcMain.invoke("save-task", { projectId, task: patch }),
+      "task-123",
+    );
+    assert.deepEqual(calls, [{
+      id: "task-123",
+      patch: { ...patch, projectId },
+    }]);
   });
 
   it("blocks project archival until an in-flight recognition finishes", async () => {

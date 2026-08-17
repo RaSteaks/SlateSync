@@ -9,8 +9,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 let progressListener = null;
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  isElectron: true,
-
   getConfig: () => ipcRenderer.invoke("get-config"),
 
   saveProviderKey: (provider, apiKey) =>

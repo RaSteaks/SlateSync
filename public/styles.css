@@ -2301,12 +2301,12 @@ footer {
    Electron —— 项目库 / 设置页
    ============================================================ */
 
-body.is-electron {
+body {
   background: var(--surface);
   color: var(--ink);
 }
 
-body.is-electron .topbar {
+.topbar {
   padding-right: 24px;
   padding-left: 24px;
   background: rgba(248, 250, 252, 0.94);
@@ -2384,16 +2384,7 @@ body.is-electron .topbar {
   overflow: auto;
 }
 
-/* Web 模式没有可见侧栏，隐藏导航不能继续占用 Electron 的首列。 */
-body:not(.is-electron) .app-shell {
-  display: block;
-}
-
-body:not(.is-electron) .app-content {
-  width: 100%;
-}
-
-.is-electron #recognition-settings-group {
+#recognition-settings-group {
   display: none;
 }
 

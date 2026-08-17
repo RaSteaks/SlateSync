@@ -10,8 +10,8 @@ export function cleanValue(value) {
 
 // Converts Chinese numeral runs (十一 → 11, 二十三 → 23, 一百零五 → 105) so
 // handwritten slate values can flow through the regular numeric normalizers.
-// Shared by the recognition schema (server) and the Resolve merge layer
-// (browser) so both normalize identically.
+// Shared by the main-process recognition schema and the renderer's Resolve
+// merge layer so both normalize identically.
 const CHINESE_DIGITS = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 const CHINESE_UNITS = { 十: 10, 百: 100 };
 

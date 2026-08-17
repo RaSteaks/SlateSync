@@ -1,9 +1,8 @@
 // Environment and settings helpers for the Electron main process.
 //
-// loadLocalEnv mirrors the server's dotenv-style loader so dev and packaged
-// builds read the same .env; the rest are small shared utilities (a concurrency
-// limiter, bounded-integer / trimmed-string parsing) used to normalize runtime
-// settings.
+// Development builds read a project-local .env while packaged builds read the
+// application data copy. The remaining helpers normalize Electron runtime
+// settings and enforce recognition concurrency.
 import { readFile } from "node:fs/promises";
 
 export async function loadLocalEnv(path) {
