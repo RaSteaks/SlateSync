@@ -5,7 +5,8 @@
 // that loads public/index.html. The window blocks external navigation and only
 // allows file:// URLs under the app's public directory.
 import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
-import { join, dirname, resolve } from "node:path";
+import { access } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureModelHttpAgent } from "../lib/ai-client.mjs";
 import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
@@ -15,9 +16,18 @@ import { createKeyStore } from "../lib/key-store.mjs";
 import { createFileDialogs } from "./file-dialogs.mjs";
 import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";
-import { createDiagnosticsStore } from "../lib/diagnostics.mjs";
-import { createTaskStore } from "../lib/task-store.mjs";
-import { createScenarioStore } from "../lib/scenario/store.mjs";
+import {
+  createProjectLibrary,
+  DEFAULT_LIBRARY_FOLDER,
+  defaultLibraryPath,
+} from "../lib/project-library.mjs";
+import {
+  exportProjectLibrary,
+  libraryExportPath,
+  validateProjectLibrary,
+} from "../lib/project-library-transfer.mjs";
+import { createProjectRuntime } from "../lib/project-runtime.mjs";
+import { projectSettingsFromWorkflow } from "../lib/project-settings.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -47,6 +57,8 @@ if (!process.env.PADDLE_PDX_CACHE_HOME) {
 }
 
 let mainWindow = null;
+let projectLibrary = null;
+let projectRuntime = null;
 
 async function initialize() {
   // Load .env from project root (dev) or userData (packaged)
@@ -89,16 +101,68 @@ async function initialize() {
 
   const fileDialogs = createFileDialogs(() => mainWindow);
   const slateScanner = createSlateScanner();
-  const diagnostics = createDiagnosticsStore(
-    join(app.getPath("userData"), "data"),
-  );
-  const taskStore = createTaskStore(
-    join(app.getPath("userData"), "data"),
-  );
-  const scenarioStore = createScenarioStore(
-    join(app.getPath("userData"), "data"),
-    { matching: async () => (await getWorkflowConfig()).scenario?.matching },
-  );
+  const workflowDefaults = projectSettingsFromWorkflow(await getWorkflowConfig());
+  const libraryRoot = runtimeSettings.libraryPath || await initialLibraryPath();
+  projectLibrary = createProjectLibrary(libraryRoot, {
+    defaultSettings: workflowDefaults,
+  });
+  // Copy the legacy global database into the default project without deleting
+  // the original data directory. The library records a migration marker so
+  // restarts remain safe and idempotent.
+  await projectLibrary.migrateLegacyData(join(app.getPath("userData"), "data"));
+  projectRuntime = createProjectRuntime(projectLibrary, {
+    matching: async () => (await getWorkflowConfig()).scenario?.matching,
+  });
+
+  const libraryActions = {
+    async importLibrary() {
+      const selected = await fileDialogs.selectProjectLibrary(
+        dirname(libraryRoot),
+      );
+      if (!selected) return { canceled: true };
+      const imported = await validateProjectLibrary(selected);
+      await activateLibrary(imported.path);
+      return { canceled: false, restartRequired: true, library: imported };
+    },
+
+    async exportLibrary() {
+      const selected = await fileDialogs.selectLibraryExportPath(
+        join(app.getPath("downloads"), basename(libraryRoot)),
+      );
+      if (!selected) return { canceled: true };
+      const target = libraryExportPath(dirname(selected), basename(selected));
+      const exported = await exportProjectLibrary(libraryRoot, target);
+      return { canceled: false, library: exported };
+    },
+
+    async changeLocation() {
+      const selected = await fileDialogs.selectLibraryStorageDirectory(
+        dirname(libraryRoot),
+      );
+      if (!selected) return { canceled: true };
+      const target = libraryExportPath(selected, basename(libraryRoot));
+      const relocated = await exportProjectLibrary(libraryRoot, target);
+      await activateLibrary(relocated.path);
+      return { canceled: false, restartRequired: true, library: relocated };
+    },
+  };
+
+  async function activateLibrary(nextPath) {
+    // Persist the selected package only after it has passed validation/copy.
+    // Close current connections before scheduling a relaunch so no late WAL
+    // write can race with the switch to the next Project Library.
+    const saved = await settingsStore.save({
+      ...runtimeSettings,
+      libraryPath: resolve(nextPath),
+    });
+    Object.assign(runtimeSettings, saved);
+    await projectRuntime?.close();
+    await projectLibrary?.close();
+    setTimeout(() => {
+      app.relaunch();
+      app.exit(0);
+    }, 150);
+  }
 
   registerIpcHandlers(ipcMain, {
     getWorkflowConfig,
@@ -109,12 +173,36 @@ async function initialize() {
     keyStore,
     fileDialogs,
     slateScanner,
-    diagnostics,
-    taskStore,
-    scenarioStore,
+    projectLibrary,
+    projectRuntime,
     settingsStore,
     runtimeSettings,
+    libraryActions,
   });
+}
+
+async function initialLibraryPath() {
+  const preferred = defaultLibraryPath(app.getPath("appData"));
+  const previousDefault = join(
+    app.getPath("userData"),
+    "Libraries",
+    DEFAULT_LIBRARY_FOLDER,
+  );
+  // Existing development installs used <userData>/Libraries. Prefer that
+  // package only when the new Application Support default does not yet exist.
+  if (!(await exists(preferred)) && await exists(previousDefault)) {
+    return previousDefault;
+  }
+  return preferred;
+}
+
+async function exists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createWindow() {
@@ -187,4 +275,11 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   app.quit();
+});
+
+app.on("will-quit", () => {
+  // Close cached project connections before Electron tears down the main
+  // process. The library remains a portable folder that can be backed up.
+  void projectRuntime?.close();
+  void projectLibrary?.close();
 });

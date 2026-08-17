@@ -51,22 +51,44 @@ contextBridge.exposeInMainWorld("electronAPI", {
       maxDepth,
     }),
 
-  listTasks: () => ipcRenderer.invoke("list-tasks"),
+  // Every project-scoped read carries the project ID so the main process can
+  // resolve the correct project database instead of trusting renderer state.
+  listProjects: () => ipcRenderer.invoke("list-projects"),
 
-  loadTask: (id) => ipcRenderer.invoke("load-task", { id }),
+  getLibraryInfo: () => ipcRenderer.invoke("get-library-info"),
 
-  saveTask: (task) => ipcRenderer.invoke("save-task", task),
+  importProjectLibrary: () => ipcRenderer.invoke("import-project-library"),
 
-  deleteTask: (id) => ipcRenderer.invoke("delete-task", { id }),
+  exportProjectLibrary: () => ipcRenderer.invoke("export-project-library"),
 
-  // Scenario profiles are shared by the desktop and web data models so the
-  // renderer can inspect or import reusable slate structures in either mode.
-  listScenarios: () => ipcRenderer.invoke("list-scenarios"),
+  changeLibraryLocation: () => ipcRenderer.invoke("change-library-location"),
 
-  loadScenario: (id) => ipcRenderer.invoke("load-scenario", { id }),
+  createProject: (project) => ipcRenderer.invoke("create-project", project),
 
-  importScenario: (profile) =>
-    ipcRenderer.invoke("import-scenario", { profile }),
+  loadProject: (id) => ipcRenderer.invoke("load-project", { id }),
+
+  updateProject: (project) => ipcRenderer.invoke("update-project", project),
+
+  archiveProject: (id) => ipcRenderer.invoke("archive-project", { id }),
+
+  restoreProject: (id) => ipcRenderer.invoke("restore-project", { id }),
+
+  listTasks: (projectId) => ipcRenderer.invoke("list-tasks", { projectId }),
+
+  loadTask: (projectId, id) => ipcRenderer.invoke("load-task", { projectId, id }),
+
+  saveTask: (projectId, task) => ipcRenderer.invoke("save-task", { projectId, task }),
+
+  deleteTask: (projectId, id) => ipcRenderer.invoke("delete-task", { projectId, id }),
+
+  // Profiles are project-owned in Electron; imports create a copy in the
+  // selected project's database instead of sharing a global row.
+  listScenarios: (projectId) => ipcRenderer.invoke("list-scenarios", { projectId }),
+
+  loadScenario: (projectId, id) => ipcRenderer.invoke("load-scenario", { projectId, id }),
+
+  importScenario: (projectId, profile) =>
+    ipcRenderer.invoke("import-scenario", { projectId, profile }),
 
   getOcrSettings: () => ipcRenderer.invoke("get-ocr-settings"),
 

@@ -27,6 +27,39 @@
 - 内置 MCP 服务器，可把识别与诊断能力接入 AI 客户端。
 - 无需 API Key 即可在本地合并“场记系统 CSV + Resolve CSV”。
 
+## 项目架构与实现
+
+```text
+SlateSync/
+├── public/                 Web UI、文件预览、识别状态和 CSV 编辑
+├── electron/               Electron 主进程、IPC、文件对话框和本地扫描
+├── lib/                    识别、模型路由、OCR、CSV、配置和数据存储
+├── scripts/                Vision OCR、PaddleOCR 和构建辅助脚本
+├── test/                   Node.js 单元测试和集成测试
+├── server.mjs              Web 服务和 HTTP API
+├── mcp-server.mjs          MCP stdio 服务器
+├── slatesync.config.json   工作流配置
+└── electron-builder.yml    Electron 打包配置
+```
+
+核心处理流程：
+
+```text
+PDF/图片 → 页面图像预览 → 本地 OCR → 多模态模型识别
+        → 字段归一化与序列校验 → Profile 匹配
+        → SQLite 任务保存 → Resolve CSV 回填预览 → 下载 CSV
+```
+
+- `public/` 负责浏览器端文件选择、页面预览、任务状态和 CSV 预览编辑。
+- `server.mjs` 提供 Web 模式的 HTTP 服务和识别 API。
+- `electron/main.mjs` 负责桌面窗口、配置、密钥、SQLite、文件对话框和 IPC；渲染器通过 `preload.cjs` 使用受限 API。
+- `lib/ai-client.mjs` 统一不同模型供应商的请求、结构化输出和错误处理。
+- `lib/ocr/` 将 Vision OCR、PaddleOCR 规范化为统一的文字、置信度和坐标证据。
+- `lib/scenario/` 学习、匹配和持久化场记结构 Profile。
+- `lib/sqlite-store.mjs`、`lib/task-store.mjs` 和 `lib/diagnostics.mjs` 保存任务、诊断和结构数据。
+- `scripts/vision_ocr.swift` 通过 Apple Vision 在本机运行 OCR；Node 端会在 macOS 工具链可用时准备二进制。
+- `mcp-server.mjs` 通过 stdio 暴露配置、识别、任务、Profile 和诊断能力。
+
 ## 选择运行方式
 
 | 方式 | 适合场景 | 构建产物 |
@@ -103,6 +136,16 @@ npm run electron:dev
 
 API Key 可以写入 `.env`，也可以在应用界面中保存。macOS 会优先使用本地 Vision OCR；如需 PaddleOCR，可额外执行 `npm run ocr:setup`。
 
+`npm run electron:dev` 会先按当前 Electron ABI 强制重建 `better-sqlite3`，再启动未打包的 Electron 源码环境。由于 Node 与 Electron 不能复用同一份原生二进制，`start`、`dev` 和 `test` 会在执行前自动恢复当前 Node.js ABI。仓库默认不包含自动重载器；修改渲染页面后可在窗口中按 `⌘R` 刷新，修改主进程或 preload 后需要重新启动。
+
+桌面版默认在 macOS 的 `~/Library/Application Support/Local SlateSync Library.slatesync-library` 创建本地 Project Library。项目库首页支持：
+
+- 导出完整 `.slatesync-library` 可移植目录；SQLite 数据库通过一致性备份写入导出包。
+- 导入并连接已有 Project Library，校验成功后自动重启应用。
+- 选择新的存储目录；当前 Library 会复制到新位置后切换，原位置的数据保持不变。
+
+当前 Library 的绝对路径显示在项目库首页。自定义路径保存在机器级 `settings.json`，不会写入任何项目数据库。
+
 ### Docker 部署
 
 复制配置并编辑 `.env`：
@@ -170,6 +213,8 @@ npm run electron:build
 npm run electron:build:dir
 ```
 
+打包和开发模式使用同一套图标资源：`electron-builder.yml` 从 `build/slatesync.icon` 读取 macOS 应用图标；开发模式的 Dock 和窗口图标读取该 `.icon` 容器中的 `build/slatesync.icon/Assets/icon.png`。`assets/` 下的历史图标版本不会被 Electron 自动使用。
+
 > 发布给其他用户前，还需要配置 Apple Developer 代码签名与公证；仓库默认构建不包含发布证书。
 
 ### Docker 镜像
@@ -229,6 +274,8 @@ docker compose up -d --build
 3. 点击“合并 CSV”，校对后下载。
 
 ## 写入规则
+
+###### 输出格式都能改
 
 | Resolve 字段 | 数据来源 | 输出格式 |
 | --- | --- | --- |
@@ -340,32 +387,6 @@ npm run ocr:check   # 检查 PaddleOCR 安装
 
 Web API 也提供相同的 Profile 能力：`GET /api/scenarios`、`GET /api/scenarios/:id` 和 `POST /api/scenarios/import`。识别请求可选传 `scenarioId`。
 
-## 开源发布
-
-项目采用 [MIT License](./LICENSE)。发布前先更新 `package.json` 的版本号，完成本地检查并创建版本标签：
-
-```bash
-npm ci
-npm run check
-npm test
-git add package.json package-lock.json
-git commit -m "Release v0.2.0"
-git tag v0.2.0
-git push origin main --follow-tags
-```
-
-推送 `v*` 标签后，GitHub Actions 会在 macOS runner 上构建 arm64/x64 的 DMG、ZIP，并创建 GitHub Release。发布签名版本前，在仓库 Secrets 配置 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD` 和 `APPLE_TEAM_ID`；未配置签名时 workflow 仍可生成未签名测试包，但 macOS 用户可能需要手动允许打开。
-
-Docker workflow 会把 `main` 和版本标签推送到 `ghcr.io/rasteaks/slatesync`。部署指定版本：
-
-```bash
-export SLATESYNC_IMAGE=ghcr.io/rasteaks/slatesync:0.2.0
-docker compose pull
-docker compose up -d
-```
-
-生产环境请保留 `SLATESYNC_AUTH_USERNAME`、`SLATESYNC_AUTH_PASSWORD` 和持久化 `slatesync-data` 卷，不要把 `.env` 或 `data/` 提交到仓库。
-
 ## 常见问题
 
 - **`npm run ocr:check` 提示找不到 Python 环境**：先运行 `npm run ocr:setup`；如果系统缺少 `venv`，请先安装对应的 Python venv 组件。
@@ -374,7 +395,9 @@ docker compose up -d
 
 - **Electron 编译时找不到 `swiftc`**：运行 `xcode-select --install`，完成安装后重新编译 Vision OCR。
 
-- **Electron 打包后 Node 测试提示 `NODE_MODULE_VERSION` 不匹配**：Electron Builder 会把工作区的 `better-sqlite3` 重建为 Electron ABI；执行 `npm rebuild better-sqlite3`（或重新执行 `npm ci`）即可恢复 Node 开发环境。
+- **Node 与 Electron 报 `NODE_MODULE_VERSION` 不匹配**：这是 `better-sqlite3` 被编译给另一个运行时导致的。通过 npm 脚本运行 Web 开发、测试或 Electron 时会自动恢复对应 ABI；直接执行 `node ...` 前可运行 `npm run rebuild:native:node`。Electron Builder 打包时也会自动重建原生依赖。
+
+- **Electron 开发模式每次启动都重新编译**：开发脚本会强制重建 `better-sqlite3`，以可靠处理 Node 与 Electron 之间的 ABI 切换；本地重建通常只需几秒。
 
 - **端口 4173 已被占用**：在 `.env` 中修改 `PORT`；Docker 部署则修改 `SLATESYNC_PORT`。
 

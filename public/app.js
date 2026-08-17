@@ -1,11 +1,10 @@
 // Renderer UI — the SlateSync single-page application.
 //
-// Owns the page state machine, DOM wiring, and all user interactions: loading
-// the slate report / Resolve CSV, running recognition, scanning the material
-// directory for metadata, the CSV backfill preview (with inline editing,
-// sorting, and clip search), and the OCR setup wizard. Talks to the backend
-// through public/electron-bridge.js, which switches between HTTP (web) and IPC
-// (Electron).
+// Owns the page state machine, DOM wiring, and all user interactions: the
+// Electron Project Library, project-scoped settings/tasks/Profiles, slate
+// recognition, material metadata scanning, CSV backfill editing, and OCR
+// setup. Talks to the backend through public/electron-bridge.js, which keeps
+// Electron project databases separate from the legacy Web mode.
 import {
   buildSlateMetadataIndex,
   buildStandaloneResolveTable,
@@ -49,6 +48,16 @@ import {
 import {
   isElectron,
   fetchConfig,
+  listProjectsApi,
+  getLibraryInfoApi,
+  importProjectLibraryApi,
+  exportProjectLibraryApi,
+  changeLibraryLocationApi,
+  createProjectApi,
+  loadProjectApi,
+  updateProjectApi,
+  archiveProjectApi,
+  restoreProjectApi,
   listScenariosApi,
   saveProviderKeyApi,
   fetchModelsApi,
@@ -71,6 +80,8 @@ import {
   selectRecognitionImageGroups,
   serializeRecognitionRequest as serializeRecognitionPayload,
 } from "./recognition-request.js";
+import { createLatestOperation } from "./operation-token.js";
+import { createTaskAutosave } from "./task-autosave.js";
 import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.mjs";
@@ -108,6 +119,12 @@ const state = {
   detailSort: { field: null, direction: 1 },
   detailSearch: "",
   missingMetadataKeys: new Set(),
+  currentProjectId: null,
+  currentProject: null,
+  projects: [],
+  libraryInfo: null,
+  route: isElectron ? "projects" : "workspace",
+  activeTaskSettings: null,
 };
 
 const elements = {
@@ -115,6 +132,7 @@ const elements = {
   provider: document.querySelector("#provider-select"),
   model: document.querySelector("#model-select"),
   accuracyMode: document.querySelector("#accuracy-mode-select"),
+  accuracyModeNote: document.querySelector("#accuracy-mode-note"),
   scenario: document.querySelector("#scenario-select"),
   modelRefresh: document.querySelector("#model-refresh"),
   modelNote: document.querySelector("#model-note"),
@@ -177,6 +195,8 @@ const elements = {
   taskSwitcher: document.querySelector("#task-switcher"),
   taskSelect: document.querySelector("#task-select"),
   taskDelete: document.querySelector("#task-delete"),
+  taskSaveStatus: document.querySelector("#task-save-status"),
+  taskSaveRetry: document.querySelector("#task-save-retry"),
   slateCsvDropzone: document.querySelector("#slate-csv-dropzone"),
   slateCsvInput: document.querySelector("#slate-csv-input"),
   slateCsvHelp: document.querySelector("#slate-csv-help"),
@@ -197,12 +217,80 @@ const elements = {
   ocrCheckButton: document.querySelector("#ocr-check-button"),
   ocrSaveButton: document.querySelector("#ocr-save-button"),
   ocrSkipButton: document.querySelector("#ocr-skip-button"),
+  appNav: document.querySelector("#app-nav"),
+  currentProjectNav: document.querySelector("#current-project-nav"),
+  navProjects: document.querySelector("#nav-projects"),
+  navWorkspace: document.querySelector("#nav-workspace"),
+  navProjectSettings: document.querySelector("#nav-project-settings"),
+  navGlobalSettings: document.querySelector("#nav-global-settings"),
+  workspacePage: document.querySelector("#workspace-page"),
+  projectHomePage: document.querySelector("#project-home-page"),
+  projectSettingsPage: document.querySelector("#project-settings-page"),
+  globalSettingsPage: document.querySelector("#global-settings-page"),
+  libraryLocation: document.querySelector("#library-location"),
+  projectGrid: document.querySelector("#project-grid"),
+  archivedProjectGrid: document.querySelector("#archived-project-grid"),
+  projectEmpty: document.querySelector("#project-empty"),
+  activeProjectCount: document.querySelector("#active-project-count"),
+  archivedProjectCount: document.querySelector("#archived-project-count"),
+  projectHomeError: document.querySelector("#project-home-error"),
+  libraryActionStatus: document.querySelector("#library-action-status"),
+  importLibraryButton: document.querySelector("#import-library-button"),
+  exportLibraryButton: document.querySelector("#export-library-button"),
+  changeLibraryLocationButton: document.querySelector("#change-library-location-button"),
+  newProjectButton: document.querySelector("#new-project-button"),
+  projectEmptyCreate: document.querySelector("#project-empty-create"),
+  projectSettingsBack: document.querySelector("#project-settings-back"),
+  projectSettingsForm: document.querySelector("#project-settings-form"),
+  projectSettingsHeading: document.querySelector("#project-settings-heading"),
+  projectNameInput: document.querySelector("#project-name-input"),
+  projectDescriptionInput: document.querySelector("#project-description-input"),
+  projectProvider: document.querySelector("#project-provider-select"),
+  projectModel: document.querySelector("#project-model-select"),
+  projectAccuracy: document.querySelector("#project-accuracy-mode-select"),
+  projectScenario: document.querySelector("#project-scenario-select"),
+  projectCustomPrompt: document.querySelector("#project-custom-prompt-input"),
+  projectSceneFormat: document.querySelector("#project-scene-format"),
+  projectShotFormat: document.querySelector("#project-shot-format"),
+  projectTakeFormat: document.querySelector("#project-take-format"),
+  projectGoodComment: document.querySelector("#project-good-comment"),
+  projectHoldComment: document.querySelector("#project-hold-comment"),
+  projectSettingsReset: document.querySelector("#project-settings-reset"),
+  projectSettingsStatus: document.querySelector("#project-settings-status"),
+  globalProvider: document.querySelector("#global-provider-select"),
+  globalApiKeyInput: document.querySelector("#global-api-key-input"),
+  globalSaveKeyButton: document.querySelector("#global-save-key-button"),
+  globalApiKeyNote: document.querySelector("#global-api-key-note"),
+  globalOcrOpen: document.querySelector("#global-ocr-open"),
+  globalOcrStatus: document.querySelector("#global-ocr-status"),
+  projectContext: document.querySelector("#project-context"),
+  projectDialog: document.querySelector("#project-dialog"),
+  projectDialogForm: document.querySelector("#project-dialog-form"),
+  projectDialogClose: document.querySelector("#project-dialog-close"),
+  projectDialogCancel: document.querySelector("#project-dialog-cancel"),
+  newProjectName: document.querySelector("#new-project-name"),
+  newProjectDescription: document.querySelector("#new-project-description"),
 };
+
+const libraryOperations = createLatestOperation();
+const projectOperations = createLatestOperation();
+const projectModelOperations = createLatestOperation();
+const taskOperations = createLatestOperation();
+const taskListOperations = createLatestOperation();
+let allowWindowClose = false;
+
+const taskAutosave = createTaskAutosave({
+  delayMs: 500,
+  capture: captureCurrentTaskSave,
+  save: ({ projectId, task }) => saveTaskApi(task, projectId),
+  onStatus: renderTaskSaveStatus,
+});
 
 init();
 
 async function init() {
   bindEvents();
+  if (isElectron) document.body.classList.add("is-electron");
   try {
     await loadConfig();
     renderSlateDirectoryConfig();
@@ -215,8 +303,15 @@ async function init() {
     updateMetadataInputState();
     updateSlateDirectoryState();
     await loadProviderModels();
-    await refreshScenarioProfiles();
-    await loadTaskList();
+    if (isElectron) {
+      renderGlobalProviderOptions();
+      await refreshLibrary();
+      renderRoute();
+    } else {
+      await refreshScenarioProfiles();
+      await loadTaskList();
+      renderRoute();
+    }
   } catch {
     showError("无法读取服务配置，请确认 SlateSync 已启动。");
   }
@@ -224,23 +319,33 @@ async function init() {
 
 async function loadConfig() {
   state.config = await fetchConfig();
-  state.scenarioProfiles = Array.isArray(state.config?.scenarios)
-    ? state.config.scenarios
-    : [];
+  if (!isElectron) {
+    state.scenarioProfiles = Array.isArray(state.config?.scenarios)
+      ? state.config.scenarios
+      : [];
+  }
   renderScenarioOptions();
 }
 
-async function refreshScenarioProfiles() {
+async function refreshScenarioProfiles(projectId = state.currentProjectId) {
   try {
-    state.scenarioProfiles = await listScenariosApi();
+    state.scenarioProfiles = await listScenariosApi(projectId);
     renderScenarioOptions();
   } catch {
     // Profile listing is advisory; recognition remains usable if it is unavailable.
+    state.scenarioProfiles = [];
+    renderScenarioOptions();
   }
 }
 
-function renderScenarioOptions(selectedId = elements.scenario?.value || "") {
-  if (!elements.scenario) return;
+function renderScenarioOptions(
+  selectedId = elements.projectScenario?.value
+    || elements.scenario?.value
+    || state.currentProject?.settings?.scenarioId
+    || "",
+  includeProjectSelect = true,
+  includeWorkspaceSelect = true,
+) {
   const options = [
     '<option value="">自动识别并学习版式</option>',
     ...state.scenarioProfiles.map((profile) => {
@@ -249,12 +354,17 @@ function renderScenarioOptions(selectedId = elements.scenario?.value || "") {
       return `<option value="${escapeHtml(profile.id)}">${escapeHtml(label)}</option>`;
     }),
   ];
-  elements.scenario.innerHTML = options.join("");
-  elements.scenario.value = state.scenarioProfiles.some(
+  const selected = state.scenarioProfiles.some(
     (profile) => profile.id === selectedId,
-  )
-    ? selectedId
-    : "";
+  ) ? selectedId : "";
+  for (const select of [
+    includeWorkspaceSelect ? elements.scenario : null,
+    includeProjectSelect ? elements.projectScenario : null,
+  ]) {
+    if (!select) continue;
+    select.innerHTML = options.join("");
+    select.value = selected;
+  }
 }
 
 async function refreshRuntimeConfig() {
@@ -265,7 +375,666 @@ async function refreshRuntimeConfig() {
   }
 }
 
+function navigate(route) {
+  if (!isElectron) return;
+  state.route = route;
+  renderRoute();
+  if (route === "projects") void refreshLibrary();
+}
+
+async function refreshLibrary() {
+  if (!isElectron) return;
+  const token = libraryOperations.start();
+  try {
+    const [libraryInfo, projects] = await Promise.all([
+      getLibraryInfoApi(),
+      listProjectsApi(),
+    ]);
+    if (!libraryOperations.isCurrent(token)) return false;
+    state.libraryInfo = libraryInfo;
+    state.projects = projects;
+    renderProjectLibrary();
+    return true;
+  } catch (error) {
+    if (libraryOperations.isCurrent(token)) {
+      showProjectHomeError(error.message || "无法刷新项目库。");
+    }
+    return false;
+  }
+}
+
+function renderRoute() {
+  if (!isElectron) {
+    elements.appNav.hidden = true;
+    elements.workspacePage.hidden = false;
+    elements.projectHomePage.hidden = true;
+    elements.projectSettingsPage.hidden = true;
+    elements.globalSettingsPage.hidden = true;
+    return;
+  }
+
+  elements.appNav.hidden = false;
+  elements.workspacePage.hidden = state.route !== "workspace";
+  elements.projectHomePage.hidden = state.route !== "projects";
+  elements.projectSettingsPage.hidden = state.route !== "project-settings";
+  elements.globalSettingsPage.hidden = state.route !== "global-settings";
+  elements.currentProjectNav.hidden = !state.currentProject;
+
+  for (const [button, active] of [
+    [elements.navProjects, state.route === "projects"],
+    [elements.navWorkspace, state.route === "workspace"],
+    [elements.navProjectSettings, state.route === "project-settings"],
+    [elements.navGlobalSettings, state.route === "global-settings"],
+  ]) {
+    button?.classList.toggle("is-active", active);
+  }
+
+  if (state.route === "project-settings") renderProjectSettingsForm();
+  updateProjectContextLabel();
+}
+
+async function openProject(projectId, nextRoute = "workspace") {
+  if (!isElectron) return;
+  const token = projectOperations.start();
+  projectModelOperations.invalidate();
+  taskOperations.invalidate();
+  taskListOperations.invalidate();
+  hideProjectHomeError();
+  if (state.recognizing && projectId !== state.currentProjectId) {
+    showProjectHomeError("识别进行中，完成后才能切换项目。");
+    return;
+  }
+  try {
+    if (projectId !== state.currentProjectId) {
+      const saved = await flushPendingTaskSave();
+      if (!projectOperations.isCurrent(token) || !saved) return;
+    }
+    const project = await loadProjectApi(projectId);
+    if (!projectOperations.isCurrent(token)) return;
+    const [scenarioProfiles, taskData] = await Promise.all([
+      listScenariosApi(project.id),
+      listTasksApi(project.id),
+    ]);
+    if (!projectOperations.isCurrent(token)) return;
+    const switched = state.currentProjectId !== project.id;
+    if (switched) resetProjectWorkspace();
+    state.currentProjectId = project.id;
+    state.currentProject = project;
+    state.scenarioProfiles = Array.isArray(scenarioProfiles) ? scenarioProfiles : [];
+    state.tasks = taskListFromResponse(taskData);
+    // Reopening settings for the current project must not replace the output
+    // snapshot or recognition controls belonging to a loaded historical task.
+    if (!state.currentTaskId) applyNewTaskRecognitionDefaults(project);
+    renderTaskSwitcher();
+    state.route = nextRoute;
+    renderRoute();
+  } catch (error) {
+    if (!projectOperations.isCurrent(token)) return;
+    showProjectHomeError(error.message || "无法打开项目。");
+    state.route = "projects";
+    renderRoute();
+  }
+}
+
+function resetProjectWorkspace() {
+  if (state.recognizing) return;
+  state.currentTaskId = null;
+  clearReportFile();
+  clearResolveCsv();
+  resetRecognitionResults();
+  state.activeTaskSettings = null;
+  taskAutosave.reset();
+}
+
+function updateProjectContextLabel() {
+  const label = elements.projectContext;
+  if (!label) return;
+  label.textContent = state.currentProject
+    ? `${state.currentProject.name}${isProjectReadOnly() ? " · 只读" : ""}`
+    : "未选择项目";
+  label.hidden = !isElectron || !state.currentProject;
+}
+
+function isProjectReadOnly() {
+  // The renderer mirrors the IPC archive guard for immediate feedback; the
+  // main process remains authoritative and rechecks the archive flag per call.
+  return isElectron && Boolean(state.currentProject?.archivedAt);
+}
+
+function renderProjectLibrary() {
+  if (!isElectron) return;
+  const active = state.projects.filter((project) => !project.archivedAt);
+  const archived = state.projects.filter((project) => project.archivedAt);
+  elements.libraryLocation.textContent = state.libraryInfo?.path
+    ? `${state.libraryInfo.name} · ${state.libraryInfo.path}`
+    : "本地 Project Library";
+  elements.activeProjectCount.textContent = `${active.length} 个项目`;
+  elements.archivedProjectCount.textContent = `${archived.length} 个项目`;
+  elements.projectEmpty.hidden = active.length > 0;
+  elements.projectGrid.innerHTML = active.map(projectCard).join("");
+  elements.archivedProjectGrid.innerHTML = archived.map(projectCard).join("");
+}
+
+function projectCard(project) {
+  const archived = Boolean(project.archivedAt);
+  const current = project.id === state.currentProjectId;
+  const latest = project.latestTaskAt ? formatTaskDate(project.latestTaskAt) : "暂无任务";
+  return `
+    <article class="project-card${current ? " is-current" : ""}${archived ? " is-archived" : ""}" data-project-id="${escapeHtml(project.id)}">
+      <button class="project-card-main" type="button" data-project-action="open" data-project-id="${escapeHtml(project.id)}">
+        <span class="project-card-mark" aria-hidden="true">${archived ? "□" : "S"}</span>
+        <span class="project-card-copy">
+          <strong>${escapeHtml(project.name)}</strong>
+          <small>${escapeHtml(project.description || "SlateSync Project")}</small>
+          <small>${project.taskCount || 0} 个任务 · ${escapeHtml(latest)}</small>
+        </span>
+      </button>
+      <div class="project-card-actions">
+        <button class="icon-button" type="button" title="${archived ? "查看项目设置" : "项目设置"}" aria-label="${archived ? "查看项目设置" : "项目设置"}" data-project-action="settings" data-project-id="${escapeHtml(project.id)}">⚙</button>
+        ${archived
+          ? `<button class="secondary-button compact" type="button" data-project-action="restore" data-project-id="${escapeHtml(project.id)}">恢复</button>`
+          : project.canArchive
+            ? `<button class="secondary-button compact" type="button" data-project-action="archive" data-project-id="${escapeHtml(project.id)}">归档</button>`
+            : ""}
+      </div>
+    </article>
+  `;
+}
+
+async function handleProjectCardClick(event) {
+  const button = event.target.closest("[data-project-action]");
+  if (!button) return;
+  const projectId = button.dataset.projectId;
+  const action = button.dataset.projectAction;
+  if (action === "open" || action === "settings") {
+    await openProject(projectId, action === "settings" ? "project-settings" : "workspace");
+    return;
+  }
+  if (action === "archive") {
+    if (state.recognizing && state.currentProjectId === projectId) {
+      showProjectHomeError("项目正在识别，完成后才能归档。");
+      return;
+    }
+    if (!confirm("归档后项目将变为只读，确定继续吗？")) return;
+    try {
+      if (state.currentProjectId === projectId && !(await flushPendingTaskSave())) {
+        return;
+      }
+      await archiveProjectApi(projectId);
+      if (state.currentProjectId === projectId) {
+        state.currentProject = null;
+        resetProjectWorkspace();
+        state.currentProjectId = null;
+      }
+      await refreshLibrary();
+      state.route = "projects";
+      renderRoute();
+    } catch (error) {
+      showProjectHomeError(error.message || "项目归档失败。");
+    }
+    return;
+  }
+  if (action === "restore") {
+    try {
+      await restoreProjectApi(projectId);
+      await refreshLibrary();
+      await openProject(projectId, "workspace");
+    } catch (error) {
+      showProjectHomeError(error.message || "项目恢复失败。");
+    }
+  }
+}
+
+function openProjectDialog() {
+  elements.projectDialog.hidden = false;
+  elements.newProjectName.value = "";
+  elements.newProjectDescription.value = "";
+  elements.newProjectName.focus();
+}
+
+function closeProjectDialog() {
+  elements.projectDialog.hidden = true;
+}
+
+async function createProjectFromDialog(event) {
+  event.preventDefault();
+  try {
+    const project = await createProjectApi({
+      name: elements.newProjectName.value,
+      description: elements.newProjectDescription.value,
+    });
+    closeProjectDialog();
+    await refreshLibrary();
+    await openProject(project.id, "workspace");
+  } catch (error) {
+    showProjectHomeError(error.message || "项目创建失败。");
+  }
+}
+
+async function exportCurrentLibrary() {
+  if (!(await prepareLibraryTransfer())) return;
+  setLibraryActionBusy(true);
+  try {
+    const result = await exportProjectLibraryApi();
+    if (!result?.canceled) {
+      showLibraryActionStatus(`项目库已导出到 ${result.library.path}`);
+    }
+  } catch (error) {
+    showProjectHomeError(error.message || "项目库导出失败。");
+  } finally {
+    setLibraryActionBusy(false);
+  }
+}
+
+async function importProjectLibrary() {
+  if (!confirm("导入后将切换到所选 Project Library，并自动重启 SlateSync。是否继续？")) {
+    return;
+  }
+  if (!(await prepareLibraryTransfer())) return;
+  setLibraryActionBusy(true);
+  try {
+    const result = await importProjectLibraryApi();
+    if (result?.canceled) setLibraryActionBusy(false);
+    else showLibraryActionStatus("正在切换项目库并重启…");
+  } catch (error) {
+    showProjectHomeError(error.message || "项目库导入失败。");
+    setLibraryActionBusy(false);
+  }
+}
+
+async function changeLibraryLocation() {
+  if (!confirm("当前 Project Library 将复制到新位置，原位置会保留。切换后 SlateSync 将自动重启。是否继续？")) {
+    return;
+  }
+  if (!(await prepareLibraryTransfer())) return;
+  setLibraryActionBusy(true);
+  try {
+    const result = await changeLibraryLocationApi();
+    if (result?.canceled) setLibraryActionBusy(false);
+    else showLibraryActionStatus("正在切换存储位置并重启…");
+  } catch (error) {
+    showProjectHomeError(error.message || "项目库存储位置修改失败。");
+    setLibraryActionBusy(false);
+  }
+}
+
+async function prepareLibraryTransfer() {
+  hideProjectHomeError();
+  showLibraryActionStatus("");
+  if (state.recognizing) {
+    showProjectHomeError("识别进行中，完成后才能操作项目库。");
+    return false;
+  }
+  // Library copies must include the newest manual edits. The autosave flush
+  // also keeps a failed local edit visible instead of silently switching away.
+  return flushPendingTaskSave();
+}
+
+function setLibraryActionBusy(busy) {
+  for (const button of [
+    elements.importLibraryButton,
+    elements.exportLibraryButton,
+    elements.changeLibraryLocationButton,
+    elements.newProjectButton,
+  ]) {
+    if (button) button.disabled = busy;
+  }
+}
+
+function showLibraryActionStatus(message) {
+  if (!elements.libraryActionStatus) return;
+  elements.libraryActionStatus.textContent = message;
+  elements.libraryActionStatus.hidden = !message;
+}
+
+function showProjectHomeError(message) {
+  elements.projectHomeError.textContent = message;
+  elements.projectHomeError.hidden = false;
+}
+
+function hideProjectHomeError() {
+  elements.projectHomeError.hidden = true;
+  elements.projectHomeError.textContent = "";
+}
+
+function renderProjectSettingsForm() {
+  const project = state.currentProject;
+  if (!project || !elements.projectSettingsForm) return;
+  const settings = project.settings || defaultRendererProjectSettings();
+  elements.projectSettingsHeading.textContent = `${project.name} · 项目设置`;
+  elements.projectNameInput.value = project.name || "";
+  elements.projectDescriptionInput.value = project.description || "";
+  renderProjectProviderOptions(settings.providerId);
+  const preserveSavedModel = elements.projectProvider.value === settings.providerId;
+  renderProjectModelOptions(settings.modelId, {
+    preserveUnknown: preserveSavedModel,
+  });
+  // Runtime discovery may be the only source for a configured model. Keep the
+  // persisted ID visible until the latest request for this project confirms
+  // the available options, so unrelated saves cannot replace it silently.
+  void loadProviderModelsForSelect(elements.projectProvider, elements.projectModel, {
+    selectedModelId: settings.modelId,
+    preserveUnknown: preserveSavedModel,
+  });
+  elements.projectAccuracy.value = settings.accuracyMode || "high";
+  renderScenarioOptions(settings.scenarioId || "", true, false);
+  elements.projectScenario.value = settings.scenarioId || "";
+  elements.projectCustomPrompt.value = settings.customPrompt || "";
+  elements.projectSceneFormat.value = settings.resolve.fieldFormats.scene;
+  elements.projectShotFormat.value = settings.resolve.fieldFormats.shot;
+  elements.projectTakeFormat.value = settings.resolve.fieldFormats.take;
+  elements.projectGoodComment.value = settings.resolve.comments.goodTake;
+  elements.projectHoldComment.value = settings.resolve.comments.holdTake;
+  const readOnly = Boolean(project.archivedAt);
+  // Archived projects remain inspectable, but every control is disabled until
+  // the user explicitly restores the project from the library.
+  for (const control of elements.projectSettingsForm.elements) {
+    control.disabled = readOnly;
+  }
+  elements.projectSettingsStatus.textContent = readOnly
+    ? "项目已归档，恢复后才能修改"
+    : "";
+}
+
+function buildProjectSettingsFromForm() {
+  const scene = elements.projectSceneFormat.value.trim();
+  const shot = elements.projectShotFormat.value.trim();
+  const take = elements.projectTakeFormat.value.trim();
+  const goodTake = elements.projectGoodComment.value.trim();
+  const holdTake = elements.projectHoldComment.value.trim();
+  if (![scene, shot, take].every((value) => /^X{1,6}$/.test(value))) {
+    throw new Error("场、镜、次格式必须由 1–6 个 X 组成。");
+  }
+  if (![goodTake, holdTake].every((value) => value && !/[\r\n]/.test(value))) {
+    throw new Error("过条和保条标记不能为空，且不能包含换行。");
+  }
+  return {
+    version: 1,
+    providerId: elements.projectProvider.value || null,
+    modelId: elements.projectModel.value || null,
+    accuracyMode: elements.projectAccuracy.value,
+    scenarioId: elements.projectScenario.value || null,
+    customPrompt: elements.projectCustomPrompt.value.trim(),
+    resolve: {
+      fieldFormats: { scene, shot, take },
+      comments: { goodTake, holdTake },
+    },
+  };
+}
+
+async function saveProjectSettings(event) {
+  event.preventDefault();
+  if (!state.currentProjectId) return;
+  if (isProjectReadOnly()) {
+    elements.projectSettingsStatus.textContent = "项目已归档，恢复后才能修改";
+    return;
+  }
+  if (state.recognizing) {
+    elements.projectSettingsStatus.textContent = "识别进行中，完成后才能修改项目设置";
+    return;
+  }
+  try {
+    const settings = buildProjectSettingsFromForm();
+    const project = await updateProjectApi({
+      id: state.currentProjectId,
+      name: elements.projectNameInput.value,
+      description: elements.projectDescriptionInput.value,
+      settings,
+    });
+    state.currentProject = project;
+    state.projects = state.projects.map((item) => item.id === project.id ? project : item);
+    if (!state.currentTaskId) state.activeTaskSettings = project.settings;
+    if (!state.currentTaskId) applyNewTaskRecognitionDefaults(project);
+    renderProjectLibrary();
+    elements.projectSettingsStatus.textContent = "已保存";
+    renderRoute();
+  } catch (error) {
+    elements.projectSettingsStatus.textContent = error.message || "保存失败";
+  }
+}
+
+function resetProjectOutputSettings() {
+  const defaults = defaultRendererProjectSettings().resolve;
+  elements.projectSceneFormat.value = defaults.fieldFormats.scene;
+  elements.projectShotFormat.value = defaults.fieldFormats.shot;
+  elements.projectTakeFormat.value = defaults.fieldFormats.take;
+  elements.projectGoodComment.value = defaults.comments.goodTake;
+  elements.projectHoldComment.value = defaults.comments.holdTake;
+  elements.projectSettingsStatus.textContent = "默认值已填入，保存后生效";
+}
+
+function defaultRendererProjectSettings() {
+  return {
+    providerId: "",
+    modelId: "",
+    accuracyMode: "high",
+    scenarioId: "",
+    customPrompt: "",
+    resolve: {
+      fieldFormats: {
+        scene: state.config?.workflow?.resolve?.fieldFormats?.scene || "XXX",
+        shot: state.config?.workflow?.resolve?.fieldFormats?.shot || "XX",
+        take: state.config?.workflow?.resolve?.fieldFormats?.take || "XX",
+      },
+      comments: {
+        goodTake: state.config?.workflow?.resolve?.comments?.goodTake || "_OK",
+        holdTake: state.config?.workflow?.resolve?.comments?.holdTake || "_KP",
+      },
+    },
+  };
+}
+
+function applyNewTaskRecognitionDefaults(project = state.currentProject) {
+  if (!project) return;
+  const settings = project.settings || defaultRendererProjectSettings();
+  const recent = project.lastRecognitionDefaults;
+  const providerOptions = [...elements.provider.options].map((option) => option.value);
+  const providerIsUsable = (providerId) => Boolean(providerId) &&
+    providerOptions.includes(providerId) &&
+    state.config?.providers.some(
+      (provider) => provider.id === providerId && provider.configured,
+    );
+  // A removed provider must not leave controls on the previously opened
+  // project. Fall back deterministically to project settings, then any usable
+  // provider currently configured on this machine.
+  const providerId = [recent?.providerId, settings.providerId]
+    .find(providerIsUsable)
+    || state.config?.providers.find((provider) => provider.configured)?.id
+    || providerOptions[0]
+    || "";
+  elements.provider.value = providerId;
+  renderModelOptions();
+
+  const modelCandidates = [
+    recent?.providerId === providerId ? recent.modelId : null,
+    settings.providerId === providerId ? settings.modelId : null,
+  ].filter(Boolean);
+  const selectRememberedModel = () => {
+    const availableModels = [...elements.model.options].map((option) => option.value);
+    const desiredModel = modelCandidates.find((modelId) =>
+      availableModels.includes(modelId));
+    if (desiredModel) elements.model.value = desiredModel;
+  };
+  selectRememberedModel();
+  elements.accuracyMode.value = settings.accuracyMode || "high";
+  elements.scenario.value = settings.scenarioId || "";
+  elements.customPromptInput.value = recent
+    ? recent.customPrompt || ""
+    : settings.customPrompt || "";
+  state.activeTaskSettings = settings;
+  updateApiKeyFieldState();
+  updateRecognizeState();
+
+  // Discovery may add the remembered model after the first synchronous render.
+  const projectId = project.id;
+  void loadProviderModels().then(() => {
+    if (state.currentProjectId !== projectId || state.currentTaskId) return;
+    selectRememberedModel();
+    renderModelNote();
+    updateRecognizeState();
+  });
+}
+
+function renderGlobalProviderOptions() {
+  if (!elements.globalProvider || !state.config) return;
+  const previous = elements.globalProvider.value;
+  elements.globalProvider.innerHTML = state.config.providers.map((provider) =>
+    `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}${provider.configured ? "" : " · 未配置"}</option>`,
+  ).join("");
+  elements.globalProvider.value = state.config.providers.some(
+    (provider) => provider.id === previous,
+  ) ? previous : state.config.providers[0]?.id || "";
+  updateGlobalApiKeyFieldState();
+}
+
+function updateGlobalApiKeyFieldState() {
+  const provider = state.config?.providers.find(
+    (item) => item.id === elements.globalProvider?.value,
+  );
+  if (!provider || !elements.globalApiKeyNote) return;
+  const configurable = WEB_CONFIGURABLE_PROVIDERS.includes(provider.id);
+  elements.globalApiKeyInput.disabled = !configurable;
+  elements.globalSaveKeyButton.disabled = !configurable;
+  elements.globalApiKeyNote.textContent = !configurable
+    ? "OpenAI 兼容 API 需通过环境变量配置。"
+    : provider.configured
+      ? "已配置 · 输入新 Key 可覆盖，留空保存可清除"
+      : "未配置 · 粘贴 API Key 后保存";
+}
+
+async function saveGlobalProviderKey() {
+  const provider = state.config?.providers.find(
+    (item) => item.id === elements.globalProvider.value,
+  );
+  if (!provider) return;
+  try {
+    await saveProviderKeyApi(provider.id, elements.globalApiKeyInput.value.trim());
+    elements.globalApiKeyInput.value = "";
+    await loadConfig();
+    renderProviderOptions();
+    renderGlobalProviderOptions();
+    renderApiStatus();
+    await loadProviderModels();
+    renderProjectSettingsForm();
+    if (!state.currentTaskId) applyNewTaskRecognitionDefaults();
+    elements.globalApiKeyNote.textContent = "已保存。";
+  } catch (error) {
+    elements.globalApiKeyNote.textContent = error.message || "保存失败。";
+  }
+}
+
+function renderProjectProviderOptions(selectedId = "") {
+  if (!elements.projectProvider || !state.config) return;
+  elements.projectProvider.innerHTML = state.config.providers.map((provider) =>
+    `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}${provider.configured ? "" : " · 未配置"}</option>`,
+  ).join("");
+  elements.projectProvider.value = state.config.providers.some(
+    (provider) => provider.id === selectedId,
+  ) ? selectedId : state.config.providers.find((provider) => provider.configured)?.id || "";
+}
+
+function renderProjectModelOptions(
+  selectedId = "",
+  { preserveUnknown = false } = {},
+) {
+  if (!elements.projectModel) return;
+  const compatible = modelsForProvider(elements.projectProvider.value);
+  const fixed = compatible.filter((model) => model.fixed !== false);
+  const discovered = compatible.filter((model) => model.fixed === false).slice(0, MAX_DISCOVERED_MODELS);
+  const groups = [];
+  if (fixed.length) groups.push(modelOptionGroup("固定模型", fixed));
+  if (discovered.length) groups.push(modelOptionGroup("其他视觉模型", discovered));
+  const selectedAvailable = compatible.some((model) => model.id === selectedId);
+  const rememberedOption = preserveUnknown && selectedId && !selectedAvailable
+    ? `<option value="${escapeHtml(selectedId)}">${escapeHtml(selectedId)} · 已保存（当前未加载）</option>`
+    : "";
+  elements.projectModel.innerHTML = rememberedOption
+    + (groups.join("") || (rememberedOption
+      ? ""
+      : '<option value="">没有发现可用的视觉模型</option>'));
+  elements.projectModel.value = selectedAvailable || rememberedOption
+    ? selectedId
+    : compatible[0]?.id || "";
+}
+
+async function loadProviderModelsForSelect(
+  providerSelect,
+  modelSelect,
+  { selectedModelId = modelSelect.value, preserveUnknown = false } = {},
+) {
+  const token = projectModelOperations.start();
+  const projectId = state.currentProjectId;
+  const providerId = providerSelect.value;
+  const provider = state.config?.providers.find((item) => item.id === providerSelect.value);
+  if (!provider?.configured) {
+    if (
+      projectModelOperations.isCurrent(token)
+      && state.currentProjectId === projectId
+      && providerSelect.value === providerId
+    ) {
+      renderProjectModelOptions(selectedModelId, { preserveUnknown });
+    }
+    return false;
+  }
+  try {
+    const data = await fetchModelsApi(provider.id, false);
+    if (
+      !projectModelOperations.isCurrent(token)
+      || state.currentProjectId !== projectId
+      || providerSelect.value !== providerId
+    ) return false;
+    state.providerModels[provider.id] = Array.isArray(data.models) ? data.models : [];
+  } catch {
+    // Static models remain available when discovery is unavailable.
+  }
+  if (
+    !projectModelOperations.isCurrent(token)
+    || state.currentProjectId !== projectId
+    || providerSelect.value !== providerId
+  ) return false;
+  renderProjectModelOptions(selectedModelId, { preserveUnknown });
+  return true;
+}
+
 function bindEvents() {
+  elements.navProjects?.addEventListener("click", () => navigate("projects"));
+  elements.navWorkspace?.addEventListener("click", () => {
+    if (state.currentProjectId) navigate("workspace");
+  });
+  elements.navProjectSettings?.addEventListener("click", () => {
+    if (state.currentProjectId) navigate("project-settings");
+  });
+  elements.navGlobalSettings?.addEventListener("click", () => navigate("global-settings"));
+  elements.newProjectButton?.addEventListener("click", openProjectDialog);
+  elements.importLibraryButton?.addEventListener("click", importProjectLibrary);
+  elements.exportLibraryButton?.addEventListener("click", exportCurrentLibrary);
+  elements.changeLibraryLocationButton?.addEventListener("click", changeLibraryLocation);
+  elements.projectEmptyCreate?.addEventListener("click", openProjectDialog);
+  elements.projectDialogClose?.addEventListener("click", closeProjectDialog);
+  elements.projectDialogCancel?.addEventListener("click", closeProjectDialog);
+  elements.projectDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.projectDialog) closeProjectDialog();
+  });
+  elements.projectDialogForm?.addEventListener("submit", createProjectFromDialog);
+  elements.projectSettingsBack?.addEventListener("click", () => navigate("workspace"));
+  elements.projectSettingsForm?.addEventListener("submit", saveProjectSettings);
+  elements.projectSettingsReset?.addEventListener("click", resetProjectOutputSettings);
+  elements.projectProvider?.addEventListener("change", async () => {
+    renderProjectModelOptions();
+    await loadProviderModelsForSelect(
+      elements.projectProvider,
+      elements.projectModel,
+    );
+  });
+  elements.projectModel?.addEventListener("change", () => {
+    // A deliberate user choice supersedes a discovery request that started
+    // while restoring the previously saved model.
+    projectModelOperations.invalidate();
+  });
+  elements.globalProvider?.addEventListener("change", updateGlobalApiKeyFieldState);
+  elements.globalSaveKeyButton?.addEventListener("click", saveGlobalProviderKey);
+  elements.globalOcrOpen?.addEventListener("click", openOcrSetup);
+
   elements.provider.addEventListener("change", async () => {
     updateApiKeyFieldState();
     renderModelOptions();
@@ -305,6 +1074,7 @@ function bindEvents() {
     if (event.target === elements.ocrSetupOverlay) closeOcrSetup();
   });
   elements.addRow.addEventListener("click", () => {
+    if (isProjectReadOnly()) return;
     state.detailSearch = "";
     elements.detailSearch.value = "";
     state.records.push(emptyRecord());
@@ -323,6 +1093,9 @@ function bindEvents() {
   elements.tabDetail.addEventListener("click", () => setResultsTab("detail"));
   elements.taskSelect.addEventListener("change", switchTask);
   elements.taskDelete.addEventListener("click", deleteCurrentTask);
+  elements.taskSaveRetry?.addEventListener("click", () => {
+    void taskAutosave.retry();
+  });
   elements.slateCsvInput.addEventListener("change", (event) => {
     if (event.target.files?.[0]) loadSlateCsv(event.target.files[0]);
   });
@@ -333,6 +1106,17 @@ function bindEvents() {
       saveProviderKey();
     }
   });
+
+  elements.globalApiKeyInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveGlobalProviderKey();
+    }
+  });
+
+  for (const grid of [elements.projectGrid, elements.archivedProjectGrid]) {
+    grid?.addEventListener("click", handleProjectCardClick);
+  }
 
   const resultTabs = [elements.tabCsv, elements.tabDetail];
   for (const tab of resultTabs) {
@@ -352,6 +1136,17 @@ function bindEvents() {
   }
 
   document.addEventListener("keydown", handleRecognitionShortcut);
+  window.addEventListener("beforeunload", (event) => {
+    if (!isElectron || allowWindowClose || !taskAutosave.hasPending()) return;
+    event.preventDefault();
+    event.returnValue = false;
+    // Keep the Electron window alive until its final pending edit is durable.
+    void taskAutosave.flush().then((saved) => {
+      if (!saved) return;
+      allowWindowClose = true;
+      window.close();
+    });
+  });
 
   bindFileDropzone(elements.metadataDropzone, elements.metadataInput, loadResolveCsv);
   bindFileDropzone(elements.dropzone, elements.imageInput, loadReportFile);
@@ -676,7 +1471,8 @@ function renderSlateDirectoryConfig() {
 function updateMetadataInputState() {
   const reportReady = state.imageDataGroups.length > 0;
   const slateCsvLoaded = Boolean(state.slateCsvRecords?.length);
-  const enabled = canLoadResolveCsv({ reportReady, slateCsvLoaded });
+  const writable = !isProjectReadOnly();
+  const enabled = writable && canLoadResolveCsv({ reportReady, slateCsvLoaded });
   elements.metadataInput.disabled = !enabled;
   elements.metadataDropzone.classList.toggle("is-disabled", !enabled);
   elements.metadataDropzone.setAttribute("aria-disabled", String(!enabled));
@@ -685,7 +1481,7 @@ function updateMetadataInputState() {
     : "可选 · 请先选择场记单或场记 CSV";
 
   // Slate CSV can always be loaded independently
-  const slateEnabled = canLoadSlateCsv();
+  const slateEnabled = writable && canLoadSlateCsv();
   elements.slateCsvInput.disabled = !slateEnabled;
   elements.slateCsvDropzone.classList.toggle("is-disabled", !slateEnabled);
   elements.slateCsvDropzone.setAttribute("aria-disabled", String(!slateEnabled));
@@ -695,7 +1491,7 @@ function updateMetadataInputState() {
 }
 
 function updateSlateDirectoryState() {
-  const enabled = canSelectSlateDirectory({
+  const enabled = !isProjectReadOnly() && canSelectSlateDirectory({
     reportReady: state.imageDataGroups.length > 0,
     metadataLoaded: Boolean(state.metadataTable),
   }) && !state.slateScanning;
@@ -897,7 +1693,7 @@ async function loadProviderModels(forceRefresh = false) {
     return state.modelDiscovery[providerId];
   } finally {
     if (requestId === state.modelRequestId) {
-      elements.modelRefresh.disabled = false;
+      elements.modelRefresh.disabled = isProjectReadOnly();
       updateRecognizeState();
     }
   }
@@ -979,6 +1775,18 @@ function renderApiStatus() {
 
 function renderOcrSetupLink() {
   elements.ocrSetupLink.hidden = !isElectron;
+  renderGlobalOcrStatus();
+}
+
+function renderGlobalOcrStatus() {
+  if (!elements.globalOcrStatus) return;
+  const ready = state.config?.ocr?.enabled && state.config?.ocr?.available;
+  elements.globalOcrStatus.textContent = ready
+    ? "已启用"
+    : state.ocrSettings?.setupSkipped
+      ? "已跳过"
+      : "未配置";
+  elements.globalOcrStatus.classList.toggle("is-ready", Boolean(ready));
 }
 
 async function maybeShowOcrSetup() {
@@ -994,6 +1802,7 @@ async function maybeShowOcrSetup() {
     return;
   }
   state.ocrSettings = settings;
+  renderGlobalOcrStatus();
   if (settings.setupCompleted || settings.setupSkipped) return;
 
   if (settings.pythonPath) elements.ocrPythonPath.value = settings.pythonPath;
@@ -1055,6 +1864,7 @@ async function saveOcrSettings() {
     elements.ocrSetupOverlay.hidden = true;
     await loadConfig();
     renderApiStatus();
+    renderGlobalOcrStatus();
   } catch (error) {
     showError(error.message);
   } finally {
@@ -1065,6 +1875,12 @@ async function saveOcrSettings() {
 async function skipOcrSetup() {
   try {
     await saveOcrSettingsApi({ skip: true });
+    state.ocrSettings = {
+      ...(state.ocrSettings || {}),
+      setupSkipped: true,
+      setupCompleted: false,
+    };
+    renderGlobalOcrStatus();
     elements.ocrSetupOverlay.hidden = true;
   } catch (error) {
     showError(error.message);
@@ -1207,6 +2023,18 @@ async function loadReportFile(file) {
     showError("文件大小不能超过 20 MB。");
     return;
   }
+
+  if (!(await flushPendingTaskSave())) {
+    elements.imageInput.value = "";
+    return;
+  }
+  // Selecting a source document starts a new task. Invalidate a historical
+  // task load before clearing its UI, then restore this project's defaults.
+  taskOperations.invalidate();
+  state.currentTaskId = null;
+  taskAutosave.reset();
+  applyNewTaskRecognitionDefaults();
+  renderTaskSwitcher();
 
   if (state.metadataTable || state.slateMetadata.length) clearResolveCsv();
   resetRecognitionResults();
@@ -1561,23 +2389,40 @@ async function recognize() {
 }
 
 async function recognizeWithPdf() {
+  if (!(await flushPendingTaskSave())) return;
   hideError();
   resetRecognitionResults();
   setProcessing(true);
+  // Capture the request owner before awaiting IPC. Navigation is guarded while
+  // recognizing, and this snapshot remains the final defence against stale UI
+  // state if a future route introduces another way to change projects.
+  const requestProjectId = state.currentProjectId;
+  const requestSettingsSnapshot = cloneSettings(state.currentProject?.settings);
 
   try {
     const requestBody = await recognitionRequestBody();
     const data = await recognizeStreamApi(requestBody, updateTaskProgress);
+    const resultProjectId = data.projectId || requestProjectId;
+    if (isElectron && resultProjectId !== state.currentProjectId) {
+      throw new Error("识别结果所属项目已变化，请返回原项目查看已保存任务。");
+    }
 
     state.latestResponse = data;
+    state.activeTaskSettings = data.projectSettingsSnapshot
+      || requestSettingsSnapshot
+      || state.activeTaskSettings;
     state.records = data.result.records.map(applyRecordFieldFormats);
     state.latestResponse.result.records = state.records;
     if (data.taskId) {
       state.currentTaskId = data.taskId;
-      await loadTaskList();
+      if (state.currentProject && data.lastRecognitionDefaults) {
+        state.currentProject.lastRecognitionDefaults = data.lastRecognitionDefaults;
+      }
+      taskAutosave.reset();
+      await loadTaskList(resultProjectId);
     }
     renderResults(data);
-    await refreshScenarioProfiles();
+    await refreshScenarioProfiles(resultProjectId);
   } catch (error) {
     markTaskProgressError(error.message);
     showError(error.message);
@@ -1586,7 +2431,13 @@ async function recognizeWithPdf() {
   }
 }
 
-function mergeSlateCsv() {
+function cloneSettings(settings) {
+  if (!settings || typeof settings !== "object") return null;
+  return JSON.parse(JSON.stringify(settings));
+}
+
+async function mergeSlateCsv() {
+  if (!(await flushPendingTaskSave())) return;
   hideError();
   resetRecognitionResults();
   state.currentTaskId = null;
@@ -1653,7 +2504,7 @@ async function recognitionRequestBody() {
 
 function serializeCurrentRecognitionRequest() {
   const accuracyMode = elements.accuracyMode.value;
-  return serializeRecognitionPayload({
+  const serialized = serializeRecognitionPayload({
     provider: elements.provider.value,
     model: elements.model.value,
     filename: state.reportFile.name,
@@ -1667,6 +2518,14 @@ function serializeCurrentRecognitionRequest() {
     scenarioId: elements.scenario.value || null,
     slateCsvRecords: state.slateCsvRecords,
   });
+  const payload = JSON.parse(serialized);
+  if (state.currentProjectId) {
+    payload.projectId = state.currentProjectId;
+    // Preserve an intentionally empty remembered prompt; omitting the field
+    // would make the main process fall back to the project's older prompt.
+    payload.customPrompt = elements.customPromptInput.value.trim();
+  }
+  return JSON.stringify(payload);
 }
 
 async function recompressImageGroups({ maxDimension, quality }) {
@@ -1768,6 +2627,7 @@ function renderResults(data) {
   renderTable();
   setResultsTab(state.metadataTable ? "csv" : "detail");
   elements.results.hidden = false;
+  updateWorkflowSteps();
   elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1861,7 +2721,7 @@ function renderTable() {
     .map(({ index, record }) => {
       const status = statuses[index];
       return `
-      <tr data-index="${index}">
+      <tr data-index="${index}"${record.takeStatus === "过" ? ' class="is-keeper"' : ""}>
         <td>${index + 1}</td>
         <td>${record.sourcePage || "-"}</td>
         ${textCell("cardNumber", record.cardNumber)}
@@ -1870,7 +2730,7 @@ function renderTable() {
         ${textCell("shot", record.shot)}
         ${textCell("take", record.take)}
         <td>
-          <select data-field="takeStatus">
+          <select data-field="takeStatus"${isProjectReadOnly() ? " disabled" : ""}>
             <option value="" ${record.takeStatus == null ? "selected" : ""}>未标记（留空）</option>
             <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → ${escapeHtml(resolveCommentsConfig().goodTake)}</option>
             <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → ${escapeHtml(resolveCommentsConfig().holdTake)}</option>
@@ -1883,7 +2743,7 @@ function renderTable() {
         ${textCell("cameraPosition", record.cameraPosition)}
         <td>${exportLabel(status, record)}${missingMetadataBadge(record)}</td>
         <td><span class="confidence ${escapeHtml(record.confidence)}">${confidenceLabel(record.confidence)}</span></td>
-        <td><button class="delete-row" type="button" aria-label="删除这一行">×</button></td>
+        <td><button class="delete-row" type="button" aria-label="删除这一行"${isProjectReadOnly() ? " disabled" : ""}>×</button></td>
       </tr>`;
     })
     .join("");
@@ -1891,16 +2751,30 @@ function renderTable() {
   for (const row of elements.resultBody.querySelectorAll("tr")) {
     const index = Number(row.dataset.index);
     for (const input of row.querySelectorAll("[data-field]")) {
-      input.addEventListener("change", () => {
+      if (isProjectReadOnly()) continue;
+      const applyInput = () => {
         const field = input.dataset.field;
         state.records[index][field] = normalizeEditedField(
           field,
           input.value,
         );
-        renderTable();
         saveCurrentTask();
+      };
+      input.addEventListener("input", applyInput);
+      input.addEventListener("change", () => {
+        applyInput();
+        input.value = state.records[index][input.dataset.field] || "";
+        // 状态改为“过”时圈出次号，还原场记单上的圈条笔迹。
+        if (input.dataset.field === "takeStatus") {
+          row.classList.toggle(
+            "is-keeper",
+            state.records[index].takeStatus === "过",
+          );
+        }
+        renderDerivedResultsAfterEdit();
       });
     }
+    if (isProjectReadOnly()) continue;
     row.querySelector(".delete-row").addEventListener("click", () => {
       state.records.splice(index, 1);
       renderTable();
@@ -1908,6 +2782,14 @@ function renderTable() {
     });
   }
 
+  renderWarnings(output);
+  renderResultSummary(output);
+  updateExportState(output);
+}
+
+function renderDerivedResultsAfterEdit() {
+  const output = currentMergeOutput();
+  renderCsvPreview(output);
   renderWarnings(output);
   renderResultSummary(output);
   updateExportState(output);
@@ -2003,7 +2885,8 @@ function renderCsvPreview(output) {
           const cellClasses =
             missing && columnIndex === 0 ? `${classes} csv-flag-cell`.trim() : classes;
           const value = String(row[columnIndex] ?? "");
-          return `<td class="${cellClasses}">${flag}<input data-row="${rowIndex}" data-col="${columnIndex}" value="${escapeHtml(value)}" /></td>`;
+          const readOnly = isProjectReadOnly() ? " readonly" : "";
+          return `<td class="${cellClasses}">${flag}<input data-row="${rowIndex}" data-col="${columnIndex}" value="${escapeHtml(value)}"${readOnly} /></td>`;
         })
         .join("");
       const rowClass = [
@@ -2037,7 +2920,8 @@ function bindCsvPreviewEdits(columns) {
   for (const input of elements.csvResultBody.querySelectorAll(
     "[data-row][data-col]",
   )) {
-    input.addEventListener("change", () => {
+    if (isProjectReadOnly()) continue;
+    const applyInput = () => {
       const rowIndex = Number(input.dataset.row);
       const columnIndex = Number(input.dataset.col);
       const value = normalizeCsvCellEdit(
@@ -2046,10 +2930,17 @@ function bindCsvPreviewEdits(columns) {
       );
       const key = `${rowIndex}:${columnIndex}`;
       state.csvEdits.set(key, value);
-      renderCsvPreview(currentMergeOutput());
-      // Re-evaluate export and persist the override immediately after editing.
-      updateExportState();
+      input.closest("td")?.classList.add("csv-cell-edited");
+      // Keep the current input mounted; rebuilding a large CSV table on every
+      // keystroke made manual correction noticeably laggy and lost focus.
+      updateExportState({ exportableCount: 0 });
       saveCurrentTask();
+    };
+    input.addEventListener("input", applyInput);
+    input.addEventListener("change", () => {
+      applyInput();
+      const key = `${input.dataset.row}:${input.dataset.col}`;
+      input.value = state.csvEdits.get(key) || "";
     });
   }
 }
@@ -2104,7 +2995,8 @@ function renderWarnings(output) {
 }
 
 function textCell(field, value, style = "") {
-  return `<td><input style="${style}" data-field="${field}" value="${escapeHtml(value || "")}" /></td>`;
+  const readOnly = isProjectReadOnly() ? " readonly" : "";
+  return `<td><input style="${style}" data-field="${field}" value="${escapeHtml(value || "")}"${readOnly} /></td>`;
 }
 
 function exportLabel(status, record) {
@@ -2199,7 +3091,9 @@ function emptyRecord() {
 }
 
 function resolveFieldFormats() {
-  return state.config?.workflow?.resolve?.fieldFormats || {
+  return state.activeTaskSettings?.resolve?.fieldFormats
+    || state.currentProject?.settings?.resolve?.fieldFormats
+    || state.config?.workflow?.resolve?.fieldFormats || {
     scene: "XXX",
     shot: "XX",
     take: "XX",
@@ -2207,7 +3101,9 @@ function resolveFieldFormats() {
 }
 
 function resolveCommentsConfig() {
-  return state.config?.workflow?.resolve?.comments || {
+  return state.activeTaskSettings?.resolve?.comments
+    || state.currentProject?.settings?.resolve?.comments
+    || state.config?.workflow?.resolve?.comments || {
     goodTake: "_OK",
     holdTake: "_KP",
   };
@@ -2305,6 +3201,7 @@ function resetRecognitionResults() {
   updateExportState(null);
   updateMetadataInputState();
   updateSlateDirectoryState();
+  updateWorkflowSteps();
 }
 
 function setPreparing(value) {
@@ -2408,10 +3305,35 @@ function markTaskProgressError(message) {
 }
 
 function updateRecognizeState() {
-  const canRecognize = recognitionReady();
-  const canMerge = !canRecognize && slateCsvMergeReady();
+  const readOnly = isProjectReadOnly();
+  const projectManagedAccuracy = isElectron && Boolean(state.currentProject);
+  const canRecognize = !readOnly && recognitionReady();
+  const canMerge = !readOnly && !canRecognize && slateCsvMergeReady();
   elements.recognizeButton.disabled =
-    state.recognizing || (!canRecognize && !canMerge);
+    readOnly || state.recognizing || (!canRecognize && !canMerge);
+  elements.imageInput.disabled = readOnly || state.recognizing;
+  // Accuracy is an authoritative project setting in Electron. Do not expose a
+  // task-level control whose submitted value the main process must ignore.
+  elements.provider.disabled = readOnly;
+  elements.model.disabled = readOnly;
+  elements.modelRefresh.disabled = readOnly;
+  elements.accuracyMode.disabled = readOnly || projectManagedAccuracy;
+  elements.accuracyMode.title = projectManagedAccuracy
+    ? "识别模式由当前项目设置管理"
+    : "";
+  if (elements.accuracyModeNote) {
+    elements.accuracyModeNote.textContent = projectManagedAccuracy
+      ? "由当前项目设置管理；需要调整时请打开项目设置"
+      : "精确模式适合正式交付；清晰且格式稳定的场记单可使用快速模式";
+  }
+  elements.scenario.disabled = readOnly;
+  elements.customPromptInput.disabled = readOnly;
+  elements.removeFile.disabled = readOnly || state.recognizing;
+  elements.removeMetadata.disabled = readOnly || state.recognizing;
+  elements.removeSlates.disabled = readOnly || state.recognizing;
+  elements.removeSlateCsv.disabled = readOnly || state.recognizing;
+  elements.addRow.disabled = readOnly;
+  elements.taskDelete.disabled = readOnly;
   elements.recognizeButton.querySelector("span").textContent = state.recognizing
     ? "识别中…"
     : canMerge
@@ -2465,6 +3387,27 @@ function updateWorkspaceStatus(status = {}) {
   } else {
     elements.recognizeHint.textContent = "补齐输入后即可继续";
   }
+  updateWorkflowSteps();
+}
+
+// Hero 工步条镜像真实状态：载入场记 → AI 识别 → 校对导出。
+function updateWorkflowSteps() {
+  const steps = document.querySelectorAll(".workflow-steps li");
+  if (!steps.length) return;
+  const reportReady =
+    state.imageDataGroups.length > 0 ||
+    Boolean(state.slateCsvRecords?.length && state.metadataTable);
+  const hasResults = !elements.results.hidden;
+  const current = hasResults ? 2 : reportReady ? 1 : 0;
+  steps.forEach((li, index) => {
+    li.classList.toggle("is-done", index < current);
+    li.classList.toggle("is-current", index === current);
+    if (index === current) {
+      li.setAttribute("aria-current", "step");
+    } else {
+      li.removeAttribute("aria-current");
+    }
+  });
 }
 
 function updateSupportDataSummary() {
@@ -2523,14 +3466,26 @@ function selectedModel() {
   );
 }
 
-async function loadTaskList() {
+async function loadTaskList(projectId = state.currentProjectId) {
+  const token = taskListOperations.start();
   try {
-    const data = await listTasksApi();
-    state.tasks = Array.isArray(data) ? data : data.tasks || [];
+    const data = await listTasksApi(projectId);
+    if (
+      !taskListOperations.isCurrent(token) ||
+      (isElectron && projectId !== state.currentProjectId)
+    ) return false;
+    state.tasks = taskListFromResponse(data);
     renderTaskSwitcher();
+    return true;
   } catch {
+    if (!taskListOperations.isCurrent(token)) return false;
     state.tasks = [];
+    return false;
   }
+}
+
+function taskListFromResponse(data) {
+  return Array.isArray(data) ? data : data?.tasks || [];
 }
 
 function renderTaskSwitcher() {
@@ -2548,35 +3503,66 @@ function renderTaskSwitcher() {
 }
 
 async function switchTask() {
+  const token = taskOperations.start();
   const taskId = elements.taskSelect.value;
-  if (!taskId) {
-    // "新任务" — reset workspace
-    state.currentTaskId = null;
-    elements.scenario.value = "";
-    clearReportFile();
-    clearResolveCsv();
-    resetRecognitionResults();
-    renderTaskSwitcher();
-    return;
-  }
-  if (taskId === state.currentTaskId) return;
+  const projectId = state.currentProjectId;
   if (state.recognizing) {
     elements.taskSelect.value = state.currentTaskId || "";
     showError("识别进行中，无法切换任务。");
     return;
   }
+  const saved = await flushPendingTaskSave();
+  if (!taskOperations.isCurrent(token)) return;
+  if (!saved) {
+    elements.taskSelect.value = state.currentTaskId || "";
+    return;
+  }
+  if (!taskId) {
+    // "新任务" — reset workspace
+    state.currentTaskId = null;
+    applyNewTaskRecognitionDefaults();
+    clearReportFile();
+    clearResolveCsv();
+    resetRecognitionResults();
+    taskAutosave.reset();
+    renderTaskSwitcher();
+    return;
+  }
+  if (taskId === state.currentTaskId) return;
 
   try {
-    const task = await loadTaskApi(taskId);
-    restoreTask(task);
+    const task = await loadTaskApi(taskId, projectId);
+    if (
+      !taskOperations.isCurrent(token) ||
+      state.currentProjectId !== projectId ||
+      elements.taskSelect.value !== taskId
+    ) return;
+    // The old task remains editable while its replacement is loading. Flush a
+    // second time so edits made during that await cannot be erased by reset().
+    const savedDuringLoad = await flushPendingTaskSave();
+    if (
+      !taskOperations.isCurrent(token) ||
+      state.currentProjectId !== projectId ||
+      elements.taskSelect.value !== taskId
+    ) return;
+    if (!savedDuringLoad) {
+      elements.taskSelect.value = state.currentTaskId || "";
+      return;
+    }
+    restoreTask(task, { token, projectId });
   } catch (error) {
+    if (!taskOperations.isCurrent(token)) return;
     showError(error.message || "无法加载任务。");
     elements.taskSelect.value = state.currentTaskId || "";
   }
 }
 
-function restoreTask(task) {
+function restoreTask(task, operation = {}) {
   state.currentTaskId = task.id;
+  taskAutosave.reset();
+  state.activeTaskSettings = task.projectSettingsSnapshot
+    || state.currentProject?.settings
+    || defaultRendererProjectSettings();
 
   // Clear current state
   clearReportFile();
@@ -2584,19 +3570,26 @@ function restoreTask(task) {
   resetRecognitionResults();
 
   restoreResolveCsvState(task);
-  renderScenarioOptions(task.scenarioId || "");
+  renderScenarioOptions(task.scenarioId || "", false);
 
   // Restore recognition config
   if (task.provider) elements.provider.value = task.provider;
   if (["high", "standard"].includes(task.accuracyMode)) {
     elements.accuracyMode.value = task.accuracyMode;
   }
-  if (task.customPrompt) elements.customPromptInput.value = task.customPrompt;
+  if (Object.hasOwn(task, "customPrompt")) {
+    elements.customPromptInput.value = task.customPrompt || "";
+  }
   updateApiKeyFieldState();
   renderModelOptions();
   if (task.model) {
     // Wait for models to load, then select
     loadProviderModels().then(() => {
+      if (
+        (operation.token && !taskOperations.isCurrent(operation.token)) ||
+        (operation.projectId && state.currentProjectId !== operation.projectId) ||
+        state.currentTaskId !== task.id
+      ) return;
       if ([...elements.model.options].some((o) => o.value === task.model)) {
         elements.model.value = task.model;
         renderModelNote();
@@ -2668,46 +3661,95 @@ function restoreResolveCsvState(task) {
 }
 
 async function deleteCurrentTask() {
-  if (!state.currentTaskId) return;
+  if (!state.currentTaskId || isProjectReadOnly()) return;
   const task = state.tasks.find((t) => t.id === state.currentTaskId);
   const label = task?.filename || "未命名";
   if (!confirm(`确定删除任务"${label}"吗？此操作不可撤销。`)) return;
 
   try {
-    await deleteTaskApi(state.currentTaskId);
+    if (!(await flushPendingTaskSave())) return;
+    const taskId = state.currentTaskId;
+    const projectId = state.currentProjectId;
+    const token = taskOperations.start();
+    taskListOperations.invalidate();
+    await deleteTaskApi(taskId, projectId);
+    const [project, taskData] = await Promise.all([
+      isElectron ? loadProjectApi(projectId) : Promise.resolve(null),
+      listTasksApi(projectId),
+    ]);
+    if (
+      !taskOperations.isCurrent(token) ||
+      (isElectron && state.currentProjectId !== projectId)
+    ) return;
+
     state.currentTaskId = null;
     clearReportFile();
     clearResolveCsv();
     resetRecognitionResults();
-    await loadTaskList();
+    taskAutosave.reset();
+    state.tasks = taskListFromResponse(taskData);
+    if (project) {
+      // Project details recompute lastRecognitionDefaults from tasks that still
+      // exist, so deleting the latest result cannot seed the next task.
+      state.currentProject = project;
+      state.projects = state.projects.map((item) =>
+        item.id === project.id ? { ...item, ...project } : item);
+      applyNewTaskRecognitionDefaults(project);
+    }
+    renderTaskSwitcher();
   } catch (error) {
     showError(error.message || "删除任务失败。");
   }
 }
 
-async function saveCurrentTask() {
-  if (!state.currentTaskId || !state.latestResponse) return;
-  try {
-    // Keep the editable Resolve preview and its source metadata with the task,
-    // so a restored task can re-render and export the user's manual overrides.
-    const csvState = serializeCsvPreviewState({
-      metadataTable: state.metadataTable,
-      metadataFilename: state.metadataFile?.name,
-      csvEdits: state.csvEdits,
-      slateMetadata: state.slateMetadata,
-      slateWarnings: state.slateWarnings,
-      missingMetadataKeys: [...state.missingMetadataKeys],
-      slateDirectoryName: elements.slateDirectoryName.textContent,
-    });
-    await saveTaskApi({
+function saveCurrentTask() {
+  if (isProjectReadOnly() || !state.currentTaskId || !state.latestResponse) return;
+  taskAutosave.markDirty();
+}
+
+function captureCurrentTaskSave() {
+  if (isProjectReadOnly() || !state.currentTaskId || !state.latestResponse) return null;
+  // Keep the editable Resolve preview and source metadata with an immutable
+  // task snapshot so a later keystroke cannot mutate an in-flight IPC payload.
+  const csvState = serializeCsvPreviewState({
+    metadataTable: state.metadataTable,
+    metadataFilename: state.metadataFile?.name,
+    csvEdits: state.csvEdits,
+    slateMetadata: state.slateMetadata,
+    slateWarnings: state.slateWarnings,
+    missingMetadataKeys: [...state.missingMetadataKeys],
+    slateDirectoryName: elements.slateDirectoryName.textContent,
+  });
+  return {
+    projectId: state.currentProjectId,
+    task: JSON.parse(JSON.stringify({
       id: state.currentTaskId,
       editedRecords: state.records,
       status: "edited",
       ...csvState,
-    });
-  } catch {
-    // best-effort save
-  }
+    })),
+  };
+}
+
+async function flushPendingTaskSave() {
+  const saved = await taskAutosave.flush();
+  if (!saved) showError("手动编辑保存失败，请重试后再继续。");
+  return saved;
+}
+
+function renderTaskSaveStatus(status) {
+  if (!elements.taskSaveStatus || !elements.taskSaveRetry) return;
+  const labels = {
+    idle: "",
+    dirty: "未保存",
+    saving: "保存中…",
+    saved: "已保存",
+    error: "保存失败",
+  };
+  elements.taskSaveStatus.textContent = labels[status.state] || "";
+  elements.taskSaveStatus.dataset.state = status.state;
+  elements.taskSaveStatus.hidden = status.state === "idle";
+  elements.taskSaveRetry.hidden = status.state !== "error";
 }
 
 function formatTaskDate(isoString) {

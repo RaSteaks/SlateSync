@@ -93,4 +93,29 @@ describe("electron-bridge API dispatch", () => {
     const result = await globalThis.electronAPI.saveFile("test.csv", Array.from(bytes));
     assert.deepEqual(result, mockResult);
   });
+
+  it("Web task mutations reject non-success HTTP responses", async () => {
+    delete globalThis.electronAPI;
+    globalThis.fetch = async (url) => ({
+      ok: false,
+      json: async () => ({
+        error: String(url).includes("missing-save")
+          ? "保存被拒绝"
+          : "删除被拒绝",
+      }),
+    });
+    // Use a fresh module instance because runtime mode is fixed at import time.
+    const bridge = await import(
+      `../public/electron-bridge.js?web-task-errors=${Date.now()}`
+    );
+
+    await assert.rejects(
+      () => bridge.saveTaskApi({ id: "missing-save" }),
+      /保存被拒绝/,
+    );
+    await assert.rejects(
+      () => bridge.deleteTaskApi("missing-delete"),
+      /删除被拒绝/,
+    );
+  });
 });

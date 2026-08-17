@@ -1,20 +1,21 @@
 // Persisted user-facing app settings for the Electron build.
 //
-// Currently only the local OCR configuration (Python/venv path and setup
-// flags). Stored at <userData>/settings.json with the same atomic write and
-// 0600 permissions as key-store.mjs, so the OCR wizard state survives restarts.
+// Stores machine-level settings at <userData>/settings.json. Project content
+// does not belong here: it lives inside the selected Project Library folder.
+// libraryPath records the currently connected portable Library package; the
+// main process validates and switches that path through native dialogs.
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 
 const DEFAULT_SETTINGS = Object.freeze({
+  libraryPath: "",
   ocrPythonPath: "",
   ocrSetupCompleted: false,
   ocrSetupSkipped: false,
 });
 
-// Persists user-facing app settings (currently only the local OCR
-// configuration) in <userData>/settings.json, mirroring the atomic write and
-// 0600 permissions of key-store.mjs.
+// Persists user-facing machine settings, mirroring the atomic write and 0600
+// permissions of key-store.mjs.
 export function createSettingsStore(userDataPath) {
   const filePath = join(userDataPath, "settings.json");
 
@@ -45,6 +46,8 @@ export function createSettingsStore(userDataPath) {
 function sanitizeSettings(settings) {
   if (!settings || typeof settings !== "object") return {};
   return {
+    libraryPath:
+      typeof settings.libraryPath === "string" ? settings.libraryPath : "",
     ocrPythonPath:
       typeof settings.ocrPythonPath === "string" ? settings.ocrPythonPath : "",
     ocrSetupCompleted: Boolean(settings.ocrSetupCompleted),

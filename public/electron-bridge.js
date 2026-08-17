@@ -1,10 +1,12 @@
 // Unified API layer that transparently switches between Web (fetch) and
 // Electron (ipcRenderer.invoke) modes based on the runtime environment.
 //
-// When adding a new API endpoint, update all three locations:
+// When adding a shared API endpoint, update all three locations:
 //   1. server.mjs (Web mode HTTP route)
 //   2. electron/ipc-handlers.mjs (Electron IPC handler)
 //   3. public/electron-bridge.js (this file, frontend dispatch)
+// Project Library methods are Electron-only and intentionally do not fall
+// back to the legacy Web task/Profile database.
 
 import { readRecognitionResponse } from "./recognition-stream.js";
 
@@ -18,9 +20,59 @@ export async function fetchConfig() {
   return response.json();
 }
 
-export async function listScenariosApi() {
+export async function listProjectsApi() {
+  if (!isElectron) return [];
+  return globalThis.electronAPI.listProjects();
+}
+
+export async function getLibraryInfoApi() {
+  if (!isElectron) return null;
+  return globalThis.electronAPI.getLibraryInfo();
+}
+
+export async function importProjectLibraryApi() {
+  if (!isElectron) throw new Error("项目库导入仅桌面版支持");
+  return globalThis.electronAPI.importProjectLibrary();
+}
+
+export async function exportProjectLibraryApi() {
+  if (!isElectron) throw new Error("项目库导出仅桌面版支持");
+  return globalThis.electronAPI.exportProjectLibrary();
+}
+
+export async function changeLibraryLocationApi() {
+  if (!isElectron) throw new Error("项目库存储位置仅桌面版支持");
+  return globalThis.electronAPI.changeLibraryLocation();
+}
+
+export async function createProjectApi(project) {
+  if (!isElectron) throw new Error("项目管理仅桌面版支持");
+  return globalThis.electronAPI.createProject(project);
+}
+
+export async function loadProjectApi(id) {
+  if (!isElectron) throw new Error("项目管理仅桌面版支持");
+  return globalThis.electronAPI.loadProject(id);
+}
+
+export async function updateProjectApi(project) {
+  if (!isElectron) throw new Error("项目管理仅桌面版支持");
+  return globalThis.electronAPI.updateProject(project);
+}
+
+export async function archiveProjectApi(id) {
+  if (!isElectron) throw new Error("项目管理仅桌面版支持");
+  return globalThis.electronAPI.archiveProject(id);
+}
+
+export async function restoreProjectApi(id) {
+  if (!isElectron) throw new Error("项目管理仅桌面版支持");
+  return globalThis.electronAPI.restoreProject(id);
+}
+
+export async function listScenariosApi(projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.listScenarios();
+    return globalThis.electronAPI.listScenarios(projectId);
   }
   const response = await fetch("/api/scenarios");
   const data = await response.json();
@@ -28,9 +80,9 @@ export async function listScenariosApi() {
   return data.scenarios || [];
 }
 
-export async function loadScenarioApi(id) {
+export async function loadScenarioApi(id, projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.loadScenario(id);
+    return globalThis.electronAPI.loadScenario(projectId, id);
   }
   const response = await fetch(`/api/scenarios/${encodeURIComponent(id)}`);
   const data = await response.json();
@@ -38,9 +90,9 @@ export async function loadScenarioApi(id) {
   return data.scenario || data;
 }
 
-export async function importScenarioApi(profile) {
+export async function importScenarioApi(profile, projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.importScenario(profile);
+    return globalThis.electronAPI.importScenario(projectId, profile);
   }
   const response = await fetch("/api/scenarios/import", {
     method: "POST",
@@ -143,43 +195,49 @@ export async function scanSlateDirectoryApi(dirPath, expectedKeys, maxDepth) {
   throw new Error("Web 模式不支持主进程目录扫描");
 }
 
-export async function listTasksApi() {
+export async function listTasksApi(projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.listTasks();
+    return globalThis.electronAPI.listTasks(projectId);
   }
   const response = await fetch("/api/tasks");
   return response.json();
 }
 
-export async function loadTaskApi(id) {
+export async function loadTaskApi(id, projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.loadTask(id);
+    return globalThis.electronAPI.loadTask(projectId, id);
   }
   const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`);
   if (!response.ok) throw new Error("任务不存在");
   return response.json();
 }
 
-export async function saveTaskApi(task) {
+export async function saveTaskApi(task, projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.saveTask(task);
+    return globalThis.electronAPI.saveTask(projectId, task);
   }
   const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(task),
   });
-  return response.json();
+  const data = await response.json();
+  // Fetch resolves for HTTP failures; surface them so autosave cannot report a
+  // failed Web write as durable and allow navigation to discard local edits.
+  if (!response.ok) throw new Error(data.error || "任务保存失败");
+  return data;
 }
 
-export async function deleteTaskApi(id) {
+export async function deleteTaskApi(id, projectId) {
   if (isElectron) {
-    return globalThis.electronAPI.deleteTask(id);
+    return globalThis.electronAPI.deleteTask(projectId, id);
   }
   const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
-  return response.json();
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "任务删除失败");
+  return data;
 }
 
 export async function getOcrSettingsApi() {

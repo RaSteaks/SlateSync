@@ -249,6 +249,67 @@ test("OpenAI Responses request uses image input and parses structured output", a
   assert.equal(result.result.records[0].takeStatus, "过");
 });
 
+test("Electron project output settings override Profile output metadata", async () => {
+  const requests = [];
+  const fetchImpl = async (_url, request) => {
+    requests.push(JSON.parse(request.body));
+    return jsonResponse({
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: JSON.stringify(modelResult) }],
+        },
+      ],
+    });
+  };
+  const scenarioStore = {
+    async getProfile() {
+      return {
+        label: "旧版 Profile 输出",
+        fingerprint: "profile-fingerprint",
+        layout: {
+          pages: [],
+          headerTokens: [],
+          cameraGroups: [],
+          columnBands: [],
+          rowBands: [],
+        },
+        fields: {},
+        recognition: { headerTokens: [], promptHints: [] },
+        output: {
+          resolve: {
+            fieldFormats: { scene: "XXXXX", shot: "XXXX", take: "XXX" },
+            comments: { goodTake: "PROFILE_OK", holdTake: "PROFILE_HOLD" },
+          },
+        },
+      };
+    },
+  };
+  const input = {
+    providerId: "openai",
+    modelId: "openai/gpt-4o-mini",
+    imageDataUrl,
+    filename: "project-sheet.jpg",
+    scenarioId: "scenario-0123456789abcdef",
+    fieldFormats: { scene: "XXXX", shot: "X", take: "X" },
+    comments: { goodTake: "PROJECT_OK", holdTake: "PROJECT_HOLD" },
+  };
+
+  const result = await recognizeSlate(input, {
+    env: { OPENAI_API_KEY: "test-key" },
+    fetchImpl,
+    scenarioStore,
+    projectScopedOutput: true,
+  });
+
+  assert.equal(result.result.records[0].scene, "0012");
+  assert.equal(result.result.records[0].shot, "2");
+  assert.equal(result.result.records[0].take, "3");
+  assert.match(requests[0].input[0].content, /scene 至少 4 位/);
+  assert.match(requests[0].input[0].content, /PROJECT_OK/);
+  assert.doesNotMatch(requests[0].input[0].content, /PROFILE_OK/);
+});
+
 test("Qwen uses OpenRouter JSON object mode with the schema in its prompt", async () => {
   let captured;
   const fetchImpl = async (url, request) => {
