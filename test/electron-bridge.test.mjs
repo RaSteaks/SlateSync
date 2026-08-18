@@ -44,15 +44,18 @@ describe("electron renderer bridge", () => {
     });
   });
 
-  it("converts file bytes to an IPC-safe array", async () => {
+  it("passes file bytes over IPC as a compact ArrayBuffer", async () => {
     globalThis.electronAPI = {
       saveFile: async (filename, data) => ({ filename, data }),
     };
 
-    assert.deepEqual(
-      await downloadFileApi(new Uint8Array([104, 105]), "test.csv"),
-      { filename: "test.csv", data: [104, 105] },
+    const result = await downloadFileApi(
+      new Uint8Array([0, 104, 105]).subarray(1),
+      "test.csv",
     );
+    assert.equal(result.filename, "test.csv");
+    assert.ok(result.data instanceof ArrayBuffer);
+    assert.deepEqual([...new Uint8Array(result.data)], [104, 105]);
   });
 
   it("registers and always removes recognition progress listeners", async () => {

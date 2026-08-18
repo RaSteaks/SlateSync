@@ -87,7 +87,13 @@ export async function recognizeApi(requestBody, onProgress) {
 }
 
 export async function downloadFileApi(bytes, filename) {
-  return electronApi().saveFile(filename, Array.from(bytes));
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // Electron's structured clone supports ArrayBuffer directly. Avoid
+  // Array.from(), which created one boxed JavaScript number per output byte.
+  const data = view.byteOffset === 0 && view.byteLength === view.buffer.byteLength
+    ? view.buffer
+    : view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+  return electronApi().saveFile(filename, data);
 }
 
 export async function pickDirectoryApi() {

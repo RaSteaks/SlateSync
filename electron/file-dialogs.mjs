@@ -21,7 +21,11 @@ export function createFileDialogs(getMainWindow) {
         return { saved: false };
       }
 
-      const buffer = Buffer.from(data);
+      // Accept binary structured-clone payloads without routing through a
+      // memory-heavy plain number array; keep arrays for legacy saved clients.
+      const buffer = ArrayBuffer.isView(data)
+        ? Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+        : Buffer.from(data);
       await writeFile(result.filePath, buffer);
       return { saved: true, filePath: result.filePath };
     },

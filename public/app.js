@@ -7,13 +7,10 @@
 // bridge in public/electron-bridge.js.
 import {
   buildSlateMetadataIndex,
-  buildStandaloneResolveTable,
   canonicalMaterialKey,
   canonicalResolveComment,
   collectResolveMaterialKeys,
-  decodeResolveCsv,
   detectSlateSequenceAnomalies,
-  encodeResolveCsv,
   materialPrefix,
   mergeSlateIntoResolveTable,
   normalizeSceneValue,
@@ -25,6 +22,8 @@ import {
   restoreCsvPreviewState,
   serializeCsvPreviewState,
 } from "./task-persistence.js";
+import { createCsvTaskProcessor } from "./csv-background-tasks.js";
+import { createCsvWorkerClient } from "./csv-worker-client.js";
 import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
@@ -78,8 +77,11 @@ import { createTaskAutosave } from "./task-autosave.js";
 import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.mjs";
-const PDF_PREPARE_CONCURRENCY = 2;
+const PDF_PREPARE_CONCURRENCY = 1;
 const MAX_DISCOVERED_MODELS = 24;
+
+const csvWorker = createCsvWorkerClient();
+const fallbackCsvProcessor = createCsvTaskProcessor();
 
 const state = {
   config: null,
@@ -93,6 +95,8 @@ const state = {
   slateWarnings: [],
   slateScanning: false,
   recognizing: false,
+  exporting: false,
+  exportButtonEnabledBeforeBusy: false,
   imageDataGroups: [],
   pageCount: 0,
   records: [],
@@ -1670,7 +1674,16 @@ async function loadResolveCsv(file) {
   }
 
   try {
-    const table = decodeResolveCsv(await file.arrayBuffer());
+    const data = await file.arrayBuffer();
+    // Keep the source buffer available for the renderer fallback until the
+    // Worker confirms decoding; transferring it here would detach it.
+    const { table } = await runCsvBackgroundTask({
+      type: "decode-metadata",
+      data,
+    });
+    // Keep the renderer fallback primed without cloning the large table. It is
+    // used only if the module Worker becomes unavailable later in the session.
+    fallbackCsvProcessor({ type: "prime-metadata", table });
     state.metadataFile = file;
     state.metadataTable = table;
     state.csvEdits.clear();
@@ -1698,6 +1711,7 @@ function clearResolveCsv() {
   clearSlateMetadata();
   state.metadataFile = null;
   state.metadataTable = null;
+  clearCsvWorkerMetadata();
   state.csvEdits.clear();
   elements.metadataInput.value = "";
   elements.metadataCard.hidden = true;
@@ -1899,7 +1913,7 @@ async function prepareImage(file) {
   context.drawImage(image, 0, 0, width, height);
 
   const prepared = {
-    dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+    dataUrl: await canvasToDataUrl(canvas, "image/jpeg", 0.9),
     width,
     height,
   };
@@ -1991,22 +2005,17 @@ async function preparePdfPage(documentHandle, pageNumber) {
     const croppedCanvas = cropVerticalWhitespace(canvas);
     const outputCanvas = resizeCanvas(croppedCanvas, 2600);
     const detailLayout = calculateDetailSegments(croppedCanvas.height);
-    const details = detailLayout.segments.map(
-      (segment) =>
-        resizeCanvas(
-          createDetailComposite(
-            croppedCanvas,
-            detailLayout.header,
-            segment,
-          ),
-          3000,
-          true,
-        ).toDataURL("image/jpeg", 0.93),
-    );
-    return [
-      outputCanvas.toDataURL("image/jpeg", 0.92),
-      ...details,
-    ];
+    const output = [await canvasToDataUrl(outputCanvas, "image/jpeg", 0.92)];
+    for (const segment of detailLayout.segments) {
+      await yieldToRenderer();
+      const detailCanvas = resizeCanvas(
+        createDetailComposite(croppedCanvas, detailLayout.header, segment),
+        3000,
+        true,
+      );
+      output.push(await canvasToDataUrl(detailCanvas, "image/jpeg", 0.93));
+    }
+    return output;
   } finally {
     page.cleanup();
   }
@@ -2301,9 +2310,12 @@ async function recompressImageGroups({ maxDimension, quality }) {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, width, height);
       context.drawImage(image, 0, 0, width, height);
-      group[index] = canvas.toDataURL("image/jpeg", quality);
+      // Oversized-request recompression shares the same asynchronous encoder
+      // as initial preparation so clicking Recognize cannot freeze the UI.
+      group[index] = await canvasToDataUrl(canvas, "image/jpeg", quality);
       canvas.width = 1;
       canvas.height = 1;
+      await yieldToRenderer();
     },
   );
 }
@@ -2776,48 +2788,43 @@ function missingMetadataBadge(record) {
 }
 
 async function exportCsv() {
-  await refreshRuntimeConfig();
-  if (state.metadataTable && state.metadataFile) {
-    const output = currentMergeOutput();
-    if (
-      !canExportResolveCsv({
-        metadataLoaded: true,
-        recordCount: state.records.length,
-        exportableCount: output?.exportableCount,
-        hasManualEdits: state.csvEdits.size > 0,
-      })
-    ) {
-      showError("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
+  if (state.exporting) return;
+  hideError();
+  // Acquire the export lock before the first await so rapid clicks cannot
+  // start overlapping Worker jobs or open multiple native save dialogs.
+  setExporting(true);
+  try {
+    await refreshRuntimeConfig();
+    await yieldToRenderer();
+    if (state.metadataTable && state.metadataFile) {
+      const { bytes } = await runCsvBackgroundTask({
+        type: "export-resolve",
+        records: state.records,
+        slateMetadata: state.slateMetadata,
+        csvEdits: [...state.csvEdits],
+        fieldFormats: resolveFieldFormats(),
+        comments: resolveCommentsConfig(),
+      });
+      await downloadCsv(bytes, `${baseName(state.metadataFile.name)}_场记已回填.csv`);
       return;
     }
-    const bytes = encodeResolveCsv(applyCsvEdits(output.table), {
+
+    if (!state.records.length) {
+      throw new Error("没有可导出的识别记录。");
+    }
+    const title = state.latestResponse?.result?.sheetTitle || "场记单";
+    const { bytes } = await runCsvBackgroundTask({
+      type: "export-standalone",
+      records: state.records,
       fieldFormats: resolveFieldFormats(),
       comments: resolveCommentsConfig(),
-      // Resolve Comments only accepts the configured take-status markers.
-      canonicalizeComments: true,
     });
-    downloadCsv(bytes, `${baseName(state.metadataFile.name)}_场记已回填.csv`);
-    return;
+    await downloadCsv(bytes, `${baseName(title)}_场记识别.csv`);
+  } catch (error) {
+    showError(error.message || "无法导出 CSV。");
+  } finally {
+    setExporting(false);
   }
-
-  if (!state.records.length) {
-    showError("没有可导出的识别记录。");
-    return;
-  }
-  const table = buildStandaloneResolveTable(state.records, {
-    fieldFormats: resolveFieldFormats(),
-    comments: resolveCommentsConfig(),
-  });
-  if (!table.rows.length) {
-    showError("没有场次、镜、次完整的识别记录可导出。");
-    return;
-  }
-  const title = state.latestResponse?.result?.sheetTitle || "场记单";
-  const bytes = encodeResolveCsv(table, {
-    fieldFormats: resolveFieldFormats(),
-    comments: resolveCommentsConfig(),
-  });
-  downloadCsv(bytes, `${baseName(title)}_场记识别.csv`);
 }
 
 async function downloadCsv(bytes, filename) {
@@ -3183,7 +3190,22 @@ function updateExportState(output = currentMergeOutput()) {
         hasManualEdits: state.csvEdits.size > 0,
       })
     : recordCount > 0;
-  elements.exportButton.disabled = !enabled;
+  elements.exportButton.disabled = state.exporting || !enabled;
+}
+
+function setExporting(value) {
+  state.exporting = value;
+  if (value) {
+    state.exportButtonEnabledBeforeBusy = !elements.exportButton.disabled;
+  }
+  elements.exportButton.textContent = value
+    ? "正在准备 CSV…"
+    : "下载 Resolve CSV";
+  // Do not synchronously rebuild the full merge merely to change button busy
+  // state; retain the already-computed eligibility from before this export.
+  elements.exportButton.disabled = value
+    ? true
+    : !state.exportButtonEnabledBeforeBusy;
 }
 
 function recognitionReady() {
@@ -3384,6 +3406,7 @@ function restoreResolveCsvState(task) {
   if (!saved) return;
 
   state.metadataTable = saved.metadataTable;
+  primeCsvWorkerMetadata(saved.metadataTable);
   // The restored task only needs the filename for export; the original File
   // object cannot survive a reload, so keep a small compatible name object.
   state.metadataFile = { name: saved.metadataFilename };
@@ -3535,6 +3558,66 @@ function loadImage(url) {
     image.onerror = reject;
     image.src = url;
   });
+}
+
+function canvasToDataUrl(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    // Chromium performs toBlob encoding asynchronously; unlike toDataURL this
+    // does not hold the renderer thread throughout JPEG compression.
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("无法编码场记单页面图像"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error("无法读取页面图像"));
+      reader.readAsDataURL(blob);
+    }, type, quality);
+  });
+}
+
+function yieldToRenderer() {
+  // scheduler.yield is available in recent Electron; the timer fallback keeps
+  // older runtimes responsive between canvas/CSV phases as well.
+  return globalThis.scheduler?.yield
+    ? globalThis.scheduler.yield()
+    : new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function runCsvBackgroundTask(task, transfer = []) {
+  if (csvWorker) {
+    try {
+      const result = await csvWorker.request(task, transfer);
+      if (result?.bytes instanceof ArrayBuffer) {
+        return { ...result, bytes: new Uint8Array(result.bytes) };
+      }
+      return result;
+    } catch (error) {
+      // Validation errors came from a healthy Worker and must reach the user;
+      // only infrastructure failures should retry on the renderer.
+      if (error.csvWorkerTask) throw error;
+      console.warn(`[csv-worker] ${error.message}；改用 renderer 兼容路径`);
+    }
+  }
+  await yieldToRenderer();
+  return fallbackCsvProcessor(task);
+}
+
+function primeCsvWorkerMetadata(table) {
+  fallbackCsvProcessor({ type: "prime-metadata", table });
+  if (csvWorker) {
+    void csvWorker.request({ type: "prime-metadata", table }).catch((error) => {
+      console.warn(`[csv-worker] 无法缓存 Resolve CSV：${error.message}`);
+    });
+  }
+}
+
+function clearCsvWorkerMetadata() {
+  fallbackCsvProcessor({ type: "clear-metadata" });
+  if (csvWorker) {
+    void csvWorker.request({ type: "clear-metadata" }).catch(() => {});
+  }
 }
 
 function formatBytes(bytes) {
