@@ -205,6 +205,8 @@ SlateSync 只更新匹配到的素材，不创建虚构行；原 CSV 的其他�
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `SLATESYNC_CONFIG_PATH` | `slatesync.config.json` | 工作流配置文件路径 |
+| `MODEL_REQUEST_TIMEOUT_MS` | `180000` | 单个模型请求超时（毫秒），范围 30000–3600000 |
+| `MODEL_REQUEST_MAX_RETRIES` | `1` | 单个模型请求超时后的自动重试次数，范围 0–3 |
 | `MODEL_PAGE_CONCURRENCY` | `2` | 同时提交给模型的页数，范围 1–6 |
 | `MAX_CONCURRENT_RECOGNITIONS` | `1` | 同时运行的识别任务数 |
 | `PADDLEOCR_ENABLED` | `auto` | `auto`、`true` 或 `false` |
@@ -273,7 +275,7 @@ npm run ocr:check   # 检查 PaddleOCR 安装
 
 - **`npm run ocr:check` 提示找不到 Python 环境**：先运行 `npm run ocr:setup`；如果系统缺少 `venv`，请先安装对应的 Python venv 组件。
 
-- **模型接口频繁限流或超时**：将 `MODEL_PAGE_CONCURRENCY` 降为 `1`，或适当增加 `MODEL_REQUEST_TIMEOUT_MS`。
+- **模型接口频繁限流或超时**：超时默认会自动重试 1 次；仍然失败时，可将 `MODEL_PAGE_CONCURRENCY` 降为 `1`，适当增加 `MODEL_REQUEST_TIMEOUT_MS`，或用 `MODEL_REQUEST_MAX_RETRIES` 调整重试次数。
 
 - **Electron 编译时找不到 `swiftc`**：运行 `xcode-select --install`，完成安装后重新编译 Vision OCR。
 

@@ -1432,6 +1432,65 @@ test("missing provider key returns a readable client error", async () => {
   );
 });
 
+test("an AbortError timeout retries the page request and then succeeds", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      throw new DOMException(
+        "The operation was aborted due to timeout",
+        "AbortError",
+      );
+    }
+    return jsonResponse({
+      output_text: JSON.stringify(modelResult),
+    });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.result.records[0].videoCode, "C001");
+});
+
+test("a final AbortError timeout is normalized into a readable page error", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    throw new DOMException(
+      "The operation was aborted due to timeout",
+      "AbortError",
+    );
+  };
+
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "openai",
+        modelId: "openai/gpt-4o-mini",
+        imageDataUrls: [imageDataUrl, imageDataUrl],
+      },
+      {
+        env: {
+          OPENAI_API_KEY: "test-key",
+          MODEL_PAGE_CONCURRENCY: "1",
+          MODEL_REQUEST_MAX_RETRIES: "0",
+        },
+        fetchImpl,
+      },
+    ),
+    /第 1\/2 页识别失败：模型请求超时（单次等待上限 180 秒）/,
+  );
+  assert.equal(calls, 1);
+});
+
 function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), {
     status,
