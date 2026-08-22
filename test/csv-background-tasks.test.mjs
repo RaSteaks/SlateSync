@@ -40,3 +40,24 @@ test("CSV background processor clears retained metadata", () => {
     /尚未载入有效的 Resolve CSV/,
   );
 });
+
+test("CSV background processor owns material-key extraction", () => {
+  const processTask = createCsvTaskProcessor();
+  processTask({ type: "prime-metadata", table: decodeResolveCsv(source) });
+  assert.deepEqual(processTask({ type: "collect-material-keys" }).keys, ["A:1:1"]);
+});
+
+test("CSV background processor decodes slate CSV and builds local records", () => {
+  const processTask = createCsvTaskProcessor();
+  const data = new TextEncoder().encode(
+    "File Name,Scene,Shot,Take,Comments\r\nA001_C001.mov,12,3,2,_OK\r\n",
+  );
+  const decoded = processTask({ type: "decode-slate-csv", data });
+  assert.equal(decoded.records.length, 1);
+  assert.equal(decoded.records[0].materialKey, "A001C001");
+  const local = processTask({ type: "records-from-slate-csv", records: decoded.records });
+  assert.deepEqual(
+    { cardNumber: local.records[0].cardNumber, videoCode: local.records[0].videoCode, takeStatus: local.records[0].takeStatus },
+    { cardNumber: "A001", videoCode: "C001", takeStatus: "过" },
+  );
+});

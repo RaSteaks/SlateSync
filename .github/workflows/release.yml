@@ -42,7 +42,10 @@ jobs:
       - name: Verify source and tests
         run: |
           npm run check
+          npm run typecheck
           npm test
+          npm run test:native:abi
+          npm run build:modern
 
       - name: Build macOS artifacts
         env:

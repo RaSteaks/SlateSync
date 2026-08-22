@@ -107,6 +107,8 @@ API Key 可以写入 `.env`，也可以在应用界面中保存。macOS 会优�
 
 `npm start`、`npm run dev` 和 `npm run electron:dev` 都会先按当前 Electron ABI 强制重建 `better-sqlite3`，再启动未打包的源码环境。仓库默认不包含自动重载器；修改 renderer 后可在窗口中按 `⌘R` 刷新，修改主进程或 preload 后需要重新启动。
 
+当前重构中的 React Renderer 可用 `npm run electron:dev:modern` 单独启动。它与 legacy Renderer 不会同时写入同一个窗口；正式启动仍保持 legacy，直到连续 IP-03—08 完成集成与最终审核。
+
 桌面版默认在 macOS 的 `~/Library/Application Support/Local SlateSync Library.slatesync-library` 创建本地 Project Library。项目库首页支持：
 
 - 导出完整 `.slatesync-library` 可移植目录；SQLite 数据库通过一致性备份写入导出包。
@@ -134,8 +136,11 @@ npm run electron:build
 构建结果位于 `dist/`。只生成未打包应用目录时使用：
 
 ```bash
-npm run electron:build:dir
+CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:build:dir
 ```
+
+这是当前重构 Gate 的本地验收命令，不需要 Apple Development Key，也不执行
+签名、公证或发布。正式对外发布仍使用受保护的 release 流水线和独立凭据。
 
 打包和开发模式使用同一套图标资源：`electron-builder.yml` 从 `build/slatesync.icon` 读取 macOS 应用图标；开发模式的 Dock 和窗口图标读取该 `.icon` 容器中的 `build/slatesync.icon/Assets/icon.png`。`assets/` 下的历史图标版本不会被 Electron 自动使用。
 
@@ -268,6 +273,7 @@ SlateSync 只更新匹配到的素材，不创建虚构行；原 CSV 的其他�
 ```bash
 npm run check       # 检查 JavaScript、Electron 与 Python 语法
 npm test            # 运行完整测试，不调用真实模型，不消耗 API 额度
+npm run test:native:abi # 验证 Electron 原生 ABI，并在 finally 后恢复/验证 Node ABI
 npm run ocr:check   # 检查 PaddleOCR 安装
 ```
 
@@ -282,5 +288,7 @@ npm run ocr:check   # 检查 PaddleOCR 安装
 - **Node 与 Electron 报 `NODE_MODULE_VERSION` 不匹配**：这是 `better-sqlite3` 被编译给另一个运行时导致的。通过 npm 脚本运行测试或 Electron 时会自动恢复对应 ABI；直接执行 `node ...` 前可运行 `npm run rebuild:native:node`。Electron Builder 打包时也会自动重建原生依赖。
 
 - **Electron 开发模式每次启动都重新编译**：开发脚本会强制重建 `better-sqlite3`，以可靠处理 Node 与 Electron 之间的 ABI 切换；本地重建通常只需几秒。
+
+- **是否应为了 ABI 切换更换数据库**：当前不需要。ABI 数字属于系统 Node 与 Electron 两个运行时，不代表项目仍有 Web 服务；换成 `sqlite3` 仍需原生 ABI，WASM 会改变文件和锁语义，`node:sqlite` 则留作重构完成后的独立兼容性评估。当前脚本、CI 和发布检查会自动准备并恢复正确运行时。
 
 - **修改 `slatesync.config.json` 后识别位数未变化**：配置支持热加载，下一次识别或导出即生效，无需重启。若仍未生效，请检查 JSON 是否合法——格式错误的配置会被忽略并沿用上一次的有效配置；`fieldFormats` 的值必须由 1–6 个 `X` 组成。

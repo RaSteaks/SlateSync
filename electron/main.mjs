@@ -1,12 +1,24 @@
 // Electron main process: composition root and window lifecycle.
 //
 // Loads .env + workflow config, wires up persisted keys/settings and the OCR
-// Python path, registers IPC handlers, then opens the sandboxed BrowserWindow
-// that loads public/index.html. The window blocks external navigation and only
-// allows file:// URLs under the app's public directory.
+// Python path, registers IPC handlers, then opens the sandboxed BrowserWindow.
+// The window loads the single compiled typed Preload directly because a
+// sandboxed Electron Preload cannot require another application-local file.
+// Ordinary and packaged startup load the modern out/renderer/index.html shell.
+// An internal --slatesync-renderer=legacy switch and bounded load-time fallback
+// preserve recovery without creating a second BrowserWindow or gateway. The
+// window blocks external navigation and only allows file:// URLs under the
+// selected legacy or modern shell root.
 import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
 import { access } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureModelHttpAgent } from "../lib/ai-client.mjs";
 import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
@@ -205,7 +217,51 @@ async function exists(path) {
   }
 }
 
-function createWindow() {
+async function resolveRendererEntry() {
+  const appRoot = resolve(__dirname, "..");
+  const legacyRoot = isDev
+    ? join(appRoot, "public")
+    : join(__dirname, "..", "public");
+  const modernRoot = join(appRoot, "out", "renderer");
+  const modernRequested = process.argv.includes("--slatesync-renderer=modern");
+  const legacyRequested = process.argv.includes("--slatesync-renderer=legacy");
+  // The modern shell is the default; the explicit switch keeps the selected
+  // recovery mode observable in smoke/evidence without adding a second gateway.
+  const requestedModern = modernRequested || !legacyRequested;
+
+  try {
+    const { selectRendererEntry } = await import("../out/main/renderer-entry.js");
+    const modernAvailable = await exists(join(modernRoot, "index.html"));
+    const entry = selectRendererEntry({
+      isDevelopment: isDev,
+      requestedModern,
+      modernAvailable,
+      legacyRoot,
+      modernRoot,
+    });
+    if (entry.mode === "legacy" && entry.reason === "modern-missing") {
+      console.warn("Modern renderer entry is unavailable; using bounded legacy recovery.");
+    }
+    return entry;
+  } catch (error) {
+    console.error("Modern renderer selector is unavailable; using legacy recovery:", error);
+    return {
+      mode: "legacy",
+      root: legacyRoot,
+      htmlPath: join(legacyRoot, "index.html"),
+      reason: "modern-missing",
+    };
+  }
+}
+
+function isWithinRoot(filePath, root) {
+  const pathFromRoot = relative(root, filePath);
+  return pathFromRoot === "" || (!pathFromRoot.startsWith("..") && !isAbsolute(pathFromRoot));
+}
+
+async function createWindow() {
+  const rendererEntry = await resolveRendererEntry();
+  let allowedRoot = rendererEntry.root;
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -219,30 +275,44 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
-      preload: join(__dirname, "preload.cjs"),
+      preload: join(__dirname, "..", "out", "preload", "index.cjs"),
     },
   });
 
-  // Prevent navigation to external URLs
+  // Prevent navigation to external URLs and keep the fallback root exact so
+  // a modern-shell failure cannot widen the legacy file boundary.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  const allowedDir = isDev
-    ? join(resolve(__dirname, ".."), "public")
-    : join(__dirname, "..", "public");
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith("file://")) {
       event.preventDefault();
       return;
     }
     const filePath = fileURLToPath(url);
-    if (!filePath.startsWith(allowedDir)) {
+    if (!isWithinRoot(filePath, allowedRoot)) {
       event.preventDefault();
     }
   });
 
-  const htmlPath = join(allowedDir, "index.html");
-  mainWindow.loadFile(htmlPath).catch((error) => {
-    console.error("Failed to load index.html:", error);
-  });
+  try {
+    await mainWindow.loadFile(rendererEntry.htmlPath);
+    console.log(`Loaded ${rendererEntry.mode} renderer: ${rendererEntry.htmlPath}`);
+  } catch (error) {
+    if (rendererEntry.mode !== "modern") {
+      console.error("Failed to load index.html:", error);
+    } else {
+      const legacyRoot = isDev
+        ? join(resolve(__dirname, ".."), "public")
+        : join(__dirname, "..", "public");
+      allowedRoot = legacyRoot;
+      console.error("Modern renderer failed during initial load; falling back to legacy renderer:", error);
+      try {
+        await mainWindow.loadFile(join(legacyRoot, "index.html"));
+        console.log(`Loaded legacy renderer fallback: ${join(legacyRoot, "index.html")}`);
+      } catch (fallbackError) {
+        console.error("Failed to load legacy renderer fallback:", fallbackError);
+      }
+    }
+  }
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -264,11 +334,11 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  createWindow();
+  await createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      void createWindow();
     }
   });
 });

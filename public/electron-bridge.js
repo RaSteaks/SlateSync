@@ -1,133 +1,154 @@
-// Electron renderer API facade.
-//
-// Every backend operation crosses the context-isolated preload bridge. Keeping
-// the lookup inside each call produces a clear startup error if preload fails,
-// instead of silently falling back to a second transport.
+// Legacy Renderer compatibility adapter. The active typed window.slateSync
+// gateway is the only transport; this module only converts its Result<T>
+// values and request objects to the unchanged legacy call conventions. The
+// complete adapter is removed after the modern Renderer replaces its callers.
 
 function electronApi() {
-  const api = globalThis.electronAPI;
-  if (!api) {
-    throw new Error("Electron preload bridge is unavailable");
-  }
-  return api;
+  if (globalThis.slateSync) return globalThis.slateSync;
+  throw new Error("Electron preload bridge is unavailable");
 }
 
-export async function fetchConfig() {
-  return electronApi().getConfig();
+function legacyError(result) {
+  const details = result?.error || {};
+  const error = new Error(details.message || "未知错误");
+  if (details.code) error.code = details.code;
+  if (details.retryable !== undefined) error.retryable = details.retryable;
+  const statusMatch = /^HTTP_(\d+)$/.exec(String(details.code || ""));
+  if (statusMatch) error.status = Number(statusMatch[1]);
+  return error;
 }
 
-export async function listProjectsApi() {
-  return electronApi().listProjects();
+function unwrap(result) {
+  if (result?.ok === true) return result.data;
+  if (result?.ok === false) throw legacyError(result);
+  throw new Error("Invalid slateSync Result envelope");
 }
 
-export async function getLibraryInfoApi() {
-  return electronApi().getLibraryInfo();
+async function call(operation) {
+  return unwrap(await operation(electronApi()));
 }
 
-export async function importProjectLibraryApi() {
-  return electronApi().importProjectLibrary();
+export function fetchConfig() {
+  return call((api) => api.app.getConfig());
 }
 
-export async function exportProjectLibraryApi() {
-  return electronApi().exportProjectLibrary();
+export function listProjectsApi() {
+  return call((api) => api.projects.list());
 }
 
-export async function changeLibraryLocationApi() {
-  return electronApi().changeLibraryLocation();
+export function getLibraryInfoApi() {
+  return call((api) => api.projects.getLibraryInfo());
 }
 
-export async function createProjectApi(project) {
-  return electronApi().createProject(project);
+export function importProjectLibraryApi() {
+  return call((api) => api.projects.importLibrary());
 }
 
-export async function loadProjectApi(id) {
-  return electronApi().loadProject(id);
+export function exportProjectLibraryApi() {
+  return call((api) => api.projects.exportLibrary());
 }
 
-export async function updateProjectApi(project) {
-  return electronApi().updateProject(project);
+export function changeLibraryLocationApi() {
+  return call((api) => api.projects.changeLibraryLocation());
 }
 
-export async function archiveProjectApi(id) {
-  return electronApi().archiveProject(id);
+export function createProjectApi(project) {
+  return call((api) => api.projects.create(project));
 }
 
-export async function restoreProjectApi(id) {
-  return electronApi().restoreProject(id);
+export function loadProjectApi(id) {
+  return call((api) => api.projects.load({ id }));
 }
 
-export async function listScenariosApi(projectId) {
-  return electronApi().listScenarios(projectId);
+export function updateProjectApi(project) {
+  return call((api) => api.projects.update(project));
 }
 
-export async function loadScenarioApi(id, projectId) {
-  return electronApi().loadScenario(projectId, id);
+export function archiveProjectApi(id) {
+  return call((api) => api.projects.archive({ id }));
 }
 
-export async function importScenarioApi(profile, projectId) {
-  return electronApi().importScenario(projectId, profile);
+export function restoreProjectApi(id) {
+  return call((api) => api.projects.restore({ id }));
 }
 
-export async function saveProviderKeyApi(providerId, apiKey) {
-  return electronApi().saveProviderKey(providerId, apiKey);
+export function listScenariosApi(projectId) {
+  return call((api) => api.projects.listScenarios({ projectId }));
 }
 
-export async function fetchModelsApi(providerId, forceRefresh = false) {
-  return electronApi().getModels(providerId, forceRefresh);
+export function loadScenarioApi(id, projectId) {
+  return call((api) => api.projects.loadScenario({ id, projectId }));
+}
+
+export function importScenarioApi(profile, projectId) {
+  return call((api) => api.projects.importScenario({ profile, projectId }));
+}
+
+export function saveProviderKeyApi(providerId, apiKey) {
+  return call((api) => api.settings.saveProviderKey({ provider: providerId, apiKey }));
+}
+
+export function fetchModelsApi(providerId, forceRefresh = false) {
+  return call((api) => api.recognition.getModels({ providerId, forceRefresh }));
 }
 
 export async function recognizeApi(requestBody, onProgress) {
   const api = electronApi();
-  api.onRecognitionProgress(onProgress);
+  const request = JSON.parse(requestBody);
+  const unsubscribe = api.recognition.onProgress((event) => onProgress?.(event));
   try {
-    return await api.recognize(JSON.parse(requestBody));
+    return unwrap(await api.recognition.run(request));
   } finally {
-    api.removeRecognitionProgressListener();
+    unsubscribe();
   }
 }
 
-export async function downloadFileApi(bytes, filename) {
+function exactBinary(bytes) {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  // Electron's structured clone supports ArrayBuffer directly. Avoid
-  // Array.from(), which created one boxed JavaScript number per output byte.
-  const data = view.byteOffset === 0 && view.byteLength === view.buffer.byteLength
+  // Keep a full view zero-copy; only a subview receives one exact-range copy so
+  // adjacent bytes from a shared backing buffer cannot cross the IPC boundary.
+  return view.byteOffset === 0 && view.byteLength === view.buffer.byteLength
     ? view.buffer
     : view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
-  return electronApi().saveFile(filename, data);
 }
 
-export async function pickDirectoryApi() {
-  return electronApi().selectDirectory();
+export function downloadFileApi(bytes, filename) {
+  const data = exactBinary(bytes);
+  return call((api) => api.files.save({ defaultFilename: filename, data }));
 }
 
-export async function scanSlateDirectoryApi(dirPath, expectedKeys, maxDepth) {
-  return electronApi().scanSlateDirectory(dirPath, expectedKeys, maxDepth);
+export function pickDirectoryApi() {
+  return call((api) => api.files.selectDirectory());
 }
 
-export async function listTasksApi(projectId) {
-  return electronApi().listTasks(projectId);
+export function scanSlateDirectoryApi(dirPath, expectedKeys, maxDepth) {
+  return call((api) => api.files.scanSlateDirectory({ dirPath, expectedKeys, maxDepth }));
 }
 
-export async function loadTaskApi(id, projectId) {
-  return electronApi().loadTask(projectId, id);
+export function listTasksApi(projectId) {
+  return call((api) => api.tasks.list({ projectId }));
 }
 
-export async function saveTaskApi(task, projectId) {
-  return electronApi().saveTask(projectId, task);
+export function loadTaskApi(id, projectId) {
+  return call((api) => api.tasks.load({ id, projectId }));
 }
 
-export async function deleteTaskApi(id, projectId) {
-  return electronApi().deleteTask(projectId, id);
+export function saveTaskApi(task, projectId) {
+  return call((api) => api.tasks.save({ task, projectId }));
 }
 
-export async function getOcrSettingsApi() {
-  return electronApi().getOcrSettings();
+export function deleteTaskApi(id, projectId) {
+  return call((api) => api.tasks.delete({ id, projectId }));
 }
 
-export async function saveOcrSettingsApi(settings) {
-  return electronApi().saveOcrSettings(settings);
+export function getOcrSettingsApi() {
+  return call((api) => api.settings.getOcrSettings());
 }
 
-export async function checkOcrApi(pythonPath) {
-  return electronApi().checkOcr(pythonPath);
+export function saveOcrSettingsApi(settings) {
+  return call((api) => api.settings.saveOcrSettings(settings));
+}
+
+export function checkOcrApi(pythonPath) {
+  return call((api) => api.settings.checkOcr({ pythonPath }));
 }

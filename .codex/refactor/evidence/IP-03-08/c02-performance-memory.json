@@ -1,0 +1,52 @@
+{
+  "recordedAt": "2026-08-22T11:00:00+08:00",
+  "hardware": "Apple Silicon arm64 / macOS 15.7.3",
+  "runtime": "Node v24.13.0 / Electron 43.3.0 / Chromium 144",
+  "methodology": "Isolated Electron profile and explicit temporary libraryPath. Worker comparison alternates seven five-decode samples after two warmup batches. Heap uses CDP Runtime.getHeapUsage after HeapProfiler.collectGarbage; the UI is warmed once before the retained-data baseline. No fixed waits or production hooks.",
+  "csv10000": {
+    "rows": 10000,
+    "payloadBytes": 241014,
+    "domRowsInitial": 24,
+    "domRowsScrolled": 37,
+    "scrollMs": 9.661792,
+    "keyboardEditMs": 14.613167,
+    "workerLegacyMs": [5.42, 5.2, 4.96, 4.74, 4.9, 5.16, 5.1],
+    "workerModernMs": [5.24, 5.36, 4.88, 4.74, 4.78, 4.86, 4.96],
+    "workerLegacyMedianMs": 5.1,
+    "workerModernMedianMs": 4.88,
+    "rawTableRepresentationBytes": 6092900,
+    "virtualRowModelRepresentationBytes": 30720000,
+    "documentedTableRepresentationBytes": 36812900,
+    "heapBaselineBytes": 6066896,
+    "heapLoadedBytes": 35137700,
+    "heapAdditionalBytes": 29070804,
+    "heapReleasedBytes": 6439124,
+    "workersAfterWorkspaceUnmount": 0
+  },
+  "scale": {
+    "projects": 500,
+    "projectRefreshMs": 328.716083,
+    "tasks": 1000,
+    "taskRefreshMs": 29.1665,
+    "taskDomRows": 10,
+    "fps": 119.826805,
+    "maxFrameGapMs": 10.3,
+    "rendererLongTasksOver50Ms": [],
+    "taskSwitchSamplesMs": [28.931125, 45.099959, 49.631792, 29.840333, 25.609542]
+  },
+  "preparation": {
+    "uiCommitRatePerSecondMaximum": 10,
+    "terminationRejectsPending": true,
+    "deferredProgressCleared": true,
+    "pdfPageAndDocumentCleanup": true,
+    "workerCountAfterUnmount": 0
+  },
+  "coldStart": {
+    "sampleCountPerRenderer": 5,
+    "legacyMs": [183.9, 165.3, 169.0, 170.3, 166.4],
+    "modernMs": [165.7, 164.6, 174.2, 168.6, 168.2],
+    "legacyMedianMs": 169.0,
+    "modernMedianMs": 168.2
+  },
+  "result": "PASS"
+}

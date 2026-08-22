@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-08-20T16:02:31.279Z",
+  "methodology": "Production electron/main.mjs and the compiled typed out/preload/index.cjs; isolated profile/library; one real BrowserWindow; the mode marker exists and the visible body has non-zero layout after document.fonts.ready and two animation frames. Legacy readiness additionally requires completed app navigation/project-library rendering. markerReadyMs is measured from navigation start by the Renderer performance clock.",
+  "runs": [
+    {
+      "label": "packaged-modern-refused",
+      "packaged": true,
+      "expectedMode": "legacy",
+      "requestedModern": true,
+      "href": "file:///Users/rasteaks/Desktop/%E4%B8%AA%E4%BA%BA/GitHub/SlateSync/dist/mac-arm64/SlateSync.app/Contents/Resources/app.asar/public/index.html",
+      "namespaceKeys": [
+        "app",
+        "files",
+        "projects",
+        "recognition",
+        "settings",
+        "tasks"
+      ],
+      "markerReadyMs": 168.5999999642372,
+      "firstContentfulPaintMs": 140,
+      "markerRect": {
+        "width": 1440,
+        "height": 903.2734375
+      },
+      "projectLibraryFiles": [
+        "Projects",
+        "library.json",
+        "library.sqlite",
+        "library.sqlite-shm",
+        "library.sqlite-wal"
+      ],
+      "missingProjectError": {
+        "code": "UNKNOWN",
+        "message": "Error: 项目不存在",
+        "retryable": false
+      },
+      "pdfVersion": "5.6.205",
+      "deniedNavigation": {
+        "before": "file:///Users/rasteaks/Desktop/%E4%B8%AA%E4%BA%BA/GitHub/SlateSync/dist/mac-arm64/SlateSync.app/Contents/Resources/app.asar/public/index.html",
+        "afterExternal": "file:///Users/rasteaks/Desktop/%E4%B8%AA%E4%BA%BA/GitHub/SlateSync/dist/mac-arm64/SlateSync.app/Contents/Resources/app.asar/public/index.html",
+        "afterFile": "file:///Users/rasteaks/Desktop/%E4%B8%AA%E4%BA%BA/GitHub/SlateSync/dist/mac-arm64/SlateSync.app/Contents/Resources/app.asar/public/index.html",
+        "opened": true
+      },
+      "selectedLog": "Loaded legacy renderer: /Users/rasteaks/Desktop/个人/GitHub/SlateSync/dist/mac-arm64/SlateSync.app/Contents/Resources/app.asar/public/index.html"
+    }
+  ],
+  "medianMarkerReadyMs": {
+    "legacy": 168.5999999642372,
+    "modern": null
+  }
+}

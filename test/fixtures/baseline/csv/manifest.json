@@ -1,0 +1,75 @@
+{
+  "name": "synthetic-resolve-csv-byte-golden",
+  "sources": {
+    "resolve-source.csv": {
+      "bytes": 156,
+      "sha256": "6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0",
+      "format": { "encoding": "utf-8", "bom": true, "delimiter": ",", "lineEnding": "\n", "finalNewline": true },
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments", "Notes"],
+      "rows": [
+        ["A001C001.mov", "", "", "", "", "quoted, source"],
+        ["A001C002.mov", "", "", "", "_OLD", "line 1\nline 2"],
+        ["A001C999.mov", "keep", "keep", "keep", "", "unmatched"]
+      ],
+      "roundTrip": { "bytes": 142, "sha256": "f53f385f9d583ab3c9b7844ebbba0cb47320b944e8cd171266386092f809397c" }
+    },
+    "resolve-source-utf8.csv": {
+      "bytes": 52,
+      "sha256": "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e",
+      "format": { "encoding": "utf-8", "bom": false, "delimiter": ",", "lineEnding": "\n", "finalNewline": true },
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments"],
+      "rows": [["A001C001.mov", "", "", "", ""]],
+      "roundTrip": { "bytes": 52, "sha256": "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e" }
+    },
+    "resolve-source-utf16le.csv": {
+      "bytes": 110,
+      "sha256": "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b",
+      "format": { "encoding": "utf-16le", "bom": true, "delimiter": ",", "lineEnding": "\r\n", "finalNewline": true },
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments"],
+      "rows": [["A001C001.mov", "", "", "", ""]],
+      "roundTrip": { "bytes": 110, "sha256": "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b" }
+    },
+    "resolve-source-utf16be.csv": {
+      "bytes": 110,
+      "sha256": "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea",
+      "format": { "encoding": "utf-16be", "bom": true, "delimiter": ",", "lineEnding": "\r\n", "finalNewline": true },
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments"],
+      "rows": [["A001C001.mov", "", "", "", ""]],
+      "roundTrip": { "bytes": 110, "sha256": "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea" }
+    },
+    "resolve-source-semicolon.csv": {
+      "bytes": 118,
+      "sha256": "a95565d61d2d377d213bc3f3ed3b5d2095e389b807e7b517e2d0d0816e6e842a",
+      "format": { "encoding": "utf-8", "bom": false, "delimiter": ";", "lineEnding": "\n", "finalNewline": true },
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments", "Notes"],
+      "rows": [
+        ["A001C001.mov", "", "", "", "", "quoted; value"],
+        ["A001C002.mov", "", "", "", "", "line 1\nline 2 \"quoted\""]
+      ],
+      "roundTrip": { "bytes": 118, "sha256": "a95565d61d2d377d213bc3f3ed3b5d2095e389b807e7b517e2d0d0816e6e842a" }
+    }
+  },
+  "outputs": {
+    "mergedResolve": {
+      "bytes": 196,
+      "sha256": "c601ab2c779b2b4d474966fef727bb9225cb9c011e61b4f4de282fe4e1a89ab3",
+      "format": { "encoding": "utf-8", "bom": true, "delimiter": ",", "lineEnding": "\n", "finalNewline": true },
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments", "Notes", "Camera FPS", "Shoot Day"],
+      "rows": [
+        ["A001C001.mov", "1 / 2A", "02", "03", "YES", "edited note", "24", "26-01-01"],
+        ["A001C002.mov", "1234", "100", "11", "HOLD", "line 1\nline 2", "", ""],
+        ["A001C999.mov", "", "", "", "", "unmatched", "", ""]
+      ]
+    },
+    "standalone": {
+      "bytes": 120,
+      "sha256": "9e729ca8ad3abf1e7ac13eeca47b39b082463350ab5b207d92ff6733d25a94e9",
+      "format": { "encoding": "utf-16le", "bom": true, "delimiter": ",", "lineEnding": "\r\n", "finalNewline": true },
+      "headers": ["Scene", "Shot", "Take", "Comments"],
+      "rows": [
+        ["37A", "02", "11", "HOLD"],
+        ["1234", "100", "03", "YES"]
+      ]
+    }
+  }
+}

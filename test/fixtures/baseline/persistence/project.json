@@ -1,0 +1,9 @@
+{
+  "id": "project-default",
+  "libraryId": "library-baseline-001",
+  "name": "默认项目",
+  "description": "Synthetic baseline project",
+  "formatVersion": 1,
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

@@ -5,10 +5,12 @@
 // send only the comparatively small recognition/edit payload back to it.
 import {
   buildStandaloneResolveTable,
+  collectResolveMaterialKeys,
   decodeResolveCsv,
   encodeResolveCsv,
   mergeSlateIntoResolveTable,
 } from "./resolve-csv.js";
+import { parseSlateCsv } from "./slate-csv-parser.js";
 
 const EDIT_KEY_PATTERN = /^(\d+):(\d+)$/;
 
@@ -29,6 +31,24 @@ export function createCsvTaskProcessor() {
       case "clear-metadata": {
         metadataTable = null;
         return { ready: false };
+      }
+      case "collect-material-keys": {
+        assertTable(metadataTable);
+        const materialKeys = collectResolveMaterialKeys(metadataTable);
+        return { keys: materialKeys.keys, warnings: materialKeys.warnings };
+      }
+      case "decode-slate-csv": {
+        const bytes = task.data instanceof ArrayBuffer
+          ? new Uint8Array(task.data)
+          : task.data instanceof Uint8Array
+            ? task.data
+            : null;
+        if (!bytes?.length) throw new Error("场记 CSV 文件为空");
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
+        return parseSlateCsv(text);
+      }
+      case "records-from-slate-csv": {
+        return { records: recognitionRecordsFromSlateCsv(task.records) };
       }
       case "export-resolve": {
         assertTable(metadataTable);
@@ -75,6 +95,28 @@ export function createCsvTaskProcessor() {
         throw new Error(`未知 CSV 后台任务：${String(task.type || "")}`);
     }
   };
+}
+
+function recognitionRecordsFromSlateCsv(records) {
+  return (Array.isArray(records) ? records : []).map((record, index) => {
+    const key = String(record?.materialKey || "").toUpperCase();
+    const match = key.match(/^([A-Z]+\d+)(C\d+)$/);
+    return {
+      id: `slate-csv-${index}`,
+      sourcePage: null,
+      cardNumber: record?.cardNumber || match?.[1] || null,
+      videoCode: record?.videoCode || match?.[2] || null,
+      scene: record?.scene || null,
+      shot: record?.shot || null,
+      take: record?.take || null,
+      takeStatus: record?.comments || null,
+      description: null,
+      comments: null,
+      shotSize: null,
+      cameraPosition: null,
+      confidence: "high",
+    };
+  });
 }
 
 function assertTable(table) {

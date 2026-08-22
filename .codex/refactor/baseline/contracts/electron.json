@@ -1,0 +1,23 @@
+{
+  "baselineCommit": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "entrypoint": "electron/main.mjs",
+  "rendererDocument": "public/index.html",
+  "preload": "out/preload/index.cjs",
+  "window": {
+    "width": 1440,
+    "height": 900,
+    "minWidth": 960,
+    "minHeight": 600,
+    "title": "SlateSync",
+    "contextIsolation": true,
+    "nodeIntegration": false,
+    "sandbox": true,
+    "webSecurity": true,
+    "allowRunningInsecureContent": false,
+    "externalNavigation": "prevent",
+    "externalWindow": "deny",
+    "allowedDevNavigationRoot": "public/"
+  },
+  "routes": ["projects", "workspace", "project-settings", "global-settings"],
+  "visualAppearance": "light-only at baseline"
+}

@@ -38,6 +38,7 @@ files:
   - lib/**/*
   - public/**/*
   - package.json
+  - out/**/*
 
 extraResources:
   - from: scripts/

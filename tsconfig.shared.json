@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "outDir": "out/shared",
+    "rootDir": "src/shared",
+    "tsBuildInfoFile": "out/.tsbuildinfo/shared.tsbuildinfo",
+    "types": []
+  },
+  "include": ["src/shared/**/*.ts"]
+}

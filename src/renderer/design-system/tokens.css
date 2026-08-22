@@ -1,0 +1,110 @@
+/*
+ * SlateSync's visual contract is semantic rather than feature-owned. The
+ * graphite/indigo palette keeps long CSV sessions calm, while the paper tone
+ * gives recognition evidence a readable work surface. Features consume these
+ * names only; they do not introduce screen-local colors or radii.
+ */
+:root {
+  color-scheme: dark;
+  font-family: "Avenir Next", "SF Pro Display", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+  font-synthesis: none;
+  --ss-font-body: "Avenir Next", "SF Pro Text", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+  --ss-font-display: "Avenir Next", "SF Pro Display", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+  --ss-font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --ss-color-canvas: #0b0f16;
+  --ss-color-surface: #111827;
+  --ss-color-surface-raised: #172131;
+  --ss-color-surface-sunken: #0a0e15;
+  --ss-color-surface-hover: #1d2a3d;
+  --ss-color-ink: #f3f6fb;
+  --ss-color-ink-muted: #a7b3c4;
+  --ss-color-ink-subtle: #7d8ca3;
+  --ss-color-line: rgba(190, 207, 230, 0.14);
+  --ss-color-line-strong: rgba(190, 207, 230, 0.27);
+  --ss-color-accent: #8c9cff;
+  --ss-color-accent-strong: #5e6ee8;
+  --ss-color-accent-soft: rgba(140, 156, 255, 0.14);
+  --ss-color-on-accent: #11162c;
+  --ss-color-success: #6fd6a0;
+  --ss-color-success-soft: rgba(111, 214, 160, 0.13);
+  --ss-color-warning: #f0c674;
+  --ss-color-warning-soft: rgba(240, 198, 116, 0.14);
+  --ss-color-danger: #ff8e86;
+  --ss-color-danger-soft: rgba(255, 142, 134, 0.14);
+  --ss-color-info: #80c9ff;
+  --ss-color-info-soft: rgba(128, 201, 255, 0.14);
+  --ss-overlay: rgba(4, 7, 12, 0.72);
+
+  --ss-radius-sm: 6px;
+  --ss-radius-md: 8px;
+  --ss-radius-lg: 12px;
+  --ss-radius-xl: 16px;
+  --ss-radius-xxl: 20px;
+  --ss-radius-pill: 999px;
+
+  --ss-space-1: 4px;
+  --ss-space-2: 8px;
+  --ss-space-3: 12px;
+  --ss-space-4: 16px;
+  --ss-space-5: 20px;
+  --ss-space-6: 24px;
+  --ss-space-8: 32px;
+  --ss-space-10: 40px;
+  --ss-space-12: 48px;
+
+  --ss-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.18);
+  --ss-shadow-md: 0 12px 28px rgba(0, 0, 0, 0.24);
+  --ss-shadow-focus: 0 0 0 3px rgba(140, 156, 255, 0.28);
+
+  --ss-motion-fast: 120ms;
+  --ss-motion-base: 180ms;
+  --ss-motion-slow: 240ms;
+  --ss-ease: cubic-bezier(0.2, 0.75, 0.25, 1);
+
+  --ss-z-sticky: 10;
+  --ss-z-dropdown: 30;
+  --ss-z-overlay: 60;
+  --ss-z-toast: 80;
+  --ss-control-height: 40px;
+  --ss-header-height: 68px;
+  --ss-sidebar-width: 248px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ss-color-canvas: #e9edf3;
+  --ss-color-surface: #f8fafc;
+  --ss-color-surface-raised: #ffffff;
+  --ss-color-surface-sunken: #dde4ed;
+  --ss-color-surface-hover: #eef2f8;
+  --ss-color-ink: #192231;
+  --ss-color-ink-muted: #4c5b70;
+  --ss-color-ink-subtle: #5f6f84;
+  --ss-color-line: rgba(34, 51, 73, 0.15);
+  --ss-color-line-strong: rgba(34, 51, 73, 0.26);
+  --ss-color-accent: #3f50ba;
+  --ss-color-accent-strong: #2f3d9a;
+  --ss-color-accent-soft: rgba(63, 80, 186, 0.1);
+  --ss-color-on-accent: #ffffff;
+  --ss-color-success: #18794e;
+  --ss-color-success-soft: rgba(24, 121, 78, 0.1);
+  --ss-color-warning: #865b0a;
+  --ss-color-warning-soft: rgba(134, 91, 10, 0.11);
+  --ss-color-danger: #b33a32;
+  --ss-color-danger-soft: rgba(179, 58, 50, 0.1);
+  --ss-color-info: #17689c;
+  --ss-color-info-soft: rgba(23, 104, 156, 0.1);
+  --ss-overlay: rgba(20, 28, 41, 0.48);
+  --ss-shadow-sm: 0 2px 8px rgba(36, 51, 70, 0.08);
+  --ss-shadow-md: 0 12px 28px rgba(36, 51, 70, 0.14);
+  --ss-shadow-focus: 0 0 0 3px rgba(63, 80, 186, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ss-motion-fast: 1ms;
+    --ss-motion-base: 1ms;
+    --ss-motion-slow: 1ms;
+  }
+}

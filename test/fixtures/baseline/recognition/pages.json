@@ -1,0 +1,15 @@
+{
+  "name": "page-order-and-inheritance",
+  "pages": [
+    { "pageNumber": 1, "records": [{ "cardNumber": "A001", "videoCode": "C001", "scene": "001", "shot": "01", "take": "01", "confidence": "high" }] },
+    { "pageNumber": 2, "records": [{ "cardNumber": "A001", "videoCode": "C002", "scene": null, "shot": null, "take": "02", "confidence": "high" }] },
+    { "pageNumber": 3, "records": [] }
+  ],
+  "expected": {
+    "sourcePages": [1, 2],
+    "records": [{ "videoCode": "C001", "scene": "001", "shot": "01" }, { "videoCode": "C002", "scene": "001", "shot": "01" }],
+    "warningIncludes": ["第 3 页未识别到任何视频码"],
+    "completionOrder": [2, 3, 1],
+    "progressPhases": ["starting", "ocr", "ocr", "primary", "primary", "page-complete", "primary", "page-complete", "page-complete", "merge", "complete"]
+  }
+}

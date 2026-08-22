@@ -1,4 +1,7 @@
 .env
+# Keep local environment variants and credentials out of commits while retaining the safe template.
+.env.*
+!.env.example
 .DS_Store
 node_modules/
 .venv-paddleocr/
@@ -15,6 +18,25 @@ bin/
 dist/
 out/
 public/vendor/
+
+# Rebuildable Storybook, Playwright, Vite, and TypeScript validation output.
+/storybook-static/
+/test-results/
+/playwright-report/
+/blob-report/
+/.vite/
+*.tsbuildinfo
+
+# Keep only the reviewed visual baselines and final stable captures visible.
+# Intermediate captures remain locally available but must not enter commits.
+.codex/refactor/evidence/IP-03-08/visual-contained-run-[1-9]/*.png
+.codex/refactor/evidence/IP-03-08/visual-contained-run-1[0-9]/*.png
+.codex/refactor/evidence/IP-03-08/visual-contained-run-2[0-4]/*.png
+.codex/refactor/evidence/IP-03-08/visual-run-1/*.png
+.codex/refactor/evidence/IP-03-08/c02-visual-run-1/*.png
+.codex/refactor/evidence/IP-03-08/c02-visual-run-2/*.png
+.codex/refactor/evidence/IP-03-08/c02-final-visual-run-1/*.png
+.codex/refactor/evidence/IP-03-08/c02-final-visual-run-2/*.png
 
 # Local assistant session exports may contain prompts and absolute machine paths.
 session-*.md

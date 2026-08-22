@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-08-20T20:36:35.466Z",
+  "viewportStates": [
+    {
+      "name": "01-project-library-empty-dark-1440x900.png",
+      "bytes": 75311,
+      "sha256": "3aca65d86f766e4a95d6908615546d441addfcc8225ee6aec3db889a15b2ba8f"
+    },
+    {
+      "name": "02-new-project-dialog-dark-1440x900.png",
+      "bytes": 93290,
+      "sha256": "ac647014bf70f4517c3ea77217adcde48d25939860e4f92bfea161a41ea2f693"
+    },
+    {
+      "name": "03-project-library-light-1440x900.png",
+      "bytes": 75355,
+      "sha256": "ff4bf1bd02ed1868a3ecd8c05bbb3773b68a4a6d502b783ba963c26afa2e5465"
+    },
+    {
+      "name": "04-project-library-compact-light-960x600.png",
+      "bytes": 65616,
+      "sha256": "8f6b98bc30c071478ee9764c695024dcba3a0fa786ae36b48030a1cb24b94f95"
+    },
+    {
+      "name": "05-workspace-empty-compact-light-960x600.png",
+      "bytes": 73481,
+      "sha256": "f506c071bfb8c872c2d23da251297b06ef09c7ca70508a1f9305293890b4f85a"
+    },
+    {
+      "name": "06-global-settings-light-960x600.png",
+      "bytes": 96904,
+      "sha256": "97ab9815128d6b41ed9a6082aec381ac4cdb3b9efd7b1af651f2700549749eac"
+    },
+    {
+      "name": "07-project-settings-light-960x600.png",
+      "bytes": 74077,
+      "sha256": "6b5c079ab644e6106f6fe31d302e147cf85d339c67cb9ef93f07edec9f6d6963"
+    },
+    {
+      "name": "08-project-settings-error-light-960x600.png",
+      "bytes": 50594,
+      "sha256": "efed8862fb4429a76aa590e41b9ba2b0ce34dfea1f09d09450cafcfdcdb02646"
+    },
+    {
+      "name": "09-workspace-dark-reduced-motion-1440x900.png",
+      "bytes": 109126,
+      "sha256": "19f4e182684b87d12753410405b49adb270a41a34b7f6d2db90496664c4bfbe8"
+    },
+    {
+      "name": "10-project-library-archived-dark-1440x900.png",
+      "bytes": 88132,
+      "sha256": "bb47f73d95c79bf73d3b5715bbabe33ee9f066338410fc7c892b75778fc1108f"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "normalization-and-status",
+  "input": {
+    "sheetTitle": "Day 01",
+    "records": [
+      { "cardNumber": "a001", "videoCode": "c01", "scene": "３７a / 58", "shot": "二", "take": "９", "takeStatus": "√", "confidence": "high" },
+      { "cardNumber": "A001", "videoCode": "C002", "scene": "", "shot": "", "take": "11", "takeStatus": "△", "confidence": "medium" },
+      { "cardNumber": "A001", "videoCode": "C003", "scene": "16/72a", "shot": "18", "take": "100", "takeStatus": "X", "confidence": "low" }
+    ],
+    "warnings": ["synthetic warning"]
+  },
+  "expected": {
+    "scenes": ["37A / 58", null, "16 / 72A"],
+    "shots": ["02", null, "18"],
+    "takes": ["09", "11", "100"],
+    "statuses": ["过", "保", "废条"],
+    "warnings": ["synthetic warning"]
+  }
+}

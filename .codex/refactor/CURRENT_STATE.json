@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-22",
+  "phase": "IP-03-08_READY_FOR_FINAL_REVIEW",
+  "baselineHead": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "admissionGate": {
+    "path": ".codex/refactor/reviews/GATE-01-02.md",
+    "verdict": "APPROVED",
+    "reviewedAt": "2026-08-21"
+  },
+  "activeImplementationPackage": {
+    "path": ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+    "version": "2026-08-21.2",
+    "sha256": "67a4d98e90950a78a04e4ab2b5a6b6a164408567dee83f6d211b2b4e54a2c164",
+    "soleExecutablePackage": true,
+    "intermediateImplementationGates": false,
+    "historicalIpNumbersAreTraceabilityOnly": true
+  },
+  "activeCorrectionPackage": {
+    "path": ".codex/refactor/packages/IP-03-08-C03.md",
+    "sha256": "8c29a3923f7a400780c9f82856ccdff0ebb26d1fdaf8b473965730a49438a6c1",
+    "purpose": "owner safety disposition only",
+    "productionChangesAuthorized": false
+  },
+  "models": {
+    "implementer": "GPT-5.6 Luna XHigh",
+    "correctionImplementer": "GPT-5.6 Sol High under owner direction",
+    "finalReviewer": "GPT-5.6 Sol High",
+    "plannedModelSwitchesBeforeCompletionReport": 0
+  },
+  "foundation": {
+    "ip0102Approved": true,
+    "sharedContractV1Frozen": true,
+    "productionRendererGateway": "window.slateSync",
+    "blockingDecisionIds": []
+  },
+  "database": {
+    "driverDuringContinuousPackage": "better-sqlite3",
+    "driverMigrationAuthorized": false,
+    "nodeElectronAbiLifecycle": "automated-and-self-restoring",
+    "decision": ".codex/refactor/adr/ADR-DATABASE-RUNTIME-ABI.md"
+  },
+  "packaging": {
+    "localGateRequiresSigning": false,
+    "localAcceptanceCommand": "CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:build:dir",
+    "signingNotarizationPublishingProtected": true
+  },
+  "historicalNonExecutablePackages": [
+    ".codex/refactor/packages/IP-00.md",
+    ".codex/refactor/packages/IP-00-C01.md",
+    ".codex/refactor/packages/IP-0102.md",
+    ".codex/refactor/packages/IP-0102-C01.md",
+    ".codex/refactor/packages/IP-01——IP-08.md"
+  ],
+  "frozenHistoricalEvidenceRoots": [
+    ".codex/refactor/baseline",
+    ".codex/refactor/evidence/IP-00",
+    ".codex/refactor/evidence/IP-01",
+    ".codex/refactor/evidence/IP-02",
+    ".codex/refactor/evidence/IP-0102"
+  ],
+  "continuousEvidenceRoot": ".codex/refactor/evidence/IP-03-08",
+  "completionReport": ".codex/refactor/evidence/IP-03-08/CONTINUOUS_COMPLETION_REPORT.md",
+  "finalHandoff": {
+    "status": "APPROVED_POST_IP02_COMPLETE",
+    "preparedBy": "GPT-5.6 Sol High under owner-accepted C03 disposition",
+    "reviewTarget": ".codex/refactor/reviews/FINAL-IP-03-08.md",
+    "solReviewStarted": true,
+    "technicalCorrectionComplete": true
+  },
+  "historicalRequirementTraceability": ".codex/refactor/IP-03-08-TRACEABILITY.md",
+  "finalReviewTarget": ".codex/refactor/reviews/FINAL-IP-03-08.md",
+  "hygieneAuthorization": {
+    "path": ".codex/refactor/evidence/IP-03-08/final-handoff/GITIGNORE-HYGIENE-AUTHORIZATION.md",
+    "decisionId": "IP-03-08-REPO-HYGIENE-001",
+    "status": "OWNER_AUTHORIZED_STANDALONE",
+    "authorizedAt": "2026-08-22",
+    "scope": [
+      ".gitignore"
+    ],
+    "productionChangesAuthorized": false
+  },
+  "gitMutationPolicy": {
+    "commit": false,
+    "stage": false,
+    "push": false,
+    "branchSwitch": false,
+    "resetOrClean": false
+  }
+}

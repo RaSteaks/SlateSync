@@ -1,5 +1,9 @@
 # SlateSync Architecture Invariants
 
+Authority status: **CURRENT AND BINDING FOR
+`IP-03-08-CONTINUOUS` VERSION 2026-08-21.2**. Start from `README.md` and
+`CURRENT_STATE.json`; historical package boundaries cannot override this file.
+
 本文件定义整个重构过程中不可由 Implementer 自行修改的架构边界。发现实际代码与不变量冲突时，必须写入 `DECISION_QUEUE.md` 并交由 Sol High 决策。
 
 ## Renderer

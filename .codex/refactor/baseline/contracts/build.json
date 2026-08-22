@@ -1,0 +1,109 @@
+{
+  "baselineCommit": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "package": {
+    "name": "slatesync",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "electron/main.mjs",
+    "engines": { "node": ">=20.19" },
+    "scripts": {
+      "start": "npm run electron:dev",
+      "dev": "npm run electron:dev",
+      "postinstall": "node scripts/copy-pdfjs.mjs",
+      "ocr:setup": "sh scripts/setup-paddleocr.sh",
+      "ocr:check": ".venv-paddleocr/bin/python scripts/paddleocr_runner.py --check",
+      "rebuild:native:node": "npm rebuild better-sqlite3",
+      "preelectron:dev": "electron-rebuild --force --which-module better-sqlite3",
+      "electron:dev": "electron electron/main.mjs",
+      "electron:build": "electron-builder",
+      "electron:build:dir": "electron-builder --dir",
+      "release:mac": "npm run check && npm test && electron-builder --mac",
+      "release:mac:publish": "npm run check && npm test && electron-builder --mac --publish always",
+      "pretest": "npm run rebuild:native:node",
+      "test": "node --test",
+      "check": "node --check lib/ai-client.mjs && node --check lib/config.mjs && node --check lib/model-catalog.mjs && node --check lib/model-discovery.mjs && node --check lib/ocr/paddleocr.mjs && node --check lib/ocr/vision.mjs && node --check electron/main.mjs && node --check electron/ipc-handlers.mjs && node --check electron/env-loader.mjs && node --check electron/file-dialogs.mjs && node --check electron/slate-scanner.mjs && node --check electron/key-store.mjs && node --check electron/settings-store.mjs && node --check lib/diagnostics.mjs && node --check lib/task-store.mjs && node --check lib/sqlite-store.mjs && node --check lib/project-library.mjs && node --check lib/project-library-transfer.mjs && node --check lib/project-runtime.mjs && node --check lib/project-settings.mjs && node --check lib/scenario/profile.mjs && node --check lib/scenario/store.mjs && node --check public/app.js && node --check public/csv-background-tasks.js && node --check public/csv-worker.js && node --check public/csv-worker-client.js && node --check public/electron-bridge.js && node --check public/operation-token.js && node --check public/task-autosave.js && node --check public/slate-csv-parser.js && node --check public/image-preprocess.js && node --check public/recognition-request.js && node --check public/resolve-csv.js && node --check public/metadata-common.js && node --check public/metadata-structure.js && node --check public/metadata-sources/index.js && node --check public/metadata-sources/kinefinity.js && node --check public/task-persistence.js && node --check public/workflow-state.js && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('scripts/paddleocr_runner.py').read_text())\""
+    },
+    "dependencies": {
+      "better-sqlite3": "^12.11.1",
+      "pdfjs-dist": "^5.6.205",
+      "undici": "^8.10.0"
+    },
+    "devDependencies": {
+      "@electron/rebuild": "^4.2.0",
+      "electron": "^43.3.0",
+      "electron-builder": "^26.15.3"
+    }
+  },
+  "builder": {
+    "configFile": "electron-builder.yml",
+    "appId": "com.slatesync.app",
+    "productName": "SlateSync",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["electron/**/*", "lib/**/*", "public/**/*", "package.json"],
+    "extraResources": [
+      { "from": "scripts/", "to": "app/scripts/" },
+      { "from": "bin/", "to": "app/bin/" },
+      { "from": "slatesync.config.json", "to": "app/slatesync.config.json" }
+    ],
+    "asarUnpack": ["scripts/**/*", "bin/**/*", "node_modules/better-sqlite3/build/Release/**/*"],
+    "macTargets": ["dmg:arm64", "dmg:x64", "zip:arm64", "zip:x64"],
+    "icon": "build/slatesync.icon",
+    "entitlements": "build/entitlements.mac.plist"
+  },
+  "generatedInputs": {
+    "public/vendor/pdfjs/pdf.mjs": "postinstall from pdfjs-dist/build/pdf.mjs; ignored by Git",
+    "public/vendor/pdfjs/pdf.worker.mjs": "postinstall from pdfjs-dist/build/pdf.worker.mjs; ignored by Git",
+    "bin/vision-ocr": "release Swift build; ignored by Git"
+  },
+  "ci": {
+    "node": "22",
+    "install": "npm ci",
+    "validation": ["npm run check", "npm test"],
+    "releaseValidation": ["npm run check", "npm test", "electron-builder --mac --<arch> --publish never"]
+  },
+  "transition": {
+    "scripts": {
+      "test": "npm run test:node && npm run test:modern",
+      "rebuild:native:electron": "electron-rebuild --force --which-module better-sqlite3",
+      "preelectron:dev": "npm run build:modern && npm run rebuild:native:electron",
+      "preelectron:dev:modern": "npm run build:modern && npm run rebuild:native:electron",
+      "electron:dev:modern": "electron electron/main.mjs --slatesync-renderer=modern",
+      "typecheck": "tsc -b --pretty false",
+      "build:main": "tsc -p tsconfig.main.json --pretty false",
+      "build:preload": "vite build --config vite.preload.config.ts",
+      "build:renderer": "vite build --config vite.renderer.config.ts",
+      "build:modern": "npm run build:main && npm run build:preload && npm run build:renderer",
+      "pretest:node": "npm run rebuild:native:node",
+      "test:node": "node --import ./test-support/refactor/legacy-test-gateway.mjs --test test/*.test.mjs test/refactor/ip-02/*.test.mjs",
+      "test:modern": "vitest run --config vitest.config.ts",
+      "pretest:electron:smoke": "npm run build:modern && npm run rebuild:native:electron",
+      "test:electron:smoke": "node test-support/refactor/electron-smoke.mjs",
+      "pretest:electron:package-smoke": "npm run rebuild:native:electron",
+      "test:electron:package-smoke": "node test-support/refactor/electron-smoke.mjs --packaged",
+      "test:native:abi": "node test-support/refactor/native-abi-lifecycle.mjs",
+      "validate:modern": "npm run typecheck && npm run test:modern && npm run build:modern",
+      "preelectron:build": "npm run build:modern && npm run rebuild:native:electron",
+      "preelectron:build:dir": "npm run build:modern && npm run rebuild:native:electron",
+      "release:mac": "npm run check && npm run typecheck && npm test && npm run test:native:abi && npm run build:modern && electron-builder --mac",
+      "release:mac:publish": "npm run check && npm run typecheck && npm test && npm run test:native:abi && npm run build:modern && electron-builder --mac --publish always"
+    },
+    "dependencies": {
+      "react": "19.2.6",
+      "react-dom": "19.2.6"
+    },
+    "devDependencies": {
+      "@types/node": "22.19.19",
+      "@types/react": "19.2.18",
+      "@types/react-dom": "19.2.4",
+      "@vitejs/plugin-react": "6.0.2",
+      "jsdom": "29.1.1",
+      "typescript": "5.9.3",
+      "vite": "8.0.13",
+      "vitest": "4.1.11"
+    },
+    "builderFiles": ["out/**/*"],
+    "ciValidation": ["npm run validate:modern"],
+    "releaseValidation": ["npm run typecheck", "npm run build:modern"]
+  }
+}
