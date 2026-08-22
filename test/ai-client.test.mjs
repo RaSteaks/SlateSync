@@ -249,6 +249,67 @@ test("OpenAI Responses request uses image input and parses structured output", a
   assert.equal(result.result.records[0].takeStatus, "过");
 });
 
+test("Electron project output settings override Profile output metadata", async () => {
+  const requests = [];
+  const fetchImpl = async (_url, request) => {
+    requests.push(JSON.parse(request.body));
+    return jsonResponse({
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: JSON.stringify(modelResult) }],
+        },
+      ],
+    });
+  };
+  const scenarioStore = {
+    async getProfile() {
+      return {
+        label: "旧版 Profile 输出",
+        fingerprint: "profile-fingerprint",
+        layout: {
+          pages: [],
+          headerTokens: [],
+          cameraGroups: [],
+          columnBands: [],
+          rowBands: [],
+        },
+        fields: {},
+        recognition: { headerTokens: [], promptHints: [] },
+        output: {
+          resolve: {
+            fieldFormats: { scene: "XXXXX", shot: "XXXX", take: "XXX" },
+            comments: { goodTake: "PROFILE_OK", holdTake: "PROFILE_HOLD" },
+          },
+        },
+      };
+    },
+  };
+  const input = {
+    providerId: "openai",
+    modelId: "openai/gpt-4o-mini",
+    imageDataUrl,
+    filename: "project-sheet.jpg",
+    scenarioId: "scenario-0123456789abcdef",
+    fieldFormats: { scene: "XXXX", shot: "X", take: "X" },
+    comments: { goodTake: "PROJECT_OK", holdTake: "PROJECT_HOLD" },
+  };
+
+  const result = await recognizeSlate(input, {
+    env: { OPENAI_API_KEY: "test-key" },
+    fetchImpl,
+    scenarioStore,
+    projectScopedOutput: true,
+  });
+
+  assert.equal(result.result.records[0].scene, "0012");
+  assert.equal(result.result.records[0].shot, "2");
+  assert.equal(result.result.records[0].take, "3");
+  assert.match(requests[0].input[0].content, /scene 至少 4 位/);
+  assert.match(requests[0].input[0].content, /PROJECT_OK/);
+  assert.doesNotMatch(requests[0].input[0].content, /PROFILE_OK/);
+});
+
 test("Qwen uses OpenRouter JSON object mode with the schema in its prompt", async () => {
   let captured;
   const fetchImpl = async (url, request) => {
@@ -1369,6 +1430,65 @@ test("missing provider key returns a readable client error", async () => {
     ),
     /OPENROUTER_API_KEY/,
   );
+});
+
+test("an AbortError timeout retries the page request and then succeeds", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      throw new DOMException(
+        "The operation was aborted due to timeout",
+        "AbortError",
+      );
+    }
+    return jsonResponse({
+      output_text: JSON.stringify(modelResult),
+    });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.result.records[0].videoCode, "C001");
+});
+
+test("a final AbortError timeout is normalized into a readable page error", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    throw new DOMException(
+      "The operation was aborted due to timeout",
+      "AbortError",
+    );
+  };
+
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "openai",
+        modelId: "openai/gpt-4o-mini",
+        imageDataUrls: [imageDataUrl, imageDataUrl],
+      },
+      {
+        env: {
+          OPENAI_API_KEY: "test-key",
+          MODEL_PAGE_CONCURRENCY: "1",
+          MODEL_REQUEST_MAX_RETRIES: "0",
+        },
+        fetchImpl,
+      },
+    ),
+    /第 1\/2 页识别失败：模型请求超时（单次等待上限 180 秒）/,
+  );
+  assert.equal(calls, 1);
 });
 
 function jsonResponse(value, status = 200) {

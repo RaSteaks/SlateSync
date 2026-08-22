@@ -1,0 +1,9 @@
+{
+  "name": "timeout-retry",
+  "defaultTimeoutMs": 180000,
+  "defaultRetries": 1,
+  "timeoutErrorNames": ["TimeoutError", "AbortError"],
+  "successAfterAttempts": 2,
+  "exhaustedStatus": 504,
+  "exhaustedMessageIncludes": "共尝试 2 次"
+}

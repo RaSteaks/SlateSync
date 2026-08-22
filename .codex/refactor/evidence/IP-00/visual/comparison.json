@@ -1,0 +1,132 @@
+{
+  "status": "stable",
+  "captureCommand": "./node_modules/.bin/electron test-support/baseline/capture-visuals.mjs",
+  "firstCapturedAt": "2026-08-19T18:14:44.732Z",
+  "secondCapturedAt": "2026-08-19T18:15:04.191Z",
+  "firstDurationMs": 1673,
+  "secondDurationMs": 1676,
+  "first": [
+    {
+      "state": "project-library",
+      "width": 1440,
+      "height": 900,
+      "sha256": "8e3773b8b9882ee411d007d43d860a46dece6f1f2a0c14b28719197e47a48992"
+    },
+    {
+      "state": "workspace-empty",
+      "width": 1440,
+      "height": 900,
+      "sha256": "7b2330d2562250dba76af2e9c2490d954a7ed42326f22d34677ea76d6ce15c9c"
+    },
+    {
+      "state": "workspace-ready",
+      "width": 1440,
+      "height": 900,
+      "sha256": "4f106fd8d231792b821f87aea7660d23c564f2cb02e86a1661bbfa713e27fa3f"
+    },
+    {
+      "state": "recognition-progress",
+      "width": 1440,
+      "height": 900,
+      "sha256": "311ecd89027ec80f36b70f4864a9027532e057242f7c8dd03714a45da4164e2e"
+    },
+    {
+      "state": "result-detail",
+      "width": 1440,
+      "height": 900,
+      "sha256": "05979970a4a57d51cc220532014a024fe8944e811326a3b7db1643208a3dfe66"
+    },
+    {
+      "state": "csv-preview",
+      "width": 1440,
+      "height": 900,
+      "sha256": "900dea530ee484334266f7db1b7e5bafd0ba9d47cee25993eab0b374991ebe1b"
+    },
+    {
+      "state": "project-settings",
+      "width": 1440,
+      "height": 900,
+      "sha256": "56a9d822cf0ad542f93817103cf84fb1fbd61698a818bd6a4e8e0f24c9c571e5"
+    },
+    {
+      "state": "global-settings",
+      "width": 1440,
+      "height": 900,
+      "sha256": "2c7ccb373301f56df02a03d9657dd0ee7aa1ad811e47f774b2627ddbd6db1cc4"
+    },
+    {
+      "state": "new-project-dialog",
+      "width": 1440,
+      "height": 900,
+      "sha256": "bb0d148d9470b5d955251f8a59b2fa5d7382d0db6ce7ece03c2c15c1acf4e120"
+    },
+    {
+      "state": "ocr-setup-dialog",
+      "width": 1440,
+      "height": 900,
+      "sha256": "9d9f31be28f5256bca584d6e9bb9476212968a3466bffaab075f12ab1478e76b"
+    }
+  ],
+  "second": [
+    {
+      "state": "project-library",
+      "width": 1440,
+      "height": 900,
+      "sha256": "8e3773b8b9882ee411d007d43d860a46dece6f1f2a0c14b28719197e47a48992"
+    },
+    {
+      "state": "workspace-empty",
+      "width": 1440,
+      "height": 900,
+      "sha256": "7b2330d2562250dba76af2e9c2490d954a7ed42326f22d34677ea76d6ce15c9c"
+    },
+    {
+      "state": "workspace-ready",
+      "width": 1440,
+      "height": 900,
+      "sha256": "4f106fd8d231792b821f87aea7660d23c564f2cb02e86a1661bbfa713e27fa3f"
+    },
+    {
+      "state": "recognition-progress",
+      "width": 1440,
+      "height": 900,
+      "sha256": "311ecd89027ec80f36b70f4864a9027532e057242f7c8dd03714a45da4164e2e"
+    },
+    {
+      "state": "result-detail",
+      "width": 1440,
+      "height": 900,
+      "sha256": "05979970a4a57d51cc220532014a024fe8944e811326a3b7db1643208a3dfe66"
+    },
+    {
+      "state": "csv-preview",
+      "width": 1440,
+      "height": 900,
+      "sha256": "900dea530ee484334266f7db1b7e5bafd0ba9d47cee25993eab0b374991ebe1b"
+    },
+    {
+      "state": "project-settings",
+      "width": 1440,
+      "height": 900,
+      "sha256": "56a9d822cf0ad542f93817103cf84fb1fbd61698a818bd6a4e8e0f24c9c571e5"
+    },
+    {
+      "state": "global-settings",
+      "width": 1440,
+      "height": 900,
+      "sha256": "2c7ccb373301f56df02a03d9657dd0ee7aa1ad811e47f774b2627ddbd6db1cc4"
+    },
+    {
+      "state": "new-project-dialog",
+      "width": 1440,
+      "height": 900,
+      "sha256": "bb0d148d9470b5d955251f8a59b2fa5d7382d0db6ce7ece03c2c15c1acf4e120"
+    },
+    {
+      "state": "ocr-setup-dialog",
+      "width": 1440,
+      "height": 900,
+      "sha256": "9d9f31be28f5256bca584d6e9bb9476212968a3466bffaab075f12ab1478e76b"
+    }
+  ]
+}

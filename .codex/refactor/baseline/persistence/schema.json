@@ -1,0 +1,70 @@
+{
+  "baselineCommit": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "filenames": { "legacy": "slatesync.sqlite", "library": "library.sqlite", "project": "project.sqlite" },
+  "pragmas": { "journal_mode": "wal", "foreign_keys": 1, "busy_timeout": 5000 },
+  "library": {
+    "tables": {
+      "library_meta": [
+        ["key", "TEXT", 0, null, 1],
+        ["value", "TEXT", 1, null, 0]
+      ],
+      "projects": [
+        ["id", "TEXT", 0, null, 1],
+        ["relative_path", "TEXT", 1, null, 0],
+        ["name", "TEXT", 1, null, 0],
+        ["description", "TEXT", 1, "''", 0],
+        ["archived_at", "TEXT", 0, null, 0],
+        ["created_at", "TEXT", 1, null, 0],
+        ["updated_at", "TEXT", 1, null, 0]
+      ]
+    },
+    "indexes": [
+      { "name": "projects_updated_at_idx", "table": "projects", "unique": false, "columns": ["updated_at DESC"] },
+      { "name": "sqlite_autoindex_library_meta_1", "table": "library_meta", "unique": true, "columns": ["key"] },
+      { "name": "sqlite_autoindex_projects_1", "table": "projects", "unique": true, "columns": ["id"] },
+      { "name": "sqlite_autoindex_projects_2", "table": "projects", "unique": true, "columns": ["relative_path"] }
+    ],
+    "foreignKeys": []
+  },
+  "project": {
+    "tables": {
+      "app_meta": [["key", "TEXT", 0, null, 1], ["value", "TEXT", 1, null, 0]],
+      "project_meta": [["key", "TEXT", 0, null, 1], ["value", "TEXT", 1, null, 0]],
+      "tasks": [["id", "TEXT", 0, null, 1], ["data_json", "TEXT", 1, null, 0], ["created_at", "TEXT", 1, null, 0], ["updated_at", "TEXT", 1, null, 0]],
+      "diagnostic_sessions": [["id", "TEXT", 0, null, 1], ["data_json", "TEXT", 1, null, 0], ["saved_at", "TEXT", 1, null, 0]],
+      "scenario_profiles": [["id", "TEXT", 0, null, 1], ["schema_version", "INTEGER", 1, null, 0], ["fingerprint_version", "INTEGER", 1, null, 0], ["fingerprint", "TEXT", 1, null, 0], ["profile_json", "TEXT", 1, null, 0], ["sample_count", "INTEGER", 1, "1", 0], ["created_at", "TEXT", 1, null, 0], ["updated_at", "TEXT", 1, null, 0], ["last_used_at", "TEXT", 1, null, 0]],
+      "scenario_observations": [["id", "TEXT", 0, null, 1], ["profile_id", "TEXT", 0, null, 0], ["fingerprint_version", "INTEGER", 1, null, 0], ["fingerprint", "TEXT", 1, null, 0], ["observation_json", "TEXT", 1, null, 0], ["created_at", "TEXT", 1, null, 0]]
+    },
+    "indexes": [
+      { "name": "tasks_updated_at_idx", "table": "tasks", "unique": false, "columns": ["updated_at"] },
+      { "name": "tasks_created_at_idx", "table": "tasks", "unique": false, "columns": ["created_at DESC"] },
+      { "name": "diagnostics_saved_at_idx", "table": "diagnostic_sessions", "unique": false, "columns": ["saved_at"] },
+      { "name": "scenario_profiles_last_used_idx", "table": "scenario_profiles", "unique": false, "columns": ["last_used_at"] },
+      { "name": "scenario_observations_created_idx", "table": "scenario_observations", "unique": false, "columns": ["created_at"] },
+      { "name": "sqlite_autoindex_app_meta_1", "table": "app_meta", "unique": true, "columns": ["key"] },
+      { "name": "sqlite_autoindex_project_meta_1", "table": "project_meta", "unique": true, "columns": ["key"] },
+      { "name": "sqlite_autoindex_tasks_1", "table": "tasks", "unique": true, "columns": ["id"] },
+      { "name": "sqlite_autoindex_diagnostic_sessions_1", "table": "diagnostic_sessions", "unique": true, "columns": ["id"] },
+      { "name": "sqlite_autoindex_scenario_profiles_1", "table": "scenario_profiles", "unique": true, "columns": ["id"] },
+      { "name": "sqlite_autoindex_scenario_profiles_2", "table": "scenario_profiles", "unique": true, "columns": ["fingerprint_version", "fingerprint"] },
+      { "name": "sqlite_autoindex_scenario_observations_1", "table": "scenario_observations", "unique": true, "columns": ["id"] }
+    ],
+    "foreignKeys": [{ "table": "scenario_observations", "from": "profile_id", "to": "scenario_profiles.id", "onUpdate": "NO ACTION", "onDelete": "SET NULL" }]
+  },
+  "canonicalFiles": {
+    "library.json": ["id", "name", "formatVersion", "createdAt"],
+    "project.json": ["id", "libraryId", "name", "description", "formatVersion", "createdAt", "updatedAt"],
+    "project_meta": ["project_id", "library_id", "name", "description", "settings", "created_at", "updated_at", "archived_at", "schema_version"],
+    "settings.json": ["libraryPath", "ocrPythonPath", "ocrSetupCompleted", "ocrSetupSkipped"]
+  },
+  "versions": { "libraryFormat": 1, "projectFormat": 1, "projectSettings": 1, "legacyMigrationMarker": "legacy_migration_v1" },
+  "directoryTree": [
+    "<Library>.slatesync-library/library.json",
+    "<Library>.slatesync-library/library.sqlite",
+    "<Library>.slatesync-library/Projects/<project-id>/project.json",
+    "<Library>.slatesync-library/Projects/<project-id>/project.sqlite",
+    "<Library>.slatesync-library/Projects/<project-id>/tasks/<id>.json",
+    "<Library>.slatesync-library/Projects/<project-id>/diagnostics/<id>.json"
+  ],
+  "modes": { "directories": "0700 where POSIX supports it", "databasesAndJson": "0600 where POSIX supports it" }
+}

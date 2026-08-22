@@ -20,6 +20,9 @@ describe("settings-store", () => {
   it("returns defaults when no file exists", async () => {
     const store = createSettingsStore(tempDir);
     assert.deepEqual(await store.load(), {
+      // The library root is a machine setting; project data remains in the
+      // selected library and is never placed in this settings file.
+      libraryPath: "",
       ocrPythonPath: "",
       ocrSetupCompleted: false,
       ocrSetupSkipped: false,

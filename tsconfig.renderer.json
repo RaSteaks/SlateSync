@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "outDir": "out/types/renderer",
+    "rootDir": "src/renderer",
+    "tsBuildInfoFile": "out/.tsbuildinfo/renderer.tsbuildinfo",
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"],
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}

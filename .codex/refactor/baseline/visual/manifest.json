@@ -1,0 +1,125 @@
+{
+  "baselineCommit": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "capturedAt": "2026-08-19T18:15:04.191Z",
+  "fixtureId": "synthetic-project-library-v1",
+  "platform": "darwin-arm64",
+  "electron": "43.3.0",
+  "captureCommand": "./node_modules/.bin/electron test-support/baseline/capture-visuals.mjs",
+  "viewport": {
+    "width": 1440,
+    "height": 900,
+    "kind": "content"
+  },
+  "deviceScaleFactor": 1,
+  "appearance": "light",
+  "reducedMotion": true,
+  "locale": "zh-CN",
+  "timezone": "Asia/Shanghai",
+  "durationMs": 1676,
+  "stability": {
+    "verifiedAgainstPreviousRun": true,
+    "identicalCaptureCount": 10
+  },
+  "captures": [
+    {
+      "state": "project-library",
+      "route": "projects",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "project-library.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 70587,
+      "sha256": "8e3773b8b9882ee411d007d43d860a46dece6f1f2a0c14b28719197e47a48992"
+    },
+    {
+      "state": "workspace-empty",
+      "route": "workspace",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "workspace-empty.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 351278,
+      "sha256": "7b2330d2562250dba76af2e9c2490d954a7ed42326f22d34677ea76d6ce15c9c"
+    },
+    {
+      "state": "workspace-ready",
+      "route": "workspace",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "workspace-ready.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 178031,
+      "sha256": "4f106fd8d231792b821f87aea7660d23c564f2cb02e86a1661bbfa713e27fa3f"
+    },
+    {
+      "state": "recognition-progress",
+      "route": "workspace",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "recognition-progress.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 149382,
+      "sha256": "311ecd89027ec80f36b70f4864a9027532e057242f7c8dd03714a45da4164e2e"
+    },
+    {
+      "state": "result-detail",
+      "route": "workspace",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "result-detail.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 290289,
+      "sha256": "05979970a4a57d51cc220532014a024fe8944e811326a3b7db1643208a3dfe66"
+    },
+    {
+      "state": "csv-preview",
+      "route": "workspace",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "csv-preview.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 256837,
+      "sha256": "900dea530ee484334266f7db1b7e5bafd0ba9d47cee25993eab0b374991ebe1b"
+    },
+    {
+      "state": "project-settings",
+      "route": "project-settings",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "project-settings.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 90721,
+      "sha256": "56a9d822cf0ad542f93817103cf84fb1fbd61698a818bd6a4e8e0f24c9c571e5"
+    },
+    {
+      "state": "global-settings",
+      "route": "global-settings",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "global-settings.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 72936,
+      "sha256": "2c7ccb373301f56df02a03d9657dd0ee7aa1ad811e47f774b2627ddbd6db1cc4"
+    },
+    {
+      "state": "new-project-dialog",
+      "route": "projects",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "new-project-dialog.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 109172,
+      "sha256": "bb0d148d9470b5d955251f8a59b2fa5d7382d0db6ce7ece03c2c15c1acf4e120"
+    },
+    {
+      "state": "ocr-setup-dialog",
+      "route": "global-settings",
+      "fixtureId": "synthetic-project-library-v1",
+      "file": "ocr-setup-dialog.png",
+      "width": 1440,
+      "height": 900,
+      "bytes": 121499,
+      "sha256": "9d9f31be28f5256bca584d6e9bb9476212968a3466bffaab075f12ab1478e76b"
+    }
+  ]
+}

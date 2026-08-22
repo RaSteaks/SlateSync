@@ -1,5 +1,4 @@
-// Browser-compatible slate CSV parser.
-// Mirrors lib/slate-csv.mjs but runs in the browser (no Node.js dependencies).
+// Renderer-side slate CSV parser with no Node.js API dependencies.
 
 export function parseSlateCsv(text) {
   const lines = text.split(/\r?\n/).filter((line) => line.trim());

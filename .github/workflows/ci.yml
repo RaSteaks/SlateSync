@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check source files
+        run: npm run check
+
+      - name: Typecheck and build modern targets
+        run: npm run validate:modern
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify Electron and Node native ABI lifecycle
+        # This probe uses Electron's Node mode, so CI validates both native
+        # runtimes without requiring a graphical desktop or weakening E2E.
+        run: npm run test:native:abi

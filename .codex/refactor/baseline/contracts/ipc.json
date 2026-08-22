@@ -1,0 +1,66 @@
+{
+  "baselineCommit": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "rendererGlobal": "electronAPI",
+  "preloadFile": "out/preload/index.cjs",
+  "bridgeModule": "public/electron-bridge.js",
+  "requestMethods": {
+    "getConfig": { "channel": "get-config", "args": [] },
+    "saveProviderKey": { "channel": "save-provider-key", "args": ["provider", "apiKey"] },
+    "getModels": { "channel": "get-models", "args": ["providerId", "forceRefresh"] },
+    "recognize": { "channel": "recognize", "args": ["requestBody"] },
+    "saveFile": { "channel": "save-file", "args": ["defaultFilename", "ArrayBuffer|TypedArray|legacy array"] },
+    "selectDirectory": { "channel": "select-directory", "args": [] },
+    "scanSlateDirectory": { "channel": "scan-slate-directory", "args": ["dirPath", "expectedKeys", "maxDepth"] },
+    "listProjects": { "channel": "list-projects", "args": [] },
+    "getLibraryInfo": { "channel": "get-library-info", "args": [] },
+    "importProjectLibrary": { "channel": "import-project-library", "args": [] },
+    "exportProjectLibrary": { "channel": "export-project-library", "args": [] },
+    "changeLibraryLocation": { "channel": "change-library-location", "args": [] },
+    "createProject": { "channel": "create-project", "args": ["project"] },
+    "loadProject": { "channel": "load-project", "args": ["id"] },
+    "updateProject": { "channel": "update-project", "args": ["project"] },
+    "archiveProject": { "channel": "archive-project", "args": ["id"] },
+    "restoreProject": { "channel": "restore-project", "args": ["id"] },
+    "listTasks": { "channel": "list-tasks", "args": ["projectId"] },
+    "loadTask": { "channel": "load-task", "args": ["projectId", "id"] },
+    "saveTask": { "channel": "save-task", "args": ["projectId", "task"] },
+    "deleteTask": { "channel": "delete-task", "args": ["projectId", "id"] },
+    "listScenarios": { "channel": "list-scenarios", "args": ["projectId"] },
+    "loadScenario": { "channel": "load-scenario", "args": ["projectId", "id"] },
+    "importScenario": { "channel": "import-scenario", "args": ["projectId", "profile"] },
+    "getOcrSettings": { "channel": "get-ocr-settings", "args": [] },
+    "saveOcrSettings": { "channel": "save-ocr-settings", "args": ["settings"] },
+    "checkOcr": { "channel": "check-ocr", "args": ["pythonPath"] }
+  },
+  "events": {
+    "recognitionProgress": {
+      "channel": "recognition-progress",
+      "subscribeMethod": "onRecognitionProgress",
+      "unsubscribeMethod": "removeRecognitionProgressListener",
+      "cleanup": "recognizeApi finally removes the listener"
+    }
+  },
+  "security": {
+    "contextIsolation": true,
+    "nodeIntegration": false,
+    "sandbox": true,
+    "webSecurity": true,
+    "allowRunningInsecureContent": false,
+    "externalNavigation": "denied",
+    "externalWindow": "denied"
+  },
+  "errorTransport": "ipcRenderer.invoke rejects/thrown errors; no Result<T> envelope in the current implementation",
+  "cancelRecognitionChannel": null,
+  "transition": {
+    "version": 1,
+    "activeGlobal": "slateSync",
+    "legacyGlobal": "electronAPI",
+    "namespaces": ["app", "projects", "tasks", "recognition", "files", "settings"],
+    "resultEnvelope": {
+      "success": "{ ok: true, data }",
+      "failure": "{ ok: false, error: { code, message, retryable } }"
+    },
+    "adapter": "public/electron-bridge.js",
+    "removalPackage": "IP-08"
+  }
+}

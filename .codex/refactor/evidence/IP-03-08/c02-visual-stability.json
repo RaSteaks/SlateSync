@@ -1,0 +1,23 @@
+{
+  "firstRoot": ".codex/refactor/evidence/IP-03-08/c02-final-visual-run-1",
+  "secondRoot": ".codex/refactor/evidence/IP-03-08/c02-final-visual-run-2",
+  "captureCount": 14,
+  "identicalCaptureCount": 14,
+  "states": [
+    "project-library-empty-dark",
+    "new-project-dialog-dark",
+    "project-library-light",
+    "project-library-compact-light",
+    "workspace-empty-compact-light",
+    "global-settings-light",
+    "project-settings-light",
+    "project-settings-error-light",
+    "workspace-dark-reduced-motion",
+    "project-library-archived-dark",
+    "workspace-ready-dark",
+    "recognition-progress-dark",
+    "result-detail-dark",
+    "csv-preview-dark"
+  ],
+  "result": "PASS"
+}

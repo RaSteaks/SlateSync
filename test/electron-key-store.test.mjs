@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createKeyStore } from "../lib/key-store.mjs";
+import { createKeyStore } from "../electron/key-store.mjs";
 
 describe("electron key-store", () => {
   let tempDir;

@@ -1,7 +1,7 @@
 // postinstall: copy the pdf.js build artifacts into public/vendor/pdfjs/.
 //
-// The browser bundle loads pdf.js from there, so this keeps the vendored copy
-// in sync with the installed pdfjs-dist version.
+// The Electron renderer loads pdf.js from there, so this keeps the vendored
+// copy in sync with the installed pdfjs-dist version.
 import { copyFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";

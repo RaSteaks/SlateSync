@@ -25,6 +25,7 @@
         </span>
       </a>
       <div class="topbar-right">
+        <span id="project-context" class="project-context" hidden></span>
         <div id="task-switcher" class="task-switcher" hidden>
           <select id="task-select" class="task-select" aria-label="切换识别任务">
             <option value="">新任务</option>
@@ -36,11 +37,37 @@
       </div>
     </header>
 
-    <main class="page-shell">
+    <div class="app-shell">
+      <aside id="app-nav" class="app-nav" aria-label="主导航" hidden>
+        <div class="nav-label">PROJECT LIBRARY</div>
+        <button id="nav-projects" class="nav-item" type="button">
+          <span class="nav-icon" aria-hidden="true">▦</span>
+          <span>项目库</span>
+        </button>
+        <div id="current-project-nav" class="current-project-nav" hidden>
+          <div class="nav-label">CURRENT PROJECT</div>
+          <button id="nav-workspace" class="nav-item" type="button">
+            <span class="nav-icon" aria-hidden="true">⌁</span>
+            <span>工作台</span>
+          </button>
+          <button id="nav-project-settings" class="nav-item" type="button">
+            <span class="nav-icon" aria-hidden="true">⚙</span>
+            <span>项目设置</span>
+          </button>
+        </div>
+        <div class="nav-spacer"></div>
+        <button id="nav-global-settings" class="nav-item" type="button">
+          <span class="nav-icon" aria-hidden="true">☷</span>
+          <span>全局设置</span>
+        </button>
+      </aside>
+
+      <div class="app-content">
+      <main id="workspace-page" class="page-shell app-page">
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">AI-ASSISTED POST WORKFLOW</p>
-          <h1>从场记单到 Resolve，<span>一次完成。</span></h1>
+          <h1>让每条场记，<span>准确落进 Resolve。</span></h1>
           <p>识别纸质场记、匹配素材元数据，校对后导出可直接使用的 Resolve CSV。</p>
         </div>
         <ol class="workflow-steps" aria-label="工作流程">
@@ -164,8 +191,6 @@
                         <small id="slate-help">请先载入 Resolve CSV</small>
                       </span>
                     </button>
-                    <input id="slate-input" type="file" webkitdirectory directory multiple hidden />
-
                     <div id="slate-card" class="file-card" hidden>
                       <div class="txt-file-badge">TXT</div>
                       <div>
@@ -180,7 +205,8 @@
               </details>
             </div>
 
-            <div class="panel-group">
+            <!-- Electron 项目设置页独立承载这些识别控件，工作台只保留当前项目的快捷入口。 -->
+            <div id="recognition-settings-group" class="panel-group">
               <div class="panel-heading compact-heading">
                 <div>
                   <div class="panel-group-title">RECOGNITION</div>
@@ -224,7 +250,15 @@
                   <option value="high">精确模式 · 主识别 + 核心查漏</option>
                   <option value="standard">快速模式 · 单次主识别</option>
                 </select>
-                <small class="api-key-note">精确模式适合正式交付；清晰且格式稳定的场记单可使用快速模式</small>
+                <small id="accuracy-mode-note" class="api-key-note">精确模式适合正式交付；清晰且格式稳定的场记单可使用快速模式</small>
+              </label>
+
+              <label class="field">
+                <span>场记结构</span>
+                <select id="scenario-select">
+                  <option value="">自动识别并学习版式</option>
+                </select>
+                <small class="api-key-note">首次识别会保存版式指纹；后续相似场记单可复用已学习结构</small>
               </label>
 
               <details class="advanced-settings">
@@ -330,6 +364,8 @@
             </button>
           </div>
           <div class="result-actions">
+            <span id="task-save-status" class="task-save-status" data-state="idle" aria-live="polite" hidden></span>
+            <button id="task-save-retry" class="text-button task-save-retry" type="button" hidden>重试保存</button>
             <button id="export-button" class="primary-button compact" type="button">
               下载 Resolve CSV
             </button>
@@ -388,8 +424,182 @@
       </section>
     </main>
 
+    <section id="project-home-page" class="app-page project-page" hidden>
+      <div class="page-header project-page-header">
+        <div>
+          <p class="eyebrow">PROJECT LIBRARY</p>
+          <h1>项目库</h1>
+          <p id="library-location" class="page-subtitle">正在读取本地 Library…</p>
+        </div>
+        <div class="project-header-actions">
+          <button id="import-library-button" class="secondary-button compact" type="button">导入 Library</button>
+          <button id="export-library-button" class="secondary-button compact" type="button">导出 Library</button>
+          <button id="change-library-location-button" class="secondary-button compact" type="button">更改存储位置</button>
+          <button id="new-project-button" class="primary-button compact" type="button">＋ 新建项目</button>
+        </div>
+      </div>
+      <div id="project-home-error" class="error-message" hidden></div>
+      <p id="library-action-status" class="library-action-status" hidden></p>
+      <section class="project-section">
+        <div class="section-heading">
+          <div>
+            <span class="preview-kicker">ACTIVE PROJECTS</span>
+            <h2>进行中的项目</h2>
+          </div>
+          <span id="active-project-count" class="section-count">0 个项目</span>
+        </div>
+        <div id="project-grid" class="project-grid"></div>
+        <div id="project-empty" class="project-empty" hidden>
+          <strong>还没有项目</strong>
+          <p>创建一个项目后，识别任务和场记结构都会保存在项目自己的数据库中。</p>
+          <button id="project-empty-create" class="secondary-button" type="button">创建第一个项目</button>
+        </div>
+      </section>
+      <section class="project-section archived-project-section">
+        <div class="section-heading">
+          <div>
+            <span class="preview-kicker">ARCHIVED</span>
+            <h2>已归档项目</h2>
+          </div>
+          <span id="archived-project-count" class="section-count">0 个项目</span>
+        </div>
+        <div id="archived-project-grid" class="project-grid archived-grid"></div>
+      </section>
+    </section>
+
+    <section id="project-settings-page" class="app-page settings-page" hidden>
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">PROJECT SETTINGS</p>
+          <h1 id="project-settings-heading">项目设置</h1>
+          <p class="page-subtitle">设置只作用于当前项目，不会影响其他项目。</p>
+        </div>
+        <button id="project-settings-back" class="secondary-button" type="button">返回工作台</button>
+      </div>
+      <form id="project-settings-form" class="settings-layout">
+        <section class="settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">PROJECT</span>
+              <h2>项目资料</h2>
+            </div>
+          </div>
+          <label class="field">
+            <span>项目名称</span>
+            <input id="project-name-input" type="text" maxlength="80" required />
+          </label>
+          <label class="field">
+            <span>项目描述</span>
+            <textarea id="project-description-input" rows="3" maxlength="500" placeholder="例如：第一季主线拍摄素材"></textarea>
+          </label>
+        </section>
+
+        <section class="settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">RECOGNITION</span>
+              <h2>识别偏好</h2>
+            </div>
+          </div>
+          <label class="field">
+            <span>API 服务商</span>
+            <select id="project-provider-select"></select>
+          </label>
+          <label class="field">
+            <span>识别模型</span>
+            <select id="project-model-select"></select>
+          </label>
+          <label class="field">
+            <span>识别模式</span>
+            <select id="project-accuracy-mode-select">
+              <option value="high">精确模式 · 主识别 + 核心查漏</option>
+              <option value="standard">快速模式 · 单次主识别</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>场记结构 Profile</span>
+            <select id="project-scenario-select"></select>
+            <small class="api-key-note">Profile 只在当前项目内学习和复用。</small>
+          </label>
+          <label class="field">
+            <span>项目背景与识别提示</span>
+            <textarea id="project-custom-prompt-input" rows="4" maxlength="2000" placeholder="例如：本片使用繁体字；A 机为主机；场次前缀为 EP02…"></textarea>
+          </label>
+        </section>
+
+        <section class="settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">RESOLVE OUTPUT</span>
+              <h2>场 / 镜 / 次输出</h2>
+            </div>
+            <span class="settings-note">项目优先</span>
+          </div>
+          <p class="settings-help">这些规则会同时用于识别结果规范化、CSV 回填和最终导出。</p>
+          <div class="format-grid">
+            <label class="field"><span>场格式</span><input id="project-scene-format" type="text" maxlength="6" pattern="X{1,6}" /></label>
+            <label class="field"><span>镜格式</span><input id="project-shot-format" type="text" maxlength="6" pattern="X{1,6}" /></label>
+            <label class="field"><span>次格式</span><input id="project-take-format" type="text" maxlength="6" pattern="X{1,6}" /></label>
+          </div>
+          <div class="format-grid">
+            <label class="field"><span>过条标记</span><input id="project-good-comment" type="text" maxlength="32" /></label>
+            <label class="field"><span>保条标记</span><input id="project-hold-comment" type="text" maxlength="32" /></label>
+          </div>
+        </section>
+
+        <div class="settings-actions">
+          <button id="project-settings-reset" class="secondary-button" type="button">恢复默认输出</button>
+          <span id="project-settings-status" class="settings-save-status" aria-live="polite"></span>
+          <button id="project-settings-save" class="primary-button compact" type="submit">保存项目设置</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="global-settings-page" class="app-page settings-page" hidden>
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">APPLICATION SETTINGS</p>
+          <h1>全局设置</h1>
+          <p class="page-subtitle">这些设置作用于本机 SlateSync，不属于任何单个项目。</p>
+        </div>
+      </div>
+      <div class="settings-layout">
+        <section class="settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">AI CONNECTIONS</span>
+              <h2>API 服务商</h2>
+            </div>
+          </div>
+          <label class="field">
+            <span>服务商</span>
+            <select id="global-provider-select"></select>
+          </label>
+          <div class="api-key-row global-api-key-row">
+            <input id="global-api-key-input" type="password" placeholder="粘贴 API Key" autocomplete="off" spellcheck="false" />
+            <button id="global-save-key-button" class="secondary-button" type="button">保存</button>
+          </div>
+          <small id="global-api-key-note" class="api-key-note">选择服务商查看配置状态。</small>
+        </section>
+        <section class="settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">LOCAL OCR</span>
+              <h2>本地 OCR</h2>
+            </div>
+            <span id="global-ocr-status" class="settings-note">未检测</span>
+          </div>
+          <p class="settings-help">PaddleOCR 会在识别前提取文字和坐标，作为模型识别的证据层。</p>
+          <button id="global-ocr-open" class="secondary-button" type="button">配置本地 OCR</button>
+        </section>
+      </div>
+    </section>
+      </div>
+    </div>
+
     <footer>
       <span>SlateSync · 为影视后期设计</span>
+      <span class="footer-security">原始文件与识别数据仅在本地处理</span>
     </footer>
 
     <div id="ocr-setup-overlay" class="ocr-setup-overlay" hidden>
@@ -420,6 +630,30 @@
           <button id="ocr-save-button" class="primary-button compact" type="button">保存并启用</button>
         </div>
       </div>
+    </div>
+
+    <div id="project-dialog" class="project-dialog-overlay" hidden>
+      <form id="project-dialog-form" class="project-dialog" role="dialog" aria-modal="true" aria-labelledby="project-dialog-title">
+        <div class="settings-card-heading">
+          <div>
+            <span class="preview-kicker">NEW PROJECT</span>
+            <h2 id="project-dialog-title">新建项目</h2>
+          </div>
+          <button id="project-dialog-close" class="icon-button" type="button" aria-label="关闭">×</button>
+        </div>
+        <label class="field">
+          <span>项目名称</span>
+          <input id="new-project-name" type="text" maxlength="80" required placeholder="例如：第一季 / Day 01" />
+        </label>
+        <label class="field">
+          <span>项目描述</span>
+          <textarea id="new-project-description" rows="3" maxlength="500" placeholder="可选"></textarea>
+        </label>
+        <div class="settings-actions">
+          <button id="project-dialog-cancel" class="secondary-button" type="button">取消</button>
+          <button class="primary-button compact" type="submit">创建项目</button>
+        </div>
+      </form>
     </div>
 
     <script type="module" src="./app.js"></script>

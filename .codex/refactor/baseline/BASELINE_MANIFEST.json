@@ -1,0 +1,93 @@
+{
+  "package": "IP-00",
+  "status": "blocked",
+  "capturedAt": "2026-08-18T07:29:12.000Z",
+  "repository": {
+    "head": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+    "branch": "codex/react-architecture-refactor",
+    "upstream": "origin/codex/react-architecture-refactor",
+    "ahead": 0,
+    "behind": 0,
+    "statusBeforeImplementation": [
+      "# branch.oid c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+      "# branch.head codex/react-architecture-refactor",
+      "# branch.upstream origin/codex/react-architecture-refactor",
+      "# branch.ab +0 -0",
+      "? .codex/refactor/packages/"
+    ],
+    "knownArchitectArtifact": ".codex/refactor/packages/IP-00.md",
+    "prePackageObservation": "The source tree was clean on c7dafa4. An external checkout moved from codex/electron-only to codex/react-architecture-refactor while the package was being prepared; both branches pointed to c7dafa4 and no source content changed."
+  },
+  "protection": {
+    "preExistingUserChanges": [],
+    "trackedFilesChangedBeforeIp00": [],
+    "stagedFilesChangedBeforeIp00": [],
+    "untrackedFilesKnownBeforeIp00": [
+      ".codex/refactor/packages/IP-00.md"
+    ],
+    "trackedBuildInputsObserved": [
+      "build/** (including tracked build/.DS_Store files)",
+      "build/slatesync.icon/**",
+      "build/entitlements.mac.plist"
+    ],
+    "ignoredGeneratedInputsObserved": [
+      "node_modules/",
+      "dist/",
+      "bin/",
+      "public/vendor/"
+    ],
+    "mutatingGitOperationsPerformed": [],
+    "userChangesCleanedOverwrittenStagedCommittedOrStashed": false
+  },
+  "runtime": {
+    "os": "Darwin 24.6.0",
+    "architecture": "arm64",
+    "node": "v24.13.0",
+    "npm": "11.6.2",
+    "ciNode": "22",
+    "packageManagerLockfileVersion": 3,
+    "directDependencies": {
+      "@electron/rebuild": "4.2.0",
+      "better-sqlite3": "12.11.1",
+      "electron": "43.3.0",
+      "electron-builder": "26.15.3",
+      "pdfjs-dist": "5.6.205",
+      "undici": "8.10.0"
+    }
+  },
+  "sha256": {
+    "package.json": "8a10340f0a81078cea84d9d9bae39e53d9d191e18121add496e47673a60697b2",
+    "package-lock.json": "ff751acdf5e82f5634a2cf767bb76c373136092477b0085d2dc7309ac6a362e1",
+    "electron-builder.yml": "47adbc692ad19afdcb9c4a21814e5d9c17619ef6485f2972e61ebb26c90fab0d",
+    "slatesync.config.json": "7f79acced6d756021178a2d176cf764c109b389aec36d443a627ad74238d6846",
+    ".env.example": "9d576a0a37b8ebdf5a0c0f488269ba903eae27c0c644ae5305e94be49a0b2f27"
+  },
+  "testBaseline": {
+    "check": "passed",
+    "testCommand": "npm test",
+    "tests": 226,
+    "passed": 225,
+    "failed": 1,
+    "skipped": 0,
+    "todo": 0,
+    "durationMs": 1096.127958,
+    "nativeRebuild": "passed"
+  },
+  "visual": {
+    "status": "blocked",
+    "decision": "IP-00-VISUAL-001",
+    "viewport": { "width": 1440, "height": 900 },
+    "deviceScaleFactor": 1,
+    "appearance": "light",
+    "reducedMotion": true,
+    "requiredStates": 10,
+    "capturedStates": 0
+  },
+  "directoryBuild": {
+    "status": "blocked",
+    "decision": "IP-00-BUILD-001",
+    "exactCommand": "npm run electron:build:dir",
+    "lastExit": 130,
+    "lastStage": "macOS distribution signing"
+  }
+}

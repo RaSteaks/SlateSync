@@ -1,170 +1,154 @@
-// Unified API layer that transparently switches between Web (fetch) and
-// Electron (ipcRenderer.invoke) modes based on the runtime environment.
-//
-// When adding a new API endpoint, update all three locations:
-//   1. server.mjs (Web mode HTTP route)
-//   2. electron/ipc-handlers.mjs (Electron IPC handler)
-//   3. public/electron-bridge.js (this file, frontend dispatch)
+// Legacy Renderer compatibility adapter. The active typed window.slateSync
+// gateway is the only transport; this module only converts its Result<T>
+// values and request objects to the unchanged legacy call conventions. The
+// complete adapter is removed after the modern Renderer replaces its callers.
 
-import { readRecognitionResponse } from "./recognition-stream.js";
-
-export const isElectron = Boolean(globalThis.electronAPI?.isElectron);
-
-export async function fetchConfig() {
-  if (isElectron) {
-    return globalThis.electronAPI.getConfig();
-  }
-  const response = await fetch("/api/config");
-  return response.json();
+function electronApi() {
+  if (globalThis.slateSync) return globalThis.slateSync;
+  throw new Error("Electron preload bridge is unavailable");
 }
 
-export async function saveProviderKeyApi(providerId, apiKey) {
-  if (isElectron) {
-    return globalThis.electronAPI.saveProviderKey(providerId, apiKey);
-  }
-  const response = await fetch("/api/provider-key", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider: providerId, apiKey }),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "API Key 保存失败");
-  return data;
+function legacyError(result) {
+  const details = result?.error || {};
+  const error = new Error(details.message || "未知错误");
+  if (details.code) error.code = details.code;
+  if (details.retryable !== undefined) error.retryable = details.retryable;
+  const statusMatch = /^HTTP_(\d+)$/.exec(String(details.code || ""));
+  if (statusMatch) error.status = Number(statusMatch[1]);
+  return error;
 }
 
-export async function fetchModelsApi(providerId, forceRefresh = false) {
-  if (isElectron) {
-    return globalThis.electronAPI.getModels(providerId, forceRefresh);
-  }
-  const query = new URLSearchParams({ provider: providerId });
-  if (forceRefresh) query.set("refresh", "1");
-  const response = await fetch(`/api/models?${query}`);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "无法读取模型列表");
-  return data;
+function unwrap(result) {
+  if (result?.ok === true) return result.data;
+  if (result?.ok === false) throw legacyError(result);
+  throw new Error("Invalid slateSync Result envelope");
 }
 
-export async function recognizeStreamApi(requestBody, onProgress) {
-  if (isElectron) {
-    globalThis.electronAPI.onRecognitionProgress(onProgress);
-    try {
-      const parsed = JSON.parse(requestBody);
-      return await globalThis.electronAPI.recognize(parsed);
-    } finally {
-      globalThis.electronAPI.removeRecognitionProgressListener();
-    }
-  }
-  const response = await fetch("/api/recognize-stream", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/x-ndjson",
-    },
-    body: requestBody,
-  });
-  return readRecognitionResponse(response, onProgress);
+async function call(operation) {
+  return unwrap(await operation(electronApi()));
 }
 
-export async function downloadFileApi(bytes, filename) {
-  if (isElectron) {
-    return globalThis.electronAPI.saveFile(filename, Array.from(bytes));
-  }
-  const blob = new Blob([bytes], { type: "text/csv" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 0);
-  return { saved: true };
+export function fetchConfig() {
+  return call((api) => api.app.getConfig());
 }
 
-export async function pickDirectoryApi() {
-  if (isElectron) {
-    return globalThis.electronAPI.selectDirectory();
-  }
-  // Web mode: use File System Access API
-  if (typeof globalThis.showDirectoryPicker === "function") {
-    try {
-      const handle = await globalThis.showDirectoryPicker({
-        id: "slatesync-slate-root",
-        mode: "read",
-      });
-      return { dirPath: null, dirName: handle.name, handle };
-    } catch (error) {
-      if (error?.name === "AbortError") return null;
-      throw error;
-    }
-  }
-  return null;
+export function listProjectsApi() {
+  return call((api) => api.projects.list());
 }
 
-export async function scanSlateDirectoryApi(dirPath, expectedKeys, maxDepth) {
-  if (isElectron) {
-    return globalThis.electronAPI.scanSlateDirectory(
-      dirPath,
-      expectedKeys,
-      maxDepth,
-    );
-  }
-  throw new Error("Web 模式不支持主进程目录扫描");
+export function getLibraryInfoApi() {
+  return call((api) => api.projects.getLibraryInfo());
 }
 
-export async function listTasksApi() {
-  if (isElectron) {
-    return globalThis.electronAPI.listTasks();
-  }
-  const response = await fetch("/api/tasks");
-  return response.json();
+export function importProjectLibraryApi() {
+  return call((api) => api.projects.importLibrary());
 }
 
-export async function loadTaskApi(id) {
-  if (isElectron) {
-    return globalThis.electronAPI.loadTask(id);
-  }
-  const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`);
-  if (!response.ok) throw new Error("任务不存在");
-  return response.json();
+export function exportProjectLibraryApi() {
+  return call((api) => api.projects.exportLibrary());
 }
 
-export async function saveTaskApi(task) {
-  if (isElectron) {
-    return globalThis.electronAPI.saveTask(task);
-  }
-  const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(task),
-  });
-  return response.json();
+export function changeLibraryLocationApi() {
+  return call((api) => api.projects.changeLibraryLocation());
 }
 
-export async function deleteTaskApi(id) {
-  if (isElectron) {
-    return globalThis.electronAPI.deleteTask(id);
-  }
-  const response = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  return response.json();
+export function createProjectApi(project) {
+  return call((api) => api.projects.create(project));
 }
 
-export async function getOcrSettingsApi() {
-  if (isElectron) {
-    return globalThis.electronAPI.getOcrSettings();
-  }
-  throw new Error("本地 OCR 配置仅桌面版支持");
+export function loadProjectApi(id) {
+  return call((api) => api.projects.load({ id }));
 }
 
-export async function saveOcrSettingsApi(settings) {
-  if (isElectron) {
-    return globalThis.electronAPI.saveOcrSettings(settings);
-  }
-  throw new Error("本地 OCR 配置仅桌面版支持");
+export function updateProjectApi(project) {
+  return call((api) => api.projects.update(project));
 }
 
-export async function checkOcrApi(pythonPath) {
-  if (isElectron) {
-    return globalThis.electronAPI.checkOcr(pythonPath);
+export function archiveProjectApi(id) {
+  return call((api) => api.projects.archive({ id }));
+}
+
+export function restoreProjectApi(id) {
+  return call((api) => api.projects.restore({ id }));
+}
+
+export function listScenariosApi(projectId) {
+  return call((api) => api.projects.listScenarios({ projectId }));
+}
+
+export function loadScenarioApi(id, projectId) {
+  return call((api) => api.projects.loadScenario({ id, projectId }));
+}
+
+export function importScenarioApi(profile, projectId) {
+  return call((api) => api.projects.importScenario({ profile, projectId }));
+}
+
+export function saveProviderKeyApi(providerId, apiKey) {
+  return call((api) => api.settings.saveProviderKey({ provider: providerId, apiKey }));
+}
+
+export function fetchModelsApi(providerId, forceRefresh = false) {
+  return call((api) => api.recognition.getModels({ providerId, forceRefresh }));
+}
+
+export async function recognizeApi(requestBody, onProgress) {
+  const api = electronApi();
+  const request = JSON.parse(requestBody);
+  const unsubscribe = api.recognition.onProgress((event) => onProgress?.(event));
+  try {
+    return unwrap(await api.recognition.run(request));
+  } finally {
+    unsubscribe();
   }
-  throw new Error("本地 OCR 配置仅桌面版支持");
+}
+
+function exactBinary(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // Keep a full view zero-copy; only a subview receives one exact-range copy so
+  // adjacent bytes from a shared backing buffer cannot cross the IPC boundary.
+  return view.byteOffset === 0 && view.byteLength === view.buffer.byteLength
+    ? view.buffer
+    : view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+}
+
+export function downloadFileApi(bytes, filename) {
+  const data = exactBinary(bytes);
+  return call((api) => api.files.save({ defaultFilename: filename, data }));
+}
+
+export function pickDirectoryApi() {
+  return call((api) => api.files.selectDirectory());
+}
+
+export function scanSlateDirectoryApi(dirPath, expectedKeys, maxDepth) {
+  return call((api) => api.files.scanSlateDirectory({ dirPath, expectedKeys, maxDepth }));
+}
+
+export function listTasksApi(projectId) {
+  return call((api) => api.tasks.list({ projectId }));
+}
+
+export function loadTaskApi(id, projectId) {
+  return call((api) => api.tasks.load({ id, projectId }));
+}
+
+export function saveTaskApi(task, projectId) {
+  return call((api) => api.tasks.save({ task, projectId }));
+}
+
+export function deleteTaskApi(id, projectId) {
+  return call((api) => api.tasks.delete({ id, projectId }));
+}
+
+export function getOcrSettingsApi() {
+  return call((api) => api.settings.getOcrSettings());
+}
+
+export function saveOcrSettingsApi(settings) {
+  return call((api) => api.settings.saveOcrSettings(settings));
+}
+
+export function checkOcrApi(pythonPath) {
+  return call((api) => api.settings.checkOcr({ pythonPath }));
 }

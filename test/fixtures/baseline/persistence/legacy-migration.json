@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "sourceDatabase": "slatesync.sqlite",
+  "taskId": "legacy-task",
+  "projectId": "project-default",
+  "expectedCounts": {
+    "tasks": 1,
+    "snapshots": 1
+  }
+}

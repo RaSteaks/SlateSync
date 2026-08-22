@@ -1,0 +1,19 @@
+{
+  "methodology": "1,000 sequential local resolved calls after 50 warmups; performance.now around each Promise.",
+  "samples": 1000,
+  "raw": {
+    "medianMs": 0.0001669999999993621,
+    "p95Ms": 0.0004170000000005558
+  },
+  "typed": {
+    "medianMs": 0.0002080000000006521,
+    "p95Ms": 0.00037499999999823785
+  },
+  "legacyAdapter": {
+    "medianMs": 0.0002919999999981826,
+    "p95Ms": 0.00041699999999877946
+  },
+  "typedOverheadMedianMs": 0.000041000000001290005,
+  "adapterOverheadMedianMs": 0.0001249999999988205,
+  "transportCalls": 3150
+}
