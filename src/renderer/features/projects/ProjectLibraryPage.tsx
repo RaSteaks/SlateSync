@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, FolderKanban, Import, MapPin, PackageOpen, Plus, RefreshCw, Settings2 } from "lucide-react";
+import { Archive, ArchiveRestore, FolderKanban, Plus, RefreshCw, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button, Dialog, EmptyState, Field, Icon, IconButton, InlineError, Input, Stack, Surface, Text } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
@@ -12,10 +12,9 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
-export function ProjectLibraryPage({ onOpenProject }: { onOpenProject: (id: string, route?: "workspace" | "project-settings") => void }) {
+export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { onOpenProject: (id: string, route?: "workspace" | "project-settings") => void; onOpenLibrarySettings: () => void }) {
   const projects = useProjectStore((state) => state.projects);
   const current = useProjectStore((state) => state.current);
-  const library = useProjectStore((state) => state.library);
   const loading = useProjectStore((state) => state.loading);
   const error = useProjectStore((state) => state.error);
   const setLoading = useProjectStore((state) => state.setLoading);
@@ -52,24 +51,6 @@ export function ProjectLibraryPage({ onOpenProject }: { onOpenProject: (id: stri
     void refresh();
     return () => refreshGuard.invalidate();
   }, [refreshGuard]);
-
-  const runLibraryAction = async (action: "import" | "export" | "change") => {
-    setActionBusy(action);
-    try {
-      const api = getSlateSync();
-      const result = action === "import"
-        ? await unwrap(await api.projects.importLibrary())
-        : action === "export"
-          ? await unwrap(await api.projects.exportLibrary())
-          : await unwrap(await api.projects.changeLibraryLocation());
-      if (result.canceled) return;
-      setToast({ tone: "success", message: action === "export" ? "项目库已导出" : "项目库已更新，应用将重新启动" });
-    } catch (nextError) {
-      setError(appErrorFromUnknown(nextError));
-    } finally {
-      setActionBusy(null);
-    }
-  };
 
   const createProject = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -111,16 +92,18 @@ export function ProjectLibraryPage({ onOpenProject }: { onOpenProject: (id: stri
 
   return <div className={styles.page}>
     <div className={styles.pageHeader}>
-      <div><p className={styles.eyebrow}>本地项目</p><h1 className={styles.heading}>项目库</h1><p className={styles.subtitle}>{library ? `${library.name} · ${library.path}` : "正在读取项目库…"}</p></div>
-      <div className={styles.pageActions}><Button variant="ghost" size="sm" onClick={() => void refresh()} loading={loading} startIcon={<RefreshCw size={15} />}>刷新</Button><Button size="lg" onClick={() => setDialog("new-project")} startIcon={<Plus size={17} />}>新建项目</Button></div>
+      <div><p className={styles.eyebrow}>本地项目</p><h1 className={styles.heading}>项目库</h1><p className={styles.subtitle}>管理本地项目，并按需导入或导出项目库。</p></div>
+      {/* Visible text keeps Library management available to keyboard and touch;
+          the sidebar context menu remains an optional expert shortcut. */}
+      <div className={styles.pageActions}><Button variant="ghost" size="sm" onClick={onOpenLibrarySettings} startIcon={<Settings2 size={15} />}>项目库设置</Button><Button variant="ghost" size="sm" onClick={() => void refresh()} loading={loading} startIcon={<RefreshCw size={15} />}>刷新</Button><Button size="lg" onClick={() => setDialog("new-project")} startIcon={<Plus size={17} />}>新建项目</Button></div>
     </div>
     {error && <div style={{ marginBottom: 16 }}><InlineError message={error.message} onRetry={() => void refresh()} /></div>}
     <div className={`${styles.grid} ${styles.gridTwo}`} style={{ marginBottom: 20 }}>
-      <Surface tone="accent" compact className={styles.metric}><span className={styles.kicker}>可用项目</span><strong className={styles.metricValue}>{active.length}</strong><span className={styles.metricNote}>可继续工作</span></Surface>
+      <Surface tone="accent" compact className={styles.metric}><span className={styles.kicker}>在线项目</span><strong className={styles.metricValue}>{active.length}</strong><span className={styles.metricNote}>可继续工作</span></Surface>
       <Surface compact className={styles.metric}><span className={styles.kicker}>已归档</span><strong className={styles.metricValue}>{archived.length}</strong><span className={styles.metricNote}>可随时恢复</span></Surface>
     </div>
     <Surface className={styles.panel}>
-      <div className={styles.sectionHeader}><div><p className={styles.kicker}>项目</p><h2 className={styles.sectionTitle}>项目列表</h2></div><Stack direction="row" gap={2} align="center"><Button variant="ghost" size="sm" startIcon={<Import size={15} />} onClick={() => void runLibraryAction("import")} loading={actionBusy === "import"}>导入</Button><Button variant="ghost" size="sm" startIcon={<PackageOpen size={15} />} onClick={() => void runLibraryAction("export")} loading={actionBusy === "export"}>导出</Button><Button variant="ghost" size="sm" startIcon={<MapPin size={15} />} onClick={() => void runLibraryAction("change")} loading={actionBusy === "change"}>更换位置</Button></Stack></div>
+      <div className={styles.sectionHeader}><div><p className={styles.kicker}>项目</p><h2 className={styles.sectionTitle}>项目列表</h2></div></div>
       {active.length === 0 ? <EmptyState icon={FolderKanban} title="还没有项目" description="创建项目后即可开始识别场记。" action={<Button onClick={() => setDialog("new-project")} startIcon={<Plus size={16} />}>创建第一个项目</Button>} /> : <div className={styles.cardGrid}>{active.map((project) => <ProjectCard key={project.id} project={project} current={project.id === current?.id} busy={actionBusy === project.id} onOpen={() => onOpenProject(project.id, "workspace")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, false)} />)}</div>}
     </Surface>
     {archived.length > 0 && <Surface className={styles.panel} style={{ marginTop: 16 }}><div className={styles.sectionHeader}><div><p className={styles.kicker}>归档</p><h2 className={styles.sectionTitle}>已归档项目</h2></div><Text tone="muted" size="sm">恢复后可继续编辑。</Text></div><div className={styles.cardGrid}>{archived.map((project) => <ProjectCard key={project.id} project={project} current={false} busy={actionBusy === project.id} onOpen={() => onOpenProject(project.id, "project-settings")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, true)} />)}</div></Surface>}

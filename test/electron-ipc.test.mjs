@@ -59,6 +59,7 @@ describe("electron IPC handlers", () => {
       "import-project-library",
       "export-project-library",
       "change-library-location",
+      "rename-library",
       "create-project",
       "load-project",
       "update-project",
@@ -120,6 +121,10 @@ describe("electron IPC handlers", () => {
           calls.push("location");
           return { canceled: true };
         },
+        renameLibrary: async (name) => {
+          calls.push(`rename:${name}`);
+          return { canceled: false, restartRequired: true, library: { path: "/renamed" } };
+        },
       },
     }));
 
@@ -133,7 +138,12 @@ describe("electron IPC handlers", () => {
     assert.deepEqual(await ipcMain.invoke("change-library-location"), {
       canceled: true,
     });
-    assert.deepEqual(calls, ["import", "export", "location"]);
+    assert.deepEqual(await ipcMain.invoke("rename-library", { name: "新名称" }), {
+      canceled: false,
+      restartRequired: true,
+      library: { path: "/renamed" },
+    });
+    assert.deepEqual(calls, ["import", "export", "location", "rename:新名称"]);
   });
 
   it("does not export while a project is being created", async () => {

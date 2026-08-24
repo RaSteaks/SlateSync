@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
+import { defineConfig, normalizePath } from "vite";
 import react from "@vitejs/plugin-react";
 
 const configuredRendererPort = Number.parseInt(process.env.SLATESYNC_RENDERER_PORT || "5173", 10);
@@ -6,8 +7,10 @@ const rendererDevPort = Number.isInteger(configuredRendererPort) && configuredRe
   ? configuredRendererPort
   : 5173;
 const isRendererDev = process.env.SLATESYNC_RENDERER_DEV === "true";
+const csvWorkerSource = normalizePath(fileURLToPath(new URL("public/csv-worker.js", import.meta.url)));
+const csvWorkerDevUrl = `/@fs/${csvWorkerSource}`;
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: "src/renderer",
   // File-based production shells need relative assets; the dev server needs
   // root-relative HMR modules so Electron can resolve Vite's client correctly.
@@ -16,6 +19,12 @@ export default defineConfig({
     host: "localhost",
     port: rendererDevPort,
     strictPort: true,
+  },
+  // Only the Vite server exposes the repository-level compatibility Worker
+  // through /@fs/. Production receives an empty marker and keeps resolving
+  // the packaged public/csv-worker.js beside out/renderer.
+  define: {
+    __SLATESYNC_CSV_WORKER_DEV_URL__: JSON.stringify(command === "serve" ? csvWorkerDevUrl : ""),
   },
   plugins: [
     react(),
@@ -48,4 +57,4 @@ export default defineConfig({
       input: "src/renderer/index.html",
     },
   },
-});
+}));

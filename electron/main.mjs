@@ -36,8 +36,8 @@ import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";
 import {
   createProjectLibrary,
-  DEFAULT_LIBRARY_FOLDER,
-  defaultLibraryPath,
+  LEGACY_DEFAULT_LIBRARY_FOLDER,
+  migrateDefaultLibraryPath,
 } from "../lib/project-library.mjs";
 import {
   exportProjectLibrary,
@@ -120,7 +120,15 @@ async function initialize() {
   const fileDialogs = createFileDialogs(() => mainWindow);
   const slateScanner = createSlateScanner();
   const workflowDefaults = projectSettingsFromWorkflow(await getWorkflowConfig());
-  const libraryRoot = runtimeSettings.libraryPath || await initialLibraryPath();
+  const libraryRoot = await initialLibraryPath(runtimeSettings.libraryPath);
+  if (runtimeSettings.libraryPath && resolve(runtimeSettings.libraryPath) !== resolve(libraryRoot)) {
+    // Keep a previously persisted default path aligned with its successful
+    // on-disk rename; arbitrary user-selected package paths are never changed.
+    Object.assign(runtimeSettings, await settingsStore.save({
+      ...runtimeSettings,
+      libraryPath: libraryRoot,
+    }));
+  }
   projectLibrary = createProjectLibrary(libraryRoot, {
     defaultSettings: workflowDefaults,
   });
@@ -163,6 +171,12 @@ async function initialize() {
       await activateLibrary(relocated.path);
       return { canceled: false, restartRequired: true, library: relocated };
     },
+
+    async renameLibrary(nextName) {
+      const renamed = await projectLibrary.renameLibrary(nextName);
+      await activateLibrary(renamed.path);
+      return { canceled: false, restartRequired: true, library: renamed };
+    },
   };
 
   async function activateLibrary(nextPath) {
@@ -199,19 +213,35 @@ async function initialize() {
   });
 }
 
-async function initialLibraryPath() {
-  const preferred = defaultLibraryPath(app.getPath("appData"));
+async function initialLibraryPath(configuredPath = "") {
+  const applicationSupportPath = app.getPath("appData");
+  const deployedPreviousDefault = join(
+    applicationSupportPath,
+    LEGACY_DEFAULT_LIBRARY_FOLDER,
+  );
   const previousDefault = join(
     app.getPath("userData"),
     "Libraries",
-    DEFAULT_LIBRARY_FOLDER,
+    LEGACY_DEFAULT_LIBRARY_FOLDER,
   );
-  // Existing development installs used <userData>/Libraries. Prefer that
-  // package only when the new Application Support default does not yet exist.
-  if (!(await exists(preferred)) && await exists(previousDefault)) {
-    return previousDefault;
+  if (configuredPath) {
+    // Only known historical defaults are eligible for automatic shortening.
+    // Imported and relocated Libraries retain their user-selected names.
+    const knownDefaults = [deployedPreviousDefault, previousDefault]
+      .map((path) => resolve(path));
+    if (!knownDefaults.includes(resolve(configuredPath))) {
+      return configuredPath;
+    }
+    return migrateDefaultLibraryPath(applicationSupportPath, [configuredPath], {
+      // A persisted existing Library wins when the short default path is also
+      // occupied; switching automatically could surface unrelated data.
+      preserveLegacyOnConflict: true,
+    });
   }
-  return preferred;
+  return migrateDefaultLibraryPath(applicationSupportPath, [
+    deployedPreviousDefault,
+    previousDefault,
+  ]);
 }
 
 async function exists(path) {

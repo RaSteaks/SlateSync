@@ -1,5 +1,7 @@
 import type { RecognitionRecord, ResolveCsvTable, ScannedSlateMetadata, SlateCsvRecord } from "../../shared/contracts/index.js";
 
+declare const __SLATESYNC_CSV_WORKER_DEV_URL__: string;
+
 export const CSV_WORKER_PROTOCOL_VERSION = 1 as const;
 
 type CsvTask =
@@ -49,10 +51,15 @@ export class CsvWorkerService {
 
   private createWorker(): Worker {
     if (typeof Worker !== "function") throw workerFailure("当前环境不支持 CSV Worker");
-    // Renderer output lives under out/renderer while the compatibility Worker
-    // remains packaged once under public/. Resolving from the loaded HTML keeps
-    // both development file:// and packaged app:// paths in the same contract.
-    const url = new URL("../../public/csv-worker.js", window.location.href);
+    // Vite owns repository-level module resolution in HMR mode. Production
+    // intentionally keeps the established file:// path to the Worker packaged
+    // once under public/, so this development repair cannot widen that shell.
+    const devUrl = typeof __SLATESYNC_CSV_WORKER_DEV_URL__ === "undefined"
+      ? ""
+      : __SLATESYNC_CSV_WORKER_DEV_URL__;
+    const url = devUrl
+      ? new URL(devUrl, window.location.origin)
+      : new URL("../../public/csv-worker.js", window.location.href);
     const worker = new Worker(url, { type: "module" });
     worker.addEventListener("message", (event: MessageEvent<WorkerReply>) => this.handleMessage(event.data));
     worker.addEventListener("error", (event) => this.handleFailure(worker, event.message || "CSV Worker 不可用"));

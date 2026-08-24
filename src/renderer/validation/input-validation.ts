@@ -27,6 +27,15 @@ export function validateProjectName(value: string): ValidationResult {
   return { ok: true };
 }
 
+export function validateLibraryName(value: string): ValidationResult {
+  if (!value.trim()) return { ok: false, message: "请输入项目库名称。" };
+  if (value.trim().length > 80) return { ok: false, message: "项目库名称不能超过 80 个字符。" };
+  if (/[/\\:<>"|?*\u0000-\u001f]/.test(value.trim())) {
+    return { ok: false, message: "项目库名称不能包含 / \\ : 等特殊字符。" };
+  }
+  return { ok: true };
+}
+
 export function validateSlateFile(
   file: File,
   options: {

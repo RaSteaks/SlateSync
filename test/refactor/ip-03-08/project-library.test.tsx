@@ -49,12 +49,13 @@ describe("project library cards", () => {
     });
 
     const onOpenProject = vi.fn();
+    const onOpenLibrarySettings = vi.fn();
     const host = document.createElement("div");
     document.body.append(host);
     const root = createRoot(host);
     mounted.push({ host, root });
     await act(async () => {
-      root.render(<ProjectLibraryPage onOpenProject={onOpenProject} />);
+      root.render(<ProjectLibraryPage onOpenProject={onOpenProject} onOpenLibrarySettings={onOpenLibrarySettings} />);
       await Promise.resolve();
     });
 
@@ -63,9 +64,13 @@ describe("project library cards", () => {
     const archiveButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("归档"));
     expect(openButton).not.toBeNull();
     expect(openButton?.contains(host.querySelector("h3"))).toBe(false);
-    expect(host.textContent).toContain("可用项目");
+    expect(host.textContent).toContain("在线项目");
     expect(host.textContent).toContain("项目列表");
     expect(host.textContent).not.toContain("当前项目");
+
+    const librarySettingsButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("项目库设置"));
+    act(() => librarySettingsButton?.click());
+    expect(onOpenLibrarySettings).toHaveBeenCalledOnce();
 
     act(() => openButton?.click());
     expect(onOpenProject).toHaveBeenLastCalledWith(project.id, "workspace");

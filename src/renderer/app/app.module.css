@@ -9,13 +9,31 @@
 .brandCopy[data-collapsed="true"] { display: none; }
 .brandCopy strong { font-size: .96rem; letter-spacing: -.02em; }
 .brandCopy small { margin-top: 2px; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; }
-.navItem { display: flex; min-height: 40px; align-items: center; gap: var(--ss-space-3); width: 100%; padding: 0 var(--ss-space-3); border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .84rem; text-align: left; cursor: pointer; }
+.navItem { display: flex; min-height: 40px; align-items: center; gap: var(--ss-space-4); width: 100%; padding: 0 var(--ss-space-3); border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .84rem; text-align: left; cursor: pointer; }
 .navItem:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
 .navItem[data-active="true"] { color: var(--ss-color-ink); border-color: color-mix(in srgb, var(--ss-color-accent) 24%, transparent); background: var(--ss-color-accent-soft); }
 .navItem svg { color: var(--ss-color-accent); }
 .navItem[data-collapsed="true"] { justify-content: center; padding-inline: 0; }
 .navItem[data-collapsed="true"] span { display: none; }
+/* 侧栏分组沿用全局间距令牌；明确的上下留白避免标题贴住相邻导航项。 */
+.navSection { min-width: 0; margin: var(--ss-space-5) 0 var(--ss-space-2); padding: 0 var(--ss-space-3); color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; font-weight: 700; line-height: 1.35; letter-spacing: .14em; }
 .navSection[data-collapsed="true"] { display: none; }
+/* 当前项目上下文拆成两行：分组标签负责层级，项目名负责定位且可安全省略。 */
+.navSectionCurrent { display: grid; gap: var(--ss-space-1); }
+.navSectionProject { min-width: 0; overflow: hidden; color: var(--ss-color-ink-muted); font-family: var(--ss-font-body); font-size: .72rem; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
+/* 项目库右键菜单头部：显示项目库名称与可点击复制的路径，过长时省略。 */
+.libraryMenuHeader { display: grid; gap: 2px; min-width: 220px; padding: var(--ss-space-2); }
+.libraryMenuName { display: block; color: var(--ss-color-ink); font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.libraryMenuPath { display: block; width: 100%; padding: 0; border: 0; color: var(--ss-color-ink-subtle); background: transparent; font-family: var(--ss-font-mono); font-size: .68rem; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.libraryMenuPath:hover, .libraryMenuPath:focus-visible { color: var(--ss-color-accent); }
+
+/* Shared Sidebar cannot style feature-owned CSS-module class names directly;
+   mirror its rail behavior so responsive and manually collapsed states agree. */
+@media (max-width: 920px) {
+  .navSection, .navItem span { display: none; }
+  .navItem { justify-content: center; padding-inline: 0; }
+}
+
 .pageHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--ss-space-5); margin-bottom: var(--ss-space-8); }
 .eyebrow { margin: 0 0 8px; color: var(--ss-color-accent); font-family: var(--ss-font-mono); font-size: .65rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .heading { margin: 0; color: var(--ss-color-ink); font-family: var(--ss-font-display); font-size: clamp(1.8rem, 4vw, 3.2rem); letter-spacing: -.06em; line-height: 1.05; }

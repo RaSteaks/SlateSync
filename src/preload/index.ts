@@ -15,6 +15,7 @@ import type {
   ScanSlateDirectoryRequest,
   ScenarioIdRequest,
   ScenarioImportRequest,
+  LibraryRenameRequest,
   SlateSyncApi,
   ProgressData,
 } from "../shared/contracts/index.js";
@@ -84,6 +85,7 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       importLibrary: () => request("import-project-library"),
       exportLibrary: () => request("export-project-library"),
       changeLibraryLocation: () => request("change-library-location"),
+      renameLibrary: (body: LibraryRenameRequest) => request("rename-library", body),
       create: (body: ProjectRequest) => request("create-project", body),
       load: (body: ProjectIdRequest) => request("load-project", body),
       update: (body: ProjectRequest) => request("update-project", body),

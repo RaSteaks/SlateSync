@@ -208,3 +208,71 @@ Worker 边界、验收证据和最终治理交接。
 - 验证结果：`npm run test:node` 243/243、Modern Vitest 15 个文件 46/46、
   `npm run typecheck`、`npm run build:modern` 与 `git diff --check` 通过；未启动
   Electron 前台窗口。
+
+## 2026-08-24 Dev CSV Worker 路径隔离
+
+- Vite serve 为仓库根目录的兼容 CSV Worker 注入 `/@fs/` 本机模块 URL，点击
+  “新建任务”清理 Worker 状态时不再请求不存在的 `/public/csv-worker.js`。
+- Production build 注入空的 dev marker，继续从 Renderer HTML 相对解析已打包的
+  `public/csv-worker.js`；不改变 file:// 加载路径、Worker 协议或 CSV 算法来源。
+- 回归测试分别锁定 Vite dev 模块转换、HTTP Worker URL 和 production file URL，
+  防止开发修复反向改变生产加载契约。
+- 验证结果：Modern Vitest 15 个文件 47/47、Node 243/243、`npm run typecheck`
+  与 production Renderer build 通过；产物无 `/@fs/` 运行时代码和额外 CSV
+  Worker 副本，仍只引用 `../../public/csv-worker.js`。
+
+## 2026-08-24 默认项目库短名称
+
+- 部署后的本机默认目录改为 Application Support 下的 `Local SlateSync Library`，
+  不再把便携包扩展名用于应用内部数据目录。
+- 启动时只对两个已知旧默认位置执行原位重命名；若目录不可写则继续使用旧位置，
+  用户导入或迁移的 `.slatesync-library` 路径不参与自动改名。
+- 导入、导出和更改存储位置仍使用 `.slatesync-library` 便携包契约，不改变现有
+  验证、安全边界或跨设备文件识别方式。
+- 验证结果：Node 244/244、Modern Vitest 15 个文件 47/47、`npm run typecheck`、
+  `npm run build:modern` 与 `git diff --check` 通过；未启动 Electron 前台窗口。
+
+## 2026-08-24 项目库改名与导航交互
+
+- 左侧导航栏“项目库”右键菜单新增“改名项目库”，主进程通过
+  `renameLibrary` 同步更新 `library.json` 清单名称并原位重命名磁盘目录，
+  随后持久化新 `libraryPath` 并重启应用（沿用导入 / 更换位置的契约）。
+- 内置库目录无扩展名保持不加后缀，便携包改名保留 `.slatesync-library`
+  后缀；SQLite 连接在 POSIX 目录改名后继续指向同一 inode，store 根路径同步
+  切换以保持项目相对路径解析一致。
+- 新增 `rename-library` IPC 通道并纳入 additive IPC 契约清单；Preload 暴露
+  `projects.renameLibrary`，Renderer 提供改名对话框与名称校验（不允许路径
+  分隔符等特殊字符）。
+- 顶部栏副标题仅在工作台 / 项目设置 / 全局设置展示当前项目名；项目库页只
+  显示“项目库”，当前项目名只由左侧导航栏“当前项目”区段维护。
+- 项目库统计标题从“可用项目”改为“在线项目”。
+- 验证结果：Node 246/246、Modern Vitest 15 个文件 47/47、`npm run typecheck`
+  与 `npm run build:modern` 通过；未启动 Electron 前台窗口。
+
+## 2026-08-25 侧栏项目上下文排布
+
+- 补齐 Modern 侧栏分组标题的局部样式映射，使用既有间距、字体和颜色 token
+  拉开“分组标题—导航项”的垂直节奏，避免标题紧贴选中卡片。
+- “当前项目”与项目名改为上下两行：前者维持分组标签层级，后者回到正文字体；
+  长项目名保持单行省略，并通过 `title` 提供完整值。
+- 导航图标与文字间距由 12px token 提升到 16px token，折叠侧栏仍隐藏文字并
+  居中图标，不改变路由、点击区域或窄屏导航行为。
+- 验证结果：侧栏布局测试 4/4、Modern Vitest 15 个文件 48/48、
+  `npm run typecheck`、`npm run build:modern`、`npm run build:storybook` 与
+  `git diff --check` 通过；premium strict audit 为 0 findings，未启动 Electron
+  前台窗口。
+
+## 2026-08-25 项目库审查问题修复
+
+- 已配置旧默认库与短名称目录同时存在时，继续使用设置中明确记录的旧库；只有
+  目标无冲突时才原位迁移，避免启动后静默切换到另一份数据。
+- 项目库改名先移动目录，再原子写入清单；目录移动失败时不再提前修改名称，清单
+  写入失败会尝试恢复原目录，公开的 Library、Projects 与 SQLite 路径字段也随
+  成功改名同步更新。
+- 项目库页新增可见“项目库设置”按钮，通过共享 Dialog 提供导入、导出、更换
+  位置和改名的完整键盘/触控路径；侧栏右键菜单继续作为专家快捷入口。
+- 新增迁移冲突、目录改名失败和可见设置入口回归覆盖；改名表单错误由共享 Field
+  关联到输入控件，保留 `aria-invalid` 与错误描述关系。
+- 验证结果：Node 248/248、Modern Vitest 15 个文件 48/48、`npm run typecheck`、
+  `npm run build:modern`、`npm run build:storybook` 与 `git diff --check` 通过；
+  premium strict audit 为 0 findings，未启动 Electron 前台窗口。

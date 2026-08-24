@@ -168,7 +168,7 @@ Legacy Renderer（受限回退路径）
 
 ## 数据与安全
 
-- 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library.slatesync-library`。
+- 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library`。
 - Project Library 使用 SQLite 保存任务、诊断、项目设置和场记结构 Profile。
 - 旧版本 JSON 数据会按兼容规则迁移，并保留兼容快照。
 - API Key 只由 Main 进程读取；Renderer 不直接访问密钥或 Node.js 能力。

@@ -87,6 +87,11 @@ export function registerIpcHandlers(ipcMain, context) {
     return withLibraryTransfer(() => libraryActions.changeLocation());
   });
 
+  ipcMain.handle("rename-library", async (_event, body) => {
+    if (!libraryActions?.renameLibrary) throw new Error("项目库改名不可用");
+    return withLibraryTransfer(() => libraryActions.renameLibrary(body?.name));
+  });
+
   ipcMain.handle("create-project", async (_event, body) => {
     if (!projectLibrary) throw new Error("项目库不可用");
     return withLibraryWrite(async () => sanitizeProject(

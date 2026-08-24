@@ -78,10 +78,10 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   assert.equal(additions.extendsBaselineCommit, ipc.baselineCommit);
   assert.deepEqual(Object.keys(ipc.requestMethods).sort(), [...historicalIpcMethodNames].sort());
   assert.equal(ipc.cancelRecognitionChannel, null);
-  assert.deepEqual(Object.keys(additions.requestMethods).sort(), ["cancelRecognition", "deleteProject"]);
+  assert.deepEqual(Object.keys(additions.requestMethods).sort(), ["cancelRecognition", "deleteProject", "renameLibrary"]);
   assert.deepEqual(
     Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
-    ["cancel-recognition", "delete-project"],
+    ["cancel-recognition", "delete-project", "rename-library"],
   );
 });
 

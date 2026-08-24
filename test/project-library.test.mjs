@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -87,7 +87,7 @@ function ipcContext(projectLibrary, projectRuntime) {
 
 test("projects use separate SQLite files and project-scoped IPC", async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-library-"));
-  const libraryRoot = join(tempRoot, "Local SlateSync Library.slatesync-library");
+  const libraryRoot = join(tempRoot, "Local SlateSync Library");
   const library = createProjectLibrary(libraryRoot);
   const runtime = createProjectRuntime(library);
 
@@ -458,6 +458,79 @@ test("touching project activity updates library ordering without changing task d
     assert.equal(projects[0].id, first.id);
     assert.equal(projects[0].updatedAt, "2099-01-02T00:00:00.000Z");
     assert.equal(projects[0].taskCount, 0);
+  } finally {
+    await library.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("renaming the library updates manifest, folder, and store path together", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-rename-"));
+  const originalRoot = join(tempRoot, "My Library");
+  const library = createProjectLibrary(originalRoot);
+
+  try {
+    const before = await library.getLibraryInfo();
+    assert.equal(before.name, "Local SlateSync Library");
+    assert.equal(before.path, originalRoot);
+
+    const renamed = await library.renameLibrary("存档库");
+    assert.equal(renamed.name, "存档库");
+    assert.equal(renamed.path, join(tempRoot, "存档库"));
+    assert.equal(renamed.id, before.id);
+    assert.equal(library.libraryRoot, renamed.path);
+    assert.equal(library.projectsPath, join(renamed.path, "Projects"));
+    assert.equal(library.dbPath, join(renamed.path, "library.sqlite"));
+
+    const manifest = JSON.parse(await readFile(join(renamed.path, "library.json"), "utf8"));
+    assert.equal(manifest.name, "存档库");
+
+    // 项目相对路径仍解析到新根目录，任务数据不受改名影响。
+    const project = await library.createProject({ name: "改名后新建项目" });
+    const summary = await library.getProject(project.id);
+    assert.equal(summary.directoryPath.startsWith(renamed.path), true);
+
+    // 同目录下已存在的同名目录会导致改名失败。
+    await mkdir(join(tempRoot, "占用库"));
+    await assert.rejects(() => library.renameLibrary("占用库"), /已存在/);
+  } finally {
+    await library.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("renaming a portable library preserves the .slatesync-library suffix", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-rename-portable-"));
+  const originalRoot = join(tempRoot, "Portable Library.slatesync-library");
+  const library = createProjectLibrary(originalRoot);
+
+  try {
+    const renamed = await library.renameLibrary("便携库");
+    assert.equal(renamed.path, join(tempRoot, "便携库.slatesync-library"));
+    await assert.rejects(() => library.renameLibrary("无效/名称"), /特殊字符/);
+  } finally {
+    await library.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("a failed directory rename leaves the original manifest and path untouched", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-rename-failure-"));
+  const originalRoot = join(tempRoot, "Original Library");
+  const renameFailure = Object.assign(new Error("synthetic rename failure"), { code: "EACCES" });
+  const library = createProjectLibrary(originalRoot, {
+    renameDirectory: async () => { throw renameFailure; },
+  });
+
+  try {
+    const before = await library.getLibraryInfo();
+    await assert.rejects(() => library.renameLibrary("Renamed Library"), /synthetic rename failure/);
+
+    const after = await library.getLibraryInfo();
+    const manifest = JSON.parse(await readFile(join(originalRoot, "library.json"), "utf8"));
+    assert.deepEqual(after, before);
+    assert.equal(manifest.name, before.name);
+    await assert.rejects(() => access(join(tempRoot, "Renamed Library")));
   } finally {
     await library.close();
     await rm(tempRoot, { recursive: true, force: true });

@@ -8,6 +8,7 @@ import type {
   LibraryImportResult,
   LibraryInfo,
   LibraryLocationResult,
+  LibraryRenameResult,
   ModelDiscoveryResult,
   OcrCheckResult,
   OcrEngineStatus,
@@ -136,6 +137,11 @@ const exportedLibrary = {
   library: validatedLibrary,
 } satisfies LibraryExportResult;
 const changedLibrary = importedLibrary satisfies LibraryLocationResult;
+const renamedLibrary = {
+  canceled: false,
+  restartRequired: true,
+  library,
+} satisfies LibraryRenameResult;
 
 const scenarioField = {
   label: "",
@@ -364,6 +370,7 @@ const responses: Readonly<Record<string, unknown>> = {
   "import-project-library": importedLibrary,
   "export-project-library": exportedLibrary,
   "change-library-location": changedLibrary,
+  "rename-library": renamedLibrary,
   "create-project": project,
   "load-project": project,
   "update-project": project,
@@ -394,7 +401,7 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly six namespaces and exact success DTOs for all 29 operations", async () => {
+  it("exposes exactly six namespaces and exact success DTOs for all 30 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
     expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings"]);
@@ -407,6 +414,7 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.projects.importLibrary(), importedLibrary);
     expectSuccess(await api.projects.exportLibrary(), exportedLibrary);
     expectSuccess(await api.projects.changeLibraryLocation(), changedLibrary);
+    expectSuccess(await api.projects.renameLibrary({ name: "Renamed" }), renamedLibrary);
     expectSuccess(await api.projects.create({ name: "Demo" }), project);
     expectSuccess(await api.projects.load({ id: project.id }), project);
     expectSuccess(await api.projects.update({ id: project.id, name: "Demo" }), project);
@@ -432,10 +440,10 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.settings.checkOcr({ pythonPath: "python3" }), ocrCheck);
 
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
-    expect(transport.calls[6]?.payload).toEqual({ name: "Demo" });
-    expect(transport.calls[12]?.payload).toEqual({ projectId: project.id });
-    expect(transport.calls[20]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
-    expect(transport.calls[21]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[7]?.payload).toEqual({ name: "Demo" });
+    expect(transport.calls[13]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[21]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[22]?.payload).toEqual({ projectId: project.id });
   });
 
   it("maps the complete failure matrix without transport boilerplate, paths, or retry changes", async () => {

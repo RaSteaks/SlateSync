@@ -87,11 +87,15 @@ describe("Electron Renderer development composition", () => {
         "utf8",
       );
       const html = await server.transformIndexHtml("/", source);
+      const workerUrl = JSON.parse(String(server.config.define?.__SLATESYNC_CSV_WORKER_DEV_URL__));
+      const workerModule = await server.transformRequest(workerUrl);
 
       expect(html).toContain('src="/@vite/client"');
       expect(html).toContain('from "/@react-refresh"');
       expect(html).toContain("script-src 'self' 'unsafe-eval' 'unsafe-inline'");
       expect(html).toContain("ws://localhost:5173");
+      expect(workerUrl).toMatch(/^\/@fs\/.*\/public\/csv-worker\.js$/);
+      expect(workerModule?.code).toContain("createCsvTaskProcessor");
     } finally {
       await server.close();
       if (previousDevMode === undefined) {

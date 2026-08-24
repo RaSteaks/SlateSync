@@ -3,6 +3,7 @@
   "purpose": "Post-baseline IPC additions. This fixture remains separate from baseline/contracts/ipc.json so the historical inventory stays immutable.",
   "requestMethods": {
     "cancelRecognition": { "channel": "cancel-recognition", "args": ["projectId"] },
-    "deleteProject": { "channel": "delete-project", "args": ["id"] }
+    "deleteProject": { "channel": "delete-project", "args": ["id"] },
+    "renameLibrary": { "channel": "rename-library", "args": ["name"] }
   }
 }

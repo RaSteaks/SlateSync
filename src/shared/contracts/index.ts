@@ -167,6 +167,18 @@ export type LibraryExportResult =
 
 export type LibraryLocationResult = LibraryImportResult;
 
+export interface LibraryRenameRequest {
+  readonly name: string;
+}
+
+export type LibraryRenameResult =
+  | { readonly canceled: true }
+  | {
+      readonly canceled: false;
+      readonly restartRequired: true;
+      readonly library: LibraryInfo;
+    };
+
 export interface ProjectRequest {
   readonly id?: string;
   readonly name?: string;
@@ -611,6 +623,7 @@ export interface SlateSyncApi {
     importLibrary(): Promise<Result<LibraryImportResult>>;
     exportLibrary(): Promise<Result<LibraryExportResult>>;
     changeLibraryLocation(): Promise<Result<LibraryLocationResult>>;
+    renameLibrary(request: LibraryRenameRequest): Promise<Result<LibraryRenameResult>>;
     create(request: ProjectRequest): Promise<Result<ProjectData>>;
     load(request: ProjectIdRequest): Promise<Result<ProjectData>>;
     update(request: ProjectRequest): Promise<Result<ProjectData>>;
