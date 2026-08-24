@@ -282,26 +282,35 @@ export function registerIpcHandlers(ipcMain, context) {
         ? await diagnosticsStore.saveSession(capture.session)
         : null;
       throwIfRecognitionCanceled(controller.signal);
+      const completedTask = {
+        projectId: projectContext.project?.id || body?.projectId || null,
+        projectSettingsSnapshot: projectSettings,
+        status: "completed",
+        filename: input.filename,
+        pageCount: result.pageCount,
+        provider: result.provider,
+        model: result.model,
+        scenarioId: result.scenario?.id || null,
+        scenarioMatch: result.scenario?.match || null,
+        scenarioFingerprint: result.scenario?.fingerprint || null,
+        customPrompt: input.customPrompt || null,
+        accuracyMode: result.accuracyMode,
+        result: result.result,
+        // Replace a draft's empty edit buffer with the newly recognized rows;
+        // listTasks otherwise prefers the stale empty array over result data.
+        editedRecords: result.result.records,
+        usage: result.usage,
+        durationMs: result.durationMs,
+        ocrSummary: result.ocr,
+        diagnosticSessionId: sessionId,
+      };
+      // Recognition is the completion phase of the current draft. Updating by
+      // its project-scoped ID keeps one logical task and preserves draft-only
+      // inputs; a run without a draft remains a legitimate new task.
       const taskId = taskStoreForProject
-        ? await taskStoreForProject.saveTask({
-            projectId: projectContext.project?.id || body?.projectId || null,
-            projectSettingsSnapshot: projectSettings,
-            status: "completed",
-            filename: input.filename,
-            pageCount: result.pageCount,
-            provider: result.provider,
-            model: result.model,
-            scenarioId: result.scenario?.id || null,
-            scenarioMatch: result.scenario?.match || null,
-            scenarioFingerprint: result.scenario?.fingerprint || null,
-            customPrompt: input.customPrompt || null,
-            accuracyMode: result.accuracyMode,
-            result: result.result,
-            usage: result.usage,
-            durationMs: result.durationMs,
-            ocrSummary: result.ocr,
-            diagnosticSessionId: sessionId,
-          })
+        ? body?.taskId
+          ? await taskStoreForProject.updateTask(body.taskId, completedTask)
+          : await taskStoreForProject.saveTask(completedTask)
         : null;
       throwIfRecognitionCanceled(controller.signal);
       if (taskId && projectContext.project && projectLibrary) {

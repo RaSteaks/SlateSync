@@ -4,11 +4,13 @@
 // Python path, registers IPC handlers, then opens the sandboxed BrowserWindow.
 // The window loads the single compiled typed Preload directly because a
 // sandboxed Electron Preload cannot require another application-local file.
-// Ordinary and packaged startup load the modern out/renderer/index.html shell.
-// An internal --slatesync-renderer=legacy switch and bounded load-time fallback
+// Packaged startup loads the modern out/renderer/index.html shell. Development
+// startup may receive a local Vite URL for Renderer HMR; if that server is not
+// available, the compiled Modern shell remains the bounded fallback. An
+// internal --slatesync-renderer=legacy switch and bounded load-time fallback
 // preserve recovery without creating a second BrowserWindow or gateway. The
-// window blocks external navigation and only allows file:// URLs under the
-// selected legacy or modern shell root.
+// window blocks external navigation and only allows the active dev origin or
+// file:// URLs under the selected legacy or modern shell root.
 import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
 import { access } from "node:fs/promises";
 import {
@@ -26,6 +28,10 @@ import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.
 import { registerIpcHandlers } from "./ipc-handlers.mjs";
 import { createKeyStore } from "./key-store.mjs";
 import { createFileDialogs } from "./file-dialogs.mjs";
+import {
+  isAllowedRendererDevNavigation,
+  parseRendererDevUrl,
+} from "./renderer-dev-url.mjs";
 import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";
 import {
@@ -261,6 +267,10 @@ function isWithinRoot(filePath, root) {
 
 async function createWindow() {
   const rendererEntry = await resolveRendererEntry();
+  const rendererDev = rendererEntry.mode === "modern" && isDev
+    ? parseRendererDevUrl(process.env.SLATESYNC_RENDERER_URL)
+    : null;
+  let activeRendererDevOrigin = rendererDev?.origin || null;
   let allowedRoot = rendererEntry.root;
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -279,10 +289,15 @@ async function createWindow() {
     },
   });
 
-  // Prevent navigation to external URLs and keep the fallback root exact so
-  // a modern-shell failure cannot widen the legacy file boundary.
+  // Apply the same boundary to user navigation and server redirects. A Vite
+  // response must not redirect the privileged Preload onto a remote origin.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  mainWindow.webContents.on("will-navigate", (event, url) => {
+  const guardRendererNavigation = (event, url) => {
+    if (activeRendererDevOrigin) {
+      if (isAllowedRendererDevNavigation(url, activeRendererDevOrigin)) return;
+      event.preventDefault();
+      return;
+    }
     if (!url.startsWith("file://")) {
       event.preventDefault();
       return;
@@ -291,13 +306,32 @@ async function createWindow() {
     if (!isWithinRoot(filePath, allowedRoot)) {
       event.preventDefault();
     }
-  });
+  };
+  mainWindow.webContents.on("will-navigate", guardRendererNavigation);
+  mainWindow.webContents.on("will-redirect", guardRendererNavigation);
 
   try {
-    await mainWindow.loadFile(rendererEntry.htmlPath);
-    console.log(`Loaded ${rendererEntry.mode} renderer: ${rendererEntry.htmlPath}`);
+    if (rendererDev) {
+      await mainWindow.loadURL(rendererDev.href);
+      console.log(`Loaded modern renderer HMR: ${rendererDev.href}`);
+    } else {
+      await mainWindow.loadFile(rendererEntry.htmlPath);
+      console.log(`Loaded ${rendererEntry.mode} renderer: ${rendererEntry.htmlPath}`);
+    }
   } catch (error) {
-    if (rendererEntry.mode !== "modern") {
+    if (rendererDev) {
+      // The dev orchestrator normally fails before Electron starts when Vite
+      // is unavailable. This fallback also covers a server that dies after
+      // the window was created, without widening the file access boundary.
+      activeRendererDevOrigin = null;
+      console.error("Renderer HMR server failed; falling back to compiled Modern renderer:", error);
+      try {
+        await mainWindow.loadFile(rendererEntry.htmlPath);
+        console.log(`Loaded compiled modern renderer: ${rendererEntry.htmlPath}`);
+      } catch (fallbackError) {
+        console.error("Failed to load compiled Modern renderer:", fallbackError);
+      }
+    } else if (rendererEntry.mode !== "modern") {
       console.error("Failed to load index.html:", error);
     } else {
       const legacyRoot = isDev

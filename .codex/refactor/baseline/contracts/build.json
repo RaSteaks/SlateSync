@@ -64,11 +64,13 @@
   },
   "transition": {
     "scripts": {
+      "dev:renderer": "vite --config vite.renderer.config.ts",
       "test": "npm run test:node && npm run test:modern",
       "rebuild:native:electron": "electron-rebuild --force --which-module better-sqlite3",
       "preelectron:dev": "npm run build:modern && npm run rebuild:native:electron",
+      "electron:dev": "node scripts/electron-dev.mjs",
       "preelectron:dev:modern": "npm run build:modern && npm run rebuild:native:electron",
-      "electron:dev:modern": "electron electron/main.mjs --slatesync-renderer=modern",
+      "electron:dev:modern": "node scripts/electron-dev.mjs --slatesync-renderer=modern",
       "typecheck": "tsc -b --pretty false",
       "build:main": "tsc -p tsconfig.main.json --pretty false",
       "build:preload": "vite build --config vite.preload.config.ts",

@@ -222,6 +222,8 @@ export interface SlateCsvRecord {
 }
 
 export interface RecognitionRequest {
+  /** Existing draft to complete in place; omitted only for a genuinely new run. */
+  readonly taskId?: string | null;
   readonly provider?: string;
   readonly model?: string;
   readonly imageDataUrl?: string;

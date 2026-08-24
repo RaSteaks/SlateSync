@@ -452,6 +452,67 @@ describe("electron IPC handlers", () => {
     }]);
   });
 
+  it("completes an existing draft instead of creating a second task", async () => {
+    const project = {
+      id: "project-draft-completion",
+      settings: {
+        accuracyMode: "high",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+      },
+    };
+    const updates = [];
+    const persisted = new Map([[
+      "draft-task-1",
+      { id: "draft-task-1", status: "draft", resolveCsvFilename: "timeline.csv" },
+    ]]);
+    const taskStore = {
+      updateTask: async (id, patch) => {
+        updates.push({ id, patch });
+        persisted.set(id, { ...persisted.get(id), ...patch, id });
+        return id;
+      },
+      saveTask: async () => assert.fail("a persisted draft must not be duplicated"),
+    };
+    const projectRuntime = {
+      get: async () => ({ project, scenarioStore: null, diagnostics: null, taskStore }),
+    };
+    const recognize = async () => ({
+      provider: "openai",
+      model: "test-model",
+      pageCount: 1,
+      accuracyMode: "high",
+      result: { records: [{ scene: "001", shot: "01", take: "01" }] },
+      usage: null,
+      durationMs: 1,
+      ocr: null,
+      scenario: null,
+    });
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({ projectRuntime, recognize }));
+
+    const result = await ipcMain.invoke("recognize", {
+      projectId: project.id,
+      taskId: "draft-task-1",
+      provider: "openai",
+      model: "test-model",
+      filename: "slate.png",
+    });
+
+    assert.equal(result.taskId, "draft-task-1");
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].id, "draft-task-1");
+    assert.equal(updates[0].patch.status, "completed");
+    assert.equal(updates[0].patch.filename, "slate.png");
+    assert.equal(updates[0].patch.result.records.length, 1);
+    assert.deepEqual(updates[0].patch.editedRecords, updates[0].patch.result.records);
+    assert.equal(persisted.size, 1);
+    assert.equal(persisted.get("draft-task-1").status, "completed");
+    assert.equal(persisted.get("draft-task-1").resolveCsvFilename, "timeline.csv");
+  });
+
   it("blocks project archival until an in-flight recognition finishes", async () => {
     let signalStarted;
     let finishRecognition;

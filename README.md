@@ -73,13 +73,13 @@ npm run ocr:check
 npm start
 ```
 
-`npm start` 会构建 Modern Renderer、重建 Electron 原生依赖并启动应用。也可以显式启动 Modern Renderer：
+`npm start` 会构建 Main/Preload、重建 Electron 原生依赖，然后启动 Vite Renderer 开发服务器和 Electron。修改 `src/renderer` 后会通过 HMR 自动更新窗口；也可以显式启动 Modern Renderer：
 
 ```bash
 npm run electron:dev:modern
 ```
 
-修改 Renderer 后可在窗口内刷新；修改 Main 或 Preload 后需要重启应用。
+修改 Main 或 Preload 后仍需要重启应用；Renderer HMR 只作用于 `src/renderer`。
 
 ## 工作流
 

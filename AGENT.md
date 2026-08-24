@@ -125,3 +125,86 @@ Worker 边界、验收证据和最终治理交接。
   （242/242）、`npm run test:modern`（35/35）、`npm run typecheck`、
   `npm run build:modern` 与 `npm run build:storybook` 均在沙盒完成。Storybook
   仅提示无法写入用户目录的全局 settings，不影响静态构建产物；未启动 Electron。
+
+## 2026-08-24 工作台可选输入布局
+
+- 将素材元数据回填与场记 CSV、Resolve CSV 的选择统一收纳到识别设置之前的
+  “可选输入”区域；右侧“回填预览”只保留 CSV 预览、编辑和清除动作。
+- 仅调整 Modern Renderer 的布局与说明文案，继续复用现有文件校验、拖放、
+  Worker、metadata scan 和 autosave 生命周期，不改变 CSV 或识别数据语义。
+
+## 2026-08-24 Renderer 开发热更新
+
+- `npm start` / `npm run dev` 通过 `scripts/electron-dev.mjs` 同时启动 Vite
+  Renderer dev server 和 Electron；Electron 开发态使用 `loadURL`，生产态与
+  Vite 不可用时继续使用已构建的 `out/renderer/index.html`。
+- HMR 仅开放本机 Renderer 端口的 websocket 与开发样式能力，生产 file:// shell
+  保持原有严格 CSP；Main/Preload 仍由现有 predev 构建并在修改后重启应用。
+
+## 2026-08-24 修复开发环境白屏
+
+- Electron dev 编排器必须显式向 Vite 传入 `vite.renderer.config.ts`；仓库没有
+  根级 `vite.config.ts`，省略 `--config` 会让 Vite 服务仓库根目录，Electron
+  虽然能完成 `loadURL`，但拿不到 Renderer 入口，最终表现为空白窗口。
+- Vite React Refresh 的开发 HTML 会注入内联启动模块；开发态 CSP 额外允许
+  `unsafe-inline`，否则 Electron 会拦截该模块并阻止 Renderer 挂载。
+- 该放宽只发生在 Vite dev server 的 HTML 转换中，生产构建和 file:// Renderer
+  继续使用严格的脚本策略。
+- Modern 回归测试固定 dev 编排器的目标配置参数与共享子进程环境，避免再次出现
+  “Vite ready 但应用未加载”的假成功。
+
+## 2026-08-24 UI 交互一致性优化
+
+- 项目库卡片使用覆盖整卡的原生按钮作为进入项目入口，设置与归档继续作为
+  独立控件；项目名称、描述、任务摘要及空白区域均可打开项目，并保留键盘焦点。
+- 项目库统计和列表标题改为“可用项目”与“项目列表”，不再使用“当前项目”。
+- 工作台的场记 CSV 与 Resolve CSV 统一使用有边框的次级按钮样式。
+- 浅色/深色主题只在实际切换时过渡颜色、边框和阴影，首次渲染不播放，且遵循
+  `prefers-reduced-motion`。
+- 验证结果：premium strict audit 为 0 findings；Modern Vitest 13 个文件、39 项
+  通过，`npm run check`、`npm run typecheck`、`npm run build:modern` 与
+  `npm run build:storybook` 通过。官方 DESIGN.md lint 为 0 errors；10 条既有
+  frontmatter token 映射 warning 未在本次小范围任务中扩张修复。
+
+## 2026-08-24 固定侧栏底部控件
+
+- 桌面端共享 `Sidebar` 固定为视口高度，右侧工作区继续使用文档滚动；收起侧栏与
+  主题切换控件固定在侧栏底部，不再随工作区长内容上下移动。
+- 极短桌面窗口只允许侧栏中部导航区滚动，品牌区和底部控件保持可见；小于
+  640px 的顶部导航显式恢复自然高度和可见溢出，避免继承桌面约束后裁切内容。
+- 验证结果：premium strict audit 为 0 findings；Modern Vitest 14 个文件、41 项
+  通过，`npm run check`、`npm run typecheck`、`npm run build:modern` 与
+  `npm run build:storybook` 通过；未自动启动 Electron 前台窗口。
+
+## 2026-08-24 Electron 开发契约与本机边界
+
+- Renderer 开发脚本的有意迁移记录在 build contract 的 transition inventory，
+  历史 baseline 保持不变，标准 Node 套件可继续检测未登记的命令漂移。
+- HMR Renderer URL 只接受无认证信息的 loopback HTTP 地址；普通导航和服务端
+  重定向均须保持在配置的同一来源，远程页面无法继承 SlateSync typed Preload。
+- URL 边界使用独立纯函数覆盖 localhost、IPv4、IPv6、协议、认证信息、端口和
+  远程域名场景，Electron Main 继续只负责窗口生命周期与事件接线。
+- 验证结果：`npm run test:node` 242/242、Modern Vitest 14 个文件 44/44 与
+  `npm run typecheck` 通过；未启动 Electron 前台窗口。
+
+## 2026-08-24 应用内品牌图标统一
+
+- Modern Renderer 左上角品牌标记改为直接导入 `build/icon.png`，与 Electron
+  窗口和 macOS 安装包共用同一 App Icon，不再维护独立的字母 `S` 图块。
+- 图标保持原侧栏 34px 布局占位和原始宽高比，折叠侧栏与窄屏导航不发生位移；
+  品牌图片为装饰内容，功能性图标仍遵循 Lucide 与可访问名称规范。
+- 验证结果：Modern Vitest 14 个文件 45/45、`npm run typecheck`、Renderer
+  production build 与 `git diff --check` 通过；premium strict audit 为 0 findings，
+  DESIGN.md lint 为 0 errors，10 条既有 token 映射 warning 未扩张处理。
+
+## 2026-08-24 草稿任务原位完成
+
+- Renderer 在草稿自动保存完成后，将当前项目内的稳定任务 ID 随识别请求传给
+  Main；Main 以该 ID 更新任务状态和识别结果，不再为完成态生成第二条任务。
+- 更新通过项目作用域的 `taskStore.updateTask` 合并，因此草稿阶段保存的原始输入、
+  CSV 与编辑数据继续保留；没有草稿 ID 的独立识别仍允许创建新任务。
+- Preload 继续透明转发唯一 typed request，新字段为向后兼容的可选 contract；
+  回归测试覆盖 Renderer 请求接线、Preload payload 与 Main 的 update-not-create。
+- 验证结果：`npm run test:node` 243/243、Modern Vitest 15 个文件 46/46、
+  `npm run typecheck`、`npm run build:modern` 与 `git diff --check` 通过；未启动
+  Electron 前台窗口。

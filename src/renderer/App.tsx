@@ -1,6 +1,7 @@
 import { FolderKanban, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import appIconUrl from "../../build/icon.png";
 import { AppShell, Button, Icon, IconButton, Sidebar, Text, Toast, Toolbar } from "./design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "./services/api";
 import { createOperationGuard } from "./services/operation-guard";
@@ -34,14 +35,33 @@ export function App() {
   const [appearanceHydrated, setAppearanceHydrated] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const mainRef = useRef<HTMLElement>(null);
+  const appliedThemeRef = useRef<"dark" | "light" | null>(null);
+  const themeHydratedRef = useRef(false);
   const projectLoadGuard = useMemo(() => createOperationGuard(), []);
 
   const resolvedTheme = resolveTheme(theme, systemPrefersDark);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.dataset.density = density;
-  }, [density, resolvedTheme]);
+  }, [density]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const previousTheme = appliedThemeRef.current;
+    const themeChanged = themeHydratedRef.current && previousTheme !== null && previousTheme !== resolvedTheme;
+    // Skip motion on first paint, then expose a short-lived hook so every
+    // semantic color surface cross-fades together on later theme changes.
+    if (themeChanged) root.dataset.themeTransition = "true";
+    root.dataset.theme = resolvedTheme;
+    appliedThemeRef.current = resolvedTheme;
+    if (appearanceHydrated) themeHydratedRef.current = true;
+    if (!themeChanged) return undefined;
+    const timer = window.setTimeout(() => { delete root.dataset.themeTransition; }, 240);
+    return () => {
+      window.clearTimeout(timer);
+      delete root.dataset.themeTransition;
+    };
+  }, [appearanceHydrated, resolvedTheme]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return undefined;
@@ -175,7 +195,7 @@ export function App() {
     <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={17} /><span>全局设置</span></button>
   </>;
 
-  const sidebar = <Sidebar brand={<><span className={styles.brandMark} data-collapsed={sidebarCollapsed || undefined} aria-hidden="true">S</span><span className={styles.brandCopy} data-collapsed={sidebarCollapsed || undefined}><strong>SlateSync</strong></span></>} navigation={navigation} footer={<><IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} size="sm" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton><IconButton label={resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题"} size="sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>{resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</IconButton></>} />;
+  const sidebar = <Sidebar brand={<><img className={styles.brandIcon} src={appIconUrl} alt="" aria-hidden="true" draggable={false} /><span className={styles.brandCopy} data-collapsed={sidebarCollapsed || undefined}><strong>SlateSync</strong></span></>} navigation={navigation} footer={<><IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} size="sm" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton><IconButton label={resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题"} size="sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>{resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</IconButton></>} />;
   const toolbar = <Toolbar title={routeTitle(route)} {...(project?.name ? { subtitle: project.name } : {})} actions={<Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button>} />;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;

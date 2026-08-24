@@ -421,7 +421,7 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.tasks.save({ projectId: project.id, task }), "task-1");
     expectSuccess(await api.tasks.delete({ projectId: project.id, id: "task-1" }), { deleted: "task-1" });
     expectSuccess(await api.recognition.getModels({ providerId: "openai", forceRefresh: true }), modelDiscovery);
-    expectSuccess(await api.recognition.run({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" }), recognition);
+    expectSuccess(await api.recognition.run({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" }), recognition);
     expectSuccess(await api.recognition.cancel({ projectId: project.id }), { canceled: true });
     expectSuccess(await api.files.save({ defaultFilename: "demo.csv", data: new Uint8Array([1, 2, 3]) }), saveResult);
     expectSuccess(await api.files.selectDirectory(), directory);
@@ -434,7 +434,7 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
     expect(transport.calls[6]?.payload).toEqual({ name: "Demo" });
     expect(transport.calls[12]?.payload).toEqual({ projectId: project.id });
-    expect(transport.calls[20]?.payload).toEqual({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[20]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
     expect(transport.calls[21]?.payload).toEqual({ projectId: project.id });
   });
 

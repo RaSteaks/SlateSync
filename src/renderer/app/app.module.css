@@ -2,8 +2,9 @@
 .appMain { min-width: 0; }
 .panel { padding: var(--ss-panel-padding); }
 .bootScreen { display: grid; min-height: 100vh; place-items: center; color: var(--ss-color-ink-muted); background: var(--ss-color-canvas); }
-.brandMark { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: var(--ss-radius-md); color: var(--ss-color-on-accent); background: var(--ss-color-accent-strong); font-weight: 800; transition: transform var(--ss-motion-base) var(--ss-ease); }
-.brandMark[data-collapsed="true"] { transform: rotate(-3deg); }
+/* The navigation shell consumes the same artwork as the packaged macOS app;
+   object-fit preserves its native rounded silhouette without local restyling. */
+.brandIcon { display: block; width: 34px; height: 34px; flex: 0 0 auto; object-fit: contain; user-select: none; }
 .brandCopy strong, .brandCopy small { display: block; }
 .brandCopy[data-collapsed="true"] { display: none; }
 .brandCopy strong { font-size: .96rem; letter-spacing: -.02em; }
@@ -33,12 +34,16 @@
 .projectCard:hover { border-color: var(--ss-color-accent); background: var(--ss-color-surface-hover); transform: translateY(-2px); }
 .projectCard[data-archived="true"] { opacity: .7; }
 .projectCard[data-current="true"] { border-color: var(--ss-color-accent); box-shadow: var(--ss-shadow-focus); }
+.projectCardOpen { position: absolute; inset: 0; z-index: 1; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.projectCardOpen:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: -3px; box-shadow: inset 0 0 0 3px var(--ss-color-accent-soft); }
+.projectCardContent { position: relative; z-index: 2; pointer-events: none; }
 .projectTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .projectMark { display: grid; width: 38px; height: 38px; place-items: center; border-radius: var(--ss-radius-md); color: var(--ss-color-accent); background: var(--ss-color-accent-soft); font-family: var(--ss-font-mono); font-weight: 800; }
 .projectName { margin: 0; color: var(--ss-color-ink); font-size: 1rem; }
 .projectDescription { min-height: 42px; margin: 8px 0 0; color: var(--ss-color-ink-muted); font-size: .82rem; line-height: 1.45; }
 .projectMeta { margin: 14px 0 0; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .68rem; }
-.projectCardActions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.projectCardActions { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
+.projectCardActions button { pointer-events: auto; }
 .emptyWide { grid-column: 1 / -1; }
 .sectionHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .sectionTitle { margin: 0; color: var(--ss-color-ink); font-size: 1rem; }

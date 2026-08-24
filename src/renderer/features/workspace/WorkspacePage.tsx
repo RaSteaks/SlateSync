@@ -563,6 +563,7 @@ export function WorkspacePage() {
   const buildRecognitionRequest = async (): Promise<RecognitionRequest> => {
     if (!project) throw new Error("项目上下文已失效。");
     const currentSlate = useSlateStore.getState();
+    const activeTaskId = useTaskStore.getState().activeId;
     const slateCsvRecords = useExportStore.getState().slateCsvRecords;
     const maxRequestBytes = config?.upload.maxRequestBytes || 80 * 1024 * 1024;
     const base = {
@@ -572,6 +573,9 @@ export function WorkspacePage() {
       accuracyMode,
       scenarioId: scenarioId || null,
       projectId: project.id,
+      // autosave.flush() runs before this builder, so a newly persisted draft
+      // already has the stable ID that Main must complete instead of cloning.
+      ...(activeTaskId ? { taskId: activeTaskId } : {}),
       ...(currentSlate.filename ? { filename: currentSlate.filename } : {}),
       ...(customPrompt.trim() ? { customPrompt: customPrompt.trim() } : {}),
       ...(slateCsvRecords?.length ? { slateCsvRecords } : {}),
@@ -729,6 +733,27 @@ export function WorkspacePage() {
         <div className={styles.workspaceLeft}>
           <Surface className={styles.panel}><TaskRail onSelect={(id) => void loadTask(id)} onRefresh={() => void refreshTasks()} onNew={() => void newTask()} onDelete={setDeleteTaskId} onRetrySave={() => void autosave.retry()} switching={switchingTask} /></Surface>
           <SlateInputPanel ref={slatePanelRef} onInputChanged={() => autosave.markDirty(captureTask())} />
+          {/* Keep optional sources together before recognition so the user can
+              finish all supporting-data choices before starting the job. */}
+          <Surface className={styles.panel}>
+            <div className={styles.sectionHeader}><div><p className={styles.kicker}>可选</p><h2 className={styles.sectionTitle}>可选输入</h2></div><FolderSearch size={18} aria-hidden="true" /></div>
+            <Text tone="muted" size="sm">载入 CSV 可辅助识别或回填；素材目录可补充帧率和拍摄日。</Text>
+            <Stack direction="row" gap={2} align="center" wrap style={{ marginTop: 14 }}>
+              {/* Both CSV sources use the same outlined affordance so neither
+                  input is visually mistaken for an unbounded text action. */}
+              <span className={styles.fileDropTarget} data-dragging={slateCsvDrop.dragging || undefined} {...slateCsvDrop.dropProps}><input ref={slateCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => slateCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></span>
+              <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
+              {exportState.slateCsvRecords && <Badge tone="accent">场记 CSV · {exportState.slateCsvRecords.length} 条</Badge>}
+              {exportState.table && <Badge tone="success">Resolve CSV · {exportState.table.rows.length} 行</Badge>}
+            </Stack>
+            {exportState.slateCsvRecords && <Button variant="ghost" size="sm" style={{ marginTop: 8 }} onClick={() => useExportStore.getState().setSlateCsvRecords(null, null)}>移除场记 CSV</Button>}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--ss-color-line)" }}>
+              <Text as="h3" size="sm" weight="medium">素材元数据回填</Text>
+              <Text tone="muted" size="sm" style={{ marginTop: 5 }}>从素材目录回填帧率和拍摄日。</Text>
+              <Stack direction="row" gap={2} align="center" style={{ marginTop: 14 }}><Button variant="secondary" size="sm" disabled={!exportState.table || metadata.scanning} loading={metadata.scanning} onClick={() => void selectMetadataDirectory()} startIcon={<FolderSearch size={14} />}>选择素材目录</Button>{metadata.result && <Badge tone="success">{metadata.result.metadata.length} 个元数据</Badge>}</Stack>
+              {metadata.result?.warnings.length ? <Text tone="warning" size="xs" style={{ marginTop: 10 }}>{metadata.result.warnings[0]}</Text> : null}
+            </div>
+          </Surface>
           <Surface className={styles.panel}>
             <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / 识别</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
             <div className={styles.grid}>
@@ -744,12 +769,6 @@ export function WorkspacePage() {
               {!provider?.configured && !canMergeLocal && <Text tone="warning" size="xs">未配置 Provider 密钥。可前往全局设置，或载入场记 CSV。</Text>}
             </div>
           </Surface>
-          <Surface className={styles.panel}>
-            <div className={styles.sectionHeader}><div><p className={styles.kicker}>可选</p><h2 className={styles.sectionTitle}>素材元数据</h2></div><FolderSearch size={18} aria-hidden="true" /></div>
-            <Text tone="muted" size="sm">从素材目录回填帧率和拍摄日。</Text>
-            <Stack direction="row" gap={2} align="center" style={{ marginTop: 14 }}><Button variant="secondary" size="sm" disabled={!exportState.table || metadata.scanning} loading={metadata.scanning} onClick={() => void selectMetadataDirectory()} startIcon={<FolderSearch size={14} />}>选择素材目录</Button>{metadata.result && <Badge tone="success">{metadata.result.metadata.length} 个元数据</Badge>}</Stack>
-            {metadata.result?.warnings.length ? <Text tone="warning" size="xs" style={{ marginTop: 10 }}>{metadata.result.warnings[0]}</Text> : null}
-          </Surface>
         </div>
 
         <div className={styles.workspaceMain}>
@@ -761,17 +780,14 @@ export function WorkspacePage() {
 
           <Surface className={styles.panel}>
             <div className={styles.sectionHeader}>
+              {/* CSV selection lives in the optional-input surface; this panel
+                  stays focused on previewing and editing the merged result. */}
               <div><p className={styles.kicker}>03 / CSV</p><h2 className={styles.sectionTitle}>回填预览</h2></div>
-              <Stack direction="row" gap={2} align="center" wrap>
-                <span className={styles.fileDropTarget} data-dragging={slateCsvDrop.dragging || undefined} {...slateCsvDrop.dropProps}><input ref={slateCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="ghost" size="sm" onClick={() => slateCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></span>
-                <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
-                {exportState.table && <Button variant="ghost" size="sm" onClick={() => { void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button>}
-              </Stack>
+              {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" onClick={() => { void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
             </div>
-            {exportState.slateCsvRecords && <Stack direction="row" gap={2} align="center" style={{ marginBottom: 12 }}><Badge tone="accent">{exportState.slateCsvFilename || "场记 CSV"} · {exportState.slateCsvRecords.length} 条</Badge><Button variant="ghost" size="sm" onClick={() => useExportStore.getState().setSlateCsvRecords(null, null)}>移除场记 CSV</Button></Stack>}
             {exportState.error && <InlineError message={exportState.error.message} />}
             {exportState.table && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
-            {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>可选：载入 Resolve CSV 后预览并编辑回填结果。</div>}
+            {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>请在左侧可选输入中载入 Resolve CSV 后预览并编辑回填结果。</div>}
           </Surface>
           <RecognitionResultPanel onRecordEdited={() => autosave.markDirty(captureTask())} />
         </div>
