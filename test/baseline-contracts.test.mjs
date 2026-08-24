@@ -12,7 +12,18 @@ import { createTask } from "../lib/task-store.mjs";
 // Inventories are reviewed expected values. Tests structurally observe the
 // live source/config/database and never regenerate an inventory on drift.
 const contractRoot = new URL("../.codex/refactor/baseline/contracts/", import.meta.url);
+const additiveContractRoot = new URL("../.codex/refactor/additive/contracts/", import.meta.url);
 const repo = new URL("../", import.meta.url);
+
+// This independent literal keeps post-baseline features from being rewritten
+// into the fixture that represents c7dafa4's historical IPC surface.
+const historicalIpcMethodNames = [
+  "getConfig", "saveProviderKey", "getModels", "recognize", "saveFile", "selectDirectory", "scanSlateDirectory",
+  "listProjects", "getLibraryInfo", "importProjectLibrary", "exportProjectLibrary", "changeLibraryLocation",
+  "createProject", "loadProject", "updateProject", "archiveProject", "restoreProject", "listTasks", "loadTask",
+  "saveTask", "deleteTask", "listScenarios", "loadScenario", "importScenario", "getOcrSettings", "saveOcrSettings",
+  "checkOcr",
+];
 
 async function readJson(name, base = contractRoot) {
   return JSON.parse(await readFile(new URL(name, base), "utf8"));
@@ -57,14 +68,37 @@ function actualForeignKeys(db, tables) {
   );
 }
 
-test("baseline preload and Main expose the exact reviewed IPC surface", async () => {
-  const ipc = await readJson("ipc.json");
+test("historical IPC inventory remains separate from post-baseline methods", async () => {
+  const [ipc, additions] = await Promise.all([
+    readJson("ipc.json"),
+    readJson("ipc.json", additiveContractRoot),
+  ]);
+
+  assert.equal(ipc.baselineCommit, "c7dafa4d972e5eb7be61f00e2b546d6826e70c87");
+  assert.equal(additions.extendsBaselineCommit, ipc.baselineCommit);
+  assert.deepEqual(Object.keys(ipc.requestMethods).sort(), [...historicalIpcMethodNames].sort());
+  assert.equal(ipc.cancelRecognitionChannel, null);
+  assert.deepEqual(Object.keys(additions.requestMethods).sort(), ["cancelRecognition", "deleteProject"]);
+  assert.deepEqual(
+    Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
+    ["cancel-recognition", "delete-project"],
+  );
+});
+
+test("baseline and additive IPC contracts expose the exact reviewed Main surface", async () => {
+  const [ipc, additions] = await Promise.all([
+    readJson("ipc.json"),
+    readJson("ipc.json", additiveContractRoot),
+  ]);
   const preload = await readFile(new URL("electron/preload.cjs", repo), "utf8");
   const typedPreload = await readFile(new URL("src/preload/index.ts", repo), "utf8");
   const sharedContracts = await readFile(new URL("src/shared/contracts/index.ts", repo), "utf8");
   const mainHandlers = await readFile(new URL("electron/ipc-handlers.mjs", repo), "utf8");
   const handlerChannels = [...mainHandlers.matchAll(/ipcMain\.handle\(\s*"([^"]+)"/g)].map((match) => match[1]);
-  const expectedChannels = Object.values(ipc.requestMethods).map((contract) => contract.channel);
+  // Current channels are verified as a union, while the historical fixture is
+  // locked above instead of absorbing feature-package additions.
+  const contracts = [ipc, additions];
+  const expectedChannels = contracts.flatMap((contract) => Object.values(contract.requestMethods).map((method) => method.channel));
 
   assert.match(preload, /Transition marker only/);
   assert.doesNotMatch(preload, /\brequire\s*\(/);
@@ -72,17 +106,18 @@ test("baseline preload and Main expose the exact reviewed IPC surface", async ()
   assert.match(typedPreload, /process\.versions\.electron/);
   assert.match(preload + typedPreload, /slateSync/);
   assert.doesNotMatch(preload, /electronAPI/);
+  assert.equal(new Set(expectedChannels).size, expectedChannels.length, "IPC contracts must not reuse request channels");
   assert.deepEqual([...new Set(handlerChannels)].sort(), [...expectedChannels].sort());
   assert.ok(typedPreload.includes(`on("${ipc.events.recognitionProgress.channel}",`));
   assert.ok(typedPreload.includes(`removeListener("${ipc.events.recognitionProgress.channel}",`));
-  assert.equal(ipc.cancelRecognitionChannel, null);
-  assert.doesNotMatch(preload + typedPreload + mainHandlers, /cancel-recognition/);
 
-  for (const [method, contract] of Object.entries(ipc.requestMethods)) {
-    assert.ok(typedPreload.includes(`request("${contract.channel}"`), `${method} transport drift`);
-    for (const argument of contract.args) {
-      if (String(argument).includes("|") || argument === "requestBody") continue;
-      assert.match(typedPreload + sharedContracts, new RegExp(`\\b${escapeRegex(argument)}\\b`), `${method} missing ${argument}`);
+  for (const source of contracts) {
+    for (const [method, contract] of Object.entries(source.requestMethods)) {
+      assert.ok(typedPreload.includes(`request("${contract.channel}"`), `${method} transport drift`);
+      for (const argument of contract.args) {
+        if (String(argument).includes("|") || argument === "requestBody") continue;
+        assert.match(typedPreload + sharedContracts, new RegExp(`\\b${escapeRegex(argument)}\\b`), `${method} missing ${argument}`);
+      }
     }
   }
   assert.deepEqual(ipc.transition.namespaces, ["app", "projects", "tasks", "recognition", "files", "settings"]);

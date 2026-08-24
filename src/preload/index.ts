@@ -89,6 +89,7 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       update: (body: ProjectRequest) => request("update-project", body),
       archive: (body: ProjectIdRequest) => request("archive-project", body),
       restore: (body: ProjectIdRequest) => request("restore-project", body),
+      delete: (body: ProjectIdRequest) => request("delete-project", body),
       listScenarios: (body: ProjectScopedRequest) => request("list-scenarios", body),
       loadScenario: (body: ScenarioIdRequest) => request("load-scenario", body),
       importScenario: (body: ScenarioImportRequest) => request("import-scenario", body),
@@ -102,6 +103,7 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
     recognition: {
       getModels: (body: ModelsRequest) => request("get-models", body),
       run: (body: RecognitionRequest) => request("recognize", body),
+      cancel: (body: ProjectScopedRequest) => request("cancel-recognition", body),
       onProgress,
     },
     files: {

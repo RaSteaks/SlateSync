@@ -10,12 +10,21 @@ function taskLabel(filename: string | null | undefined, id: string | undefined) 
 }
 
 const saveStateLabel = {
-  idle: "当前任务尚无待保存修改",
-  dirty: "有修改等待保存",
-  saving: "正在保存任务",
-  saved: "任务已保存",
-  error: "任务保存失败",
+  idle: "未修改",
+  dirty: "等待保存",
+  saving: "正在保存",
+  saved: "已保存",
+  error: "保存失败",
 } as const;
+
+function taskStatusLabel(status: string | null | undefined) {
+  if (status === "completed") return "已完成";
+  if (status === "edited") return "已编辑";
+  if (status === "running") return "进行中";
+  if (status === "failed") return "失败";
+  if (status === "draft" || !status) return "草稿";
+  return status;
+}
 
 interface TaskRailProps {
   readonly onSelect: (id: string) => void;
@@ -45,7 +54,7 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
     <section aria-labelledby="task-rail-title" aria-busy={loading || switching}>
       <Stack direction="row" justify="between" align="center" style={{ marginBottom: 10 }}>
         <div>
-          <p className={styles.kicker}>TASK HISTORY</p>
+          <p className={styles.kicker}>任务</p>
           <h2 id="task-rail-title" className={styles.sectionTitle}>识别任务</h2>
         </div>
         <Stack direction="row" gap={1} align="center">
@@ -66,7 +75,7 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
       </div>
 
       {tasks.length === 0 ? (
-        <EmptyState icon={FileClock} title="还没有任务" description="新建任务或完成一次识别后，快照会保留在当前项目。" />
+        <EmptyState icon={FileClock} title="还没有任务" description="新建任务即可开始。" />
       ) : (
         <div ref={scrollRef} className={styles.taskRail}>
           <div className={styles.taskVirtualSizer} style={{ height: virtualizer.getTotalSize() }}>
@@ -91,9 +100,9 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
                   >
                     <span>
                       <strong>{taskLabel(task.filename, task.id)}</strong>
-                      <small>{task.status || "draft"} · {task.recordCount || 0} 条 · {task.updatedAt ? new Date(task.updatedAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "未保存"}</small>
+                      <small>{taskStatusLabel(task.status)} · {task.recordCount || 0} 条 · {task.updatedAt ? new Date(task.updatedAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "未保存"}</small>
                     </span>
-                    <Text tone="subtle" size="xs" mono>{task.pageCount || 0}p</Text>
+                    <Text tone="subtle" size="xs" mono>{task.pageCount || 0} 页</Text>
                   </button>
                   {task.id && (
                     <IconButton label={`删除${taskLabel(task.filename, task.id)}`} size="sm" onClick={() => onDelete(task.id!)} disabled={switching}>

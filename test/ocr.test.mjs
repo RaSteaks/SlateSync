@@ -210,6 +210,32 @@ test("optional PaddleOCR failure degrades cleanly and required mode blocks", asy
   );
 });
 
+test("PaddleOCR cancellation is terminal instead of falling back to the model", async () => {
+  clearPaddleOcrCache();
+  const controller = new AbortController();
+  let receivedSignal = null;
+  let signalStarted;
+  const started = new Promise((resolve) => { signalStarted = resolve; });
+  const ocr = runPaddleOcrForPages([[imageDataUrl]], {
+    env: { PADDLEOCR_ENABLED: "true" },
+    cache: false,
+    signal: controller.signal,
+    execute: async (_payload, options) => new Promise((_resolve, reject) => {
+      receivedSignal = options.signal;
+      signalStarted();
+      options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+    }),
+  });
+
+  await started;
+  controller.abort();
+  await assert.rejects(
+    ocr,
+    (error) => error.code === "RECOGNITION_CANCELED" && error.message === "识别已停止",
+  );
+  assert.equal(receivedSignal, controller.signal);
+});
+
 test("multimodal recognition receives OCR text, confidence and coordinates", async () => {
   let captured;
   const fetchImpl = async (url, request) => {

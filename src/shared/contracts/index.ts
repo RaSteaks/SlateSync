@@ -614,6 +614,7 @@ export interface SlateSyncApi {
     update(request: ProjectRequest): Promise<Result<ProjectData>>;
     archive(request: ProjectIdRequest): Promise<Result<ProjectData>>;
     restore(request: ProjectIdRequest): Promise<Result<ProjectData>>;
+    delete(request: ProjectIdRequest): Promise<Result<{ readonly deleted: string }>>;
     listScenarios(request: ProjectScopedRequest): Promise<Result<ScenarioSummary[]>>;
     loadScenario(request: ScenarioIdRequest): Promise<Result<ScenarioData>>;
     importScenario(request: ScenarioImportRequest): Promise<Result<ScenarioData>>;
@@ -627,6 +628,7 @@ export interface SlateSyncApi {
   readonly recognition: {
     getModels(request: ModelsRequest): Promise<Result<ModelDiscoveryResult>>;
     run(request: RecognitionRequest): Promise<Result<RecognitionData>>;
+    cancel(request: ProjectScopedRequest): Promise<Result<{ readonly canceled: boolean }>>;
     onProgress(listener: (event: ProgressData) => void): () => void;
   };
   readonly files: {

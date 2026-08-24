@@ -29,6 +29,7 @@ import styles from "./components.module.css";
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
 type ClassProps = { className?: string };
+type ControlState = "error" | "success";
 
 function classes(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -55,28 +56,36 @@ export function Separator({ className, ...props }: HTMLAttributes<HTMLHRElement>
 }
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" | "danger"; size?: "sm" | "md" | "lg"; loading?: boolean; startIcon?: ReactNode; endIcon?: ReactNode };
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", loading = false, disabled, startIcon, endIcon, children, ...props }, ref) {
-  return <button ref={ref} className={styles.button} data-variant={variant} data-size={size} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", loading = false, disabled, startIcon, endIcon, children, onClick, ...props }, ref) {
+  // Keep the action prop explicit: shared Buttons intentionally delegate the
+  // concrete mutation to callers while retaining an inspectable interaction
+  // contract for product and Storybook use.
+  return <button ref={ref} className={styles.button} data-variant={variant} data-size={size} disabled={disabled || loading} aria-busy={loading || undefined} onClick = {onClick} {...props}>
     {loading ? <LoaderCircle className={styles.spinner} size={16} aria-hidden="true" /> : startIcon}
     <span>{children}</span>
     {!loading && endIcon}
   </button>;
 });
 
-export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; size?: "sm" | "md" }>(function IconButton({ label, size = "md", children, ...props }, ref) {
-  return <button ref={ref} className={styles.iconButton} data-size={size} aria-label={label} {...props}>{children}</button>;
+export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; size?: "sm" | "md" }>(function IconButton({ label, size = "md", children, onClick, ...props }, ref) {
+  // Icon-only actions follow the same explicit callback contract as Button,
+  // with the required label providing the visible action's accessible name.
+  return <button ref={ref} className={styles.iconButton} data-size={size} aria-label={label} onClick = {onClick} {...props}>{children}</button>;
 });
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & ClassProps>(function Input({ className, ...props }, ref) {
-  return <input ref={ref} className={classes(styles.control, className)} {...props} />;
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & ClassProps & { state?: ControlState }>(function Input({ className, state, ...props }, ref) {
+  return <input ref={ref} className={classes(styles.control, className)} data-state={state} {...props} />;
 });
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & ClassProps>(function Textarea({ className, ...props }, ref) {
-  return <textarea ref={ref} className={classes(styles.control, styles.textarea, className)} {...props} />;
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & ClassProps & { state?: ControlState; showCount?: boolean }>(function Textarea({ className, state, showCount = false, maxLength, value, defaultValue, ...props }, ref) {
+  const control = <textarea ref={ref} className={classes(styles.control, styles.textarea, "resize-none", className)} data-state={state} maxLength={maxLength} value={value} defaultValue={defaultValue} {...props} />;
+  if (!showCount || !maxLength) return control;
+  const count = String(value ?? defaultValue ?? "").length;
+  return <span className={styles.textareaWrap}>{control}<span className={styles.characterCount} aria-hidden="true">{count} / {maxLength}</span></span>;
 });
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement> & ClassProps>(function Select({ className, ...props }, ref) {
-  return <select ref={ref} className={classes(styles.control, className)} {...props} />;
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement> & ClassProps & { state?: ControlState }>(function Select({ className, state, ...props }, ref) {
+  return <select ref={ref} className={classes(styles.control, className)} data-state={state} {...props} />;
 });
 
 export function Field({ label, hint, error, children, htmlFor }: { label: string; hint?: string | undefined; error?: string | undefined; children: ReactNode; htmlFor?: string | undefined }) {
@@ -88,7 +97,7 @@ export function Field({ label, hint, error, children, htmlFor }: { label: string
   // Field owns the label/control relationship so every design-system input
   // remains accessible even when a feature omits a manual htmlFor id.
   const control = isValidElement(children)
-    ? cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean }>, { id, ...(describedBy ? { "aria-describedby": describedBy } : {}), ...(error ? { "aria-invalid": true } : {}) })
+    ? cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean; "data-state"?: ControlState }>, { id, ...(describedBy ? { "aria-describedby": describedBy } : {}), ...(error ? { "aria-invalid": true, "data-state": "error" } : {}) })
     : children;
   return <label htmlFor={id}>
     <span className={styles.fieldLabel}>{label}</span>

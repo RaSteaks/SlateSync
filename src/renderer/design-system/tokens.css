@@ -67,8 +67,28 @@
   --ss-z-overlay: 60;
   --ss-z-toast: 80;
   --ss-control-height: 40px;
+  --ss-control-padding-inline: 14px;
+  --ss-control-padding-block: 9px;
+  --ss-panel-padding: 20px;
+  --ss-layout-gap: 16px;
   --ss-header-height: 68px;
   --ss-sidebar-width: 248px;
+}
+
+:root[data-density="compact"] {
+  --ss-space-3: 10px;
+  --ss-space-4: 14px;
+  --ss-space-5: 16px;
+  --ss-space-6: 20px;
+  --ss-space-8: 26px;
+  --ss-space-10: 32px;
+  --ss-space-12: 40px;
+  --ss-control-height: 36px;
+  --ss-control-padding-inline: 11px;
+  --ss-control-padding-block: 7px;
+  --ss-panel-padding: 16px;
+  --ss-layout-gap: 12px;
+  --ss-header-height: 60px;
 }
 
 :root[data-theme="light"] {

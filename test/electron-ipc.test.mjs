@@ -64,9 +64,11 @@ describe("electron IPC handlers", () => {
       "update-project",
       "archive-project",
       "restore-project",
+      "delete-project",
       "save-provider-key",
       "get-models",
       "recognize",
+      "cancel-recognition",
       "save-file",
       "select-directory",
       "scan-slate-directory",
@@ -205,6 +207,130 @@ describe("electron IPC handlers", () => {
       }),
       { label: "Imported", imported: true },
     );
+  });
+
+  it("closes a project runtime before deleting its library entry", async () => {
+    const calls = [];
+    const projectId = "project-delete";
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        deleteProject: async (id) => {
+          calls.push(`delete:${id}`);
+          return { deleted: id };
+        },
+      },
+      projectRuntime: {
+        closeProject: async (id) => calls.push(`close:${id}`),
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("delete-project", { id: projectId }), { deleted: projectId });
+    assert.deepEqual(calls, [`close:${projectId}`, `delete:${projectId}`]);
+  });
+
+  it("drains active project reads and rejects new reads while deleting", async () => {
+    const projectId = "project-delete-read-race";
+    let releaseRead;
+    let signalReadStarted;
+    const readStarted = new Promise((resolve) => { signalReadStarted = resolve; });
+    const readGate = new Promise((resolve) => { releaseRead = resolve; });
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        deleteProject: async (id) => {
+          calls.push(`delete:${id}`);
+          return { deleted: id };
+        },
+      },
+      projectRuntime: {
+        get: async () => ({
+          project: { id: projectId },
+          taskStore: {
+            listTasks: async () => {
+              signalReadStarted();
+              await readGate;
+              return [];
+            },
+          },
+        }),
+        closeProject: async (id) => calls.push(`close:${id}`),
+      },
+    }));
+
+    const reading = ipcMain.invoke("list-tasks", { projectId });
+    await readStarted;
+    const deletion = ipcMain.invoke("delete-project", { id: projectId });
+    await assert.rejects(
+      () => ipcMain.invoke("load-task", { projectId, id: "task-1" }),
+      /项目正在归档或删除/,
+    );
+    assert.deepEqual(calls, []);
+    releaseRead();
+    await reading;
+    assert.deepEqual(await deletion, { deleted: projectId });
+    assert.deepEqual(calls, [`close:${projectId}`, `delete:${projectId}`]);
+  });
+
+  it("waits for an active recognition to release its leases before confirming cancellation", async () => {
+    let signalStarted;
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    let signalAborted;
+    const aborted = new Promise((resolve) => { signalAborted = resolve; });
+    let releaseRecognition;
+    const recognitionGate = new Promise((resolve) => { releaseRecognition = resolve; });
+    const lifecycle = [];
+    const project = {
+      id: "project-cancel",
+      settings: {
+        accuracyMode: "standard",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+      },
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      recognitionLimiter: {
+        acquire: () => {
+          lifecycle.push("acquire");
+          return () => lifecycle.push("release");
+        },
+      },
+      projectLibrary: { touchProjectActivity: async () => {} },
+      projectRuntime: {
+        get: async () => ({ project, scenarioStore: null, diagnostics: null, taskStore: null }),
+      },
+      recognize: async (_input, { signal }) => new Promise((_resolve, reject) => {
+        signalStarted();
+        signal.addEventListener("abort", () => {
+          signalAborted();
+          recognitionGate.then(() => {
+            const error = new Error("识别已停止");
+            error.code = "RECOGNITION_CANCELED";
+            reject(error);
+          });
+        }, { once: true });
+      }),
+    }));
+
+    const recognition = ipcMain.invoke("recognize", { projectId: project.id, provider: "openai", model: "test-model", filename: "slate.png" });
+    await started;
+    const rejection = assert.rejects(() => recognition, /识别已停止/);
+    const cancelling = ipcMain.invoke("cancel-recognition", { projectId: project.id });
+    await aborted;
+    let cancellationSettled = false;
+    void cancelling.then(() => { cancellationSettled = true; });
+    await Promise.resolve();
+    assert.equal(cancellationSettled, false);
+    assert.deepEqual(lifecycle, ["acquire"]);
+    releaseRecognition();
+    await rejection;
+    assert.deepEqual(await cancelling, { canceled: true });
+    assert.deepEqual(lifecycle, ["acquire", "release"]);
+    assert.deepEqual(await ipcMain.invoke("cancel-recognition", { projectId: project.id }), { canceled: false });
   });
 
   it("save-provider-key rejects unknown provider", async () => {

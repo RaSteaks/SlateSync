@@ -20,7 +20,7 @@ import type {
 } from "../../shared/contracts/index.js";
 
 export type Route = "projects" | "workspace" | "project-settings" | "global-settings";
-export type Theme = "dark" | "light";
+export type Theme = "system" | "dark" | "light";
 export type Density = "comfortable" | "compact";
 
 export interface ProjectSlice {
@@ -52,6 +52,7 @@ export interface UiSlice {
   setRoute(route: Route): void;
   setTheme(theme: Theme): void;
   setDensity(density: Density): void;
+  hydrateAppearance(appearance: { readonly theme: Theme; readonly density: Density }): void;
   toggleSidebar(): void;
   setToast(toast: UiSlice["toast"]): void;
   setDialog(dialog: UiSlice["dialog"]): void;
@@ -89,7 +90,12 @@ export interface RecognitionSlice {
   start(operationId: number, projectId: string | null, totalPages: number): void;
   progress(operationId: number, event: ProgressData): void;
   complete(operationId: number, data: RecognitionData): void;
+  requestCancel(operationId: number): void;
+  cancel(operationId: number): void;
+  cancelRequestFailed(operationId: number): void;
   updateRecord(index: number, patch: Partial<RecognitionRecord>): void;
+  addRecord(record: RecognitionRecord): void;
+  removeRecord(index: number): void;
   fail(operationId: number, error: AppError): void;
   reset(): void;
 }

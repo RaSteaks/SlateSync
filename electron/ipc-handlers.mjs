@@ -18,6 +18,7 @@ import {
   projectSettingsFromWorkflow,
   validateProjectSettings,
 } from "../lib/project-settings.mjs";
+import { throwIfRecognitionCanceled } from "../lib/ocr/cancellation.mjs";
 
 export function registerIpcHandlers(ipcMain, context) {
   const {
@@ -42,7 +43,11 @@ export function registerIpcHandlers(ipcMain, context) {
   // stores for it. The reservation also closes the inverse race where a write
   // starts after the archive request has passed its first check.
   const activeProjectWrites = new Map();
+  const activeProjectReads = new Map();
+  const projectReadDrains = new Map();
   const archivingProjects = new Set();
+  const deletingProjects = new Set();
+  const activeRecognitions = new Map();
   let activeLibraryWrites = 0;
   let libraryTransferInProgress = false;
 
@@ -95,7 +100,9 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("load-project", async (_event, { id }) => {
     if (!projectLibrary) throw new Error("项目库不可用");
-    return sanitizeProject(await projectLibrary.getProject(id));
+    return withProjectRead(id, async () =>
+      sanitizeProject(await projectLibrary.getProject(id)),
+    );
   });
 
   ipcMain.handle("update-project", async (_event, body) => {
@@ -114,6 +121,7 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("archive-project", async (_event, { id }) => {
     if (!projectLibrary) throw new Error("项目库不可用");
     assertLibraryWritable();
+    if (archivingProjects.has(id) || deletingProjects.has(id)) throw projectDeleteBusy();
     if (Number(activeProjectWrites.get(id)) > 0) {
       throw projectWriteBusy();
     }
@@ -127,28 +135,52 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("restore-project", async (_event, { id }) => {
     if (!projectLibrary) throw new Error("项目库不可用");
+    if (deletingProjects.has(id)) throw projectDeleteBusy();
     return withLibraryWrite(async () =>
       sanitizeProject(await projectLibrary.restoreProject(id)),
     );
   });
 
+  ipcMain.handle("delete-project", async (_event, { id }) => {
+    if (!projectLibrary || !projectRuntime) throw new Error("项目库不可用");
+    assertLibraryWritable();
+    if (Number(activeProjectWrites.get(id)) > 0) throw projectWriteBusy("删除");
+    if (archivingProjects.has(id) || deletingProjects.has(id)) throw projectDeleteBusy();
+    deletingProjects.add(id);
+    activeLibraryWrites += 1;
+    try {
+      // Block new access first, then let already-started readers release their
+      // SQLite use before closeProject removes the cached runtime context.
+      await waitForProjectReads(id);
+      await projectRuntime.closeProject(id);
+      return await projectLibrary.deleteProject(id);
+    } finally {
+      activeLibraryWrites -= 1;
+      deletingProjects.delete(id);
+    }
+  });
+
   ipcMain.handle("list-scenarios", async (_event, body = {}) => {
-    const context = await resolveProjectContext(body.projectId, { readOnly: true });
-    return context.scenarioStore ? context.scenarioStore.listProfiles() : [];
+    return withProjectRead(body.projectId, async () => {
+      const context = await resolveProjectContext(body.projectId, { readOnly: true });
+      return context.scenarioStore ? context.scenarioStore.listProfiles() : [];
+    });
   });
 
   ipcMain.handle("load-scenario", async (_event, { projectId, id }) => {
-    const context = await resolveProjectContext(projectId, { readOnly: true });
-    if (!context.scenarioStore) throw new Error("场记结构存储不可用");
-    return context.scenarioStore.getProfile(id);
+    return withProjectRead(projectId, async () => {
+      const context = await resolveProjectContext(projectId, { readOnly: true });
+      if (!context.scenarioStore) throw new Error("场记结构存储不可用");
+      return context.scenarioStore.getProfile(id);
+    });
   });
 
   ipcMain.handle("import-scenario", async (_event, { projectId, profile }) => {
-    const context = await resolveProjectContext(projectId);
-    if (!context.scenarioStore) throw new Error("场记结构存储不可用");
-    return withProjectWrite(context.project?.id || projectId, () =>
-      context.scenarioStore.importProfile(profile),
-    );
+    return withProjectWrite(projectId, async () => {
+      const context = await resolveProjectContext(projectId);
+      if (!context.scenarioStore) throw new Error("场记结构存储不可用");
+      return context.scenarioStore.importProfile(profile);
+    });
   });
 
   ipcMain.handle("save-provider-key", async (_event, body) => {
@@ -202,17 +234,22 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("recognize", async (event, body) => {
     const release = recognitionLimiter.acquire();
+    const controller = new AbortController();
+    const requestedProjectId = String(body?.projectId || "");
+    const activeRecognition = createActiveRecognition(controller);
+    addActiveRecognition(requestedProjectId, activeRecognition);
     const capture = createSessionCapture();
     let projectContext = null;
     let activeProjectId = null;
     try {
+      if (!requestedProjectId) throw new Error("请先选择项目");
+      // Acquire the write lease before resolving the runtime. This closes the
+      // gap where deletion could close a context while recognition was opening
+      // its SQLite-backed stores.
+      beginProjectWrite(requestedProjectId);
+      activeProjectId = requestedProjectId;
       const workflow = await getWorkflowConfig();
       projectContext = await resolveProjectContext(body?.projectId);
-      const resolvedProjectId = projectContext.project?.id || null;
-      if (resolvedProjectId) beginProjectWrite(resolvedProjectId);
-      // Assign only after the write lease succeeds; a recognition rejected by
-      // an in-progress archive must not persist even a failure diagnostic.
-      activeProjectId = resolvedProjectId;
       const projectSettings = normalizeProjectSettings(
         projectContext.project?.settings || projectSettingsFromWorkflow(workflow),
         projectSettingsFromWorkflow(workflow),
@@ -233,12 +270,18 @@ export function registerIpcHandlers(ipcMain, context) {
           }
         },
         capture,
+        signal: controller.signal,
       });
+      // Recognition can be stopped after the provider responds but before the
+      // Main-process persistence tail starts. Do not turn that late stop into
+      // a completed task or a success response for the Renderer.
+      throwIfRecognitionCanceled(controller.signal);
       const diagnosticsStore = projectContext.diagnostics;
       const taskStoreForProject = projectContext.taskStore;
       const sessionId = diagnosticsStore
         ? await diagnosticsStore.saveSession(capture.session)
         : null;
+      throwIfRecognitionCanceled(controller.signal);
       const taskId = taskStoreForProject
         ? await taskStoreForProject.saveTask({
             projectId: projectContext.project?.id || body?.projectId || null,
@@ -260,6 +303,7 @@ export function registerIpcHandlers(ipcMain, context) {
             diagnosticSessionId: sessionId,
           })
         : null;
+      throwIfRecognitionCanceled(controller.signal);
       if (taskId && projectContext.project && projectLibrary) {
         await projectLibrary.touchProjectActivity(projectContext.project.id);
       }
@@ -286,9 +330,32 @@ export function registerIpcHandlers(ipcMain, context) {
       }
       throw error;
     } finally {
-      if (activeProjectId) endProjectWrite(activeProjectId);
-      release();
+      removeActiveRecognition(requestedProjectId, activeRecognition);
+      try {
+        if (activeProjectId) endProjectWrite(activeProjectId);
+        release();
+      } finally {
+        // cancel-recognition waits for this signal, so it cannot claim the job
+        // stopped while its write lease or recognition limiter is still held.
+        // Resolve even if a defensive cleanup hook fails, otherwise the stop
+        // IPC could wait forever after the recognition promise has settled.
+        activeRecognition.resolveSettled();
+      }
     }
+  });
+
+  ipcMain.handle("cancel-recognition", async (_event, body = {}) => {
+    const projectId = String(body.projectId || "");
+    const recognitions = [...(activeRecognitions.get(projectId) || [])];
+    if (!recognitions.length) return { canceled: false };
+    for (const recognition of recognitions) {
+      recognition.controller.abort(new DOMException("识别已停止", "AbortError"));
+    }
+    // An AbortController only requests cancellation. Waiting for each run's
+    // finalizer makes the IPC acknowledgement truthful for local OCR, model
+    // fetches, SQLite persistence, and the per-project write lease.
+    await Promise.allSettled(recognitions.map((recognition) => recognition.settled));
+    return { canceled: true };
   });
 
   ipcMain.handle("save-file", async (_event, { defaultFilename, data }) => {
@@ -310,25 +377,29 @@ export function registerIpcHandlers(ipcMain, context) {
   );
 
   ipcMain.handle("list-tasks", async (_event, body = {}) => {
-    const context = await resolveProjectContext(body.projectId, { readOnly: true });
-    // Keep the preload contract compact: task lists cross IPC as arrays.
-    if (!context.taskStore) return [];
-    return context.taskStore.listTasks();
+    return withProjectRead(body.projectId, async () => {
+      const context = await resolveProjectContext(body.projectId, { readOnly: true });
+      // Keep the preload contract compact: task lists cross IPC as arrays.
+      if (!context.taskStore) return [];
+      return context.taskStore.listTasks();
+    });
   });
 
   ipcMain.handle("load-task", async (_event, { projectId, id }) => {
-    const context = await resolveProjectContext(projectId, { readOnly: true });
-    if (!context.taskStore) throw new Error("任务存储不可用");
-    return context.taskStore.loadTask(id);
+    return withProjectRead(projectId, async () => {
+      const context = await resolveProjectContext(projectId, { readOnly: true });
+      if (!context.taskStore) throw new Error("任务存储不可用");
+      return context.taskStore.loadTask(id);
+    });
   });
 
   ipcMain.handle("save-task", async (_event, body) => {
     const task = body?.task || body;
     const projectId = body?.projectId || task?.projectId;
-    const context = await resolveProjectContext(projectId);
-    if (!context.taskStore) throw new Error("任务存储不可用");
-    const resolvedProjectId = context.project?.id || projectId;
-    return withProjectWrite(resolvedProjectId, async () => {
+    return withProjectWrite(projectId, async () => {
+      const context = await resolveProjectContext(projectId);
+      if (!context.taskStore) throw new Error("任务存储不可用");
+      const resolvedProjectId = context.project?.id || projectId;
       const safeTask = { ...task };
       if (context.project || projectId || task?.projectId) {
         safeTask.projectId = resolvedProjectId || task.projectId;
@@ -344,10 +415,10 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("delete-task", async (_event, { projectId, id }) => {
-    const context = await resolveProjectContext(projectId);
-    if (!context.taskStore) throw new Error("任务存储不可用");
-    const resolvedProjectId = context.project?.id || projectId;
-    return withProjectWrite(resolvedProjectId, async () => {
+    return withProjectWrite(projectId, async () => {
+      const context = await resolveProjectContext(projectId);
+      if (!context.taskStore) throw new Error("任务存储不可用");
+      const resolvedProjectId = context.project?.id || projectId;
       await context.taskStore.deleteTask(id);
       if (context.project && projectLibrary) {
         await projectLibrary.touchProjectActivity(context.project.id);
@@ -407,12 +478,54 @@ export function registerIpcHandlers(ipcMain, context) {
   async function resolveProjectContext(projectId, { readOnly = false } = {}) {
     if (!projectRuntime) throw new Error("项目运行时不可用");
     if (!projectId) throw new Error("请先选择项目");
+    if (deletingProjects.has(projectId)) throw projectDeleteBusy();
     return projectRuntime.get(projectId, { allowArchived: readOnly });
   }
 
+  function beginProjectRead(projectId) {
+    if (!projectId) throw new Error("请先选择项目");
+    if (deletingProjects.has(projectId)) throw projectDeleteBusy();
+    activeProjectReads.set(
+      projectId,
+      Number(activeProjectReads.get(projectId) || 0) + 1,
+    );
+  }
+
+  function endProjectRead(projectId) {
+    const remaining = Number(activeProjectReads.get(projectId) || 0) - 1;
+    if (remaining > 0) {
+      activeProjectReads.set(projectId, remaining);
+      return;
+    }
+    activeProjectReads.delete(projectId);
+    const drains = projectReadDrains.get(projectId);
+    projectReadDrains.delete(projectId);
+    drains?.forEach((resolve) => resolve());
+  }
+
+  async function waitForProjectReads(projectId) {
+    if (!Number(activeProjectReads.get(projectId))) return;
+    await new Promise((resolve) => {
+      const drains = projectReadDrains.get(projectId) || [];
+      drains.push(resolve);
+      projectReadDrains.set(projectId, drains);
+    });
+  }
+
+  async function withProjectRead(projectId, operation) {
+    beginProjectRead(projectId);
+    try {
+      return await operation();
+    } finally {
+      endProjectRead(projectId);
+    }
+  }
+
   function beginProjectWrite(projectId) {
+    if (!projectId) throw new Error("请先选择项目");
     assertLibraryWritable();
     if (archivingProjects.has(projectId)) throw projectArchiveBusy();
+    if (deletingProjects.has(projectId)) throw projectDeleteBusy();
     activeProjectWrites.set(
       projectId,
       Number(activeProjectWrites.get(projectId) || 0) + 1,
@@ -454,7 +567,7 @@ export function registerIpcHandlers(ipcMain, context) {
 
   async function withLibraryTransfer(operation) {
     assertLibraryWritable();
-    if (activeLibraryWrites || activeProjectWrites.size || archivingProjects.size) {
+    if (activeLibraryWrites || activeProjectWrites.size || archivingProjects.size || deletingProjects.size) {
       const error = new Error("项目库仍有任务正在写入，完成后才能继续");
       error.code = "LIBRARY_BUSY";
       throw error;
@@ -471,10 +584,35 @@ export function registerIpcHandlers(ipcMain, context) {
       if (!restartRequired) libraryTransferInProgress = false;
     }
   }
+
+  function createActiveRecognition(controller) {
+    let resolveSettled;
+    const settled = new Promise((resolve) => { resolveSettled = resolve; });
+    return { controller, settled, resolveSettled };
+  }
+
+  function addActiveRecognition(projectId, recognition) {
+    const recognitions = activeRecognitions.get(projectId) || new Set();
+    recognitions.add(recognition);
+    activeRecognitions.set(projectId, recognitions);
+  }
+
+  function removeActiveRecognition(projectId, recognition) {
+    const recognitions = activeRecognitions.get(projectId);
+    if (!recognitions) return;
+    recognitions.delete(recognition);
+    if (!recognitions.size) activeRecognitions.delete(projectId);
+  }
 }
 
-function projectWriteBusy() {
-  const error = new Error("项目正在写入数据，完成后才能归档");
+function projectWriteBusy(action = "归档") {
+  const error = new Error(`项目正在写入数据，完成后才能${action}`);
+  error.code = "PROJECT_BUSY";
+  return error;
+}
+
+function projectDeleteBusy() {
+  const error = new Error("项目正在归档或删除，无法继续操作");
   error.code = "PROJECT_BUSY";
   return error;
 }

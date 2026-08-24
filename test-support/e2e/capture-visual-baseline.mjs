@@ -199,7 +199,7 @@ try {
   await page.getByRole("button", { name: "全局设置" }).click();
   await waitRoute(page, "全局设置");
   await page.getByRole("combobox", { name: "Provider" }).waitFor();
-  await page.locator('input[placeholder="粘贴新的 API Key"]').waitFor();
+  await page.locator('input[placeholder="粘贴 API Key"]').waitFor();
   paths.push(await capture(page, "06-global-settings-light", 960, 600));
 
   await page.getByRole("button", { name: "项目设置" }).click();
@@ -207,7 +207,7 @@ try {
   paths.push(await capture(page, "07-project-settings-light", 960, 600));
   await page.locator("#project-settings-form input").first().fill("");
   await page.locator("#project-settings-form button[type=submit]").click();
-  const projectNameError = page.getByRole("alert").filter({ hasText: "项目名称不能为空" });
+  const projectNameError = page.getByRole("alert").filter({ hasText: "请输入项目名称。" });
   await projectNameError.waitFor();
   // Keep the captured error state user-visible at the field that owns it.
   await projectNameError.scrollIntoViewIfNeeded();

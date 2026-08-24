@@ -4,7 +4,8 @@ const config: StorybookConfig = {
   stories: ["../src/**/*.stories.@(ts|tsx)"],
   addons: ["@storybook/addon-a11y"],
   framework: { name: "@storybook/react-vite", options: {} },
-  docs: { autodocs: "tag" },
+  // Storybook 10 enables generated docs through each story meta's
+  // `autodocs` tag; the former `docs.autodocs` config no longer exists.
 };
 
 export default config;

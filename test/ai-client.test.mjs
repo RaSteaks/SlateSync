@@ -1551,6 +1551,75 @@ test("empty or missing custom prompt leaves the system prompt untouched", async 
   assert.equal(captured.input[0].content.includes("项目背景补充"), false);
 });
 
+test("an external cancellation signal aborts the active model fetch without retrying", async () => {
+  const controller = new AbortController();
+  let signalStarted;
+  const started = new Promise((resolve) => { signalStarted = resolve; });
+  let calls = 0;
+  const fetchImpl = async (_url, request) => new Promise((_resolve, reject) => {
+    calls += 1;
+    signalStarted();
+    request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true });
+  });
+
+  const recognition = recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+      accuracyMode: "standard",
+    },
+    {
+      env: { OPENAI_API_KEY: "test-key", MODEL_REQUEST_MAX_RETRIES: "3" },
+      fetchImpl,
+      signal: controller.signal,
+    },
+  );
+  await started;
+  controller.abort();
+  await assert.rejects(recognition, (error) => error.code === "RECOGNITION_CANCELED" && error.message === "识别已停止");
+  assert.equal(calls, 1);
+});
+
+test("an external cancellation signal reaches OCR and prevents model requests", async () => {
+  const controller = new AbortController();
+  let receivedSignal = null;
+  let signalStarted;
+  const started = new Promise((resolve) => { signalStarted = resolve; });
+  let modelCalls = 0;
+  const ocrImpl = async (_imageGroups, options) => new Promise((_resolve, reject) => {
+    receivedSignal = options.signal;
+    signalStarted();
+    options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+  });
+
+  const recognition = recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+      accuracyMode: "standard",
+    },
+    {
+      env: { OPENAI_API_KEY: "test-key" },
+      fetchImpl: async () => {
+        modelCalls += 1;
+        return jsonResponse({});
+      },
+      ocrImpl,
+      signal: controller.signal,
+    },
+  );
+  await started;
+  controller.abort();
+  await assert.rejects(
+    recognition,
+    (error) => error.code === "RECOGNITION_CANCELED" && error.message === "识别已停止",
+  );
+  assert.equal(receivedSignal, controller.signal);
+  assert.equal(modelCalls, 0);
+});
+
 function materialRange(cardNumber, start, end) {
   return Array.from(
     { length: end - start + 1 },

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -388,6 +388,58 @@ test("archived projects reject metadata changes until restored", async () => {
     );
   } finally {
     await library.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("project deletion removes only the validated project directory and index row", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-delete-project-"));
+  const library = createProjectLibrary(join(tempRoot, "library"));
+
+  try {
+    const project = await library.createProject({ name: "待删除项目" });
+    const retained = await library.createProject({ name: "保留项目" });
+    const projectPath = project.directoryPath;
+    assert.deepEqual(await library.deleteProject(project.id), { deleted: project.id });
+    await assert.rejects(() => access(projectPath), (error) => error.code === "ENOENT");
+    await assert.rejects(() => library.getProject(project.id), /项目不存在/);
+    assert.equal((await library.getProject(retained.id)).name, "保留项目");
+    await assert.rejects(() => library.deleteProject("project-default"), /默认项目不能删除/);
+  } finally {
+    await library.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("a failed physical project cleanup stays deleted and is retried from its tombstone", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-delete-tombstone-"));
+  const libraryRoot = join(tempRoot, "library");
+  const library = createProjectLibrary(libraryRoot, {
+    // Simulate a recursive removal that has already removed one child before a
+    // transient filesystem error. The index must never be restored afterward.
+    removeDirectory: async (stagedPath) => {
+      await rm(join(stagedPath, "project.json"), { force: true });
+      throw new Error("simulated partial cleanup failure");
+    },
+  });
+
+  try {
+    const project = await library.createProject({ name: "待重试删除项目" });
+    assert.deepEqual(await library.deleteProject(project.id), { deleted: project.id });
+    await assert.rejects(() => library.getProject(project.id), /项目不存在/);
+    const entries = await readdir(join(libraryRoot, "Projects"));
+    assert.ok(entries.some((name) => name.startsWith(`${project.id}.deleting-`)));
+  } finally {
+    await library.close();
+  }
+
+  const restarted = createProjectLibrary(libraryRoot);
+  try {
+    await restarted.getLibraryInfo();
+    const entries = await readdir(join(libraryRoot, "Projects"));
+    assert.equal(entries.some((name) => name.includes(".deleting-")), false);
+  } finally {
+    await restarted.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

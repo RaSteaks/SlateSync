@@ -369,6 +369,7 @@ const responses: Readonly<Record<string, unknown>> = {
   "update-project": project,
   "archive-project": project,
   "restore-project": project,
+  "delete-project": { deleted: project.id },
   "list-scenarios": [scenarioSummary],
   "load-scenario": scenario,
   "import-scenario": scenario,
@@ -378,6 +379,7 @@ const responses: Readonly<Record<string, unknown>> = {
   "delete-task": { deleted: "task-1" },
   "get-models": modelDiscovery,
   recognize: recognition,
+  "cancel-recognition": { canceled: true },
   "save-file": saveResult,
   "select-directory": directory,
   "scan-slate-directory": scan,
@@ -392,7 +394,7 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly six namespaces and exact success DTOs for all 27 operations", async () => {
+  it("exposes exactly six namespaces and exact success DTOs for all 29 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
     expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings"]);
@@ -410,6 +412,7 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.projects.update({ id: project.id, name: "Demo" }), project);
     expectSuccess(await api.projects.archive({ id: project.id }), project);
     expectSuccess(await api.projects.restore({ id: project.id }), project);
+    expectSuccess(await api.projects.delete({ id: project.id }), { deleted: project.id });
     expectSuccess(await api.projects.listScenarios({ projectId: project.id }), [scenarioSummary]);
     expectSuccess(await api.projects.loadScenario({ projectId: project.id, id: scenario.id }), scenario);
     expectSuccess(await api.projects.importScenario({ projectId: project.id, profile: scenarioProfile }), scenario);
@@ -419,6 +422,7 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.tasks.delete({ projectId: project.id, id: "task-1" }), { deleted: "task-1" });
     expectSuccess(await api.recognition.getModels({ providerId: "openai", forceRefresh: true }), modelDiscovery);
     expectSuccess(await api.recognition.run({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" }), recognition);
+    expectSuccess(await api.recognition.cancel({ projectId: project.id }), { canceled: true });
     expectSuccess(await api.files.save({ defaultFilename: "demo.csv", data: new Uint8Array([1, 2, 3]) }), saveResult);
     expectSuccess(await api.files.selectDirectory(), directory);
     expectSuccess(await api.files.scanSlateDirectory({ dirPath: "/synthetic", expectedKeys: ["A:1:1"], maxDepth: 4 }), scan);
@@ -429,8 +433,9 @@ describe("IP-02 Shared Contract and typed Preload", () => {
 
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
     expect(transport.calls[6]?.payload).toEqual({ name: "Demo" });
-    expect(transport.calls[11]?.payload).toEqual({ projectId: project.id });
-    expect(transport.calls[19]?.payload).toEqual({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[12]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[20]?.payload).toEqual({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[21]?.payload).toEqual({ projectId: project.id });
   });
 
   it("maps the complete failure matrix without transport boilerplate, paths, or retry changes", async () => {

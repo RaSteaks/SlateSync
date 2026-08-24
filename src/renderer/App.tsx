@@ -4,6 +4,8 @@ import { flushSync } from "react-dom";
 import { AppShell, Button, Icon, IconButton, Sidebar, Text, Toast, Toolbar } from "./design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "./services/api";
 import { createOperationGuard } from "./services/operation-guard";
+import { isEditableShortcutTarget, RECOGNITION_SHORTCUT_EVENT } from "./services/keyboard-shortcuts";
+import { APPEARANCE_PREFERENCE_KEY, parseAppearancePreference, resolveTheme, watchSystemTheme } from "./services/appearance-preference";
 import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
@@ -29,13 +31,22 @@ export function App() {
   const project = useProjectStore((state) => state.current);
   const setError = useProjectStore((state) => state.setError);
   const [booting, setBooting] = useState(true);
+  const [appearanceHydrated, setAppearanceHydrated] = useState(false);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const mainRef = useRef<HTMLElement>(null);
   const projectLoadGuard = useMemo(() => createOperationGuard(), []);
 
+  const resolvedTheme = resolveTheme(theme, systemPrefersDark);
+
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.dataset.density = density;
-  }, [density, theme]);
+  }, [density, resolvedTheme]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    return watchSystemTheme(window.matchMedia("(prefers-color-scheme: dark)"), setSystemPrefersDark);
+  }, []);
 
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true });
@@ -52,16 +63,50 @@ export function App() {
     let active = true;
     void (async () => {
       try {
-        const config = await unwrap(await getSlateSync().app.getConfig());
+        const api = getSlateSync();
+        const [config, library] = await Promise.all([
+          unwrap(await api.app.getConfig()),
+          unwrap(await api.projects.getLibraryInfo()),
+        ]);
+        if (!active) return;
         useProjectStore.getState().setConfig(config);
-        const library = await unwrap(await getSlateSync().projects.getLibraryInfo());
-        if (active) useProjectStore.getState().setLibrary(library);
+        useProjectStore.getState().setLibrary(library);
+        useUiStore.getState().hydrateAppearance(parseAppearancePreference(localStorage.getItem(APPEARANCE_PREFERENCE_KEY)));
+        setAppearanceHydrated(true);
       } catch (error) {
         if (active) setError(appErrorFromUnknown(error));
       } finally { if (active) setBooting(false); }
     })();
     return () => { active = false; };
   }, [setError]);
+
+  useEffect(() => {
+    if (!appearanceHydrated) return;
+    // Appearance is renderer-only UI state. A versioned key persists it without
+    // expanding Shared Contract v1 or mixing it into project data.
+    try {
+      localStorage.setItem(APPEARANCE_PREFERENCE_KEY, JSON.stringify({ theme, density }));
+    } catch {
+      // Appearance remains usable for this session when storage is unavailable.
+    }
+  }, [appearanceHydrated, density, theme]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (event.key === ",") {
+        event.preventDefault();
+        useUiStore.getState().setDialog(null);
+        setRoute("global-settings");
+        return;
+      }
+      if (event.key !== "Enter" || route !== "workspace" || isEditableShortcutTarget(event.target) || document.querySelector('[role="dialog"]')) return;
+      event.preventDefault();
+      window.dispatchEvent(new Event(RECOGNITION_SHORTCUT_EVENT));
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [route, setRoute]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -108,17 +153,31 @@ export function App() {
     setRoute("projects");
   };
 
+  const leaveDeletedProject = (projectId: string) => {
+    projectLoadGuard.invalidate();
+    const projectState = useProjectStore.getState();
+    projectState.setProjects(projectState.projects.filter((item) => item.id !== projectId));
+    projectState.setCurrent(null);
+    projectState.setScenarios([]);
+    useRecognitionStore.getState().reset();
+    useSlateStore.getState().clearInput();
+    useExportStore.getState().clear();
+    useMetadataStore.getState().clear();
+    useTaskStore.getState().clear();
+    setRoute("projects");
+  };
+
   const navigation = <>
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>LIBRARY</div>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>项目</div>
     <button type="button" className={styles.navItem} data-active={route === "projects"} data-collapsed={sidebarCollapsed || undefined} title="项目库" onClick={leaveProject}><Icon icon={FolderKanban} size={17} /><span>项目库</span></button>
-    {project && <><div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>CURRENT PROJECT</div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => setRoute("workspace")}><Icon icon={LayoutDashboard} size={17} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => setRoute("project-settings")}><Icon icon={SlidersHorizontal} size={17} /><span>项目设置</span></button></>}
+    {project && <><div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>当前项目</div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => setRoute("workspace")}><Icon icon={LayoutDashboard} size={17} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => setRoute("project-settings")}><Icon icon={SlidersHorizontal} size={17} /><span>项目设置</span></button></>}
     <div style={{ flex: 1 }} />
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>SYSTEM</div><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={17} /><span>全局设置</span></button>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={17} /><span>全局设置</span></button>
   </>;
 
-  const sidebar = <Sidebar brand={<><span className={styles.brandMark} aria-hidden="true">S</span><span className={styles.brandCopy}><strong>SlateSync</strong><small>Slate to Resolve</small></span></>} navigation={navigation} footer={<><IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} size="sm" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton><IconButton label={theme === "dark" ? "切换浅色主题" : "切换深色主题"} size="sm" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</IconButton></>} />;
-  const toolbar = <Toolbar title={project ? `${routeTitle(route)} · ${project.name}` : routeTitle(route)} subtitle={project ? `PROJECT / ${project.id}` : "LOCAL PROJECT LIBRARY"} actions={<><Text tone="subtle" size="xs" mono>{density === "compact" ? "DENSE" : "FOCUS"}</Text><Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button></>} />;
+  const sidebar = <Sidebar brand={<><span className={styles.brandMark} data-collapsed={sidebarCollapsed || undefined} aria-hidden="true">S</span><span className={styles.brandCopy} data-collapsed={sidebarCollapsed || undefined}><strong>SlateSync</strong></span></>} navigation={navigation} footer={<><IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} size="sm" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton><IconButton label={resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题"} size="sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>{resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</IconButton></>} />;
+  const toolbar = <Toolbar title={routeTitle(route)} {...(project?.name ? { subtitle: project.name } : {})} actions={<Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button>} />;
 
-  if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">连接本地 Project Library…</Text></div></div>;
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} />}{route === "workspace" && <WorkspacePage />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} />}{route === "global-settings" && <GlobalSettingsPage />}</main></AppShell>{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} />}{route === "workspace" && <WorkspacePage />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}</main></AppShell>{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }
