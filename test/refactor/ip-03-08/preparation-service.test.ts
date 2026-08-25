@@ -57,4 +57,34 @@ describe("preparation service lifecycle", () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(progress).toHaveBeenCalledTimes(1);
   });
+
+  it("returns only ordered page images when the worker finishes PDF preparation", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    const service = new PreparationService();
+    const file = {
+      type: "application/pdf",
+      name: "sheet.pdf",
+      arrayBuffer: async () => new ArrayBuffer(4),
+    } as unknown as File;
+    const promise = service.prepare(file, vi.fn());
+    const worker = FakeWorker.latest!;
+    await Promise.resolve();
+    expect(worker.posted[0]).toMatchObject({ fileType: "application/pdf", filename: "sheet.pdf" });
+    worker.emit("message", {
+      id: 1,
+      type: "result",
+      pageCount: 2,
+      imageDataGroups: [["data:image/jpeg;base64,one"], ["data:image/jpeg;base64,two"]],
+      pdfDataUrl: "data:application/pdf;base64,retired",
+    });
+    const result = await promise;
+    // The preparation boundary intentionally strips any historical PDF field;
+    // only ordered page images may cross into recognition state.
+    expect(result).toEqual({
+      pageCount: 2,
+      imageDataGroups: [["data:image/jpeg;base64,one"], ["data:image/jpeg;base64,two"]],
+    });
+    expect(result).not.toHaveProperty("pdfDataUrl");
+    service.terminate();
+  });
 });

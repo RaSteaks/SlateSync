@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { recognizeSlate } from "../lib/ai-client.mjs";
+import { createSessionCapture } from "../lib/diagnostics.mjs";
 import { publicConfig } from "../lib/config.mjs";
 import {
   clearPaddleOcrCache,
@@ -12,7 +13,6 @@ import {
 
 const imageDataUrl = "data:image/jpeg;base64,ZmFrZS1pbWFnZQ==";
 const secondImageDataUrl = "data:image/jpeg;base64,c2Vjb25kLWltYWdl";
-const pdfDataUrl = "data:application/pdf;base64,JVBERi0xLjQK";
 
 test("PaddleOCR runner normalizes page evidence and caches identical image groups", async () => {
   clearPaddleOcrCache();
@@ -174,10 +174,11 @@ test("automatic OCR timeout scales with the number of views", async () => {
 
 test("OCR evidence keeps all full-page text while core mode focuses short field evidence", () => {
   const page = rawOcrResult().pages[0];
-  const full = formatOcrEvidence(page, { mode: "full" });
-  const core = formatOcrEvidence(page, { mode: "core" });
+  const full = formatOcrEvidence(page, { mode: "full", engine: "vision" });
+  const core = formatOcrEvidence(page, { mode: "core", engine: "vision" });
 
   assert.match(full, /<ocr_evidence>/);
+  assert.match(full, /engine=vision page=1 mode=full/);
   assert.match(full, /text="人物走进房间并坐下"/);
   assert.match(full, /box=\[0\.1000,0\.2000,0\.2000,0\.2400\]/);
   assert.doesNotMatch(core, /人物走进房间并坐下/);
@@ -238,6 +239,7 @@ test("PaddleOCR cancellation is terminal instead of falling back to the model", 
 
 test("multimodal recognition receives OCR text, confidence and coordinates", async () => {
   let captured;
+  const diagnosticCapture = createSessionCapture();
   const fetchImpl = async (url, request) => {
     captured = { url, body: JSON.parse(request.body) };
     return jsonResponse({
@@ -282,6 +284,7 @@ test("multimodal recognition receives OCR text, confidence and coordinates", asy
       env: { OPENAI_API_KEY: "test-key", PADDLEOCR_ENABLED: "true" },
       fetchImpl,
       ocrImpl,
+      capture: diagnosticCapture,
     },
   );
 
@@ -291,23 +294,26 @@ test("multimodal recognition receives OCR text, confidence and coordinates", asy
   assert.match(userText, /text="068"/);
   assert.equal(result.ocr.used, true);
   assert.equal(result.ocr.blockCount, 3);
+  const diagnosticStage = diagnosticCapture.session.pages[0].stages[0];
+  // Evidence is retained once at the stage boundary, not duplicated inside
+  // the sanitized request snapshot persisted to SQLite and JSON.
+  assert.match(diagnosticStage.ocrEvidence, /<ocr_evidence>/);
+  assert.equal(Object.hasOwn(diagnosticStage.request, "ocrEvidence"), false);
 });
 
-test("required OCR rejects direct PDF input before any provider request", async () => {
+test("legacy raw PDF input is rejected before any provider request", async () => {
   let providerCalled = false;
   await assert.rejects(
     recognizeSlate(
       {
         providerId: "openai",
         modelId: "openai/gpt-4o-mini",
-        pdfDataUrl,
-        pageCount: 1,
+        pdfDataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
       },
       {
         env: {
           OPENAI_API_KEY: "test-key",
           PADDLEOCR_ENABLED: "true",
-          PADDLEOCR_REQUIRED: "true",
         },
         fetchImpl: async () => {
           providerCalled = true;
@@ -315,39 +321,117 @@ test("required OCR rejects direct PDF input before any provider request", async 
         },
       },
     ),
-    (error) => error.status === 400 && /Base64 PDF/.test(error.message),
+    (error) => error.status === 400 && /原始 PDF 直传已停用/.test(error.message),
+  );
+  assert.equal(providerCalled, false);
+
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "openai",
+        modelId: "openai/gpt-4o-mini",
+        imageDataGroups: [[imageDataUrl]],
+      },
+      {
+        env: { OPENAI_API_KEY: "test-key" },
+        // Zero OCR blocks are also invalid in strict mode; do not silently
+        // turn an empty required result into a page-image-only request.
+        ocrMeta: { id: "vision", label: "Vision OCR", required: true },
+        ocrImpl: async () => ({
+          id: "vision",
+          enabled: true,
+          available: true,
+          used: true,
+          pages: [{ pageNumber: 1, views: [] }],
+        }),
+        fetchImpl: async () => {
+          providerCalled = true;
+          throw new Error("provider should not be called");
+        },
+      },
+    ),
+    (error) => error.status === 503 && /没有返回有效结果/.test(error.message),
   );
   assert.equal(providerCalled, false);
 });
 
-test("optional direct PDF OCR skip is included in result warnings", async () => {
+test("optional OCR failure falls back to page images with a precision warning", async () => {
+  let captured;
+  const diagnosticCapture = createSessionCapture();
+  const progressEvents = [];
   const result = await recognizeSlate(
     {
       providerId: "openai",
       modelId: "openai/gpt-4o-mini",
-      pdfDataUrl,
-      pageCount: 1,
+      imageDataGroups: [[imageDataUrl]],
     },
     {
       env: {
         OPENAI_API_KEY: "test-key",
         PADDLEOCR_ENABLED: "true",
       },
-      fetchImpl: async () =>
-        jsonResponse({
+      // Exercise the outer orchestration fallback, not only a runner's own
+      // optional-failure normalization.
+      ocrImpl: async () => {
+        throw new Error("OCR worker crashed");
+      },
+      fetchImpl: async (_url, request) => {
+        captured = JSON.parse(request.body);
+        return jsonResponse({
           output_text: JSON.stringify({
-            sheetTitle: "PDF OCR skip",
+            sheetTitle: "OCR fallback",
             records: [],
             warnings: [],
           }),
           usage: { input_tokens: 10, output_tokens: 10 },
-        }),
+        });
+      },
+      capture: diagnosticCapture,
+      onProgress: (event) => progressEvents.push(event),
     },
   );
 
   assert.equal(result.ocr.used, false);
-  assert.match(result.ocr.warning, /未运行本地 OCR/);
-  assert.match(result.result.warnings[0], /未运行本地 OCR/);
+  assert.equal(
+    result.ocr.warning,
+    "本地 OCR 不可用，已改用页面图片直接识别；识别精度可能下降。",
+  );
+  assert.equal(diagnosticCapture.session.ocr.summary.warning, result.ocr.warning);
+  assert.ok(progressEvents.some((event) => event.warning === result.ocr.warning));
+  assert.match(result.result.warnings[0], /本地 OCR 不可用/);
+  assert.match(result.result.warnings[0], /识别精度可能下降/);
+  assert.equal(captured.input[1].content[1].type, "input_image");
+});
+
+test("required OCR failure stops before the provider and explains how to repair it", async () => {
+  let providerCalled = false;
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "openai",
+        modelId: "openai/gpt-4o-mini",
+        imageDataGroups: [[imageDataUrl]],
+      },
+      {
+        env: { OPENAI_API_KEY: "test-key" },
+        // Inject a failing required engine to exercise the orchestration
+        // boundary that wraps installation/path guidance for strict mode.
+        ocrMeta: { id: "vision", label: "Vision OCR", required: true },
+        ocrImpl: async () => {
+          throw new Error("Vision OCR worker unavailable");
+        },
+        fetchImpl: async () => {
+          providerCalled = true;
+          throw new Error("provider should not be called");
+        },
+      },
+    ),
+    (error) =>
+      error.status === 503 &&
+      /VISIONOCR_REQUIRED/.test(error.message) &&
+      /安装、路径或配置/.test(error.message),
+  );
+  assert.equal(providerCalled, false);
 });
 
 test("public config exposes OCR readiness without leaking its Python path", () => {

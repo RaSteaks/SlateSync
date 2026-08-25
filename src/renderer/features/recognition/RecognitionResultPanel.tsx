@@ -143,7 +143,7 @@ export function RecognitionResultPanel({ onRecordEdited }: { readonly onRecordEd
       <div><p className={styles.kicker}>识别结果</p><h2 ref={headingRef} tabIndex={-1} id="recognition-results-title" className={styles.sectionTitle}>{result.sheetTitle || "识别明细"}</h2><Text tone="muted" size="sm">{records.length} 条记录 · {result.warnings.length} 个警告</Text></div>
       <Stack direction="row" gap={2} align="center"><Badge tone={result.warnings.length ? "warning" : "success"} icon={result.warnings.length ? FileWarning : CheckCircle2}>{result.warnings.length ? `${result.warnings.length} 个警告` : "结果可用"}</Badge><Button variant="ghost" size="sm" onClick={appendRecord} startIcon={<Plus size={14} />}>添加记录</Button></Stack>
     </Stack>
-    {result.warnings.length > 0 && <div className={`${styles.warningList} ${styles.topGap}`}>{result.warnings.map((warning, index) => <div className={styles.warningItem} key={`${warning}-${index}`}>{warning}</div>)}</div>}
+    {result.warnings.length > 0 && <div className={`${styles.warningList} ${styles.topGap}`} role="status" aria-live="polite">{result.warnings.map((warning, index) => <div className={styles.warningItem} key={`${warning}-${index}`}>{warning}</div>)}</div>}
     <div className={`${styles.statusRow} ${styles.resultControls}`}><div className={styles.searchWrap}><Input type="search" aria-label="搜索识别记录" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索卡号、视频码、场次、镜或次" /></div><Text tone="subtle" size="xs">显示 {visibleRecords.length} / {records.length}</Text></div>
     <div className={styles.resultTableFrame}>
       <div className={styles.resultTableScroll}>

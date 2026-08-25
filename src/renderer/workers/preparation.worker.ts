@@ -8,7 +8,7 @@ import { calculateCoreColumnWidth, calculateDetailSegments, findDenseRowBand } f
 type PrepareMessage = { id: number; type?: "prepare"; fileType: string; data: ArrayBuffer; filename: string };
 type RecompressMessage = { id: number; type: "recompress"; imageDataGroups: string[][]; maxDimension: number; quality: number };
 type ProgressMessage = { id: number; type: "progress"; progress: number; message: string };
-type ResultMessage = { id: number; type: "result"; pageCount: number; imageDataGroups: string[][]; pdfDataUrl: string | null };
+type ResultMessage = { id: number; type: "result"; pageCount: number; imageDataGroups: string[][] };
 type RecompressedMessage = { id: number; type: "recompressed"; imageDataGroups: string[][] };
 type ErrorMessage = { id: number; type: "error"; message: string };
 
@@ -179,9 +179,10 @@ scope.onmessage = (event) => {
       const { data, fileType, filename } = message;
       scope.postMessage({ id, type: "progress", progress: 5, message: `正在读取 ${filename}` });
       const isPdf = fileType === "application/pdf";
-      const pdfDataUrl = isPdf ? await blobToDataUrl(new Blob([data], { type: "application/pdf" })) : null;
       const imageDataGroups = isPdf ? await rasterizePdf(data, id) : [[await rasterizeImage(data, fileType)]];
-      scope.postMessage({ id, type: "result", pageCount: imageDataGroups.length, imageDataGroups, pdfDataUrl });
+      // The original PDF is only an input to local rasterization. Returning it
+      // would reintroduce a model-side path that bypasses local OCR evidence.
+      scope.postMessage({ id, type: "result", pageCount: imageDataGroups.length, imageDataGroups });
     } catch (error) {
       const named = error as { name?: string; message?: string };
       const fileType = message.type === "recompress" ? "image/jpeg" : message.fileType;

@@ -64,12 +64,11 @@ export interface SlateSlice {
   fileSize: number;
   pageCount: number;
   imageDataGroups: readonly (readonly string[])[];
-  pdfDataUrl: string | null;
   preparing: boolean;
   preparationProgress: number;
   preparationMessage: string;
   error: AppError | null;
-  setInput(input: { filename: string; fileType: string; fileSize: number; pageCount: number; imageDataGroups: readonly (readonly string[])[]; pdfDataUrl?: string | null }): void;
+  setInput(input: { filename: string; fileType: string; fileSize: number; pageCount: number; imageDataGroups: readonly (readonly string[])[] }): void;
   clearInput(): void;
   setPreparing(preparing: boolean, progress?: number, message?: string): void;
   setError(error: AppError | null): void;
@@ -84,6 +83,7 @@ export interface RecognitionSlice {
   completedPages: number;
   totalPages: number;
   message: string;
+  warning: string | null;
   data: RecognitionData | null;
   records: readonly RecognitionRecord[];
   error: AppError | null;

@@ -44,7 +44,7 @@ export const SlateInputPanel = forwardRef<SlateInputPanelHandle, { readonly onIn
     try {
       const result = await getPreparationService().prepare(file, (nextProgress, message) => { if (preparationGuard.isCurrent(operationId)) setPreparing(true, nextProgress, message); });
       if (!preparationGuard.isCurrent(operationId)) return;
-      setInput({ filename: file.name, fileType: type, fileSize: file.size, pageCount: result.pageCount, imageDataGroups: result.imageDataGroups, pdfDataUrl: result.pdfDataUrl });
+      setInput({ filename: file.name, fileType: type, fileSize: file.size, pageCount: result.pageCount, imageDataGroups: result.imageDataGroups });
       onInputChanged?.();
     } catch (nextError) { if (preparationGuard.isCurrent(operationId)) setError(asPreparationError(nextError)); }
   };

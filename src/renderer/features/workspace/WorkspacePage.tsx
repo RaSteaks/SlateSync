@@ -52,8 +52,6 @@ const EMPTY_OCR: OcrSummary = {
   warning: null,
 };
 
-const IMAGE_ONLY_PROVIDERS = new Set(["tokenplan", "dashscope"]);
-
 function defaultSettings(config: ReturnType<typeof useProjectStore.getState>["config"]): ProjectSettings {
   return {
     version: 1,
@@ -101,7 +99,6 @@ export function WorkspacePage() {
     fileSize: state.fileSize,
     pageCount: state.pageCount,
     imageDataGroups: state.imageDataGroups,
-    pdfDataUrl: state.pdfDataUrl,
     preparing: state.preparing,
   })));
   const recognition = useRecognitionStore(useShallow((state) => ({
@@ -111,6 +108,7 @@ export function WorkspacePage() {
     completedPages: state.completedPages,
     totalPages: state.totalPages,
     message: state.message,
+    warning: state.warning,
     records: state.records,
   })));
   const exportState = useExportStore(useShallow((state) => ({
@@ -580,12 +578,9 @@ export function WorkspacePage() {
       ...(customPrompt.trim() ? { customPrompt: customPrompt.trim() } : {}),
       ...(slateCsvRecords?.length ? { slateCsvRecords } : {}),
     } as const;
-    const directPdf = Boolean(currentSlate.pdfDataUrl && currentSlate.fileType === "application/pdf" && !config?.ocr.required && !IMAGE_ONLY_PROVIDERS.has(providerId));
-    if (directPdf) {
-      const request = { ...base, pdfDataUrl: currentSlate.pdfDataUrl! };
-      if (requestBodyFits(JSON.stringify(request), maxRequestBytes)) return request;
-    }
-
+    // PDFs are rasterized by PreparationService before this builder runs. The
+    // model request deliberately contains only page images so local OCR always
+    // precedes every provider call, including optional-OCR fallback runs.
     let imageDataGroups = selectRecognitionImageGroups(currentSlate.imageDataGroups, accuracyMode) as readonly (readonly string[])[];
     let request: RecognitionRequest = { ...base, imageDataGroups };
     if (requestBodyFits(JSON.stringify(request), maxRequestBytes)) return request;
@@ -601,7 +596,6 @@ export function WorkspacePage() {
           fileSize: currentSlate.fileSize,
           pageCount: currentSlate.pageCount,
           imageDataGroups,
-          pdfDataUrl: currentSlate.pdfDataUrl,
         });
         return request;
       }
@@ -775,7 +769,13 @@ export function WorkspacePage() {
           <Surface className={styles.panel}>
             <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>预览</p><h2 className={styles.sectionTitle}>场记单</h2></div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} 页` : "未载入"}</Text>{slate.filename && <Button variant="ghost" size="sm" onClick={() => slatePanelRef.current?.openPicker()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
             {slate.imageDataGroups.length ? <div ref={slatePreviewRef} tabIndex={-1} aria-label="场记单预览" className={styles.preview} style={{ marginTop: 14 }}><div className={styles.previewPages}>{slate.imageDataGroups.map((group, index) => <div className={styles.previewPage} key={`${slate.filename}-${index}`}><img src={group[0]} alt={`${slate.filename || "场记单"} 第 ${index + 1} 页`} /><span>{String(index + 1).padStart(2, "0")}</span></div>)}</div></div> : <div className={styles.routeHint} style={{ marginTop: 14 }}>载入场记单后显示预览。</div>}
-            {recognition.running && <div className={styles.recognitionBanner} style={{ marginTop: 14 }}><div className={styles.recognitionBannerHeader}><Stack direction="row" gap={2} align="center"><Badge tone="accent">{recognition.phase}</Badge><Text size="sm" weight="medium">{recognition.message}</Text></Stack><Text tone="accent" size="sm" mono>{Math.round(recognition.percent)}%</Text></div><Progress value={recognition.percent} label="识别进度" /><Text tone="subtle" size="xs">{recognition.completedPages} / {recognition.totalPages} 页</Text></div>}
+            {recognition.running && <div className={styles.recognitionBanner} style={{ marginTop: 14 }}>
+              <div className={styles.recognitionBannerHeader}><Stack direction="row" gap={2} align="center"><Badge tone="accent">{recognition.phase}</Badge><Text size="sm" weight="medium">{recognition.message}</Text></Stack><Text tone="accent" size="sm" mono>{Math.round(recognition.percent)}%</Text></div>
+              <Progress value={recognition.percent} label="识别进度" />
+              <Text tone="subtle" size="xs">{recognition.completedPages} / {recognition.totalPages} 页</Text>
+              {/* Announce only the durable warning; rapidly changing progress keeps its own progressbar semantics. */}
+              {recognition.warning && <div className={styles.warningItem} role="status" aria-live="polite" aria-atomic="true">{recognition.warning}</div>}
+            </div>}
           </Surface>
 
           <Surface className={styles.panel}>

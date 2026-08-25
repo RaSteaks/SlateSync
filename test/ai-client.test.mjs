@@ -15,7 +15,6 @@ import {
 } from "../test-support/synthetic-production-day.mjs";
 
 const imageDataUrl = "data:image/jpeg;base64,ZmFrZS1pbWFnZQ==";
-const pdfDataUrl = "data:application/pdf;base64,JVBERi0xLjQK";
 const modelResult = {
   sheetTitle: "示例项目 Day 01",
   records: [
@@ -34,14 +33,6 @@ const modelResult = {
     },
   ],
   warnings: [],
-};
-
-const pdfModelResult = {
-  ...modelResult,
-  records: modelResult.records.map((record) => ({
-    ...record,
-    sourcePage: 2,
-  })),
 };
 
 test("model routing exposes each Qwen model only through its configured provider", () => {
@@ -177,7 +168,6 @@ test("Token Plan exposes fixed visual models without publishing pricing", () => 
     ["qwen3.7-plus", "qwen3.8-max", "qwen3.6-flash", "qwen3.6-plus"],
   );
   assert.equal(resolveProvider("tokenplan").chatJsonMode, "json_schema");
-  assert.equal(resolveProvider("tokenplan").supportsDirectPdf, false);
   const publicModels = publicConfig({ TOKENPLAN_API_KEY: "test-key" }).models
     .filter((model) => model.providers.includes("tokenplan"));
   assert.equal(publicModels.length, 4);
@@ -471,14 +461,13 @@ test("Token Plan progressively falls back when structured response modes are una
   assert.equal(result.result.records[0].scene, "012");
 });
 
-test("Token Plan direct PDF input asks API clients to submit prepared page images", async () => {
+test("recognition rejects legacy raw PDF input before any provider request", async () => {
   await assert.rejects(
     recognizeSlate(
       {
         providerId: "tokenplan",
         modelId: "qwen3.7-plus",
-        pdfDataUrl,
-        pageCount: 2,
+        pdfDataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
         filename: "slate.pdf",
       },
       {
@@ -486,7 +475,7 @@ test("Token Plan direct PDF input asks API clients to submit prepared page image
         fetchImpl: async () => assert.fail("must not fetch"),
       },
     ),
-    /先把 PDF 转为页面图片.*imageDataGroups/,
+    /原始 PDF 直传已停用.*逐页图片/,
   );
 });
 
@@ -644,12 +633,12 @@ test("OpenAI-compatible provider reports missing settings and rejects unsafe bas
   );
 });
 
-test("OpenAI sends a multi-page PDF once as an input_file", async () => {
+test("OpenAI receives every PDF page as image input after local preparation", async () => {
   const requests = [];
   const fetchImpl = async (url, request) => {
     requests.push({ url, body: JSON.parse(request.body) });
     return jsonResponse({
-      output_text: JSON.stringify(pdfModelResult),
+      output_text: JSON.stringify(modelResult),
       usage: { input_tokens: 90, output_tokens: 30 },
     });
   };
@@ -658,38 +647,30 @@ test("OpenAI sends a multi-page PDF once as an input_file", async () => {
     {
       providerId: "openai",
       modelId: "openai/gpt-5.6-luna",
-      pdfDataUrl,
-      pageCount: 5,
+      imageDataGroups: [[imageDataUrl], [imageDataUrl], [imageDataUrl], [imageDataUrl], [imageDataUrl]],
       filename: "slate.pdf",
     },
     { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
   );
 
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 5);
   const body = requests[0].body;
-  assert.equal(body.input[1].content[1].type, "input_file");
-  assert.equal(body.input[1].content[1].file_data, pdfDataUrl);
-  assert.equal(body.input[1].content[1].detail, "high");
+  assert.equal(body.input[1].content[1].type, "input_image");
+  assert.equal(body.input[1].content[1].image_url, imageDataUrl);
   const recordSchema = body.text.format.schema.properties.records.items;
-  assert.equal(recordSchema.properties.sourcePage.type, "integer");
-  assert.equal(recordSchema.required.includes("sourcePage"), true);
-  assert.match(body.input[0].content, /完整的多页 PDF/);
-  assert.match(body.input[0].content, /把该页页码写入 sourcePage/);
-  assert.doesNotMatch(
-    body.input[0].content,
-    /1\. 当前请求只包含场记单的一页/,
-  );
-  assert.equal(result.inputMode, "pdf");
+  assert.equal("sourcePage" in recordSchema.properties, false);
+  assert.match(body.input[1].content[0].text, /识别这一页场记单/);
+  assert.equal(result.inputMode, "images");
   assert.equal(result.pageCount, 5);
-  assert.equal(result.result.records[0].sourcePage, 2);
+  assert.equal(result.result.records[0].sourcePage, 1);
 });
 
-test("OpenRouter sends PDF binary data through the universal file input", async () => {
+test("OpenRouter receives PDF pages as image input", async () => {
   let captured;
   const fetchImpl = async (_url, request) => {
     captured = JSON.parse(request.body);
     return jsonResponse({
-      choices: [{ message: { content: JSON.stringify(pdfModelResult) } }],
+      choices: [{ message: { content: JSON.stringify(modelResult) } }],
     });
   };
 
@@ -697,20 +678,18 @@ test("OpenRouter sends PDF binary data through the universal file input", async 
     {
       providerId: "openrouter",
       modelId: "qwen/qwen3.7-flash",
-      pdfDataUrl,
-      pageCount: 5,
+      imageDataGroups: [[imageDataUrl], [imageDataUrl], [imageDataUrl], [imageDataUrl], [imageDataUrl]],
       filename: "slate.pdf",
     },
     { env: { OPENROUTER_API_KEY: "test-key" }, fetchImpl },
   );
 
-  assert.equal(captured.messages[1].content[1].type, "file");
-  assert.equal(captured.messages[1].content[1].file.filename, "slate.pdf");
-  assert.equal(captured.messages[1].content[1].file.file_data, pdfDataUrl);
+  assert.equal(captured.messages[1].content[1].type, "image_url");
+  assert.equal(captured.messages[1].content[1].image_url.url, imageDataUrl);
   assert.equal(captured.response_format.type, "json_object");
-  assert.match(captured.messages[0].content, /sourcePage/);
-  assert.equal(result.inputMode, "pdf");
-  assert.equal(result.result.records[0].sourcePage, 2);
+  assert.doesNotMatch(captured.messages[0].content, /完整的多页 PDF/);
+  assert.equal(result.inputMode, "images");
+  assert.equal(result.result.records[0].sourcePage, 1);
 });
 
 test("structured-output OpenRouter models keep strict JSON Schema mode", async () => {
@@ -947,7 +926,10 @@ test("page recognition runs two requests in parallel while preserving page order
   assert.equal(result.pageCount, 5);
   assert.deepEqual(
     result.result.warnings,
-    Array.from({ length: 5 }, (_, index) => `第 ${index + 1} 页未识别到任何视频码。`),
+    [
+      "本地 OCR 不可用，已改用页面图片直接识别；识别精度可能下降。",
+      ...Array.from({ length: 5 }, (_, index) => `第 ${index + 1} 页未识别到任何视频码。`),
+    ],
   );
 });
 

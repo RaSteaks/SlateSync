@@ -343,6 +343,43 @@ describe("electron IPC handlers", () => {
     assert.deepEqual(await ipcMain.invoke("cancel-recognition", { projectId: project.id }), { canceled: false });
   });
 
+  it("rejects legacy PDF-only recognition in Main before invoking the model", async () => {
+    const project = {
+      id: "project-legacy-pdf",
+      settings: {
+        accuracyMode: "standard",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+      },
+    };
+    let recognizeCalls = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectRuntime: {
+        get: async () => ({ project, scenarioStore: null, diagnostics: null, taskStore: null }),
+      },
+      recognize: async () => {
+        recognizeCalls += 1;
+        throw new Error("model must not be called");
+      },
+    }));
+
+    // The Main boundary is the last compatibility gate before provider code;
+    // legacy raw PDF input must fail locally with zero model invocations.
+    await assert.rejects(
+      () => ipcMain.invoke("recognize", {
+        projectId: project.id,
+        provider: "openai",
+        model: "test-model",
+        pdfDataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
+      }),
+      (error) => error.status === 400 && /逐页图片/.test(error.message),
+    );
+    assert.equal(recognizeCalls, 0);
+  });
+
   it("save-provider-key rejects unknown provider", async () => {
     const ipcMain = createMockIpcMain();
     registerIpcHandlers(ipcMain, createMockContext());

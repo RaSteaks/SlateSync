@@ -19,6 +19,19 @@ is not permission to restore a historical implementation. The continuous
 package may replace implementation only while preserving every applicable
 behavior here and passing the one Sol Final Review.
 
+### 2026-08-25 OCR-first pipeline amendment
+
+The historical PDF input statements below remain frozen evidence and are not
+rewritten. The current product pipeline intentionally supersedes their direct
+provider-routing behavior: a user PDF is always rasterized locally into ordered
+page images, local Vision/PaddleOCR is awaited, and OCR evidence is sent with
+those images to the selected visual model. The original PDF is never a model
+input. Optional OCR failure may continue with page images and a persistent
+warning (`本地 OCR 不可用，已改用页面图片直接识别；识别精度可能下降。`); the
+warning is retained in progress, results, task OCR summaries, and diagnostics. An
+explicitly required OCR engine still blocks recognition.
+Legacy requests containing `pdfDataUrl` are rejected before any provider call.
+
 The repository root has no physical `AGENTS.md` at this baseline. The active execution rule is: after editing code, add/update comments for non-obvious architecture, ownership, concurrency, and compatibility behavior.
 
 ## 1. Runtime and ownership
@@ -37,7 +50,7 @@ Source references: `electron/main.mjs` (`initialize`, `createWindow`), `electron
 
 ### Inputs and routing
 
-`electron/ipc-handlers.mjs` accepts a recognition body and resolves project-owned settings before calling `recognizeSlate` from `lib/ai-client.mjs`. Provider/model/prompt are task inputs subject to project defaults; project-owned accuracy mode, field formats, and Comments settings remain authoritative. Inputs may be a single image, grouped page images, or a PDF. A slate CSV may be supplied as high-confidence context.
+`electron/ipc-handlers.mjs` accepts a recognition body and resolves project-owned settings before calling `recognizeSlate` from `lib/ai-client.mjs`. Provider/model/prompt are task inputs subject to project defaults; project-owned accuracy mode, field formats, and Comments settings remain authoritative. Current recognition media input is a single image or grouped page images; PDF files are converted to grouped page images by the local Preparation Worker before this boundary. A slate CSV may be supplied as high-confidence context.
 
 Configured providers are OpenAI Responses, OpenRouter Chat Completions, Token Plan, DashScope, and a custom OpenAI-compatible provider. Provider API keys are read from environment variables and/or Main-owned `provider-keys.json`; keys are never returned in public configuration. Model discovery can fall back to the static catalog when a non-400 discovery request fails.
 
@@ -48,11 +61,11 @@ Configured providers are OpenAI Responses, OpenRouter Chat Completions, Token Pl
 - `scene` preserves all scene tokens, uppercases suffix letters, and joins multiple scenes with `" / "`; numeric scenes are padded to configured width (default `XXX`).
 - `shot` and `take` are numeric, padded to configured width (default `XX`), and never truncate numbers wider than the configured width. Full-width digits and Chinese numerals are normalized.
 - `takeStatus` maps good marks (`☑/√/✓/✔`) to `过`, triangle marks (`△/▲`) to `保`, and explicit X marks (`X/×/✕/✖`) to `废条`; unknown/blank is `null`.
-- Recognition records preserve source page order. For image groups, page results are collected in input order even when requests finish out of order. PDF records carry `sourcePage`.
+- Recognition records preserve source page order. For image groups, page results are collected in input order even when requests finish out of order. Rasterized page records carry `sourcePage`.
 - Missing merged Scene/Shot values can inherit from the previous same-reel record. Sequence reconciliation and warnings are part of the current result semantics; the application must not guess values that remain unresolved.
 - High accuracy can launch primary and independent audit/review stages. It may recover omissions, resolve conflicts, lower confidence, or remove audit-only rows according to `lib/ai-client.mjs`; IP-00 freezes these stages and does not simplify them.
 
-Source references: `lib/schema.mjs` (`normalizeSlateResult`, `formatSlateResultFields`), `lib/ai-client.mjs` (`recognizeSlate`, `mergePageResults`, `mergePdfResult`, `inheritSceneAndShot`, `reconcileRecordSequences`, `pageConcurrency`).
+Source references: `lib/schema.mjs` (`normalizeSlateResult`, `formatSlateResultFields`), `lib/ai-client.mjs` (`recognizeSlate`, `mergePageResults`, `inheritSceneAndShot`, `reconcileRecordSequences`, `pageConcurrency`).
 
 ### Progress, timeout, retry, and cancellation
 

@@ -638,6 +638,12 @@ function projectArchiveBusy() {
 }
 
 function recognitionInput(body, workflowConfig, projectSettings) {
+  if (Object.hasOwn(body || {}, "pdfDataUrl")) {
+    const error = new Error("原始 PDF 直传已停用，请先在本地将 PDF 转为逐页图片后再识别。");
+    error.status = 400;
+    error.providerError = false;
+    throw error;
+  }
   const settings = projectSettings || projectSettingsFromWorkflow(workflowConfig);
   return {
     // Provider/model/prompt are task defaults selected in the workspace. The
@@ -647,7 +653,6 @@ function recognitionInput(body, workflowConfig, projectSettings) {
     imageDataUrl: body.imageDataUrl,
     imageDataUrls: body.imageDataUrls,
     imageDataGroups: body.imageDataGroups,
-    pdfDataUrl: body.pdfDataUrl,
     pageCount: body.pageCount,
     filename: body.filename,
     // Electron accuracy is project-owned; the workspace mirrors this value

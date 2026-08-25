@@ -26,7 +26,7 @@
 
 | 输入 | 处理 | 输出 |
 | --- | --- | --- |
-| PDF、JPEG、PNG、WebP 场记单 | 本地 OCR、视觉模型识别、字段校验、版式 Profile 复用 | 保留原格式的 Resolve CSV |
+| PDF、JPEG、PNG、WebP 场记单 | 本地逐页栅格化、OCR evidence、视觉模型识别、字段校验、版式 Profile 复用 | 保留原格式的 Resolve CSV |
 | Resolve CSV、素材目录 | 条号对账、场镜次序检查、`slate.txt` 元数据读取 | 可预览、可校对、可导出的回填结果 |
 
 > [!NOTE]
@@ -86,7 +86,7 @@ npm run electron:dev:modern
 ```text
 导入场记单
     ↓
-页面准备 → 本地 OCR / 视觉模型识别 → 字段归一化与版式匹配
+PDF 逐页栅格化 → 本地 Vision/PaddleOCR → OCR evidence + 页面图片 → 视觉模型 → 字段归一化与版式匹配
     ↓
 载入 Resolve CSV + 可选扫描 slate.txt
     ↓
@@ -97,7 +97,7 @@ npm run electron:dev:modern
 
 | 阶段 | SlateSync 会做什么 |
 | --- | --- |
-| 识别 | 读取 PDF 或图片，结合 OCR 与视觉模型抽取场、镜、次和条次状态。 |
+| 识别 | PDF 先在本地逐页栅格化；本地 OCR 提取文字、置信度和坐标后，与页面图片一起交给视觉模型抽取场、镜、次和条次状态。 |
 | 学习 | 从 OCR 表头、坐标和版式生成场记结构 Profile，并在相似任务中复用。 |
 | 对账 | 载入 Resolve CSV，检查条号缺失、场镜次序异常和识别完整性。 |
 | 回填 | 只更新匹配到的素材与允许写入的字段，保留原 CSV 的其他内容。 |
@@ -152,6 +152,8 @@ Legacy Renderer（受限回退路径）
 | `MAX_CONCURRENT_RECOGNITIONS` | 并行识别任务数 |
 | `VISIONOCR_ENABLED` | Vision OCR 开关 |
 | `PADDLEOCR_ENABLED` | PaddleOCR 开关 |
+| `VISIONOCR_REQUIRED` | Vision OCR 必需模式；失败时停止识别 |
+| `PADDLEOCR_REQUIRED` | PaddleOCR 必需模式；失败时停止识别 |
 
 ### Resolve 字段回填
 
@@ -172,7 +174,9 @@ Legacy Renderer（受限回退路径）
 - Project Library 使用 SQLite 保存任务、诊断、项目设置和场记结构 Profile。
 - 旧版本 JSON 数据会按兼容规则迁移，并保留兼容快照。
 - API Key 只由 Main 进程读取；Renderer 不直接访问密钥或 Node.js 能力。
-- PDF、图片、Resolve CSV 和素材目录默认在本地处理；发送给模型的内容取决于用户选择的识别服务。
+- PDF 原始字节只用于本地逐页栅格化；模型请求统一只发送页面图片与本地 OCR evidence，不发送原始 PDF 文件。
+- OCR 引擎未启用、不可用、超时、失败或没有文字块时，会显示“本地 OCR 不可用，已改用页面图片直接识别；识别精度可能下降。”并降级为页面图片识别；设置为必需时则停止识别。
+- 历史客户端提交原始 `pdfDataUrl` 会在 Main 模型调用前收到 400；旧 direct-PDF 路由已退役，不能通过环境变量重新启用。
 - 不要将 `.env`、本地 Project Library、`data/` 或任何用户数据提交到 Git。
 
 ## 开发与验证

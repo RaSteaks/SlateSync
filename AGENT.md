@@ -276,3 +276,26 @@ Worker 边界、验收证据和最终治理交接。
 - 验证结果：Node 248/248、Modern Vitest 15 个文件 48/48、`npm run typecheck`、
   `npm run build:modern`、`npm run build:storybook` 与 `git diff --check` 通过；
   premium strict audit 为 0 findings，未启动 Electron 前台窗口。
+
+## 2026-08-25 统一 PDF OCR-first 识别管线
+
+- PDF 原始字节只在 Preparation Worker 内用于逐页栅格化；Renderer、Main 和
+  RecognitionRequest 只传递有序 `imageDataGroups`，模型端不再接收原始 PDF。
+- 每次视觉模型请求前必须等待本地 Vision OCR 或 PaddleOCR；OCR evidence 统一
+  携带引擎、页码、模式、视图、文字顺序、置信度和归一化坐标，并与页面图片一起
+  发送。可选 OCR 故障或零文字块降级为页面图片识别并显示“本地 OCR 不可用，已
+  改用页面图片直接识别；识别精度可能下降。”；警告同时保留在实时进度、结果、任务
+  OCR 摘要和诊断会话中，显式 required 模式仍阻止识别。
+- 旧客户端提交 `pdfDataUrl` 时由 Main 在模型调用前返回 400；该拒绝路径仅用于
+  防止历史请求绕过 OCR，不是新的模型输入能力。历史 baseline 文件保持不变。
+
+## 2026-08-25 OCR-first 审查修复
+
+- 识别横幅继续由语义 progressbar 暴露百分比，只有持久 OCR 降级警告使用 polite
+  live region，避免多页任务把每次消息、百分比与页数更新排入屏幕阅读器播报队列。
+- 诊断 stage 以顶层 `ocrEvidence` 作为唯一持久字段，request 快照不再保存同一份
+  evidence；标准与高精度 primary/audit/review 路径遵循相同去重边界。
+- 验证结果：Node 250/250、Modern Vitest 15 个文件 50/50、`npm run check`、
+  `npm run typecheck`、`npm run build:modern`、`npm run build:storybook` 与
+  `git diff --check` 通过；premium strict audit 为 0 findings，未启动 Electron
+  前台窗口。

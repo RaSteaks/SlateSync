@@ -241,7 +241,6 @@ export interface RecognitionRequest {
   readonly imageDataUrl?: string;
   readonly imageDataUrls?: readonly string[];
   readonly imageDataGroups?: readonly (readonly string[])[];
-  readonly pdfDataUrl?: string;
   readonly pageCount?: number;
   readonly filename?: string;
   readonly accuracyMode?: "high" | "standard";
@@ -379,7 +378,8 @@ export interface ScenarioSelection {
 export interface RecognitionData {
   readonly provider: string;
   readonly model: string;
-  readonly inputMode: "images" | "pdf";
+  /** Model requests are always backed by locally rasterized page images. */
+  readonly inputMode: "images";
   readonly durationMs: number;
   readonly pageCount: number;
   readonly accuracyMode: "high" | "standard";
@@ -399,6 +399,7 @@ export interface ProgressData {
   readonly phase?: string;
   readonly percent?: number;
   readonly message?: string;
+  readonly warning?: string | null;
   readonly pageNumber?: number | null;
   readonly completed?: number;
   readonly total?: number;

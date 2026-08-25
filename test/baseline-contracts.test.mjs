@@ -204,7 +204,16 @@ test("baseline Electron window, navigation, renderer, and provider facts match l
 
   assert.deepEqual(Object.keys(PROVIDERS).sort(), Object.keys(providers.providers).sort());
   for (const [id, expected] of Object.entries(providers.providers)) {
-    for (const [key, value] of Object.entries(expected)) assert.deepEqual(PROVIDERS[id][key], value, `${id}.${key} drift`);
+    for (const [key, value] of Object.entries(expected)) {
+      // The frozen inventory predates the OCR-first amendment. Keep the old
+      // provider fact readable while asserting that the retired direct-PDF
+      // capability is absent from the live configuration.
+      if (key === "supportsDirectPdf") {
+        assert.equal(PROVIDERS[id][key], undefined, `${id}.supportsDirectPdf must stay retired`);
+        continue;
+      }
+      assert.deepEqual(PROVIDERS[id][key], value, `${id}.${key} drift`);
+    }
   }
 });
 

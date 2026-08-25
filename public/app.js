@@ -2355,7 +2355,9 @@ function renderResults(data) {
     : [
         `API ${data.provider}`,
         `MODEL ${data.model}`,
-        `MODE ${data.inputMode === "pdf" ? "PDF" : data.accuracyMode === "high" ? "HIGH ACCURACY" : "IMAGE"}`,
+        // Historical snapshots may say "pdf", but every current model request
+        // is rasterized into page images before it reaches Main.
+        `MODE ${data.accuracyMode === "high" ? "HIGH ACCURACY" : "IMAGE"}`,
         `PAGES ${state.pageCount}`,
         `TIME ${(data.durationMs / 1000).toFixed(1)}s`,
       ];

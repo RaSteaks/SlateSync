@@ -290,6 +290,16 @@ test("resolveOcrEngine honours explicit flags and injected implementations", () 
   });
   assert.equal(visionDisabled.meta.id, "paddleocr");
 
+  const requiredVision = resolveOcrEngine({
+    VISIONOCR_REQUIRED: "true",
+    PADDLEOCR_ENABLED: "true",
+  });
+  assert.equal(requiredVision.meta.id, "vision");
+  const requiredPaddle = resolveOcrEngine({
+    PADDLEOCR_REQUIRED: "true",
+  });
+  assert.equal(requiredPaddle.meta.id, "paddleocr");
+
   const auto = resolveOcrEngine({});
   assert.ok(["vision", "paddleocr"].includes(auto.meta.id));
 });
