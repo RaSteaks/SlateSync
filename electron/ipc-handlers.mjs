@@ -5,6 +5,7 @@
 // pricing/cost fields before returning them to the client.
 import { recognizeSlate } from "../lib/ai-client.mjs";
 import { PROVIDERS, publicConfig } from "../lib/config.mjs";
+import { checkOpenAiCompatibleJsonSchema } from "../lib/model-capabilities.mjs";
 import {
   discoverVisionModels,
   staticProviderModels,
@@ -36,7 +37,9 @@ export function registerIpcHandlers(ipcMain, context) {
     settingsStore,
     runtimeSettings,
     libraryActions,
+    logger,
     checkOcr = checkPaddleOcr,
+    checkJsonSchema = checkOpenAiCompatibleJsonSchema,
     recognize = recognizeSlate,
   } = context;
   // A project cannot transition to archived while any request owns writable
@@ -237,6 +240,10 @@ export function registerIpcHandlers(ipcMain, context) {
     }
   });
 
+  ipcMain.handle("check-compatible-json-schema", async () =>
+    checkJsonSchema({ env: runtimeEnv() }),
+  );
+
   ipcMain.handle("recognize", async (event, body) => {
     const release = recognitionLimiter.acquire();
     const controller = new AbortController();
@@ -264,12 +271,26 @@ export function registerIpcHandlers(ipcMain, context) {
         capture.session.projectId = projectContext.project.id;
         capture.session.projectSettingsSnapshot = projectSettings;
       }
+      // The local log mirrors the full run (start, every progress event,
+      // outcome) so any recognition can be audited after the fact. Logging is
+      // fire-and-forget and failure-swallowing; it must never delay or break
+      // the recognition itself.
+      logger?.info(
+        "recognition",
+        `识别开始 · ${input.filename || "未命名文件"} · ${input.providerId}/${input.modelId}`,
+        {
+          provider: input.providerId,
+          model: input.modelId,
+          pageCount: input.pageCount,
+        },
+      );
       const result = await recognize(input, {
         env: runtimeEnv(),
         ocrAutoEnable: true,
         projectScopedOutput: Boolean(projectContext.project),
         scenarioStore: projectContext.scenarioStore,
         onProgress: (progressEvent) => {
+          logRecognitionProgress(logger, progressEvent);
           if (!event.sender.isDestroyed()) {
             event.sender.send("recognition-progress", progressEvent);
           }
@@ -321,6 +342,17 @@ export function registerIpcHandlers(ipcMain, context) {
       if (taskId && projectContext.project && projectLibrary) {
         await projectLibrary.touchProjectActivity(projectContext.project.id);
       }
+      const recordCount = result.result?.records?.length ?? 0;
+      logger?.info(
+        "recognition",
+        `识别完成 · ${recordCount} 条记录 · ${result.provider}/${result.model} · 耗时 ${(result.durationMs / 1000).toFixed(1)}s`,
+        {
+          provider: result.provider,
+          model: result.model,
+          records: recordCount,
+          durationMs: result.durationMs,
+        },
+      );
       return {
         ...clientRecognitionResult(result),
         // The renderer formats the immediate result with this exact snapshot,
@@ -339,6 +371,13 @@ export function registerIpcHandlers(ipcMain, context) {
       };
     } catch (error) {
       capture.setError(error);
+      // A user-requested stop is a normal outcome, not a failure: keep the two
+      // distinguishable in the log so reviews do not read stops as crashes.
+      if (controller.signal.aborted || error?.code === "RECOGNITION_CANCELED") {
+        logger?.warn("recognition", `识别已停止 · ${body?.filename || "未命名文件"}`);
+      } else {
+        logger?.error("recognition", `识别失败 · ${error?.message || String(error)}`);
+      }
       if (activeProjectId && projectContext?.diagnostics) {
         await projectContext.diagnostics.saveSession(capture.session).catch(() => {});
       }
@@ -362,6 +401,7 @@ export function registerIpcHandlers(ipcMain, context) {
     const projectId = String(body.projectId || "");
     const recognitions = [...(activeRecognitions.get(projectId) || [])];
     if (!recognitions.length) return { canceled: false };
+    logger?.warn("recognition", `请求停止识别 · ${projectId}`);
     for (const recognition of recognitions) {
       recognition.controller.abort(new DOMException("识别已停止", "AbortError"));
     }
@@ -488,6 +528,20 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("check-ocr", async (_event, body) =>
     checkOcr({ pythonPath: String(body?.pythonPath ?? "").trim() }),
   );
+
+  // Read-only view over the local application log. The handler degrades to an
+  // empty result when logging is not wired (unit contexts, degraded start) so
+  // the viewer stays usable instead of surfacing an error for advisory data.
+  ipcMain.handle("logs-read", async (_event, body = {}) => {
+    if (!logger?.readEntries) return { entries: [], hasMore: false };
+    return logger.readEntries({
+      limit: body?.limit,
+      level: body?.level,
+      category: typeof body?.category === "string" && body.category
+        ? body.category
+        : undefined,
+    });
+  });
 
   async function resolveProjectContext(projectId, { readOnly = false } = {}) {
     if (!projectRuntime) throw new Error("项目运行时不可用");
@@ -713,4 +767,33 @@ function clientRecognitionResult(result) {
     delete publicResult.usage.cost;
   }
   return publicResult;
+}
+
+/**
+ * Keep the progress stream in one logging tee next to the existing IPC send.
+ * The log is useful after a renderer crash, so a destroyed sender must not
+ * suppress it; only the UI delivery is guarded by `isDestroyed()` above.
+ */
+function logRecognitionProgress(logger, event = {}) {
+  if (!logger) return;
+  const numericPercent = Number(event.percent);
+  const percent = Number.isFinite(numericPercent) ? Math.round(numericPercent) : null;
+  const message = [
+    percent === null ? null : `${percent}%`,
+    event.message || "识别进度",
+    event.warning || null,
+  ].filter(Boolean).join(" · ");
+  const meta = {
+    phase: event.phase,
+    percent,
+    completed: event.completed,
+    total: event.total,
+    completedViews: event.completedViews,
+    totalViews: event.totalViews,
+    viewIndex: event.viewIndex,
+    pageNumber: event.pageNumber,
+    cacheHit: event.cacheHit,
+  };
+  const level = event.warning ? "warn" : "info";
+  logger[level]("recognition", message, meta);
 }

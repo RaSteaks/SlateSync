@@ -23,6 +23,7 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureModelHttpAgent } from "../lib/ai-client.mjs";
+import { createAppLogger } from "../lib/app-logger.mjs";
 import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
 import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.mjs";
 import { registerIpcHandlers } from "./ipc-handlers.mjs";
@@ -77,8 +78,18 @@ if (!process.env.PADDLE_PDX_CACHE_HOME) {
 let mainWindow = null;
 let projectLibrary = null;
 let projectRuntime = null;
+let appLogger = null;
 
 async function initialize() {
+  // Start logging before any configuration or library work so startup failures
+  // still leave a local diagnostic trail; the logger itself never throws.
+  appLogger = createAppLogger(app.getPath("userData"));
+  appLogger.info("app", `SlateSync ${app.getVersion()} 启动`, {
+    platform: process.platform,
+    arch: process.arch,
+    packaged: app.isPackaged,
+  });
+
   // Load .env from project root (dev) or userData (packaged)
   const envPath = isDev
     ? join(resolve(__dirname, ".."), ".env")
@@ -121,6 +132,7 @@ async function initialize() {
   const slateScanner = createSlateScanner();
   const workflowDefaults = projectSettingsFromWorkflow(await getWorkflowConfig());
   const libraryRoot = await initialLibraryPath(runtimeSettings.libraryPath);
+  appLogger.info("app", "项目库路径已解析", { path: libraryRoot });
   if (runtimeSettings.libraryPath && resolve(runtimeSettings.libraryPath) !== resolve(libraryRoot)) {
     // Keep a previously persisted default path aligned with its successful
     // on-disk rename; arbitrary user-selected package paths are never changed.
@@ -210,6 +222,7 @@ async function initialize() {
     settingsStore,
     runtimeSettings,
     libraryActions,
+    logger: appLogger,
   });
 }
 
@@ -277,10 +290,12 @@ async function resolveRendererEntry() {
     });
     if (entry.mode === "legacy" && entry.reason === "modern-missing") {
       console.warn("Modern renderer entry is unavailable; using bounded legacy recovery.");
+      appLogger?.warn("app", "Modern Renderer 不可用，使用 legacy 恢复入口");
     }
     return entry;
   } catch (error) {
     console.error("Modern renderer selector is unavailable; using legacy recovery:", error);
+    appLogger?.error("app", "Modern Renderer 入口解析失败，使用 legacy 恢复入口", { error });
     return {
       mode: "legacy",
       root: legacyRoot,
@@ -344,9 +359,11 @@ async function createWindow() {
     if (rendererDev) {
       await mainWindow.loadURL(rendererDev.href);
       console.log(`Loaded modern renderer HMR: ${rendererDev.href}`);
+      appLogger?.info("app", "已加载 Modern Renderer HMR", { origin: rendererDev.origin });
     } else {
       await mainWindow.loadFile(rendererEntry.htmlPath);
       console.log(`Loaded ${rendererEntry.mode} renderer: ${rendererEntry.htmlPath}`);
+      appLogger?.info("app", `已加载 ${rendererEntry.mode} Renderer`, { path: rendererEntry.htmlPath });
     }
   } catch (error) {
     if (rendererDev) {
@@ -355,25 +372,32 @@ async function createWindow() {
       // the window was created, without widening the file access boundary.
       activeRendererDevOrigin = null;
       console.error("Renderer HMR server failed; falling back to compiled Modern renderer:", error);
+      appLogger?.warn("app", "Renderer HMR 加载失败，回退到编译后的 Modern Renderer", { error });
       try {
         await mainWindow.loadFile(rendererEntry.htmlPath);
         console.log(`Loaded compiled modern renderer: ${rendererEntry.htmlPath}`);
+        appLogger?.info("app", "已加载编译后的 Modern Renderer", { path: rendererEntry.htmlPath });
       } catch (fallbackError) {
         console.error("Failed to load compiled Modern renderer:", fallbackError);
+        appLogger?.error("app", "编译后的 Modern Renderer 加载失败", { error: fallbackError });
       }
     } else if (rendererEntry.mode !== "modern") {
       console.error("Failed to load index.html:", error);
+      appLogger?.error("app", "legacy Renderer 加载失败", { error });
     } else {
       const legacyRoot = isDev
         ? join(resolve(__dirname, ".."), "public")
         : join(__dirname, "..", "public");
       allowedRoot = legacyRoot;
       console.error("Modern renderer failed during initial load; falling back to legacy renderer:", error);
+      appLogger?.warn("app", "Modern Renderer 初始加载失败，回退到 legacy Renderer", { error });
       try {
         await mainWindow.loadFile(join(legacyRoot, "index.html"));
         console.log(`Loaded legacy renderer fallback: ${join(legacyRoot, "index.html")}`);
+        appLogger?.info("app", "已加载 legacy Renderer 回退入口", { path: join(legacyRoot, "index.html") });
       } catch (fallbackError) {
         console.error("Failed to load legacy renderer fallback:", fallbackError);
+        appLogger?.error("app", "legacy Renderer 回退加载失败", { error: fallbackError });
       }
     }
   }
@@ -395,6 +419,7 @@ app.whenReady().then(async () => {
     await initialize();
   } catch (error) {
     console.error("SlateSync initialization failed:", error);
+    appLogger?.error("app", "SlateSync 初始化失败", { error });
     app.quit();
     return;
   }
@@ -408,12 +433,17 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  appLogger?.info("app", "所有窗口已关闭");
   app.quit();
 });
 
 app.on("will-quit", () => {
+  appLogger?.info("app", "应用即将退出");
   // Close cached project connections before Electron tears down the main
   // process. The library remains a portable folder that can be backed up.
   void projectRuntime?.close();
   void projectLibrary?.close();
+  // Awaiting the queue here preserves the final lifecycle line without making
+  // logging part of the recognition or window error paths.
+  void appLogger?.close();
 });

@@ -23,6 +23,7 @@ import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateCsvFile } from "../../validation/input-validation";
 import { CsvVirtualTable } from "../csv/CsvVirtualTable";
 import { RecognitionResultPanel } from "../recognition/RecognitionResultPanel";
+import { groupModelOptions, modelOptionLabel } from "../recognition/model-options";
 import { useRecognitionDraft } from "../recognition/use-recognition-draft";
 import { SlateInputPanel, type SlateInputPanelHandle } from "../slate/SlateInputPanel";
 import { TaskRail } from "../tasks/TaskRail";
@@ -273,10 +274,14 @@ export function WorkspacePage() {
     taskLoadGuard.invalidate();
     void autosave.flush();
     getCsvWorkerService().terminate();
+    const preserveRecognitionForLogViewer = useUiStore.getState().route === "logs"
+      && useRecognitionStore.getState().running;
     // Route-owned projections must not retain full CSV/PDF/result graphs after
     // the workspace is gone. The immutable pending save was captured above;
     // returning to the route reloads the authoritative task from Main.
-    useRecognitionStore.getState().reset();
+    // A running recognition is the one exception: the system log page is a
+    // read-only observer and must keep receiving the global progress store.
+    if (!preserveRecognitionForLogViewer) useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
@@ -624,8 +629,11 @@ export function WorkspacePage() {
       const unsubscribe = api.recognition.onProgress((event) => useRecognitionStore.getState().progress(operationId, event));
       try {
         const result = await unwrap(await api.recognition.run(request));
-        if (!operationGuard.isCurrent(operationId) || result.projectId !== project.id) return;
+        if (result.projectId !== project.id) return;
         useRecognitionStore.getState().complete(operationId, result);
+        // A route change invalidates workspace-owned mutations, but the
+        // completed global recognition state remains useful to LogViewerPage.
+        if (!workspaceMountedRef.current || !operationGuard.isCurrent(operationId)) return;
         if (result.taskId) {
           autosave.reset();
           useTaskStore.getState().setActive(result.taskId, { ...captureTask(), id: result.taskId, projectId: project.id });
@@ -643,11 +651,11 @@ export function WorkspacePage() {
       const operationId = activeOperationId ?? useRecognitionStore.getState().operationId;
       if (cancelRequestedRef.current || appError.code === "RECOGNITION_CANCELED" || appError.message.includes("识别已停止")) {
         useRecognitionStore.getState().cancel(operationId);
-        setError(null);
+        if (workspaceMountedRef.current) setError(null);
         return;
       }
-      if (operationGuard.isCurrent(operationId)) useRecognitionStore.getState().fail(operationId, appError);
-      setError(appError.message);
+      if (useRecognitionStore.getState().operationId === operationId) useRecognitionStore.getState().fail(operationId, appError);
+      if (workspaceMountedRef.current && operationGuard.isCurrent(operationId)) setError(appError.message);
     } finally {
       useSlateStore.getState().setPreparing(false);
     }
@@ -712,6 +720,10 @@ export function WorkspacePage() {
   if (!project) return <div className={styles.page}><InlineError message="请先从项目库打开一个项目。" /></div>;
   const settings = project.settings || defaultSettings(config);
   const provider = config?.providers.find((item) => item.id === providerId);
+  const availableModels = models.length
+    ? models
+    : config?.models.filter((item) => item.providers.includes(providerId)) || [];
+  const modelGroups = groupModelOptions(providerId, availableModels);
   const canMergeLocal = Boolean(!slate.imageDataGroups.length && exportState.slateCsvRecords?.length);
   const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId)) && !recognition.running && !slate.preparing && !switchingTask);
   const canExport = Boolean(recognition.records.length && !exportState.processing && !recognition.running);
@@ -752,7 +764,7 @@ export function WorkspacePage() {
             <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / 识别</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
             <div className={styles.grid}>
               <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
-              <Field label="模型"><Select value={modelId} onChange={(event) => { patchDraft({ modelId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择视觉模型</option>{(models.length ? models : config?.models.filter((item) => item.providers.includes(providerId)) || []).map((model) => <option key={model.id} value={model.id}>{model.label || model.id}</option>)}</Select></Field>
+              <Field label="模型"><Select value={modelId} onChange={(event) => { patchDraft({ modelId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择视觉模型</option>{modelGroups.map((group) => <optgroup key={group.key} label={group.label}>{group.models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model)}</option>)}</optgroup>)}</Select></Field>
               <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { patchDraft({ accuracyMode: event.target.value as "high" | "standard" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次识别</option></Select></Field>
               <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { patchDraft({ scenarioId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">自动识别</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>
               <Field label="识别提示" hint="可选"><Textarea className="resize-none" value={customPrompt} onChange={(event) => { patchDraft({ customPrompt: event.target.value }); markDirtyAfterRender(); }} maxLength={2000} showCount disabled={recognition.running} placeholder={settings.customPrompt || "补充文字或机位约定"} /></Field>

@@ -299,3 +299,42 @@ Worker 边界、验收证据和最终治理交接。
   `npm run typecheck`、`npm run build:modern`、`npm run build:storybook` 与
   `git diff --check` 通过；premium strict audit 为 0 findings，未启动 Electron
   前台窗口。
+
+## 2026-08-26 JSON Schema 探针与 OpenRouter 模型目录分组
+
+- 新增 Main 侧 OpenAI 兼容接口能力探针：只发送无图片的最小文本请求，按当前
+  `OPENAI_COMPATIBLE_API_MODE` 支持 Chat Completions / Responses 两种 JSON Schema
+  请求形态，并区分“接口拒绝参数”“返回内容不可解析”“探针结构匹配”三类结果；
+  API Key、Base URL 与项目图片不进入 Renderer 请求体或项目持久化数据。
+- 通过 `check-compatible-json-schema` IPC、Shared Contract、Preload 和全局设置页
+  暴露“测试 JSON Schema”入口，保留旧版 Renderer 兼容适配器；探针响应不替代正式
+  识别的 `records` 校验，只用于在本地模型调用前确认端点能力。
+- OpenRouter 模型目录保留原有固定推荐模型，并将首组选到最多 10 个；剩余视觉模型
+  以 API `owned_by` 或模型 ID 前缀提取供应商，统一渲染为供应商 `optgroup`，现代
+  与 legacy Renderer 共用同一排序语义。项目设置与工作台均在切换 Provider 后加载
+  实时目录，初次打开项目设置也会加载已保存的 Provider。
+- 验证结果：JSON Schema / IPC / 模型发现 Node 定向测试 40/40、Modern Vitest
+  16 个文件 52/52、`npm run typecheck`、`npm run check`、`npm run build:modern`
+  与 `git diff --check` 通过；未启动 Electron 前台窗口。完整 baseline SQLite
+  检查仍受当前环境 `better-sqlite3` Node ABI 不匹配影响，未将其记为通过项。
+
+## 2026-08-26 Main 日志与应用内日志查看器
+
+- 新增 `lib/app-logger.mjs`：Main 进程以纯文本按日写入
+  `<userData>/logs/slatesync-YYYY-MM-DD.log`，文件 0600、目录 0700，保留最近
+  7 天；追加写入串行化，日志目录不可写时只告警并吞错，不影响识别与应用退出。
+- `electron/main.mjs` 记录启动、项目库路径、Renderer 加载/回退、初始化失败、窗口
+  关闭和退出；`electron/ipc-handlers.mjs` 在 `recognize` 的单一进度汇聚点把每条
+  进度 tee 到 `recognition` 分类日志，并记录开始、完成、取消、失败。销毁的 Renderer
+  只跳过 UI IPC，不跳过本地日志。新增 `logs-read` additive 请求通道，Preload 通过
+  `window.slateSync.logs.read` 读取结构化日志 DTO。
+- Modern Renderer 新增“系统 / 日志”路由和 `LogViewerPage`：实时复用全局 recognition
+  store 与 design-system Progress，日志列表支持级别/分类筛选、内联进度条、空态与
+  3 秒轮询；从工作台切到日志页时保留正在进行的 recognition store，完成/失败状态仍
+  可在日志页实时观察。未记录 API Key 或完整请求载荷，也未新增进度事件通道。
+- 新增 `test/app-logger.test.mjs`、`test/recognition-logging.test.mjs` 与
+  `test/refactor/ip-03-08/log-viewer.test.tsx`，更新 Electron IPC 与 Shared Contract
+  契约测试；不执行 git 提交，不启动 Electron 前台窗口。
+- 验证结果：`npm run check`、`npm run typecheck`、`npm run test:node`（267/267，含
+  native SQLite 重建）、`npm run test:modern`（17 个文件 54/54）、`npm run build:modern`
+  与 `git diff --check` 全部通过。

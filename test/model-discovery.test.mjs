@@ -123,6 +123,8 @@ test("OpenRouter discovery trusts declared modalities, uses live prices, and exc
     ],
   );
   assert.equal(result.models[2].fixed, true);
+  assert.equal(result.models[0].vendor, "qwen");
+  assert.equal(result.models.find((model) => model.id === "openai/gpt-5.6-luna").vendor, "openai");
   assert.equal(
     result.models.find((model) => model.id === "qwen/qwen3.7-plus")
       .pricePerMillion.input,

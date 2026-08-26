@@ -140,6 +140,23 @@
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .routeHint { padding: 16px; border: 1px dashed var(--ss-color-line-strong); border-radius: var(--ss-radius-md); color: var(--ss-color-ink-subtle); text-align: center; }
 .dangerZone { display: flex; align-items: center; justify-content: space-between; gap: var(--ss-space-4); border-color: color-mix(in srgb, var(--ss-color-danger) 42%, var(--ss-color-line)); }
+/* Log filters stay compact on desktop and become a readable two-column form
+   on narrow screens without changing the shared Field/Select semantics. */
+.logFilters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ss-layout-gap); margin-bottom: 14px; }
+.logList { display: grid; gap: 8px; max-height: min(720px, 66vh); overflow: auto; padding-right: 4px; }
+.logEntry { display: grid; gap: 8px; padding: 13px 14px; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-md); background: var(--ss-color-surface-sunken); }
+.logEntry[data-level="warn"] { border-left: 3px solid var(--ss-color-warning); }
+.logEntry[data-level="error"] { border-left: 3px solid var(--ss-color-danger); }
+.logEntryHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.logEntryCategory { color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .66rem; }
+.logEntryTime { color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; white-space: nowrap; }
+.logEntryMessage { margin: 0; color: var(--ss-color-ink); line-height: 1.5; overflow-wrap: anywhere; }
+.logEntryProgressRow { display: flex; align-items: center; gap: 10px; }
+/* This miniature bar is intentionally aria-hidden; the visible percentage and
+   page count immediately beside it are the single concise accessible value. */
+.logEntryProgress { height: 5px; flex: 1; overflow: hidden; border-radius: 999px; background: var(--ss-color-line); }
+.logEntryProgress span { display: block; height: 100%; border-radius: inherit; background: var(--ss-color-accent); }
+.logEntryProgressValue { min-width: 76px; margin: 0; color: var(--ss-color-ink-subtle); text-align: right; }
 
 @media (max-width: 1060px) {
   .workspaceGrid, .resultGrid { grid-template-columns: 1fr; }
@@ -154,6 +171,8 @@
   .pageActions > * { flex: 1; }
   .tableScroll { height: 54vh; }
   .dangerZone { align-items: stretch; flex-direction: column; }
+  .logFilters { grid-template-columns: 1fr; }
+  .logEntryHeader { align-items: flex-start; flex-direction: column; gap: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

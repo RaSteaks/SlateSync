@@ -79,6 +79,7 @@ import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.mjs";
 const PDF_PREPARE_CONCURRENCY = 1;
 const MAX_DISCOVERED_MODELS = 24;
+const OPENROUTER_PRIMARY_MODELS = 10;
 
 const csvWorker = createCsvWorkerClient();
 const fallbackCsvProcessor = createCsvTaskProcessor();
@@ -906,11 +907,7 @@ function renderProjectModelOptions(
 ) {
   if (!elements.projectModel) return;
   const compatible = modelsForProvider(elements.projectProvider.value);
-  const fixed = compatible.filter((model) => model.fixed !== false);
-  const discovered = compatible.filter((model) => model.fixed === false).slice(0, MAX_DISCOVERED_MODELS);
-  const groups = [];
-  if (fixed.length) groups.push(modelOptionGroup("固定模型", fixed));
-  if (discovered.length) groups.push(modelOptionGroup("其他视觉模型", discovered));
+  const groups = modelOptionGroups(elements.projectProvider.value, compatible);
   const selectedAvailable = compatible.some((model) => model.id === selectedId);
   const rememberedOption = preserveUnknown && selectedId && !selectedAvailable
     ? `<option value="${escapeHtml(selectedId)}">${escapeHtml(selectedId)} · 已保存（当前未加载）</option>`
@@ -1401,18 +1398,7 @@ function renderModelOptions() {
   const providerId = elements.provider.value;
   const compatible = modelsForProvider(providerId);
   const previous = elements.model.value;
-
-  const fixed = compatible.filter((model) => model.fixed !== false);
-  const discovered = compatible.filter((model) => model.fixed === false);
-  const ranked = discovered.slice(0, MAX_DISCOVERED_MODELS);
-  const groups = [];
-  if (fixed.length) {
-    groups.push(modelOptionGroup("固定模型", fixed));
-  }
-  if (ranked.length) {
-    const suffix = discovered.length > ranked.length ? `（前 ${ranked.length}）` : "";
-    groups.push(modelOptionGroup(`其他视觉模型${suffix}`, ranked));
-  }
+  const groups = modelOptionGroups(providerId, compatible);
   elements.model.innerHTML = groups.length
     ? groups.join("")
     : '<option value="">没有发现可用的视觉模型</option>';
@@ -1465,6 +1451,69 @@ async function loadProviderModels(forceRefresh = false) {
       updateRecognizeState();
     }
   }
+}
+
+// Keep the legacy fallback renderer aligned with the typed Renderer: OpenRouter
+// keeps all curated recommendations visible, fills the first group to ten,
+// and exposes the rest as vendor optgroups instead of one long flat list.
+function modelOptionGroups(providerId, models) {
+  if (providerId !== "openrouter") {
+    const fixed = models.filter(isRecommendedModel);
+    const discovered = models
+    .filter((model) => !isRecommendedModel(model))
+      .slice(0, MAX_DISCOVERED_MODELS);
+    const groups = [];
+    if (fixed.length) groups.push(modelOptionGroup("固定模型", fixed));
+    if (discovered.length) groups.push(modelOptionGroup("其他视觉模型", discovered));
+    return groups;
+  }
+
+  const featured = models.filter(isRecommendedModel);
+  for (const model of models) {
+    if (featured.length >= OPENROUTER_PRIMARY_MODELS) break;
+    if (!isRecommendedModel(model)) featured.push(model);
+  }
+  const featuredIds = new Set(featured.map((model) => model.id));
+  const groups = featured.length
+    ? [modelOptionGroup(`推荐模型 · 优先 ${OPENROUTER_PRIMARY_MODELS} 个`, featured)]
+    : [];
+  const byVendor = new Map();
+  for (const model of models) {
+    if (featuredIds.has(model.id)) continue;
+    const vendor = model.vendor || model.id.split("/", 1)[0] || "other";
+    const vendorModels = byVendor.get(vendor) || [];
+    vendorModels.push(model);
+    byVendor.set(vendor, vendorModels);
+  }
+  for (const [vendor, vendorModels] of byVendor) {
+    groups.push(modelOptionGroup(`${formatVendorLabel(vendor)} · 其余 ${vendorModels.length} 个`, vendorModels));
+  }
+  return groups;
+}
+
+function isRecommendedModel(model) {
+  // Static config entries do not carry discovery metadata, so keep those
+  // curated choices alongside descriptors explicitly marked as fixed.
+  return model.fixed === true || (model.fixed !== false && model.discovered !== true);
+}
+
+function formatVendorLabel(vendor) {
+  const labels = {
+    anthropic: "Anthropic",
+    deepseek: "DeepSeek",
+    google: "Google",
+    meta: "Meta",
+    mistralai: "Mistral AI",
+    openai: "OpenAI",
+    qwen: "Qwen",
+    xai: "xAI",
+  };
+  const key = String(vendor || "other").toLowerCase();
+  return labels[key] || key
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function modelOptionGroup(label, models) {

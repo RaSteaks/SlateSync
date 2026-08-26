@@ -4,6 +4,8 @@
   "requestMethods": {
     "cancelRecognition": { "channel": "cancel-recognition", "args": ["projectId"] },
     "deleteProject": { "channel": "delete-project", "args": ["id"] },
-    "renameLibrary": { "channel": "rename-library", "args": ["name"] }
+    "renameLibrary": { "channel": "rename-library", "args": ["name"] },
+    "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
+    "readLogs": { "channel": "logs-read", "args": ["request"] }
   }
 }

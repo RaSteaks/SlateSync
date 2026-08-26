@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   archiveProjectApi,
   changeLibraryLocationApi,
+  checkCompatibleJsonSchemaApi,
   checkOcrApi,
   createProjectApi,
   deleteTaskApi,
@@ -88,6 +89,7 @@ function makeGateway(calls, progress) {
       getOcrSettings: operation("settings.getOcrSettings"),
       saveOcrSettings: operation("settings.saveOcrSettings"),
       checkOcr: operation("settings.checkOcr"),
+      checkCompatibleJsonSchema: operation("settings.checkCompatibleJsonSchema"),
     },
   };
 }
@@ -109,7 +111,7 @@ describe("electron renderer bridge", () => {
     await assert.rejects(() => fetchConfig(), /preload bridge is unavailable/);
   });
 
-  it("maps all 27 legacy operations to exact typed requests and raw results", async () => {
+  it("maps all 28 legacy operations to exact typed requests and raw results", async () => {
     const calls = [];
     const progress = { listener: null, subscriptions: 0, unsubscriptions: 0 };
     globalThis.slateSync = makeGateway(calls, progress);
@@ -143,6 +145,7 @@ describe("electron renderer bridge", () => {
       [getOcrSettingsApi, [], "settings.getOcrSettings", []],
       [saveOcrSettingsApi, [{ skip: true }], "settings.saveOcrSettings", [{ skip: true }]],
       [checkOcrApi, ["python3"], "settings.checkOcr", [{ pythonPath: "python3" }]],
+      [checkCompatibleJsonSchemaApi, [], "settings.checkCompatibleJsonSchema", []],
     ];
 
     for (const [fn, args, name, expectedArgs] of invocations) {
@@ -164,7 +167,7 @@ describe("electron renderer bridge", () => {
     assert.equal(saved.name, "files.save");
     assert.equal(saved.args[0].defaultFilename, "demo.csv");
     assert.equal(saved.args[0].data, binary);
-    assert.equal(calls.length, 27);
+    assert.equal(calls.length, 28);
   });
 
   it("preserves the full-buffer identity and copies only an exact subview", async () => {

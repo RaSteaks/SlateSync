@@ -1,9 +1,10 @@
 import { AlertTriangle, ArrowLeft, Check, RotateCcw, Save, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectSettings } from "../../../shared/contracts/index.js";
 import { Button, Dialog, Field, InlineError, Input, Select, Separator, Stack, Surface, Text, Textarea } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
 import { useProjectStore, useRecognitionStore, useUiStore } from "../../state";
+import { groupModelOptions, modelOptionLabel } from "../recognition/model-options";
 import styles from "../../app/app.module.css";
 import { validateProjectName } from "../../validation/input-validation";
 
@@ -51,6 +52,22 @@ export function ProjectSettingsPage({ onBack, onDeleted }: { onBack: () => void;
   const availableProviders = config?.providers || [];
   const selectedProvider = availableProviders.find((item) => item.id === settings.providerId);
   const modelOptions = useMemo(() => models.length ? models : config?.models.filter((model) => model.providers.includes(settings.providerId || "")) || [], [config?.models, models, settings.providerId]);
+  const modelGroups = useMemo(() => groupModelOptions(settings.providerId || "", modelOptions), [modelOptions, settings.providerId]);
+
+  // Keep these hooks before the no-project branch so project restoration never
+  // changes the Hook order between renders.
+  const loadModels = useCallback(async (providerId: string) => {
+    setModels([]);
+    if (!providerId) return;
+    try { setModels((await unwrap(await getSlateSync().recognition.getModels({ providerId, forceRefresh: false }))).models); } catch { /* static config remains available */ }
+  }, []);
+  useEffect(() => {
+    // Load the initially saved provider as well as providers selected manually;
+    // otherwise an OpenRouter project would only show its static fallback until
+    // the user toggled the Provider field.
+    void loadModels(settings.providerId || "");
+  }, [loadModels, settings.providerId]);
+
   if (!project) return <div className={styles.page}><InlineError message="尚未选择项目。" onRetry={onBack} /></div>;
 
   const updateSettings = (patch: Partial<ProjectSettings>) => setSettings((current) => ({ ...current, ...patch }));
@@ -66,11 +83,6 @@ export function ProjectSettingsPage({ onBack, onDeleted }: { onBack: () => void;
       setToast({ tone: "success", message: "项目设置已保存" });
     } catch (nextError) { setError(appErrorFromUnknown(nextError).message); }
     finally { setSaving(false); }
-  };
-  const loadModels = async (providerId: string) => {
-    setModels([]);
-    if (!providerId) return;
-    try { setModels((await unwrap(await getSlateSync().recognition.getModels({ providerId, forceRefresh: false }))).models); } catch { /* static config remains available */ }
   };
   const resetOutput = () => setSettings((current) => ({ ...current, resolve: settingsDefaults(config).resolve }));
   const closeDeleteDialogs = () => {
@@ -100,7 +112,7 @@ export function ProjectSettingsPage({ onBack, onDeleted }: { onBack: () => void;
     {error && !nameError && <div style={{ marginBottom: 16 }}><InlineError message={error} /></div>}
     <form id="project-settings-form" noValidate onSubmit={save} className={styles.grid}>
       <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>项目资料</p><h2 className={styles.sectionTitle}>名称与描述</h2></div><SlidersHorizontal size={18} /></div><div className={styles.formGrid}><div className={styles.formField}><Field label="项目名称" error={nameError}><Input value={name} onChange={(event) => { setName(event.target.value); if (nameError) setError(null); }} onBlur={() => { const result = validateProjectName(name); if (!result.ok) setError(result.message); }} disabled={readOnly} /></Field></div><div className={styles.formField}><Field label="描述"><Input value={description} onChange={(event) => setDescription(event.target.value)} disabled={readOnly} /></Field></div></div></Surface>
-      <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>识别默认值</p><h2 className={styles.sectionTitle}>识别设置</h2></div></div><div className={styles.formGrid}><div className={styles.formField}><Field label="Provider"><Select value={settings.providerId || ""} onChange={(event) => { updateSettings({ providerId: event.target.value || null, modelId: null }); void loadModels(event.target.value); }} disabled={readOnly}><option value="">跟随当前设备</option>{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}{provider.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field></div><div className={styles.formField}><Field label="模型" hint={selectedProvider?.configured ? undefined : "Provider 未配置时会在识别前提示。"}><Select value={settings.modelId || ""} onChange={(event) => updateSettings({ modelId: event.target.value || null })} disabled={readOnly}><option value="">自动选择</option>{modelOptions.map((model) => <option key={model.id} value={model.id}>{model.label || model.id}</option>)}</Select></Field></div><div className={styles.formField}><Field label="准确度"><Select value={settings.accuracyMode} onChange={(event) => updateSettings({ accuracyMode: event.target.value as ProjectSettings["accuracyMode"] })} disabled={readOnly}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次主识别</option></Select></Field></div><div className={styles.formField}><Field label="场记结构"><Select value={settings.scenarioId || ""} onChange={(event) => updateSettings({ scenarioId: event.target.value || null })} disabled={readOnly}><option value="">自动识别并学习</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field></div><div className={`${styles.formField} ${styles.formFieldFull}`}><Field label="识别提示" hint="可选，用于补充项目约定。"><Textarea className="resize-none" value={settings.customPrompt} onChange={(event) => updateSettings({ customPrompt: event.target.value })} maxLength={2000} showCount disabled={readOnly} placeholder="例如：本片使用繁体字；A 机为主机。" /></Field></div></div></Surface>
+      <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>识别默认值</p><h2 className={styles.sectionTitle}>识别设置</h2></div></div><div className={styles.formGrid}><div className={styles.formField}><Field label="Provider"><Select value={settings.providerId || ""} onChange={(event) => { updateSettings({ providerId: event.target.value || null, modelId: null }); }} disabled={readOnly}><option value="">跟随当前设备</option>{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}{provider.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field></div><div className={styles.formField}><Field label="模型" hint={selectedProvider?.configured ? undefined : "Provider 未配置时会在识别前提示。"}><Select value={settings.modelId || ""} onChange={(event) => updateSettings({ modelId: event.target.value || null })} disabled={readOnly}><option value="">自动选择</option>{modelGroups.map((group) => <optgroup key={group.key} label={group.label}>{group.models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model)}</option>)}</optgroup>)}</Select></Field></div><div className={styles.formField}><Field label="准确度"><Select value={settings.accuracyMode} onChange={(event) => updateSettings({ accuracyMode: event.target.value as ProjectSettings["accuracyMode"] })} disabled={readOnly}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次主识别</option></Select></Field></div><div className={styles.formField}><Field label="场记结构"><Select value={settings.scenarioId || ""} onChange={(event) => updateSettings({ scenarioId: event.target.value || null })} disabled={readOnly}><option value="">自动识别并学习</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field></div><div className={`${styles.formField} ${styles.formFieldFull}`}><Field label="识别提示" hint="可选，用于补充项目约定。"><Textarea className="resize-none" value={settings.customPrompt} onChange={(event) => updateSettings({ customPrompt: event.target.value })} maxLength={2000} showCount disabled={readOnly} placeholder="例如：本片使用繁体字；A 机为主机。" /></Field></div></div></Surface>
       <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>Resolve 输出</p><h2 className={styles.sectionTitle}>字段格式与条次标记</h2></div><Button type="button" variant="ghost" size="sm" onClick={resetOutput} disabled={readOnly} startIcon={<RotateCcw size={14} />}>恢复默认</Button></div><Text tone="muted" size="sm">X 表示最小位数，更多位数会保留。</Text><Separator style={{ margin: "16px 0" }} /><div className={styles.formGrid}><Field label="Scene"><Input value={settings.resolve.fieldFormats.scene} onChange={(event) => setSettings((current) => ({ ...current, resolve: { ...current.resolve, fieldFormats: { ...current.resolve.fieldFormats, scene: event.target.value } } }))} disabled={readOnly} /></Field><Field label="Shot"><Input value={settings.resolve.fieldFormats.shot} onChange={(event) => setSettings((current) => ({ ...current, resolve: { ...current.resolve, fieldFormats: { ...current.resolve.fieldFormats, shot: event.target.value } } }))} disabled={readOnly} /></Field><Field label="Take"><Input value={settings.resolve.fieldFormats.take} onChange={(event) => setSettings((current) => ({ ...current, resolve: { ...current.resolve, fieldFormats: { ...current.resolve.fieldFormats, take: event.target.value } } }))} disabled={readOnly} /></Field><Field label="过条标记"><Input value={settings.resolve.comments.goodTake} onChange={(event) => setSettings((current) => ({ ...current, resolve: { ...current.resolve, comments: { ...current.resolve.comments, goodTake: event.target.value } } }))} disabled={readOnly} /></Field><Field label="保条标记"><Input value={settings.resolve.comments.holdTake} onChange={(event) => setSettings((current) => ({ ...current, resolve: { ...current.resolve, comments: { ...current.resolve.comments, holdTake: event.target.value } } }))} disabled={readOnly} /></Field></div></Surface>
       <div className={styles.formActions}><Button type="submit" disabled={readOnly} loading={saving} startIcon={<Check size={16} />}>保存项目设置</Button></div>
     </form>

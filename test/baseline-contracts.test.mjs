@@ -78,10 +78,25 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   assert.equal(additions.extendsBaselineCommit, ipc.baselineCommit);
   assert.deepEqual(Object.keys(ipc.requestMethods).sort(), [...historicalIpcMethodNames].sort());
   assert.equal(ipc.cancelRecognitionChannel, null);
-  assert.deepEqual(Object.keys(additions.requestMethods).sort(), ["cancelRecognition", "deleteProject", "renameLibrary"]);
+  // checkCompatibleJsonSchema and readLogs are post-baseline additions: the
+  // former completes the uncommitted model-capability package's registration,
+  // the latter belongs to the local logging feature package.
+  assert.deepEqual(Object.keys(additions.requestMethods).sort(), [
+    "cancelRecognition",
+    "checkCompatibleJsonSchema",
+    "deleteProject",
+    "readLogs",
+    "renameLibrary",
+  ]);
   assert.deepEqual(
     Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
-    ["cancel-recognition", "delete-project", "rename-library"],
+    [
+      "cancel-recognition",
+      "check-compatible-json-schema",
+      "delete-project",
+      "logs-read",
+      "rename-library",
+    ],
   );
 });
 

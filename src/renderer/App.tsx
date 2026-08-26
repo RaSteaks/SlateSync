@@ -1,4 +1,4 @@
-import { FolderKanban, Import, LayoutDashboard, MapPin, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, Settings, Sun, SlidersHorizontal } from "lucide-react";
+import { FolderKanban, Import, LayoutDashboard, MapPin, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import appIconUrl from "../../build/icon.png";
@@ -11,12 +11,21 @@ import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore,
 import { validateLibraryName } from "./validation/input-validation";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
+import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
 import { WorkspacePage } from "./features/workspace/WorkspacePage";
 import styles from "./app/app.module.css";
 
 function routeTitle(route: ReturnType<typeof useUiStore.getState>["route"]) {
-  return route === "projects" ? "项目库" : route === "workspace" ? "工作台" : route === "project-settings" ? "项目设置" : "全局设置";
+  return route === "projects"
+    ? "项目库"
+    : route === "workspace"
+      ? "工作台"
+      : route === "project-settings"
+        ? "项目设置"
+        : route === "logs"
+          ? "日志查看器"
+          : "全局设置";
 }
 
 // 项目库路径展示简化：去掉末尾的项目库目录（默认名称或便携包名称），只显示
@@ -285,12 +294,13 @@ export function App() {
     <button type="button" className={styles.navItem} data-active={route === "projects"} data-collapsed={sidebarCollapsed || undefined} title="项目库" onClick={leaveProject} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setLibraryMenu({ open: true, x: event.clientX, y: event.clientY }); }}><Icon icon={FolderKanban} size={17} /><span>项目库</span></button>
     {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => setRoute("workspace")}><Icon icon={LayoutDashboard} size={17} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => setRoute("project-settings")}><Icon icon={SlidersHorizontal} size={17} /><span>项目设置</span></button></>}
     <div style={{ flex: 1 }} />
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={17} /><span>全局设置</span></button>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => setRoute("logs")}><Icon icon={ScrollText} size={17} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={17} /><span>全局设置</span></button>
   </>;
 
   const sidebar = <Sidebar brand={<><img className={styles.brandIcon} src={appIconUrl} alt="" aria-hidden="true" draggable={false} /><span className={styles.brandCopy} data-collapsed={sidebarCollapsed || undefined}><strong>SlateSync</strong></span></>} navigation={navigation} footer={<><IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} size="sm" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton><IconButton label={resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题"} size="sm" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>{resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</IconButton></>} />;
   // 顶部栏副标题仅在工作台 / 项目设置 / 全局设置展示当前项目名；项目库页只显示“项目库”，当前项目名仅由左侧导航栏维护。
-  const toolbar = <Toolbar title={routeTitle(route)} {...(project?.name && route !== "projects" ? { subtitle: project.name } : {})} actions={<Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button>} />;
+  const showsProjectSubtitle = route === "workspace" || route === "project-settings" || route === "global-settings";
+  const toolbar = <Toolbar title={routeTitle(route)} {...(project?.name && showsProjectSubtitle ? { subtitle: project.name } : {})} actions={<Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button>} />;
   // The same visible actions serve the expert context menu and the accessible
   // settings dialog, keeping labels, pending states, and outcomes identical.
   const renderLibraryActions = () => <>
@@ -324,5 +334,5 @@ export function App() {
       </Dialog>;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "workspace" && <WorkspacePage />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "workspace" && <WorkspacePage />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

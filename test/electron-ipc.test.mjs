@@ -68,6 +68,7 @@ describe("electron IPC handlers", () => {
       "delete-project",
       "save-provider-key",
       "get-models",
+      "check-compatible-json-schema",
       "recognize",
       "cancel-recognition",
       "save-file",
@@ -83,6 +84,7 @@ describe("electron IPC handlers", () => {
       "get-ocr-settings",
       "save-ocr-settings",
       "check-ocr",
+      "logs-read",
     ];
     for (const channel of expectedChannels) {
       assert.ok(
@@ -102,6 +104,61 @@ describe("electron IPC handlers", () => {
     assert.ok(config.upload);
     assert.equal(typeof config.upload.maxRequestBytes, "number");
     assert.ok(config.workflow);
+  });
+
+  it("checks compatible JSON Schema through an injected capability probe", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeEnv: () => ({ OPENAI_COMPATIBLE_MODEL: "local-vision" }),
+      checkJsonSchema: async ({ env }) => {
+        calls.push(env.OPENAI_COMPATIBLE_MODEL);
+        return {
+          supported: true,
+          model: env.OPENAI_COMPATIBLE_MODEL,
+          transport: "chat-completions",
+          status: 200,
+          checkedAt: "2026-08-26T00:00:00.000Z",
+          message: "ok",
+        };
+      },
+    }));
+
+    assert.deepEqual(
+      await ipcMain.invoke("check-compatible-json-schema"),
+      {
+        supported: true,
+        model: "local-vision",
+        transport: "chat-completions",
+        status: 200,
+        checkedAt: "2026-08-26T00:00:00.000Z",
+        message: "ok",
+      },
+    );
+    assert.deepEqual(calls, ["local-vision"]);
+  });
+
+  it("reads local logs through the additive filtered IPC handler", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      logger: {
+        readEntries: async (request) => {
+          calls.push(request);
+          return { entries: [{ timestamp: "2026-08-26 10:00:00.000", level: "warn", category: "recognition", message: "OCR 降级" }], hasMore: false };
+        },
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("logs-read", {
+      limit: 25,
+      level: "warn",
+      category: "recognition",
+    }), {
+      entries: [{ timestamp: "2026-08-26 10:00:00.000", level: "warn", category: "recognition", message: "OCR 降级" }],
+      hasMore: false,
+    });
+    assert.deepEqual(calls, [{ limit: 25, level: "warn", category: "recognition" }]);
   });
 
   it("dispatches Project Library transfer actions", async () => {

@@ -152,3 +152,9 @@ export function saveOcrSettingsApi(settings) {
 export function checkOcrApi(pythonPath) {
   return call((api) => api.settings.checkOcr({ pythonPath }));
 }
+
+// Keep the legacy adapter able to exercise the same typed capability probe as
+// the Modern Renderer; the Main process remains the only owner of credentials.
+export function checkCompatibleJsonSchemaApi() {
+  return call((api) => api.settings.checkCompatibleJsonSchema());
+}

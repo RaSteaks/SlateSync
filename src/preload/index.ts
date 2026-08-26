@@ -1,6 +1,7 @@
 import type {
   AppError,
   BinaryPayload,
+  LogsReadRequest,
   ModelsRequest,
   OcrCheckRequest,
   OcrSettingsRequest,
@@ -121,6 +122,12 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       getOcrSettings: () => request("get-ocr-settings"),
       saveOcrSettings: (body: OcrSettingsRequest) => request("save-ocr-settings", body),
       checkOcr: (body: OcrCheckRequest) => request("check-ocr", body),
+      checkCompatibleJsonSchema: () => request("check-compatible-json-schema"),
+    },
+    // Logs stay read-only over IPC: the Main process is the single writer of
+    // the local log files, and the viewer polls instead of subscribing.
+    logs: {
+      read: (body: LogsReadRequest) => request("logs-read", body),
     },
   };
 }

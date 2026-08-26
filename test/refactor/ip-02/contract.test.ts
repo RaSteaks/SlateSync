@@ -4,6 +4,8 @@ import type {
   ConfigData,
   DirectorySelection,
   FileSaveResult,
+  JsonSchemaCapabilityResult,
+  LogsReadResult,
   LibraryExportResult,
   LibraryImportResult,
   LibraryInfo,
@@ -362,6 +364,15 @@ const scan = {
 const saveResult = { saved: true, filePath: "/synthetic/demo.csv" } satisfies FileSaveResult;
 const ocrSettings = { pythonPath: "python3", setupCompleted: true, setupSkipped: false } satisfies OcrSettings;
 const ocrCheck = { ok: true, paddleVersion: "3", paddleOcrVersion: "3" } satisfies OcrCheckResult;
+const jsonSchemaCheck = {
+  supported: true,
+  model: "local-vision",
+  transport: "chat-completions",
+  status: 200,
+  checkedAt: "2026-08-26T00:00:00.000Z",
+  message: "接口支持 JSON Schema，且模型返回符合探针结构。",
+} satisfies JsonSchemaCapabilityResult;
+const logsRead = { entries: [], hasMore: false } satisfies LogsReadResult;
 
 const responses: Readonly<Record<string, unknown>> = {
   "get-config": config,
@@ -394,6 +405,8 @@ const responses: Readonly<Record<string, unknown>> = {
   "get-ocr-settings": ocrSettings,
   "save-ocr-settings": ocrSettings,
   "check-ocr": ocrCheck,
+  "check-compatible-json-schema": jsonSchemaCheck,
+  "logs-read": logsRead,
 };
 
 function expectSuccess<T>(result: Result<T>, expected: T): void {
@@ -401,10 +414,10 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly six namespaces and exact success DTOs for all 30 operations", async () => {
+  it("exposes exactly seven namespaces and exact success DTOs for all 32 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
-    expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings"]);
+    expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings", "logs"]);
     expect(api).not.toHaveProperty("invoke");
     expect(api).not.toHaveProperty("electronAPI");
 
@@ -438,6 +451,8 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.settings.getOcrSettings(), ocrSettings);
     expectSuccess(await api.settings.saveOcrSettings({ pythonPath: "python3" }), ocrSettings);
     expectSuccess(await api.settings.checkOcr({ pythonPath: "python3" }), ocrCheck);
+    expectSuccess(await api.settings.checkCompatibleJsonSchema(), jsonSchemaCheck);
+    expectSuccess(await api.logs.read({ limit: 10 }), logsRead);
 
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
     expect(transport.calls[7]?.payload).toEqual({ name: "Demo" });

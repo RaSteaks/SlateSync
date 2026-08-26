@@ -28,6 +28,8 @@ export interface ModelData {
   readonly label: string;
   readonly description: string;
   readonly providers: readonly string[];
+  /** Provider/organization slug used to group large OpenRouter catalogs. */
+  readonly vendor?: string;
   readonly imageDetail?: "auto" | "low" | "high" | "original";
   readonly directId?: string;
   readonly apiId?: string;
@@ -287,6 +289,15 @@ export type OcrCheckResult =
       readonly error: { readonly code: string; readonly message: string };
     };
 
+export interface JsonSchemaCapabilityResult {
+  readonly supported: boolean;
+  readonly model: string;
+  readonly transport: "chat-completions" | "responses";
+  readonly status: number | null;
+  readonly checkedAt: string;
+  readonly message: string;
+}
+
 export interface RecognitionRecord {
   readonly id: string;
   readonly sourcePage: number | null;
@@ -407,6 +418,40 @@ export interface ProgressData {
   readonly totalViews?: number;
   readonly viewIndex?: number | null;
   readonly cacheHit?: boolean;
+}
+
+/** Severity of a local log entry; read filters use a severity threshold. */
+export type LogLevel = "info" | "warn" | "error";
+
+/** One parsed line of the local plain-text log written by the Main process. */
+export interface LogEntry {
+  /** Local wall-clock time in `YYYY-MM-DD HH:mm:ss.SSS` form. */
+  readonly timestamp: string;
+  readonly level: LogLevel;
+  /** Logical source: "app" for lifecycle, "recognition" for recognition runs. */
+  readonly category: string;
+  readonly message: string;
+  /** Recognition progress fields carried by progress entries; null otherwise. */
+  readonly phase?: string | null;
+  readonly percent?: number | null;
+  readonly completed?: number | null;
+  readonly total?: number | null;
+  readonly pageNumber?: number | null;
+}
+
+export interface LogsReadRequest {
+  /** Maximum number of entries returned (newest first); defaults to 500. */
+  readonly limit?: number;
+  /** Severity threshold: "warn" keeps warn and error entries. */
+  readonly level?: LogLevel;
+  /** Exact category match, e.g. "recognition"; omit for all categories. */
+  readonly category?: string;
+}
+
+export interface LogsReadResult {
+  readonly entries: readonly LogEntry[];
+  /** True when more matching entries exist beyond the returned limit. */
+  readonly hasMore: boolean;
 }
 
 export interface TaskListItem {
@@ -660,6 +705,10 @@ export interface SlateSyncApi {
     getOcrSettings(): Promise<Result<OcrSettings>>;
     saveOcrSettings(request: OcrSettingsRequest): Promise<Result<OcrSettings>>;
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;
+    checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
+  };
+  readonly logs: {
+    read(request: LogsReadRequest): Promise<Result<LogsReadResult>>;
   };
 }
 
