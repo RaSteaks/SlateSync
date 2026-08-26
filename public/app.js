@@ -270,6 +270,7 @@ const projectOperations = createLatestOperation();
 const projectModelOperations = createLatestOperation();
 const taskOperations = createLatestOperation();
 const taskListOperations = createLatestOperation();
+const legacyModelPickers = new Map();
 let allowWindowClose = false;
 
 const taskAutosave = createTaskAutosave({
@@ -699,6 +700,7 @@ function renderProjectSettingsForm() {
   for (const control of elements.projectSettingsForm.elements) {
     control.disabled = readOnly;
   }
+  syncLegacyModelPicker(elements.projectModel);
   elements.projectSettingsStatus.textContent = readOnly
     ? "项目已归档，恢复后才能修改"
     : "";
@@ -821,7 +823,10 @@ function applyNewTaskRecognitionDefaults(project = state.currentProject) {
     const availableModels = [...elements.model.options].map((option) => option.value);
     const desiredModel = modelCandidates.find((modelId) =>
       availableModels.includes(modelId));
-    if (desiredModel) elements.model.value = desiredModel;
+    if (desiredModel) {
+      elements.model.value = desiredModel;
+      syncLegacyModelPicker(elements.model);
+    }
   };
   selectRememberedModel();
   elements.accuracyMode.value = settings.accuracyMode || "high";
@@ -913,12 +918,13 @@ function renderProjectModelOptions(
     ? `<option value="${escapeHtml(selectedId)}">${escapeHtml(selectedId)} · 已保存（当前未加载）</option>`
     : "";
   elements.projectModel.innerHTML = rememberedOption
-    + (groups.join("") || (rememberedOption
+    + (groups.map(modelOptionGroupHtml).join("") || (rememberedOption
       ? ""
       : '<option value="">没有发现可用的视觉模型</option>'));
   elements.projectModel.value = selectedAvailable || rememberedOption
     ? selectedId
     : compatible[0]?.id || "";
+  syncLegacyModelPicker(elements.projectModel, groups);
 }
 
 async function loadProviderModelsForSelect(
@@ -961,6 +967,10 @@ async function loadProviderModelsForSelect(
 }
 
 function bindEvents() {
+  // Keep the hidden native selects as the form/state source of truth while
+  // enhancing both legacy model fields with the same collapsible groups.
+  setupLegacyModelPicker(elements.model, "识别模型");
+  setupLegacyModelPicker(elements.projectModel, "识别模型");
   elements.navProjects?.addEventListener("click", () => navigate("projects"));
   elements.navWorkspace?.addEventListener("click", () => {
     if (state.currentProjectId) navigate("workspace");
@@ -1400,7 +1410,7 @@ function renderModelOptions() {
   const previous = elements.model.value;
   const groups = modelOptionGroups(providerId, compatible);
   elements.model.innerHTML = groups.length
-    ? groups.join("")
+    ? groups.map(modelOptionGroupHtml).join("")
     : '<option value="">没有发现可用的视觉模型</option>';
 
   if (compatible.some((model) => model.id === previous)) {
@@ -1408,6 +1418,7 @@ function renderModelOptions() {
   } else if (compatible.length) {
     elements.model.value = compatible[0].id;
   }
+  syncLegacyModelPicker(elements.model, groups);
   renderModelNote();
 }
 
@@ -1453,18 +1464,17 @@ async function loadProviderModels(forceRefresh = false) {
   }
 }
 
-// Keep the legacy fallback renderer aligned with the typed Renderer: OpenRouter
-// keeps all curated recommendations visible, fills the first group to ten,
-// and exposes the rest as vendor optgroups instead of one long flat list.
+// Keep the legacy fallback renderer aligned with the typed Renderer: fixed
+// recommendations remain visible, while discovered vendor buckets can collapse.
 function modelOptionGroups(providerId, models) {
   if (providerId !== "openrouter") {
     const fixed = models.filter(isRecommendedModel);
     const discovered = models
-    .filter((model) => !isRecommendedModel(model))
+      .filter((model) => !isRecommendedModel(model))
       .slice(0, MAX_DISCOVERED_MODELS);
     const groups = [];
-    if (fixed.length) groups.push(modelOptionGroup("固定模型", fixed));
-    if (discovered.length) groups.push(modelOptionGroup("其他视觉模型", discovered));
+    if (fixed.length) groups.push(modelOptionGroup("fixed", "固定模型", fixed, false));
+    if (discovered.length) groups.push(modelOptionGroup("discovered", "其他视觉模型", discovered, true));
     return groups;
   }
 
@@ -1475,7 +1485,12 @@ function modelOptionGroups(providerId, models) {
   }
   const featuredIds = new Set(featured.map((model) => model.id));
   const groups = featured.length
-    ? [modelOptionGroup(`推荐模型 · 优先 ${OPENROUTER_PRIMARY_MODELS} 个`, featured)]
+    ? [modelOptionGroup(
+      "openrouter-featured",
+      "推荐模型 · 优先 " + OPENROUTER_PRIMARY_MODELS + " 个",
+      featured,
+      false,
+    )]
     : [];
   const byVendor = new Map();
   for (const model of models) {
@@ -1486,7 +1501,12 @@ function modelOptionGroups(providerId, models) {
     byVendor.set(vendor, vendorModels);
   }
   for (const [vendor, vendorModels] of byVendor) {
-    groups.push(modelOptionGroup(`${formatVendorLabel(vendor)} · 其余 ${vendorModels.length} 个`, vendorModels));
+    groups.push(modelOptionGroup(
+      "openrouter-vendor-" + vendor,
+      formatVendorLabel(vendor) + " · 其余 " + vendorModels.length + " 个",
+      vendorModels,
+      true,
+    ));
   }
   return groups;
 }
@@ -1516,18 +1536,230 @@ function formatVendorLabel(vendor) {
     .join(" ");
 }
 
-function modelOptionGroup(label, models) {
-  const options = models
-    .map((model) => {
-      const indicators = [
-        model.qualityLabel ? `精度 ${model.qualityLabel}` : "",
-        model.valueLabel ? `性价比 ${model.valueLabel}` : "",
-      ].filter(Boolean);
-      const suffix = indicators.length ? ` · ${indicators.join(" · ")}` : "";
-      return `<option value="${escapeHtml(model.id)}">${escapeHtml(`${model.label}${suffix}`)}</option>`;
-    })
+function modelOptionGroup(key, label, models, collapsible) {
+  return { key, label, models, collapsible };
+}
+
+function modelOptionLabel(model) {
+  const indicators = [
+    model.qualityLabel ? "精度 " + model.qualityLabel : "",
+    model.valueLabel ? "性价比 " + model.valueLabel : "",
+  ].filter(Boolean);
+  const suffix = indicators.length ? " · " + indicators.join(" · ") : "";
+  return String(model.label || model.id) + suffix;
+}
+
+function modelOptionGroupHtml(group) {
+  const options = group.models
+    .map((model) => '<option value="' + escapeHtml(model.id) + '">' + escapeHtml(modelOptionLabel(model)) + "</option>")
     .join("");
-  return `<optgroup label="${escapeHtml(label)}">${options}</optgroup>`;
+  return '<optgroup label="' + escapeHtml(group.label) + '">' + options + "</optgroup>";
+}
+
+// The legacy page retains a native select for existing form serialization,
+// but presents the same disclosure-based model list as the modern Renderer.
+function setupLegacyModelPicker(select, accessibleLabel) {
+  if (!select || legacyModelPickers.has(select) || !select.parentElement) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = "legacy-model-picker";
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.id = select.id + "-trigger";
+  trigger.className = "legacy-model-picker-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-label", accessibleLabel);
+  const menu = document.createElement("div");
+  menu.className = "legacy-model-picker-menu";
+  menu.id = select.id + "-options";
+  menu.setAttribute("role", "listbox");
+  const picker = {
+    select,
+    wrapper,
+    trigger,
+    menu,
+    groups: [],
+    expandedGroups: new Set(),
+    open: false,
+  };
+  select.classList.add("legacy-model-picker-native");
+  // Keep the native control as the form/state source, but expose only the
+  // custom trigger to keyboard and assistive-technology users.
+  select.tabIndex = -1;
+  select.setAttribute("aria-hidden", "true");
+  const associatedLabel = document.querySelector('label[for="' + select.id + '"]');
+  if (associatedLabel) associatedLabel.htmlFor = trigger.id;
+  select.parentElement.insertBefore(wrapper, select);
+  wrapper.append(select, trigger, menu);
+  legacyModelPickers.set(select, picker);
+  // Project settings wraps this control in a label; prevent nested buttons
+  // from re-triggering that label after they handle their own action.
+  wrapper.addEventListener("click", (event) => event.stopPropagation());
+  trigger.setAttribute("aria-controls", menu.id);
+  trigger.addEventListener("click", () => toggleLegacyModelPicker(picker));
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && picker.open) {
+      event.preventDefault();
+      closeLegacyModelPicker(picker, true);
+      return;
+    }
+    if (!picker.open && ["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      openLegacyModelPicker(picker);
+    }
+  });
+  select.addEventListener("change", () => syncLegacyModelPicker(select));
+  document.addEventListener("pointerdown", (event) => {
+    if (picker.open && event.target instanceof Node && !wrapper.contains(event.target)) {
+      closeLegacyModelPicker(picker);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (picker.open && event.key === "Escape") {
+      event.preventDefault();
+      closeLegacyModelPicker(picker, true);
+    }
+  });
+  // Fixed positioning lets the menu escape panel scroll containers; close it
+  // when geometry changes so it never stays detached from its trigger.
+  const closeOnLegacyPickerScroll = (event) => {
+    if (event.target instanceof Node && picker.wrapper.contains(event.target)) return;
+    if (picker.open) closeLegacyModelPicker(picker);
+  };
+  document.addEventListener("scroll", closeOnLegacyPickerScroll, true);
+  window.addEventListener("resize", closeOnLegacyPickerScroll);
+  syncLegacyModelPicker(select);
+}
+
+function positionLegacyModelPickerMenu(picker) {
+  const triggerRect = picker.trigger.getBoundingClientRect();
+  const gap = 6;
+  const viewportPadding = 12;
+  const preferredHeight = 320;
+  const availableBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - viewportPadding);
+  const availableAbove = Math.max(0, triggerRect.top - gap - viewportPadding);
+  const openBelow =
+    availableBelow >= Math.min(preferredHeight, window.innerHeight - viewportPadding * 2) ||
+    availableBelow >= availableAbove;
+  const availableHeight = openBelow ? availableBelow : availableAbove;
+  picker.menu.style.left = triggerRect.left + "px";
+  picker.menu.style.width = triggerRect.width + "px";
+  picker.menu.style.top = openBelow ? triggerRect.bottom + gap + "px" : "";
+  picker.menu.style.bottom = openBelow ? "" : window.innerHeight - triggerRect.top + gap + "px";
+  picker.menu.style.maxHeight = Math.min(420, availableHeight) + "px";
+}
+
+function openLegacyModelPicker(picker) {
+  if (picker.select.disabled) return;
+  const selectedGroup = picker.groups.find((group) =>
+    group.models.some((model) => model.id === picker.select.value),
+  );
+  if (selectedGroup?.collapsible) picker.expandedGroups.add(selectedGroup.key);
+  picker.open = true;
+  picker.trigger.setAttribute("aria-expanded", "true");
+  positionLegacyModelPickerMenu(picker);
+  renderLegacyModelPickerMenu(picker);
+}
+
+function closeLegacyModelPicker(picker, restoreFocus = false) {
+  picker.open = false;
+  picker.trigger.setAttribute("aria-expanded", "false");
+  picker.menu.hidden = true;
+  if (restoreFocus) picker.trigger.focus();
+}
+
+function toggleLegacyModelPicker(picker) {
+  if (picker.open) closeLegacyModelPicker(picker);
+  else openLegacyModelPicker(picker);
+}
+
+function syncLegacyModelPicker(select, groups) {
+  const picker = legacyModelPickers.get(select);
+  if (!picker) return;
+  if (groups) picker.groups = groups;
+  const selectedOption = select.selectedOptions?.[0];
+  picker.trigger.textContent = selectedOption?.textContent?.trim() || "选择视觉模型";
+  picker.trigger.disabled = select.disabled;
+  if (select.disabled && picker.open) closeLegacyModelPicker(picker);
+  renderLegacyModelPickerMenu(picker);
+}
+
+function renderLegacyModelPickerMenu(picker, focusGroupKey = null) {
+  // Rebuilding keeps the rendered groups in sync; a requested focus key lets
+  // a disclosure toggle preserve the keyboard user's position through it.
+  picker.menu.replaceChildren();
+  if (!picker.groups.length) {
+    const empty = document.createElement("div");
+    empty.className = "legacy-model-picker-empty";
+    empty.textContent = "暂无可用模型";
+    picker.menu.append(empty);
+    picker.menu.hidden = !picker.open;
+    return;
+  }
+  for (const group of picker.groups) {
+    const section = document.createElement("section");
+    section.className = "legacy-model-picker-group";
+    const collapsible = group.collapsible === true;
+    const expanded = !collapsible || picker.expandedGroups.has(group.key);
+    const optionsId = picker.menu.id + "-" + String(group.key).replace(/[^a-zA-Z0-9_-]/g, "-");
+    const header = document.createElement(collapsible ? "button" : "div");
+    header.className = "legacy-model-picker-group-header";
+    header.textContent = group.label;
+    if (collapsible) {
+      header.type = "button";
+      header.dataset.groupKey = group.key;
+      header.dataset.expanded = String(expanded);
+      header.setAttribute("aria-expanded", String(expanded));
+      header.setAttribute("aria-controls", optionsId);
+      header.addEventListener("click", () => {
+        const shouldRestoreFocus = document.activeElement === header;
+        if (picker.expandedGroups.has(group.key)) picker.expandedGroups.delete(group.key);
+        else picker.expandedGroups.add(group.key);
+        renderLegacyModelPickerMenu(picker, shouldRestoreFocus ? group.key : null);
+      });
+    } else {
+      header.dataset.fixed = "true";
+    }
+    section.append(header);
+    if (expanded) {
+      const options = document.createElement("div");
+      options.id = optionsId;
+      options.className = "legacy-model-picker-options";
+      options.setAttribute("role", "group");
+      options.setAttribute("aria-label", group.label);
+      for (const model of group.models) {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "legacy-model-picker-option";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(picker.select.value === model.id));
+        option.textContent = modelOptionLabel(model);
+        if (picker.select.value === model.id) {
+          const check = document.createElement("span");
+          check.className = "legacy-model-picker-check";
+          check.textContent = "✓";
+          check.setAttribute("aria-hidden", "true");
+          option.append(check);
+        }
+        option.addEventListener("click", () => {
+          if (picker.select.disabled) return;
+          picker.select.value = model.id;
+          picker.select.dispatchEvent(new Event("change", { bubbles: true }));
+          closeLegacyModelPicker(picker, true);
+        });
+        options.append(option);
+      }
+      section.append(options);
+    }
+    picker.menu.append(section);
+  }
+  picker.menu.hidden = !picker.open;
+  if (focusGroupKey) {
+    const focusTarget = Array.from(picker.menu.querySelectorAll(".legacy-model-picker-group-header")).find(
+      (candidate) => candidate.dataset.groupKey === focusGroupKey,
+    );
+    if (focusTarget) focusTarget.focus();
+  }
 }
 
 function modelsForProvider(providerId) {
@@ -3125,6 +3357,7 @@ function updateRecognizeState() {
   // task-level control whose submitted value the main process must ignore.
   elements.provider.disabled = readOnly;
   elements.model.disabled = readOnly;
+  syncLegacyModelPicker(elements.model);
   elements.modelRefresh.disabled = readOnly;
   elements.accuracyMode.disabled = readOnly || projectManagedAccuracy;
   elements.accuracyMode.title = projectManagedAccuracy
@@ -3412,6 +3645,7 @@ function restoreTask(task, operation = {}) {
       ) return;
       if ([...elements.model.options].some((o) => o.value === task.model)) {
         elements.model.value = task.model;
+        syncLegacyModelPicker(elements.model);
         renderModelNote();
       }
     });

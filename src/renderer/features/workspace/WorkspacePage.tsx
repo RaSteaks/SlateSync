@@ -23,7 +23,8 @@ import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateCsvFile } from "../../validation/input-validation";
 import { CsvVirtualTable } from "../csv/CsvVirtualTable";
 import { RecognitionResultPanel } from "../recognition/RecognitionResultPanel";
-import { groupModelOptions, modelOptionLabel } from "../recognition/model-options";
+import { ModelSelect } from "../recognition/ModelSelect";
+import { groupModelOptions } from "../recognition/model-options";
 import { useRecognitionDraft } from "../recognition/use-recognition-draft";
 import { SlateInputPanel, type SlateInputPanelHandle } from "../slate/SlateInputPanel";
 import { TaskRail } from "../tasks/TaskRail";
@@ -764,7 +765,7 @@ export function WorkspacePage() {
             <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / 识别</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
             <div className={styles.grid}>
               <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
-              <Field label="模型"><Select value={modelId} onChange={(event) => { patchDraft({ modelId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择视觉模型</option>{modelGroups.map((group) => <optgroup key={group.key} label={group.label}>{group.models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model)}</option>)}</optgroup>)}</Select></Field>
+              <Field label="模型"><ModelSelect value={modelId} groups={modelGroups} onChange={(nextModelId) => { patchDraft({ modelId: nextModelId }); markDirtyAfterRender(); }} disabled={recognition.running} placeholder="选择视觉模型" /></Field>
               <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { patchDraft({ accuracyMode: event.target.value as "high" | "standard" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次识别</option></Select></Field>
               <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { patchDraft({ scenarioId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">自动识别</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>
               <Field label="识别提示" hint="可选"><Textarea className="resize-none" value={customPrompt} onChange={(event) => { patchDraft({ customPrompt: event.target.value }); markDirtyAfterRender(); }} maxLength={2000} showCount disabled={recognition.running} placeholder={settings.customPrompt || "补充文字或机位约定"} /></Field>

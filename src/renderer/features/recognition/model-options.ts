@@ -6,6 +6,8 @@ export interface ModelOptionGroup {
   readonly key: string;
   readonly label: string;
   readonly models: readonly ModelData[];
+  /** Fixed recommendations stay open; large vendor buckets can collapse. */
+  readonly collapsible?: boolean;
 }
 
 /**
@@ -20,7 +22,7 @@ export function groupModelOptions(
   const available = dedupeModels(models);
   if (!available.length) return [];
   if (providerId !== "openrouter") {
-    return [{ key: "available", label: "可用视觉模型", models: available }];
+    return [{ key: "available", label: "可用视觉模型", models: available, collapsible: false }];
   }
 
   const recommended = available.filter(isRecommendedModel);
@@ -38,6 +40,7 @@ export function groupModelOptions(
       key: "openrouter-featured",
       label: `推荐模型 · 优先 ${OPENROUTER_PRIMARY_COUNT} 个`,
       models: featured,
+      collapsible: false,
     });
   }
 
@@ -53,6 +56,7 @@ export function groupModelOptions(
       key: `openrouter-vendor-${vendor}`,
       label: `${vendorLabel(vendor)} · 其余 ${vendorModels.length} 个`,
       models: vendorModels,
+      collapsible: true,
     });
   }
   return groups;

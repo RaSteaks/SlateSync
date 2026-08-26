@@ -140,6 +140,33 @@
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .routeHint { padding: 16px; border: 1px dashed var(--ss-color-line-strong); border-radius: var(--ss-radius-md); color: var(--ss-color-ink-subtle); text-align: center; }
 .dangerZone { display: flex; align-items: center; justify-content: space-between; gap: var(--ss-space-4); border-color: color-mix(in srgb, var(--ss-color-danger) 42%, var(--ss-color-line)); }
+/* The custom model picker keeps fixed recommendations visible while vendor
+   buckets remain compact until the user explicitly opens one. */
+.modelPicker { position: relative; width: 100%; }
+.modelPickerTrigger { display: flex; width: 100%; min-height: var(--ss-control-height); align-items: center; justify-content: space-between; gap: var(--ss-space-2); padding: var(--ss-control-padding-block) var(--ss-control-padding-inline); border: 1px solid var(--ss-color-line-strong); border-radius: var(--ss-radius-md); color: var(--ss-color-ink); background: var(--ss-color-surface-sunken); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--ss-motion-base) var(--ss-ease), background var(--ss-motion-base) var(--ss-ease), box-shadow var(--ss-motion-base) var(--ss-ease); }
+.modelPickerTrigger:hover, .modelPickerTrigger[data-open="true"] { border-color: var(--ss-color-accent); }
+.modelPickerTrigger:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: 2px; box-shadow: var(--ss-shadow-focus); }
+.modelPickerTrigger[data-state="error"], .modelPickerTrigger[aria-invalid="true"] { border-color: var(--ss-color-danger); background: var(--ss-color-danger-soft); }
+.modelPickerTrigger:disabled { cursor: not-allowed; opacity: .5; }
+.modelPickerTriggerLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modelPickerTriggerLabel[data-placeholder="true"] { color: var(--ss-color-ink-subtle); }
+.modelPickerTriggerIcon { flex: 0 0 auto; color: var(--ss-color-ink-subtle); transition: transform var(--ss-motion-fast) var(--ss-ease); }
+.modelPickerTrigger[data-open="true"] .modelPickerTriggerIcon { transform: rotate(180deg); }
+.modelPickerMenu { position: fixed; z-index: var(--ss-z-dropdown); display: grid; gap: 2px; overflow: auto; padding: 6px; border: 1px solid var(--ss-color-line-strong); border-radius: var(--ss-radius-md); background: var(--ss-color-surface-raised); box-shadow: var(--ss-shadow-md); }
+.modelPickerGroup + .modelPickerGroup { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--ss-color-line); }
+.modelPickerGroupHeader { display: flex; min-height: 32px; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border: 0; border-radius: var(--ss-radius-sm); color: var(--ss-color-ink-subtle); background: transparent; font: inherit; font-family: var(--ss-font-mono); font-size: .66rem; font-weight: 700; letter-spacing: .03em; text-align: left; cursor: pointer; }
+.modelPickerGroupHeader[data-fixed="true"] { cursor: default; }
+.modelPickerGroupHeader:hover, .modelPickerGroupHeader:focus-visible { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
+.modelPickerGroupHeader:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: -2px; }
+.modelPickerGroupHeaderIcon { flex: 0 0 auto; transition: transform var(--ss-motion-fast) var(--ss-ease); }
+.modelPickerGroupHeader[data-expanded="true"] .modelPickerGroupHeaderIcon { transform: rotate(90deg); }
+.modelPickerGroupOptions { display: grid; gap: 2px; padding: 2px 0 2px 7px; }
+.modelPickerOption { display: flex; min-height: 36px; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: var(--ss-radius-sm); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .78rem; text-align: left; cursor: pointer; }
+.modelPickerOption:hover, .modelPickerOption[aria-selected="true"] { color: var(--ss-color-ink); background: var(--ss-color-accent-soft); }
+.modelPickerOption:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: -2px; }
+.modelPickerOptionLabel { min-width: 0; overflow-wrap: anywhere; }
+.modelPickerOptionCheck { flex: 0 0 auto; margin-left: auto; color: var(--ss-color-accent); }
+.modelPickerEmpty { padding: 12px 10px; color: var(--ss-color-ink-subtle); font-size: .78rem; text-align: center; }
 /* Log filters stay compact on desktop and become a readable two-column form
    on narrow screens without changing the shared Field/Select semantics. */
 .logFilters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ss-layout-gap); margin-bottom: 14px; }
@@ -176,5 +203,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .projectCard, .uploadZone { transition: none; }
+  .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon { transition: none; }
 }
