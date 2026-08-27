@@ -1,6 +1,8 @@
 .page { width: min(100%, 1480px); margin: 0 auto; padding: clamp(var(--ss-space-5), 4vw, var(--ss-space-10)); }
 .appMain { min-width: 0; }
-.panel { padding: var(--ss-panel-padding); }
+/* Grid items otherwise preserve their min-content width; keep the wide CSV
+   preview inside its track so only the dedicated scrollport can overflow. */
+.panel { min-width: 0; max-width: 100%; padding: var(--ss-panel-padding); }
 .bootScreen { display: grid; min-height: 100vh; place-items: center; color: var(--ss-color-ink-muted); background: var(--ss-color-canvas); }
 /* The navigation shell consumes the same artwork as the packaged macOS app;
    object-fit preserves its native rounded silhouette without local restyling. */
@@ -70,9 +72,9 @@
 .formFieldFull { grid-column: 1 / -1; }
 .formActions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }
 .statusRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.workspaceGrid { display: grid; grid-template-columns: minmax(290px, 350px) minmax(0, 1fr); gap: var(--ss-layout-gap); align-items: start; }
+.workspaceGrid { display: grid; min-width: 0; max-width: 100%; grid-template-columns: minmax(290px, 350px) minmax(0, 1fr); gap: var(--ss-layout-gap); align-items: start; }
 .workspaceLeft { display: grid; gap: var(--ss-layout-gap); position: sticky; top: calc(var(--ss-header-height) + 20px); max-height: calc(100vh - var(--ss-header-height) - 40px); overflow: auto; padding-right: 4px; }
-.workspaceMain { min-width: 0; display: grid; gap: var(--ss-layout-gap); }
+.workspaceMain { min-width: 0; max-width: 100%; display: grid; gap: var(--ss-layout-gap); }
 .uploadZone { display: grid; width: 100%; min-height: 150px; place-items: center; padding: 20px; border: 1px dashed var(--ss-color-line-strong); border-radius: var(--ss-radius-lg); color: var(--ss-color-ink-muted); background: var(--ss-color-surface-sunken); font: inherit; text-align: center; cursor: pointer; transition: border-color var(--ss-motion-base) var(--ss-ease), background var(--ss-motion-base) var(--ss-ease); }
 .uploadZone:hover, .uploadZone[data-dragging="true"] { border-color: var(--ss-color-accent); background: var(--ss-color-accent-soft); }
 .uploadIcon { display: grid; width: 42px; height: 42px; place-items: center; margin: 0 auto 10px; border-radius: var(--ss-radius-lg); color: var(--ss-color-accent); background: var(--ss-color-accent-soft); }
@@ -100,10 +102,14 @@
 .taskItem strong, .taskItem small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .taskItem strong { font-size: .8rem; }
 .taskItem small { margin-top: 3px; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .65rem; }
-.tableFrame { min-width: 0; overflow: hidden; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
+.tableFrame { display: block; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
 .tableToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--ss-color-line); }
-.tableScroll { position: relative; height: min(620px, 58vh); overflow: auto; overscroll-behavior: contain; }
-.table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: .76rem; }
+.tableScroll { position: relative; display: block; width: 100%; max-width: 100%; min-width: 0; height: min(620px, 58vh); overflow-x: auto; overflow-y: auto; overscroll-behavior: contain; }
+/* The canvas is allowed to be wider than the panel so the scrollport owns all
+   horizontal movement; min-width keeps narrow tables filled to the viewport. */
+.tableCanvas { display: block; min-width: 100%; }
+.table { width: 100%; min-width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: .76rem; }
+.table th, .table td { box-sizing: border-box; }
 .table th { position: sticky; top: 0; z-index: 2; padding: 10px 12px; border-bottom: 1px solid var(--ss-color-line-strong); color: var(--ss-color-ink-subtle); background: var(--ss-color-surface); font-family: var(--ss-font-mono); font-size: .65rem; font-weight: 700; text-align: left; white-space: nowrap; }
 .table td { height: 42px; padding: 0 10px; border-bottom: 1px solid var(--ss-color-line); color: var(--ss-color-ink-muted); background: var(--ss-color-surface-sunken); white-space: nowrap; }
 .table tr:hover td { background: var(--ss-color-surface-hover); }

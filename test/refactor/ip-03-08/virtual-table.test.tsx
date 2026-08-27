@@ -45,6 +45,37 @@ describe("virtual Resolve table", () => {
     expect(host.querySelectorAll("tbody tr").length).toBeLessThan(100);
   });
 
+  it("shares fixed column widths between the header and virtual rows", () => {
+    mockVirtualViewport();
+    const table: ResolveCsvTable = {
+      headers: ["File Name", "Scene", "Comments"],
+      rows: [["A001C001.mov", "001", "_OK"]],
+      format: { encoding: "utf-8", bom: false, delimiter: ",", lineEnding: "\r\n", finalNewline: true },
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    mounted.push({ host, root });
+    act(() => root.render(<CsvVirtualTable table={table} edits={{}} onEdit={() => undefined} />));
+
+    const renderedTable = host.querySelector("table");
+    const scrollport = host.querySelector("[class*='tableScroll']");
+    const canvas = host.querySelector("[class*='tableCanvas']");
+    const columnWidths = [...(renderedTable?.querySelectorAll("col") || [])].map((column) => column.getAttribute("style"));
+    const headerWidths = [...(renderedTable?.querySelectorAll("thead th") || [])].map((cell) => cell.getAttribute("style"));
+    const rowWidths = [...(renderedTable?.querySelectorAll("tbody tr:first-child td") || [])].map((cell) => cell.getAttribute("style"));
+
+    expect(columnWidths).toHaveLength(table.headers.length);
+    expect(columnWidths.every((style) => style?.startsWith("width: "))).toBe(true);
+    expect(headerWidths).toEqual(columnWidths);
+    expect(rowWidths).toEqual(columnWidths);
+    // The intentionally wide canvas must remain a direct child of the
+    // bounded scrollport; otherwise the outer panel can regain its overflow.
+    expect(scrollport?.firstElementChild).toBe(canvas);
+    const widthTotal = columnWidths.reduce((total, style) => total + Number(style?.match(/([\d.]+)px/)?.[1] || 0), 0);
+    expect(canvas?.getAttribute("style")).toContain(`width: ${widthTotal}px`);
+  });
+
   it("keeps typing local and commits a cell once on blur", () => {
     const onEdit = vi.fn();
     const host = document.createElement("div");

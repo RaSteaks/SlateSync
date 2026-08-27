@@ -338,3 +338,36 @@ Worker 边界、验收证据和最终治理交接。
 - 验证结果：`npm run check`、`npm run typecheck`、`npm run test:node`（267/267，含
   native SQLite 重建）、`npm run test:modern`（17 个文件 54/54）、`npm run build:modern`
   与 `git diff --check` 全部通过。
+
+## 2026-08-27 回填预览列对齐修复
+
+- 修复 Modern Renderer 回填预览的表头与虚拟行部分错位：由于虚拟表格的
+  `<tbody>` 使用块级布局，列宽不再交给表头和表体分别自动推断；由同一组
+  TanStack 列宽统一驱动 `<colgroup>`、表头、虚拟行和单元格，并将表格设为
+  fixed layout。继续保留横向滚动、原生 table 语义、CSV 数据和虚拟行预算。
+- `virtual-table.test.tsx` 新增表头、`colgroup` 与虚拟行共享列宽的回归覆盖；
+  本次未改变 CSV 合并、编辑提交、Worker 或持久化契约。
+- 验证结果：Modern Vitest 18 个文件、56/56 通过，`npm run typecheck`、
+  `npm run build:modern`、`npm run check` 与 `git diff --check` 通过；按既有
+  GUI 测试边界未自动启动 Electron 前台窗口。
+
+## 2026-08-27 回填预览横向滚动恢复
+
+- 修复固定布局后的回填预览只能纵向滚动问题：在滚动容器内增加承载列总宽度的
+  `tableCanvas`，使宽表的固定元数据列真实参与横向溢出计算；`tableScroll` 明确
+  使用 `overflow-x/y: auto`，短表仍可填满区域，长表可在原区域左右查看剩余列。
+- 虚拟 `<tbody>`、表头与列宽契约保持不变；未改变 CSV 数据、编辑提交、Worker
+  或持久化语义。组件回归覆盖同步检查 canvas 总宽度和所有列宽。
+- 验证结果：Modern Vitest 18 个文件、56/56 通过，`npm run typecheck`、
+  `npm run build:modern` 与 `npm run check` 通过；按既有 GUI 测试边界未自动
+  启动 Electron 前台窗口。
+
+## 2026-08-27 回填预览区域边界约束
+
+- 修复宽表承载层的最小内容宽度向外层网格传播：工作区网格、主区、面板和表格
+  框均显式允许收缩并限制在父区域内，避免回填预览面板超过用户屏幕边界。
+- 保留 `tableCanvas` 的固定列总宽度，并将它放在宽度受限的 `tableScroll` 内；因此
+  只有回填预览内部负责上下、横向滚动，外层面板不会被宽表撑开。
+- 验证结果：`npm run check`、`npm run typecheck`、`npm run test:modern`
+  （18 个文件、56/56）、`npm run build:modern` 与 `git diff --check` 通过；按既有
+  GUI 测试边界未自动启动 Electron 前台窗口。

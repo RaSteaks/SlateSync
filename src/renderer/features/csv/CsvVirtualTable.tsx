@@ -91,11 +91,74 @@ export function CsvVirtualTable({ table, edits, onEdit }: { table: ResolveCsvTab
   const columns = useMemo<ColumnDef<CsvRow>[]>(() => (table?.headers || []).map((header, columnIndex) => ({ id: `source-column-${columnIndex}`, header, accessorFn: (row) => row.values[columnIndex] || "", cell: (context) => { const row = context.row.original; const key = `${row.index}:${columnIndex}` as CsvEditKey; const committedValue = edits[key] ?? row.values[columnIndex] ?? ""; const pendingEdit = pendingEditsRef.current[key]; const value = pendingEdit?.value ?? committedValue; return <EditableCell label={`${header} 第 ${row.index + 2} 行`} value={value} committedValue={committedValue} edited={edits[key] !== undefined} onDraftChange={(nextValue) => queueEdit(key, nextValue)} onCommit={(nextValue) => { queueEdit(key, nextValue); flushPendingEdits(key); }} onCancel={() => discardQueuedEdit(key)} />; } })), [edits, table?.headers]);
   const instance = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel(), getRowId: (row) => row.id });
   const rows = instance.getRowModel().rows;
+  const headers = instance.getHeaderGroups()[0]?.headers || [];
+  // Virtual rows live in a block-level tbody, so the browser cannot infer one
+  // shared table layout. Derive every visible width once and reuse it for the
+  // colgroup, header cells, and absolutely positioned rows.
+  const columnWidths = headers.map((header) => header.column.getSize());
+  const tableWidth = columnWidths.reduce((total, width) => total + width, 0);
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => density === "compact" ? 36 : 42, overscan: 12 });
   if (!table) return <EmptyState title="还没有 Resolve CSV" description="载入 CSV 后即可预览和编辑。" />;
   if (!table.rows.length) return <EmptyState title="CSV 没有数据行" description="请检查 Resolve CSV 是否只有表头，或重新导出文件。" />;
 
-  return <div className={styles.tableFrame} data-testid="csv-virtual-table"><div className={styles.tableToolbar}><Text tone="muted" size="sm">{table.rows.length.toLocaleString("zh-CN")} 行 · {table.headers.length} 列</Text><Text tone="subtle" size="xs">修改后离开单元格即可保存</Text></div><div ref={scrollRef} className={styles.tableScroll}><table className={styles.table}><thead><tr>{instance.getHeaderGroups()[0]?.headers.map((header) => <th key={header.id}>{flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr></thead><tbody style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", display: "block" }}>{virtualizer.getVirtualItems().map((virtualRow) => { const row = rows[virtualRow.index]; if (!row) return null; return <tr key={row.id} data-index={virtualRow.index} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)`, display: "table", tableLayout: "fixed" }}>{row.getVisibleCells().map((cell) => <td key={cell.id} style={{ width: `${cell.column.getSize()}px` }}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>; })}</tbody></table></div></div>;
+  return (
+    <div className={styles.tableFrame} data-testid="csv-virtual-table">
+      <div className={styles.tableToolbar}>
+        <Text tone="muted" size="sm">{table.rows.length.toLocaleString("zh-CN")} 行 · {table.headers.length} 列</Text>
+        <Text tone="subtle" size="xs">修改后离开单元格即可保存</Text>
+      </div>
+      <div ref={scrollRef} className={styles.tableScroll}>
+        {/* The canvas makes the fixed metadata width contribute to the
+            scrollport even though virtual rows use a block-level tbody. */}
+        <div className={styles.tableCanvas} style={{ width: `${tableWidth}px` }}>
+          <table className={styles.table}>
+            <colgroup>
+              {headers.map((header, columnIndex) => (
+                <col key={header.id} style={{ width: `${columnWidths[columnIndex]}px` }} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                {headers.map((header, columnIndex) => (
+                  <th key={header.id} scope="col" style={{ width: `${columnWidths[columnIndex]}px` }}>
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", display: "block" }}>
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const row = rows[virtualRow.index];
+                if (!row) return null;
+                return (
+                  <tr
+                    key={row.id}
+                    data-index={virtualRow.index}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                      display: "table",
+                      tableLayout: "fixed",
+                    }}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} style={{ width: `${columnWidths[cell.column.getIndex()]}px` }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function EditableCell({ label, value, committedValue = value, edited, onCommit, onDraftChange, onCancel }: { readonly label: string; readonly value: string; readonly committedValue?: string; readonly edited: boolean; readonly onCommit: (value: string) => void; readonly onDraftChange?: (value: string) => void; readonly onCancel?: () => void }) {
