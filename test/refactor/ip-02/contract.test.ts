@@ -4,6 +4,7 @@ import type {
   ConfigData,
   DirectorySelection,
   FileSaveResult,
+  GlobalSettingsData,
   JsonSchemaCapabilityResult,
   LogsReadResult,
   LibraryExportResult,
@@ -376,6 +377,12 @@ const saveResult = { saved: true, filePath: "/synthetic/demo.csv" } satisfies Fi
 const ocrSettings = { pythonPath: "python3", setupCompleted: true, setupSkipped: false } satisfies OcrSettings;
 const ocrCheck = { ok: true, paddleVersion: "3", paddleOcrVersion: "3" } satisfies OcrCheckResult;
 const visionOcrCheck = { ok: true, engine: "Vision", modelVersion: "macOS-Vision", systemVersion: "15.0" } satisfies VisionOcrCheckResult;
+const globalSettings = {
+  values: {} as GlobalSettingsData["values"],
+  overrides: [],
+  keyConfigured: { openai: false },
+  restartRequired: false,
+} satisfies GlobalSettingsData;
 const jsonSchemaCheck = {
   supported: true,
   model: "local-vision",
@@ -414,6 +421,8 @@ const responses: Readonly<Record<string, unknown>> = {
   "select-directory": directory,
   "scan-slate-directory": scan,
   "save-provider-key": { provider: "openai", configured: true },
+  "get-global-settings": globalSettings,
+  "save-global-settings": globalSettings,
   "get-ocr-settings": ocrSettings,
   "save-ocr-settings": ocrSettings,
   "check-ocr": ocrCheck,
@@ -427,7 +436,7 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly seven namespaces and exact success DTOs for all 33 operations", async () => {
+  it("exposes exactly seven namespaces and exact success DTOs for all 35 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
     expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings", "logs"]);
@@ -461,6 +470,8 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.files.selectDirectory(), directory);
     expectSuccess(await api.files.scanSlateDirectory({ dirPath: "/synthetic", expectedKeys: ["A:1:1"], maxDepth: 4 }), scan);
     expectSuccess(await api.settings.saveProviderKey({ provider: "openai", apiKey: "synthetic-key" }), { provider: "openai", configured: true });
+    expectSuccess(await api.settings.getGlobalSettings(), globalSettings);
+    expectSuccess(await api.settings.saveGlobalSettings({ values: { MAX_BODY_MB: "100" } }), globalSettings);
     expectSuccess(await api.settings.getOcrSettings(), ocrSettings);
     expectSuccess(await api.settings.saveOcrSettings({ pythonPath: "python3" }), ocrSettings);
     expectSuccess(await api.settings.checkOcr({ pythonPath: "python3" }), ocrCheck);

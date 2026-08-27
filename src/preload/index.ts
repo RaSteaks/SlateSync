@@ -1,6 +1,8 @@
 import type {
   AppError,
   BinaryPayload,
+  GlobalSettingsData,
+  GlobalSettingsRequest,
   LogsReadRequest,
   ModelsRequest,
   OcrCheckRequest,
@@ -120,6 +122,8 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
     },
     settings: {
       saveProviderKey: (body: ProviderKeyRequest) => request("save-provider-key", body),
+      getGlobalSettings: () => request<GlobalSettingsData>("get-global-settings"),
+      saveGlobalSettings: (body: GlobalSettingsRequest) => request<GlobalSettingsData>("save-global-settings", body),
       getOcrSettings: () => request("get-ocr-settings"),
       saveOcrSettings: (body: OcrSettingsRequest) => request("save-ocr-settings", body),
       checkOcr: (body: OcrCheckRequest) => request("check-ocr", body),

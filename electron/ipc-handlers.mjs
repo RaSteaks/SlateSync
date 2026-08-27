@@ -16,6 +16,11 @@ import {
 import { checkPaddleOcr } from "../lib/ocr/paddleocr.mjs";
 import { checkVisionOcr } from "../lib/ocr/vision.mjs";
 import {
+  listGlobalOverrides,
+  normalizeGlobalSettingsPatch,
+  resolveGlobalSettingValues,
+} from "./global-settings.mjs";
+import {
   normalizeProjectSettings,
   projectSettingsFromWorkflow,
   validateProjectSettings,
@@ -37,6 +42,9 @@ export function registerIpcHandlers(ipcMain, context) {
     projectRuntime,
     settingsStore,
     runtimeSettings,
+    globalConfigStore,
+    runtimeGlobalConfig = {},
+    refreshRuntimeSettings,
     libraryActions,
     logger,
     checkOcr = checkPaddleOcr,
@@ -56,8 +64,20 @@ export function registerIpcHandlers(ipcMain, context) {
   let activeLibraryWrites = 0;
   let libraryTransferInProgress = false;
 
+  function effectiveRuntimeEnv() {
+    const env = { ...runtimeEnv() };
+    // Main's production runtimeEnv already applies this map. Keeping the
+    // fallback here makes the handler independently testable and preserves
+    // key readiness immediately after a save in recovery contexts.
+    for (const [providerId, apiKey] of runtimeProviderKeys || []) {
+      const provider = PROVIDERS[providerId];
+      if (provider && apiKey) env[provider.envKey] = apiKey;
+    }
+    return env;
+  }
+
   ipcMain.handle("get-config", async () => {
-    const config = publicConfig(runtimeEnv(), await getWorkflowConfig(), {
+    const config = publicConfig(effectiveRuntimeEnv(), await getWorkflowConfig(), {
       ocrAutoEnable: true,
     });
     return {
@@ -67,6 +87,67 @@ export function registerIpcHandlers(ipcMain, context) {
         maxRequestBytes: settings.maxBodyBytes,
       },
     };
+  });
+
+  function publicGlobalSettings(restartRequired = false) {
+    const env = effectiveRuntimeEnv();
+    return {
+      values: resolveGlobalSettingValues(env),
+      overrides: listGlobalOverrides(runtimeGlobalConfig),
+      // This map contains presence flags only. Secret text never crosses IPC.
+      keyConfigured: Object.fromEntries(
+        Object.values(PROVIDERS).map((provider) => [
+          provider.id,
+          Boolean(String(env[provider.envKey] || "").trim()),
+        ]),
+      ),
+      restartRequired,
+    };
+  }
+
+  ipcMain.handle("get-global-settings", async () => publicGlobalSettings());
+
+  ipcMain.handle("save-global-settings", async (_event, body = {}) => {
+    if (!globalConfigStore) throw new Error("全局配置存储不可用");
+    const previousEnv = effectiveRuntimeEnv();
+    const previous = { ...runtimeGlobalConfig };
+    const patch = body?.reset === true
+      ? {}
+      : normalizeGlobalSettingsPatch(body?.values || {});
+    const next = body?.reset === true ? {} : { ...previous };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next[key] = value;
+      else delete next[key];
+    }
+    const saved = await globalConfigStore.save(next);
+    for (const key of Object.keys(runtimeGlobalConfig)) delete runtimeGlobalConfig[key];
+    Object.assign(runtimeGlobalConfig, saved?.values || next);
+
+    // Keep the legacy first-run OCR wizard and the new global form pointed at
+    // the same interpreter. The flags remain in settings.json for migration.
+    const pathTouched = body?.reset === true
+      ? Object.hasOwn(previous, "PADDLEOCR_PYTHON")
+      : Object.hasOwn(patch, "PADDLEOCR_PYTHON");
+    if (pathTouched && runtimeSettings) {
+      const nextPythonPath = runtimeGlobalConfig.PADDLEOCR_PYTHON || "";
+      const pathChanged = runtimeSettings.ocrPythonPath !== nextPythonPath;
+      runtimeSettings.ocrPythonPath = nextPythonPath;
+      // A generic global-form edit is not the validated OCR wizard flow. If
+      // the interpreter changed or was cleared, make the next launch ask for
+      // verification again instead of keeping a stale completion marker.
+      if (pathChanged) {
+        runtimeSettings.ocrSetupCompleted = false;
+        runtimeSettings.ocrSetupSkipped = false;
+      }
+      await settingsStore?.save(runtimeSettings);
+    }
+    refreshRuntimeSettings?.();
+    const nextEnv = effectiveRuntimeEnv();
+    // The workflow provider is constructed once at startup. Other settings
+    // refresh for later jobs, but a changed workflow path needs a relaunch.
+    return publicGlobalSettings(
+      String(previousEnv.SLATESYNC_CONFIG_PATH || "") !== String(nextEnv.SLATESYNC_CONFIG_PATH || ""),
+    );
   });
 
   ipcMain.handle("list-projects", async () =>
@@ -199,9 +280,6 @@ export function registerIpcHandlers(ipcMain, context) {
     if (!provider) {
       throw new Error("未知 API 服务商");
     }
-    if (providerId === "openai-compatible") {
-      throw new Error("OpenAI 兼容 API 需通过环境变量配置");
-    }
     const apiKey = String(body?.apiKey || "").trim();
     if (apiKey) {
       runtimeProviderKeys.set(providerId, apiKey);
@@ -213,9 +291,7 @@ export function registerIpcHandlers(ipcMain, context) {
     }
     return {
       provider: providerId,
-      configured: Boolean(
-        runtimeProviderKeys.get(providerId) || process.env[provider.envKey],
-      ),
+      configured: provider.requiredEnv.every((key) => Boolean(String(effectiveRuntimeEnv()[key] || "").trim())),
     };
   });
 
@@ -483,11 +559,16 @@ export function registerIpcHandlers(ipcMain, context) {
     });
   });
 
-  ipcMain.handle("get-ocr-settings", async () => ({
-    pythonPath: runtimeSettings?.ocrPythonPath || "",
-    setupCompleted: Boolean(runtimeSettings?.ocrSetupCompleted),
-    setupSkipped: Boolean(runtimeSettings?.ocrSetupSkipped),
-  }));
+  ipcMain.handle("get-ocr-settings", async () => {
+    const envPythonPath = effectiveRuntimeEnv().PADDLEOCR_PYTHON;
+    return {
+      // Include .env/OS fallbacks in the display while retaining the legacy
+      // settings-store fallback for isolated test/recovery contexts.
+      pythonPath: envPythonPath || runtimeSettings?.ocrPythonPath || "",
+      setupCompleted: Boolean(runtimeSettings?.ocrSetupCompleted),
+      setupSkipped: Boolean(runtimeSettings?.ocrSetupSkipped),
+    };
+  });
 
   ipcMain.handle("save-ocr-settings", async (_event, body) => {
     if (!settingsStore) throw new Error("设置存储不可用");
@@ -505,7 +586,10 @@ export function registerIpcHandlers(ipcMain, context) {
 
       // Validate before changing memory or disk, so a failed check cannot make
       // an unusable interpreter look like a completed OCR setup.
-      const checkResult = await checkOcr({ pythonPath });
+      const checkResult = await checkOcr({
+        pythonPath,
+        env: effectiveRuntimeEnv(),
+      });
       if (!checkResult?.ok) {
         throw new Error(
           checkResult?.error?.message || "PaddleOCR 检测失败，未保存设置。",
@@ -520,6 +604,15 @@ export function registerIpcHandlers(ipcMain, context) {
     }
     const savedSettings = await settingsStore.save(nextSettings);
     Object.assign(runtimeSettings, savedSettings || nextSettings);
+    if (globalConfigStore) {
+      const nextGlobalConfig = { ...runtimeGlobalConfig };
+      if (body?.skip === true) delete nextGlobalConfig.PADDLEOCR_PYTHON;
+      else nextGlobalConfig.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
+      const savedGlobalConfig = await globalConfigStore.save(nextGlobalConfig);
+      for (const key of Object.keys(runtimeGlobalConfig)) delete runtimeGlobalConfig[key];
+      Object.assign(runtimeGlobalConfig, savedGlobalConfig?.values || nextGlobalConfig);
+    }
+    refreshRuntimeSettings?.();
     return {
       pythonPath: runtimeSettings.ocrPythonPath,
       setupCompleted: runtimeSettings.ocrSetupCompleted,
@@ -528,7 +621,10 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("check-ocr", async (_event, body) =>
-    checkOcr({ pythonPath: String(body?.pythonPath ?? "").trim() }),
+    checkOcr({
+      pythonPath: String(body?.pythonPath ?? "").trim(),
+      env: effectiveRuntimeEnv(),
+    }),
   );
 
   ipcMain.handle("check-vision-ocr", async () =>

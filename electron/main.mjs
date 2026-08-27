@@ -1,7 +1,8 @@
 // Electron main process: composition root and window lifecycle.
 //
-// Loads .env + workflow config, wires up persisted keys/settings and the OCR
-// Python path, registers IPC handlers, then opens the sandboxed BrowserWindow.
+// Loads .env + user-level global config + workflow config, wires up persisted
+// keys/settings and the OCR Python path, registers IPC handlers, then opens the
+// sandboxed BrowserWindow.
 // The window loads the single compiled typed Preload directly because a
 // sandboxed Electron Preload cannot require another application-local file.
 // Packaged startup loads the modern out/renderer/index.html shell. Development
@@ -28,6 +29,8 @@ import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
 import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.mjs";
 import { registerIpcHandlers } from "./ipc-handlers.mjs";
 import { createKeyStore } from "./key-store.mjs";
+import { createGlobalConfigStore } from "./global-config-store.mjs";
+import { applyGlobalConfig } from "./global-settings.mjs";
 import { createFileDialogs } from "./file-dialogs.mjs";
 import {
   isAllowedRendererDevNavigation,
@@ -67,14 +70,6 @@ if (isDev) {
   process.env.SLATESYNC_PROJECT_DIR = join(process.resourcesPath, "app");
 }
 
-// PaddleOCR model cache in userData to avoid writing to app install directory
-if (!process.env.PADDLE_PDX_CACHE_HOME) {
-  process.env.PADDLE_PDX_CACHE_HOME = join(
-    app.getPath("userData"),
-    "paddlex",
-  );
-}
-
 let mainWindow = null;
 let projectLibrary = null;
 let projectRuntime = null;
@@ -90,42 +85,68 @@ async function initialize() {
     packaged: app.isPackaged,
   });
 
+  // Load machine stores before .env so the saved config path can participate
+  // in startup resolution without exposing any file access to the Renderer.
+  const userDataPath = app.getPath("userData");
+  const defaultPaddleCacheHome = join(userDataPath, "paddlex");
+  const settingsStore = createSettingsStore(userDataPath);
+  const runtimeSettings = await settingsStore.load();
+  const globalConfigStore = createGlobalConfigStore(userDataPath);
+  const storedGlobalConfig = await globalConfigStore.load();
+  const runtimeGlobalConfig = { ...(storedGlobalConfig?.values || {}) };
+
   // Load .env from project root (dev) or userData (packaged)
   const envPath = isDev
     ? join(resolve(__dirname, ".."), ".env")
-    : join(app.getPath("userData"), ".env");
+    : join(userDataPath, ".env");
   await loadLocalEnv(envPath);
-  configureModelHttpAgent(process.env);
+
+  // Persisted non-secret settings override .env, while the provider key map
+  // is applied separately below so credentials never enter global-config.json.
+  const keyStore = createKeyStore(userDataPath);
+  const runtimeProviderKeys = await keyStore.load();
+  function runtimeEnv() {
+    const env = { ...process.env };
+    // Resolve the cache default after .env is loaded so a user-provided
+    // PADDLE_PDX_CACHE_HOME remains effective; Global Settings then wins over
+    // both sources without writing anything into process.env.
+    if (!String(env.PADDLE_PDX_CACHE_HOME || "").trim()) {
+      env.PADDLE_PDX_CACHE_HOME = defaultPaddleCacheHome;
+    }
+    const configuredEnv = applyGlobalConfig(env, runtimeGlobalConfig);
+    for (const [providerId, apiKey] of runtimeProviderKeys) {
+      const provider = PROVIDERS[providerId];
+      if (provider) configuredEnv[provider.envKey] = apiKey;
+    }
+    // Keep the legacy first-run OCR setting readable, unless the new global
+    // config explicitly owns the same field (including an empty reset).
+    if (!Object.hasOwn(runtimeGlobalConfig, "PADDLEOCR_PYTHON") && runtimeSettings.ocrPythonPath) {
+      configuredEnv.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
+    }
+    return configuredEnv;
+  }
+
+  const initialRuntimeEnv = runtimeEnv();
+  configureModelHttpAgent(initialRuntimeEnv);
 
   // Load workflow config
   const configPath = isDev
     ? resolve(
         resolve(__dirname, ".."),
-        process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
+        initialRuntimeEnv.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
       )
     : join(process.resourcesPath, "app", "slatesync.config.json");
   const getWorkflowConfig = createWorkflowConfigProvider(configPath);
   await getWorkflowConfig();
 
-  const settings = electronSettings(process.env);
+  const settings = electronSettings(initialRuntimeEnv);
   const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
 
-  // Load persisted API keys and app settings
-  const keyStore = createKeyStore(app.getPath("userData"));
-  const runtimeProviderKeys = await keyStore.load();
-  const settingsStore = createSettingsStore(app.getPath("userData"));
-  const runtimeSettings = await settingsStore.load();
-
-  function runtimeEnv() {
-    const env = { ...process.env };
-    for (const [providerId, apiKey] of runtimeProviderKeys) {
-      const provider = PROVIDERS[providerId];
-      if (provider) env[provider.envKey] = apiKey;
-    }
-    if (runtimeSettings.ocrPythonPath) {
-      env.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
-    }
-    return env;
+  function refreshRuntimeSettings() {
+    const env = runtimeEnv();
+    Object.assign(settings, electronSettings(env));
+    recognitionLimiter.setLimit?.(settings.maxConcurrentRecognitions);
+    configureModelHttpAgent(env);
   }
 
   const fileDialogs = createFileDialogs(() => mainWindow);
@@ -221,6 +242,9 @@ async function initialize() {
     projectRuntime,
     settingsStore,
     runtimeSettings,
+    globalConfigStore,
+    runtimeGlobalConfig,
+    refreshRuntimeSettings,
     libraryActions,
     logger: appLogger,
   });

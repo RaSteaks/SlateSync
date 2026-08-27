@@ -129,6 +129,8 @@ export interface TaskSlice {
 
 export interface ExportSlice {
   table: ResolveCsvTable | null;
+  /** Worker-derived table shown in the preview; the raw table remains the export source. */
+  previewTable: ResolveCsvTable | null;
   filename: string | null;
   edits: ResolveCsvEdits;
   slateCsvRecords: readonly SlateCsvRecord[] | null;
@@ -136,6 +138,7 @@ export interface ExportSlice {
   processing: boolean;
   error: AppError | null;
   setTable(table: ResolveCsvTable | null, filename?: string | null): void;
+  setPreviewTable(table: ResolveCsvTable | null): void;
   setEdit(key: `${number}:${number}`, value: string): void;
   setEdits(edits: ResolveCsvEdits): void;
   setSlateCsvRecords(records: readonly SlateCsvRecord[] | null, filename?: string | null): void;

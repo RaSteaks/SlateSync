@@ -11,6 +11,7 @@ import {
   exportProjectLibraryApi,
   fetchConfig,
   fetchModelsApi,
+  getGlobalSettingsApi,
   getLibraryInfoApi,
   getOcrSettingsApi,
   importProjectLibraryApi,
@@ -25,6 +26,7 @@ import {
   recognizeApi,
   restoreProjectApi,
   saveOcrSettingsApi,
+  saveGlobalSettingsApi,
   saveProviderKeyApi,
   saveTaskApi,
   scanSlateDirectoryApi,
@@ -86,6 +88,8 @@ function makeGateway(calls, progress) {
     },
     settings: {
       saveProviderKey: operation("settings.saveProviderKey"),
+      getGlobalSettings: operation("settings.getGlobalSettings"),
+      saveGlobalSettings: operation("settings.saveGlobalSettings"),
       getOcrSettings: operation("settings.getOcrSettings"),
       saveOcrSettings: operation("settings.saveOcrSettings"),
       checkOcr: operation("settings.checkOcr"),
@@ -111,7 +115,15 @@ describe("electron renderer bridge", () => {
     await assert.rejects(() => fetchConfig(), /preload bridge is unavailable/);
   });
 
-  it("maps all 28 legacy operations to exact typed requests and raw results", async () => {
+  it("explains how to recover from a stale Preload for global settings", async () => {
+    globalThis.slateSync = { settings: {} };
+    await assert.rejects(
+      () => getGlobalSettingsApi(),
+      /Renderer 与 Preload 版本不一致.*完全退出 SlateSync.*不要只刷新窗口/,
+    );
+  });
+
+  it("maps all 30 legacy operations to exact typed requests and raw results", async () => {
     const calls = [];
     const progress = { listener: null, subscriptions: 0, unsubscriptions: 0 };
     globalThis.slateSync = makeGateway(calls, progress);
@@ -142,6 +154,8 @@ describe("electron renderer bridge", () => {
       [pickDirectoryApi, [], "files.selectDirectory", []],
       [scanSlateDirectoryApi, ["/synthetic", ["A:1:1"], 4], "files.scanSlateDirectory", [{ dirPath: "/synthetic", expectedKeys: ["A:1:1"], maxDepth: 4 }]],
       [saveProviderKeyApi, ["openai", "synthetic-key"], "settings.saveProviderKey", [{ provider: "openai", apiKey: "synthetic-key" }]],
+      [getGlobalSettingsApi, [], "settings.getGlobalSettings", []],
+      [saveGlobalSettingsApi, [{ values: { MAX_BODY_MB: "100" } }], "settings.saveGlobalSettings", [{ values: { MAX_BODY_MB: "100" } }]],
       [getOcrSettingsApi, [], "settings.getOcrSettings", []],
       [saveOcrSettingsApi, [{ skip: true }], "settings.saveOcrSettings", [{ skip: true }]],
       [checkOcrApi, ["python3"], "settings.checkOcr", [{ pythonPath: "python3" }]],
@@ -167,7 +181,7 @@ describe("electron renderer bridge", () => {
     assert.equal(saved.name, "files.save");
     assert.equal(saved.args[0].defaultFilename, "demo.csv");
     assert.equal(saved.args[0].data, binary);
-    assert.equal(calls.length, 28);
+    assert.equal(calls.length, 30);
   });
 
   it("preserves the full-buffer identity and copies only an exact subview", async () => {

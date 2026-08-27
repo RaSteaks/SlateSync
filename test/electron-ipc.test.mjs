@@ -54,6 +54,8 @@ describe("electron IPC handlers", () => {
 
     const expectedChannels = [
       "get-config",
+      "get-global-settings",
+      "save-global-settings",
       "list-projects",
       "get-library-info",
       "import-project-library",
@@ -473,18 +475,98 @@ describe("electron IPC handlers", () => {
     );
   });
 
-  it("save-provider-key rejects openai-compatible", async () => {
+  it("save-provider-key supports openai-compatible when its endpoint and model are present", async () => {
+    const runtimeProviderKeys = new Map();
     const ipcMain = createMockIpcMain();
-    registerIpcHandlers(ipcMain, createMockContext());
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeProviderKeys,
+      runtimeEnv: () => ({
+        OPENAI_COMPATIBLE_BASE_URL: "https://local.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "local-vision",
+      }),
+    }));
+
+    const result = await ipcMain.invoke("save-provider-key", {
+      provider: "openai-compatible",
+      apiKey: "sk-test",
+    });
+    assert.deepEqual(result, { provider: "openai-compatible", configured: true });
+  });
+
+  it("global settings persist validated non-secret overrides and refresh runtime settings", async () => {
+    const runtimeGlobalConfig = { MAX_BODY_MB: "80" };
+    const saves = [];
+    let refreshCount = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeGlobalConfig,
+      globalConfigStore: {
+        save: async (values) => {
+          const saved = { version: 1, values: { ...values } };
+          saves.push(saved);
+          return saved;
+        },
+      },
+      runtimeEnv: () => ({
+        MAX_BODY_MB: runtimeGlobalConfig.MAX_BODY_MB || "80",
+        SLATESYNC_CONFIG_PATH: runtimeGlobalConfig.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
+      }),
+      refreshRuntimeSettings: () => { refreshCount += 1; },
+    }));
+
+    const initial = await ipcMain.invoke("get-global-settings");
+    assert.equal(initial.values.MAX_BODY_MB, "80");
+    assert.deepEqual(initial.overrides, ["MAX_BODY_MB"]);
 
     await assert.rejects(
-      () =>
-        ipcMain.invoke("save-provider-key", {
-          provider: "openai-compatible",
-          apiKey: "sk-test",
-        }),
-      { message: "OpenAI 兼容 API 需通过环境变量配置" },
+      () => ipcMain.invoke("save-global-settings", { values: { OPENAI_API_KEY: "secret" } }),
+      /不支持的全局配置项/,
     );
+
+    const saved = await ipcMain.invoke("save-global-settings", {
+      values: { MAX_BODY_MB: "120", OPENAI_BASE_URL: "https://local.example/v1" },
+    });
+    assert.equal(saved.values.MAX_BODY_MB, "120");
+    assert.deepEqual(saved.overrides, ["OPENAI_BASE_URL", "MAX_BODY_MB"]);
+    assert.equal(saved.restartRequired, false);
+    assert.deepEqual(saves.at(-1).values, { MAX_BODY_MB: "120", OPENAI_BASE_URL: "https://local.example/v1" });
+
+    const pathChange = await ipcMain.invoke("save-global-settings", {
+      values: { SLATESYNC_CONFIG_PATH: "custom.config.json" },
+    });
+    assert.equal(pathChange.restartRequired, true);
+
+    const cleared = await ipcMain.invoke("save-global-settings", { values: { MAX_BODY_MB: "" } });
+    assert.equal(cleared.values.MAX_BODY_MB, "80");
+    assert.equal(cleared.overrides.includes("MAX_BODY_MB"), false);
+    assert.ok(refreshCount >= 3);
+  });
+
+  it("global OCR path changes clear a stale first-run completion marker", async () => {
+    const runtimeGlobalConfig = { PADDLEOCR_PYTHON: "/old/bin/python" };
+    const runtimeSettings = {
+      ocrPythonPath: "/old/bin/python",
+      ocrSetupCompleted: true,
+      ocrSetupSkipped: false,
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeGlobalConfig,
+      runtimeSettings,
+      settingsStore: { save: async () => {} },
+      globalConfigStore: {
+        save: async (values) => ({ version: 1, values: { ...values } }),
+      },
+      runtimeEnv: () => ({ PADDLEOCR_PYTHON: runtimeGlobalConfig.PADDLEOCR_PYTHON }),
+    }));
+
+    await ipcMain.invoke("save-global-settings", {
+      values: { PADDLEOCR_PYTHON: "" },
+    });
+
+    assert.equal(runtimeSettings.ocrPythonPath, "");
+    assert.equal(runtimeSettings.ocrSetupCompleted, false);
+    assert.equal(runtimeSettings.ocrSetupSkipped, false);
   });
 
   it("save-provider-key stores and clears keys", async () => {

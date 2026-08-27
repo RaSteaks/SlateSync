@@ -78,15 +78,18 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   assert.equal(additions.extendsBaselineCommit, ipc.baselineCommit);
   assert.deepEqual(Object.keys(ipc.requestMethods).sort(), [...historicalIpcMethodNames].sort());
   assert.equal(ipc.cancelRecognitionChannel, null);
-  // These are post-baseline additions: capability probes and local logging
-  // belong to their feature packages rather than the historical inventory.
+  // These are post-baseline additions: capability probes, local logging and
+  // machine-level settings belong to their feature packages rather than the
+  // historical inventory.
   assert.deepEqual(Object.keys(additions.requestMethods).sort(), [
     "cancelRecognition",
     "checkCompatibleJsonSchema",
     "checkVisionOcr",
     "deleteProject",
+    "getGlobalSettings",
     "readLogs",
     "renameLibrary",
+    "saveGlobalSettings",
   ]);
   assert.deepEqual(
     Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
@@ -95,8 +98,10 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
       "check-compatible-json-schema",
       "check-vision-ocr",
       "delete-project",
+      "get-global-settings",
       "logs-read",
       "rename-library",
+      "save-global-settings",
     ],
   );
 });

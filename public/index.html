@@ -560,7 +560,7 @@
         <div>
           <p class="eyebrow">APPLICATION SETTINGS</p>
           <h1>全局设置</h1>
-          <p class="page-subtitle">这些设置作用于本机 SlateSync，不属于任何单个项目。</p>
+          <p class="page-subtitle">这些设置作用于本机 SlateSync，不属于任何单个项目；普通配置不需要再编辑 .env。</p>
         </div>
       </div>
       <div class="settings-layout">
@@ -580,6 +580,22 @@
             <button id="global-save-key-button" class="secondary-button" type="button">保存</button>
           </div>
           <small id="global-api-key-note" class="api-key-note">选择服务商查看配置状态。</small>
+        </section>
+        <section class="settings-card global-settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">RUNTIME CONFIGURATION</span>
+              <h2>运行参数与接口</h2>
+            </div>
+            <span id="global-settings-count" class="settings-note">未读取</span>
+          </div>
+          <p class="settings-help">这里覆盖 .env.example 中除 API Key 外的可配置项。清空单项即可回退到 .env 或内置默认值。</p>
+          <div id="global-settings-fields" class="global-settings-fields" aria-live="polite"></div>
+          <div class="settings-actions">
+            <button id="global-settings-reset" class="secondary-button" type="button">恢复环境默认</button>
+            <span id="global-settings-status" class="settings-save-status" aria-live="polite"></span>
+            <button id="global-settings-save" class="primary-button compact" type="button">保存全局配置</button>
+          </div>
         </section>
         <section class="settings-card">
           <div class="settings-card-heading">

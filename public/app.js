@@ -61,7 +61,9 @@ import {
   loadTaskApi,
   saveTaskApi,
   deleteTaskApi,
+  getGlobalSettingsApi,
   getOcrSettingsApi,
+  saveGlobalSettingsApi,
   saveOcrSettingsApi,
   checkOcrApi,
 } from "./electron-bridge.js";
@@ -109,6 +111,10 @@ const state = {
   slateCsvRecords: null,
   slateCsvFileName: null,
   ocrSettings: null,
+  globalSettings: null,
+  globalSettingsDraft: {},
+  globalSettingsDirty: new Set(),
+  globalSettingsLoading: false,
   csvEdits: new Map(),
   detailSort: { field: null, direction: 1 },
   detailSearch: "",
@@ -254,6 +260,11 @@ const elements = {
   globalApiKeyInput: document.querySelector("#global-api-key-input"),
   globalSaveKeyButton: document.querySelector("#global-save-key-button"),
   globalApiKeyNote: document.querySelector("#global-api-key-note"),
+  globalSettingsFields: document.querySelector("#global-settings-fields"),
+  globalSettingsCount: document.querySelector("#global-settings-count"),
+  globalSettingsStatus: document.querySelector("#global-settings-status"),
+  globalSettingsSave: document.querySelector("#global-settings-save"),
+  globalSettingsReset: document.querySelector("#global-settings-reset"),
   globalOcrOpen: document.querySelector("#global-ocr-open"),
   globalOcrStatus: document.querySelector("#global-ocr-status"),
   projectContext: document.querySelector("#project-context"),
@@ -297,6 +308,7 @@ async function init() {
     updateSlateDirectoryState();
     await loadProviderModels();
     renderGlobalProviderOptions();
+    await loadGlobalSettings();
     await refreshLibrary();
     renderRoute();
   } catch {
@@ -401,6 +413,8 @@ function renderRoute() {
   }
 
   if (state.route === "project-settings") renderProjectSettingsForm();
+  if (state.route === "global-settings" && !state.globalSettings) void loadGlobalSettings();
+  if (state.route === "global-settings") renderGlobalSettingsForm();
   updateProjectContextLabel();
 }
 
@@ -868,11 +882,9 @@ function updateGlobalApiKeyFieldState() {
   const configurable = KEY_CONFIGURABLE_PROVIDERS.includes(provider.id);
   elements.globalApiKeyInput.disabled = !configurable;
   elements.globalSaveKeyButton.disabled = !configurable;
-  elements.globalApiKeyNote.textContent = !configurable
-    ? "OpenAI 兼容 API 需通过环境变量配置。"
-    : provider.configured
-      ? "已配置 · 输入新 Key 可覆盖，留空保存可清除"
-      : "未配置 · 粘贴 API Key 后保存";
+  elements.globalApiKeyNote.textContent = provider.configured
+    ? "已配置 · 输入新 Key 可覆盖，留空保存可清除"
+    : "未配置 · 粘贴 API Key 后保存";
 }
 
 async function saveGlobalProviderKey() {
@@ -881,13 +893,22 @@ async function saveGlobalProviderKey() {
   );
   if (!provider) return;
   try {
-    await saveProviderKeyApi(provider.id, elements.globalApiKeyInput.value.trim());
+    const savedKey = await saveProviderKeyApi(provider.id, elements.globalApiKeyInput.value.trim());
     elements.globalApiKeyInput.value = "";
     await loadConfig();
     renderProviderOptions();
     renderGlobalProviderOptions();
     renderApiStatus();
     await loadProviderModels();
+    if (state.globalSettings) {
+      state.globalSettings = {
+        ...state.globalSettings,
+        keyConfigured: {
+          ...(state.globalSettings.keyConfigured || {}),
+          [provider.id]: Boolean(savedKey?.configured),
+        },
+      };
+    }
     renderProjectSettingsForm();
     if (!state.currentTaskId) applyNewTaskRecognitionDefaults();
     elements.globalApiKeyNote.textContent = "已保存。";
@@ -1007,6 +1028,10 @@ function bindEvents() {
   });
   elements.globalProvider?.addEventListener("change", updateGlobalApiKeyFieldState);
   elements.globalSaveKeyButton?.addEventListener("click", saveGlobalProviderKey);
+  elements.globalSettingsFields?.addEventListener("input", handleGlobalSettingsInput);
+  elements.globalSettingsFields?.addEventListener("change", handleGlobalSettingsInput);
+  elements.globalSettingsSave?.addEventListener("click", () => void saveGlobalSettings());
+  elements.globalSettingsReset?.addEventListener("click", () => void saveGlobalSettings(true));
   elements.globalOcrOpen?.addEventListener("click", openOcrSetup);
 
   elements.provider.addEventListener("change", async () => {
@@ -1346,14 +1371,178 @@ function renderProviderOptions() {
   updateApiKeyFieldState();
 }
 
-// OpenAI-compatible endpoints require additional environment configuration;
-// the remaining providers can safely persist their single API key in Electron.
+// All supported providers can persist their API key through the Main process;
+// OpenAI-compatible endpoint/model details are edited in Modern Global Settings
+// (the bounded legacy page still exposes the credential action).
 const KEY_CONFIGURABLE_PROVIDERS = [
   "openai",
   "openrouter",
   "tokenplan",
   "dashscope",
+  "openai-compatible",
 ];
+
+// Keep the fallback settings form data-driven. The typed Modern Renderer has
+// richer affordances, but this inventory guarantees the recovery page cannot
+// silently lose a newly supported .env.example option.
+const GLOBAL_SETTINGS_GROUPS = [
+  {
+    title: "服务商接口",
+    fields: [
+      { key: "OPENAI_BASE_URL", label: "OpenAI Base URL", type: "url" },
+      { key: "OPENROUTER_BASE_URL", label: "OpenRouter Base URL", type: "url" },
+      { key: "OPENROUTER_SITE_URL", label: "OpenRouter 应用标识 URL", type: "url", hint: "可留空。" },
+      { key: "TOKENPLAN_BASE_URL", label: "Token Plan Base URL", type: "url" },
+      { key: "DASHSCOPE_BASE_URL", label: "DashScope Base URL", type: "url" },
+    ],
+  },
+  {
+    title: "OpenAI 兼容接口",
+    fields: [
+      { key: "OPENAI_COMPATIBLE_BASE_URL", label: "Base URL", type: "url" },
+      { key: "OPENAI_COMPATIBLE_MODEL", label: "模型 ID" },
+      { key: "OPENAI_COMPATIBLE_API_MODE", label: "请求接口", options: [["chat-completions", "Chat Completions"], ["responses", "Responses"]] },
+      { key: "OPENAI_COMPATIBLE_JSON_MODE", label: "JSON 模式", options: [["json_schema", "JSON Schema"], ["json_object", "JSON Object"], ["prompt", "Prompt 约束"]] },
+      { key: "OPENAI_COMPATIBLE_IMAGE_DETAIL", label: "图片细节", options: [["auto", "自动"], ["low", "低"], ["high", "高"], ["original", "原始"]] },
+    ],
+  },
+  {
+    title: "运行与缓存",
+    fields: [
+      { key: "SLATESYNC_CONFIG_PATH", label: "工作流配置路径", hint: "开发环境读取；修改后下次启动生效。" },
+      { key: "MAX_BODY_MB", label: "请求体上限（MB）", type: "number", min: 20, max: 200, step: 1 },
+      { key: "MODEL_REQUEST_TIMEOUT_MS", label: "模型请求超时（毫秒）", type: "number", min: 30000, max: 3600000, step: 1000 },
+      { key: "MODEL_REQUEST_MAX_RETRIES", label: "超时重试次数", type: "number", min: 0, max: 3, step: 1 },
+      { key: "MODEL_PAGE_CONCURRENCY", label: "并行提交页数", type: "number", min: 1, max: 6, step: 1 },
+      { key: "MAX_CONCURRENT_RECOGNITIONS", label: "并行识别任务数", type: "number", min: 1, max: 16, step: 1 },
+      { key: "PADDLE_PDX_CACHE_HOME", label: "Paddle 模型缓存路径", hint: "留空使用应用默认缓存目录。" },
+    ],
+  },
+  {
+    title: "Apple Vision OCR",
+    fields: [
+      { key: "VISIONOCR_ENABLED", label: "启用模式", options: [["auto", "自动"], ["true", "开启"], ["false", "关闭"]] },
+      { key: "VISIONOCR_REQUIRED", label: "必需模式", options: [["false", "可选"], ["true", "必需"]] },
+      { key: "VISIONOCR_LANGUAGE", label: "识别语言", hint: "可填写逗号分隔的语言。" },
+      { key: "VISIONOCR_RECOGNITION_LEVEL", label: "识别精度", options: [["accurate", "高精度"], ["fast", "快速"]] },
+      { key: "VISIONOCR_USE_LANGUAGE_CORRECTION", label: "语言校正", options: [["true", "启用"], ["false", "关闭"]] },
+      { key: "VISIONOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
+      { key: "VISIONOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
+      { key: "VISIONOCR_TIMEOUT_MS", label: "超时", hint: "填写 auto 或 10000–1800000 毫秒。" },
+      { key: "VISIONOCR_BINARY", label: "Vision bridge 路径", hint: "留空则自动查找。" },
+    ],
+  },
+  {
+    title: "PaddleOCR",
+    fields: [
+      { key: "PADDLEOCR_ENABLED", label: "启用模式", options: [["auto", "自动"], ["true", "开启"], ["false", "关闭"]] },
+      { key: "PADDLEOCR_REQUIRED", label: "必需模式", options: [["false", "可选"], ["true", "必需"]] },
+      { key: "PADDLEOCR_MODEL_VERSION", label: "模型版本" },
+      { key: "PADDLEOCR_PROFILE", label: "性能档", options: [["fast", "快速"], ["balanced", "平衡"], ["accurate", "高精度"]] },
+      { key: "PADDLEOCR_LANGUAGE", label: "识别语言" },
+      { key: "PADDLEOCR_DEVICE", label: "计算设备" },
+      { key: "PADDLEOCR_DETECTION_MODEL", label: "检测模型", hint: "留空使用性能档默认模型。" },
+      { key: "PADDLEOCR_RECOGNITION_MODEL", label: "识别模型", hint: "留空使用性能档默认模型。" },
+      { key: "PADDLEOCR_RECOGNITION_BATCH_SIZE", label: "识别批量大小", type: "number", min: 1, max: 64, step: 1 },
+      { key: "PADDLEOCR_PYTHON", label: "Python 环境路径", hint: "例如 .venv-paddleocr/bin/python；留空使用自动检测。" },
+      { key: "PADDLEOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
+      { key: "PADDLEOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
+      { key: "PADDLEOCR_TIMEOUT_MS", label: "OCR 超时", hint: "填写 auto 或 10000–3600000 毫秒。" },
+    ],
+  },
+];
+
+function globalFieldMarkup(field, values) {
+  const value = values?.[field.key] || "";
+  const common = `data-global-key="${escapeHtml(field.key)}" spellcheck="false"`;
+  const control = field.options
+    ? `<select ${common}>${field.options.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`
+    : `<input type="${field.type || "text"}" ${common}${field.min === undefined ? "" : ` min="${field.min}" max="${field.max}" step="${field.step}"`} value="${escapeHtml(value)}" />`;
+  return `<label class="field"><span>${escapeHtml(field.label)} <code>${escapeHtml(field.key)}</code></span>${control}${field.hint ? `<small class="global-settings-field-hint">${escapeHtml(field.hint)}</small>` : ""}</label>`;
+}
+
+function renderGlobalSettingsForm() {
+  if (!elements.globalSettingsFields) return;
+  if (!state.globalSettings) {
+    elements.globalSettingsFields.innerHTML = '<p class="settings-help">正在读取本机全局配置…</p>';
+    if (elements.globalSettingsCount) elements.globalSettingsCount.textContent = "读取中";
+    return;
+  }
+  const values = state.globalSettingsDraft;
+  elements.globalSettingsFields.innerHTML = GLOBAL_SETTINGS_GROUPS.map((group, index) => `
+    <details class="global-settings-group"${index === 0 ? " open" : ""}>
+      <summary>${escapeHtml(group.title)}</summary>
+      <div class="global-settings-group-fields">${group.fields.map((field) => globalFieldMarkup(field, values)).join("")}</div>
+    </details>
+  `).join("");
+  if (elements.globalSettingsCount) {
+    elements.globalSettingsCount.textContent = `已覆盖 ${state.globalSettings.overrides?.length || 0} 项`;
+  }
+  if (elements.globalSettingsSave) elements.globalSettingsSave.disabled = state.globalSettingsLoading;
+  if (elements.globalSettingsReset) elements.globalSettingsReset.disabled = state.globalSettingsLoading;
+}
+
+function setGlobalSettingsStatus(message, isError = false) {
+  if (!elements.globalSettingsStatus) return;
+  elements.globalSettingsStatus.textContent = message;
+  elements.globalSettingsStatus.classList.toggle("error", isError);
+}
+
+async function loadGlobalSettings() {
+  if (!elements.globalSettingsFields || state.globalSettingsLoading) return;
+  state.globalSettingsLoading = true;
+  renderGlobalSettingsForm();
+  try {
+    const data = await getGlobalSettingsApi();
+    state.globalSettings = data;
+    state.globalSettingsDraft = { ...(data.values || {}) };
+    state.globalSettingsDirty = new Set();
+    setGlobalSettingsStatus("");
+    renderGlobalSettingsForm();
+  } catch (error) {
+    setGlobalSettingsStatus(error.message || "读取全局配置失败。", true);
+  } finally {
+    state.globalSettingsLoading = false;
+    renderGlobalSettingsForm();
+  }
+}
+
+function handleGlobalSettingsInput(event) {
+  const key = event.target?.dataset?.globalKey;
+  if (!key) return;
+  state.globalSettingsDraft[key] = event.target.value;
+  state.globalSettingsDirty.add(key);
+  setGlobalSettingsStatus("有未保存修改");
+}
+
+async function saveGlobalSettings(reset = false) {
+  if (!state.globalSettings || state.globalSettingsLoading) return;
+  state.globalSettingsLoading = true;
+  renderGlobalSettingsForm();
+  try {
+    const values = {};
+    if (!reset) {
+      // Resolved values include .env/defaults; send only dirty fields so a
+      // normal save does not materialize inherited values as overrides.
+      for (const key of state.globalSettingsDirty) values[key] = state.globalSettingsDraft[key] || "";
+    }
+    const data = await saveGlobalSettingsApi(reset ? { reset: true } : { values });
+    state.globalSettings = data;
+    state.globalSettingsDraft = { ...(data.values || {}) };
+    state.globalSettingsDirty = new Set();
+    await loadConfig();
+    renderProviderOptions();
+    renderGlobalProviderOptions();
+    renderModelOptions();
+    renderApiStatus();
+    setGlobalSettingsStatus(data.restartRequired ? "已保存；工作流路径下次启动生效。" : reset ? "已恢复 .env 与内置默认。" : "已保存。");
+  } catch (error) {
+    setGlobalSettingsStatus(error.message || "保存全局配置失败。", true);
+  } finally {
+    state.globalSettingsLoading = false;
+    renderGlobalSettingsForm();
+  }
+}
 
 function updateApiKeyFieldState() {
   const provider = selectedProvider();
@@ -1910,10 +2099,22 @@ async function saveOcrSettings() {
   elements.ocrSaveButton.disabled = true;
   try {
     await saveOcrSettingsApi({ pythonPath });
+    if (state.globalSettings) {
+      state.globalSettings = {
+        ...state.globalSettings,
+        values: { ...state.globalSettings.values, PADDLEOCR_PYTHON: pythonPath },
+        overrides: state.globalSettings.overrides.includes("PADDLEOCR_PYTHON")
+          ? state.globalSettings.overrides
+          : [...state.globalSettings.overrides, "PADDLEOCR_PYTHON"],
+      };
+      state.globalSettingsDraft.PADDLEOCR_PYTHON = pythonPath;
+      state.globalSettingsDirty.delete("PADDLEOCR_PYTHON");
+    }
     elements.ocrSetupOverlay.hidden = true;
     await loadConfig();
     renderApiStatus();
     renderGlobalOcrStatus();
+    renderGlobalSettingsForm();
   } catch (error) {
     showError(error.message);
   } finally {

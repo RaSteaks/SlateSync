@@ -234,6 +234,66 @@ export interface ProviderKeyRequest {
   readonly apiKey: string;
 }
 
+// Non-secret values that can be overridden from the machine-level Global
+// Settings page. API keys stay on the separate Main-process key-store path.
+export type GlobalSettingKey =
+  | "OPENAI_BASE_URL"
+  | "OPENROUTER_BASE_URL"
+  | "OPENROUTER_SITE_URL"
+  | "TOKENPLAN_BASE_URL"
+  | "DASHSCOPE_BASE_URL"
+  | "OPENAI_COMPATIBLE_BASE_URL"
+  | "OPENAI_COMPATIBLE_MODEL"
+  | "OPENAI_COMPATIBLE_API_MODE"
+  | "OPENAI_COMPATIBLE_JSON_MODE"
+  | "OPENAI_COMPATIBLE_IMAGE_DETAIL"
+  | "SLATESYNC_CONFIG_PATH"
+  | "MAX_BODY_MB"
+  | "MODEL_REQUEST_TIMEOUT_MS"
+  | "MODEL_REQUEST_MAX_RETRIES"
+  | "MODEL_PAGE_CONCURRENCY"
+  | "MAX_CONCURRENT_RECOGNITIONS"
+  | "PADDLEOCR_ENABLED"
+  | "PADDLEOCR_REQUIRED"
+  | "PADDLEOCR_MODEL_VERSION"
+  | "PADDLEOCR_PROFILE"
+  | "PADDLEOCR_LANGUAGE"
+  | "PADDLEOCR_DEVICE"
+  | "PADDLEOCR_DETECTION_MODEL"
+  | "PADDLEOCR_RECOGNITION_MODEL"
+  | "PADDLEOCR_RECOGNITION_BATCH_SIZE"
+  | "PADDLEOCR_PYTHON"
+  | "PADDLEOCR_MIN_CONFIDENCE"
+  | "PADDLEOCR_MAX_BLOCKS_PER_VIEW"
+  | "PADDLEOCR_TIMEOUT_MS"
+  | "PADDLE_PDX_CACHE_HOME"
+  | "VISIONOCR_ENABLED"
+  | "VISIONOCR_REQUIRED"
+  | "VISIONOCR_LANGUAGE"
+  | "VISIONOCR_RECOGNITION_LEVEL"
+  | "VISIONOCR_USE_LANGUAGE_CORRECTION"
+  | "VISIONOCR_MIN_CONFIDENCE"
+  | "VISIONOCR_MAX_BLOCKS_PER_VIEW"
+  | "VISIONOCR_TIMEOUT_MS"
+  | "VISIONOCR_BINARY";
+
+export type GlobalSettingValues = Readonly<Record<GlobalSettingKey, string>>;
+export type GlobalSettingsPatch = Partial<Record<GlobalSettingKey, string | null>>;
+
+export interface GlobalSettingsRequest {
+  readonly values?: GlobalSettingsPatch;
+  readonly reset?: boolean;
+}
+
+export interface GlobalSettingsData {
+  readonly values: GlobalSettingValues;
+  readonly overrides: readonly GlobalSettingKey[];
+  /** Provider IDs only; values are booleans and never API key text. */
+  readonly keyConfigured: Readonly<Record<string, boolean>>;
+  /** True after saving SLATESYNC_CONFIG_PATH, which is read at next startup. */
+  readonly restartRequired: boolean;
+}
+
 export interface SlateCsvRecord {
   readonly fileName?: string | null;
   readonly materialKey?: string | null;
@@ -726,6 +786,8 @@ export interface SlateSyncApi {
       readonly provider: string;
       readonly configured: boolean;
     }>>;
+    getGlobalSettings(): Promise<Result<GlobalSettingsData>>;
+    saveGlobalSettings(request: GlobalSettingsRequest): Promise<Result<GlobalSettingsData>>;
     getOcrSettings(): Promise<Result<OcrSettings>>;
     saveOcrSettings(request: OcrSettingsRequest): Promise<Result<OcrSettings>>;
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;

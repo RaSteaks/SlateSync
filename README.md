@@ -55,10 +55,15 @@
 git clone https://github.com/RaSteaks/SlateSync.git
 cd SlateSync
 npm ci
+```
+
+启动应用后进入“全局设置”，即可填写 API Key、接口地址、运行参数和 OCR 配置，普通桌面用户不需要寻找或编辑 `.env`。完整变量模板仍见 [.env.example](./.env.example)；开发、CI 或需要预置环境的场景可以选择复制它：
+
+```bash
 cp .env.example .env
 ```
 
-在 `.env` 中至少配置一个模型服务商的密钥。完整模板见 [.env.example](./.env.example)。
+API Key 也可以直接在“全局设置”中保存；保存后不会回显。
 
 如果需要 PaddleOCR，再执行：
 
@@ -79,7 +84,9 @@ npm start
 npm run electron:dev:modern
 ```
 
-修改 Main 或 Preload 后仍需要重启应用；Renderer HMR 只作用于 `src/renderer`。
+修改 Main 或 Preload 后必须完全退出旧 Electron 进程再重启；Renderer HMR 只作用于
+`src/renderer`，仅刷新窗口不会重新加载 Preload。遇到“版本不一致”提示时，重新执行
+`npm run electron:dev:modern` 即可让启动钩子重新构建 Main/Preload。
 
 ## 工作流
 
@@ -167,6 +174,16 @@ Legacy Renderer（受限回退路径）
 | `Shoot Day` | 素材目录 `slate.txt` 的 `Shot Date` |
 
 字段无法确认时不会被强行写入，必须人工校对。原 CSV 的编码、换行和未匹配字段保持不变。
+
+### 全局设置与配置优先级
+
+“全局设置”覆盖 `.env.example` 中除 API Key 外的全部可配置项，包括服务商 Base URL、OpenAI 兼容接口参数、模型请求并发/超时、Vision OCR、PaddleOCR 和模型缓存路径。API Key 使用同一页面的独立凭据入口。
+
+配置按以下优先级生效：普通配置为“全局设置覆盖 > 操作系统进程环境变量 > `.env` > 内置默认值”；通过页面保存的 Provider API Key 则为“本机凭据 > 操作系统进程环境变量 > `.env`”，并由 Main 进程单独管理。
+
+普通配置存放在 Electron 的 `<userData>/global-config.json`：带版本号、只保存已校验的非敏感覆盖项、写入采用临时文件加原子重命名，并使用 `0600` 权限。Provider 密钥仍放在独立的 `<userData>/provider-keys.json`，不会混入全局配置、Project Library、任务数据或 Renderer IPC 的普通配置 DTO。点击“恢复环境默认”只删除全局覆盖，之后回退到 `.env` 和内置默认值。
+
+全局配置按机器用户保存，不随 Project Library 导入/导出；因此同一台机器的多个项目共享它，而项目包仍可独立迁移。若未来需要更高等级的凭据保护，可将现有独立密钥文件迁移到 macOS Keychain/系统安全存储，普通配置文件无需改变。
 
 ## 数据与安全
 

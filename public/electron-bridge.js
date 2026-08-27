@@ -28,6 +28,18 @@ async function call(operation) {
   return unwrap(await operation(electronApi()));
 }
 
+async function callGlobalSettings(operation) {
+  return call((api) => {
+    // A stale Legacy Renderer can share a window with an older Preload after
+    // a development reload; turn the missing method into a recovery hint.
+    const settings = api.settings;
+    if (typeof settings?.getGlobalSettings !== "function" || typeof settings.saveGlobalSettings !== "function") {
+      throw new Error("当前 Renderer 与 Preload 版本不一致，无法读取全局设置。请完全退出 SlateSync 后重新启动；开发环境请运行 npm run electron:dev:modern。不要只刷新窗口。");
+    }
+    return operation(api);
+  });
+}
+
 export function fetchConfig() {
   return call((api) => api.app.getConfig());
 }
@@ -86,6 +98,14 @@ export function importScenarioApi(profile, projectId) {
 
 export function saveProviderKeyApi(providerId, apiKey) {
   return call((api) => api.settings.saveProviderKey({ provider: providerId, apiKey }));
+}
+
+export function getGlobalSettingsApi() {
+  return callGlobalSettings((api) => api.settings.getGlobalSettings());
+}
+
+export function saveGlobalSettingsApi(settings) {
+  return callGlobalSettings((api) => api.settings.saveGlobalSettings(settings));
 }
 
 export function fetchModelsApi(providerId, forceRefresh = false) {

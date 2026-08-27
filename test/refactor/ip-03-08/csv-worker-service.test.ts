@@ -61,6 +61,23 @@ describe("typed CSV Worker service", () => {
     await expect(pending).resolves.toBeUndefined();
   });
 
+  it("requests a Worker-derived merge table for the preview", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    vi.stubGlobal("window", { location: { href: "file:///app/out/renderer/index.html" } });
+    const service = new CsvWorkerService();
+    const pending = service.mergePreview({
+      type: "merge-preview",
+      records: [],
+      slateMetadata: [],
+      fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+      comments: { goodTake: "_OK", holdTake: "_KP" },
+    });
+    const worker = FakeWorker.instances[0];
+    expect(worker?.messages[0]?.message).toMatchObject({ task: { type: "merge-preview" } });
+    worker?.reply({ table: { headers: ["Scene"], rows: [["001"]], format: {} } });
+    await expect(pending).resolves.toMatchObject({ headers: ["Scene"] });
+  });
+
   it("classifies infrastructure failure, rejects pending work, and recreates once", async () => {
     vi.stubGlobal("Worker", FakeWorker);
     vi.stubGlobal("window", { location: { href: "file:///app/out/renderer/index.html" } });

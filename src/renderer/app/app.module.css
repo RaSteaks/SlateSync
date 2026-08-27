@@ -184,6 +184,19 @@
 .ocrCheckResult[data-tone="danger"] { border-color: color-mix(in srgb, var(--ss-color-danger) 42%, var(--ss-color-line)); background: var(--ss-color-danger-soft); }
 .ocrPaddleForm { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--ss-color-line); }
 .ocrFootnote { margin: 14px 0 0; }
+/* Advanced environment controls use native details so the complete .env
+   surface remains available without turning the first view into a wall of
+   fields. The summary itself stays keyboard reachable and touch friendly. */
+.settingsDetails { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ss-color-line); }
+.settingsDetails > summary { min-height: 40px; padding: 9px 10px; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: var(--ss-color-surface); font-size: .78rem; font-weight: 650; cursor: pointer; }
+.settingsDetails > summary:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
+.settingsDetails > summary:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: 2px; }
+.settingsDetails[open] > summary { margin-bottom: 14px; color: var(--ss-color-ink); }
+.settingsDetails .formGrid { margin-top: 0 !important; }
+.secretInputRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.secretInputRow > .button { min-width: 66px; }
+.runtimeSettingsPanel { grid-column: 1 / -1; }
+.settingsSaveRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ss-color-line); }
 /* The custom model picker keeps fixed recommendations visible while vendor
    buckets remain compact until the user explicitly opens one. */
 .modelPicker { position: relative; width: 100%; }

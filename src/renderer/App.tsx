@@ -1,5 +1,5 @@
-import { FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import appIconUrl from "../../build/icon.png";
 import { AppShell, Button, ContextMenu, Dialog, Field, Icon, IconButton, Input, Separator, Sidebar, Stack, Text, Toast, Toolbar } from "./design-system";
@@ -13,7 +13,7 @@ import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
 import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
-import { WorkspacePage } from "./features/workspace/WorkspacePage";
+import { WorkspacePage, type RegisterWorkspaceToolbarExport } from "./features/workspace/WorkspacePage";
 import styles from "./app/app.module.css";
 
 function routeTitle(route: ReturnType<typeof useUiStore.getState>["route"]) {
@@ -64,6 +64,18 @@ export function App() {
   const appliedThemeRef = useRef<"dark" | "light" | null>(null);
   const themeHydratedRef = useRef(false);
   const projectLoadGuard = useMemo(() => createOperationGuard(), []);
+  const workspaceExportRef = useRef<(() => void) | null>(null);
+  const [workspaceExportState, setWorkspaceExportState] = useState({ canExport: false, processing: false });
+
+  // The workspace owns export semantics; the shell only hosts its stable
+  // trigger in the sticky toolbar and mirrors the current busy/disabled state.
+  const registerWorkspaceToolbarExport = useCallback<RegisterWorkspaceToolbarExport>((handler, nextState) => {
+    workspaceExportRef.current = handler;
+    setWorkspaceExportState((current) => {
+      const next = nextState || { canExport: false, processing: false };
+      return current.canExport === next.canExport && current.processing === next.processing ? current : next;
+    });
+  }, []);
 
   const resolvedTheme = resolveTheme(theme, systemPrefersDark);
   const nextTheme = cycleTheme(theme);
@@ -309,7 +321,11 @@ export function App() {
   const sidebar = <Sidebar brand={<><img className={styles.brandIcon} src={appIconUrl} alt="" aria-hidden="true" draggable={false} /><span className={styles.brandCopy} data-collapsed={sidebarCollapsed || undefined}><strong>SlateSync</strong></span></>} navigation={navigation} footer={<><IconButton label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} size="sm" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</IconButton><Button className={styles.sidebarThemeButton} data-collapsed={sidebarCollapsed || undefined} aria-label={themeButtonLabel} title={themeButtonLabel} variant="ghost" size="sm" startIcon={themeIcon} onClick={() => setTheme(nextTheme)}>{themePreferenceLabel(theme)}</Button></>} />;
   // 顶部栏副标题仅在工作台 / 项目设置 / 全局设置展示当前项目名；项目库页只显示“项目库”，当前项目名仅由左侧导航栏维护。
   const showsProjectSubtitle = route === "workspace" || route === "project-settings" || route === "global-settings";
-  const toolbar = <Toolbar title={routeTitle(route)} {...(project?.name && showsProjectSubtitle ? { subtitle: project.name } : {})} actions={<Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button>} />;
+  const toolbarActions = <>
+    {route === "workspace" && project && <Button size="sm" onClick={() => workspaceExportRef.current?.()} disabled={!workspaceExportState.canExport} loading={workspaceExportState.processing} startIcon={<Download size={15} />}>导出 Resolve CSV</Button>}
+    <Button variant="ghost" size="sm" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>{density === "compact" ? "标准密度" : "紧凑密度"}</Button>
+  </>;
+  const toolbar = <Toolbar title={routeTitle(route)} {...(project?.name && showsProjectSubtitle ? { subtitle: project.name } : {})} actions={toolbarActions} />;
   // The same visible actions serve the expert context menu and the accessible
   // settings dialog, keeping labels, pending states, and outcomes identical.
   const renderLibraryActions = () => <>
@@ -343,5 +359,5 @@ export function App() {
       </Dialog>;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "workspace" && <WorkspacePage />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "workspace" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

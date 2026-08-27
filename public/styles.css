@@ -2748,6 +2748,21 @@ body {
   grid-column: 1 / -1;
 }
 
+/* The legacy fallback mirrors the typed settings surface with collapsed
+   groups, keeping the recovery UI usable while still exposing every safe
+   .env.example override. */
+.global-settings-card { grid-column: 1 / -1; }
+.global-settings-fields { display: grid; gap: 10px; margin-top: 18px; }
+.global-settings-group { border: 1px solid var(--line); border-radius: var(--r-ctl); background: color-mix(in srgb, var(--paper) 82%, var(--canvas)); }
+.global-settings-group > summary { padding: 12px 14px; color: var(--ink); font-weight: 700; cursor: pointer; }
+.global-settings-group > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.global-settings-group[open] > summary { border-bottom: 1px solid var(--line); }
+.global-settings-group-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 14px 14px; }
+.global-settings-group-fields .field { margin-top: 14px; }
+.global-settings-field-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.global-settings-card .settings-actions { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.global-settings-card .settings-save-status.error { color: var(--danger); }
+
 .settings-card .field {
   margin-top: 18px;
 }
@@ -3035,6 +3050,9 @@ body {
   .settings-layout > .settings-actions {
     grid-column: auto;
   }
+
+  .global-settings-card { grid-column: auto; }
+  .global-settings-group-fields { grid-template-columns: 1fr; }
 
   .page-shell,
   footer {

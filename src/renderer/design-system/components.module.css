@@ -202,7 +202,9 @@
 .toolbarTitle strong, .toolbarTitle small { display: block; }
 .toolbarTitle strong { overflow: hidden; font-size: .96rem; text-overflow: ellipsis; white-space: nowrap; }
 .toolbarTitle small { margin-top: 1px; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; }
-.toolbarActions { display: flex; align-items: center; gap: var(--ss-space-2); }
+/* Sticky toolbar actions may wrap on narrow windows instead of pushing the
+   workspace wider; the header grows with its content so focus stays visible. */
+.toolbarActions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--ss-space-2); }
 .page { width: min(100%, 1480px); margin: 0 auto; padding: clamp(var(--ss-space-5), 4vw, var(--ss-space-10)); }
 .panel { padding: var(--ss-panel-padding); }
 .splitPane { display: grid; min-width: 0; grid-template-columns: minmax(260px, .85fr) minmax(0, 1.7fr); gap: var(--ss-space-5); }

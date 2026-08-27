@@ -50,6 +50,21 @@ export function createCsvTaskProcessor() {
       case "records-from-slate-csv": {
         return { records: recognitionRecordsFromSlateCsv(task.records) };
       }
+      case "merge-preview": {
+        assertTable(metadataTable);
+        // Reuse the authoritative merge algorithm for the visible preview;
+        // export still starts from the retained raw table and applies edits.
+        const output = mergeSlateIntoResolveTable(
+          metadataTable,
+          Array.isArray(task.records) ? task.records : [],
+          Array.isArray(task.slateMetadata) ? task.slateMetadata : [],
+          {
+            fieldFormats: task.fieldFormats,
+            comments: task.comments,
+          },
+        );
+        return { table: output.table };
+      }
       case "export-resolve": {
         assertTable(metadataTable);
         const records = Array.isArray(task.records) ? task.records : [];

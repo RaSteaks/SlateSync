@@ -88,7 +88,17 @@ function normalizeRecord(record: PersistedRecognitionRecord, index: number): Rec
   };
 }
 
-export function WorkspacePage() {
+export interface WorkspaceToolbarExportState {
+  readonly canExport: boolean;
+  readonly processing: boolean;
+}
+
+export type RegisterWorkspaceToolbarExport = (
+  handler: (() => void) | null,
+  state?: WorkspaceToolbarExportState,
+) => void;
+
+export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport?: RegisterWorkspaceToolbarExport } = {}) {
   const project = useProjectStore((state) => state.current);
   const config = useProjectStore((state) => state.config);
   const scenarios = useProjectStore((state) => state.scenarios);
@@ -115,6 +125,7 @@ export function WorkspacePage() {
   })));
   const exportState = useExportStore(useShallow((state) => ({
     table: state.table,
+    previewTable: state.previewTable,
     filename: state.filename,
     edits: state.edits,
     slateCsvRecords: state.slateCsvRecords,
@@ -138,10 +149,12 @@ export function WorkspacePage() {
   const operationGuard = useMemo(() => createOperationGuard(), []);
   const taskListGuard = useMemo(() => createOperationGuard(), []);
   const taskLoadGuard = useMemo(() => createOperationGuard(), []);
+  const previewGuard = useMemo(() => createOperationGuard(), []);
   const projectIdRef = useRef<string | null>(null);
   const workspaceMountedRef = useRef(true);
   const latestCapture = useRef<() => TaskData | null>(() => null);
   const runRecognitionRef = useRef<() => void>(() => undefined);
+  const exportCsvRef = useRef<() => void>(() => undefined);
   const cancelRequestedRef = useRef(false);
   projectIdRef.current = project?.id || null;
 
@@ -167,6 +180,43 @@ export function WorkspacePage() {
       customPrompt,
     };
   }, [accuracyMode, config, customPrompt, modelId, project?.settings, providerId, scenarioId]);
+
+  const invalidateResolvePreview = useCallback(() => {
+    // Each recognition run owns a new preview scope; clear the old projection
+    // before async work can fail or be canceled without producing a result.
+    previewGuard.invalidate();
+    useExportStore.getState().setPreviewTable(null);
+  }, [previewGuard]);
+
+  const refreshResolvePreview = useCallback(async () => {
+    const currentExport = useExportStore.getState();
+    const currentRecognition = useRecognitionStore.getState();
+    if (!currentExport.table || !currentRecognition.records.length) {
+      invalidateResolvePreview();
+      return;
+    }
+
+    const operationId = previewGuard.start();
+    const settings = settingsSnapshot();
+    try {
+      const previewTable = await getCsvWorkerService().mergePreview({
+        type: "merge-preview",
+        records: currentRecognition.records,
+        slateMetadata: useMetadataStore.getState().result?.metadata || [],
+        fieldFormats: settings.resolve.fieldFormats,
+        comments: settings.resolve.comments,
+      });
+      const latestExport = useExportStore.getState();
+      const latestRecognition = useRecognitionStore.getState();
+      if (!workspaceMountedRef.current || !previewGuard.isCurrent(operationId) || latestExport.table !== currentExport.table || latestRecognition.records !== currentRecognition.records) return;
+      useExportStore.getState().setPreviewTable(previewTable);
+    } catch (nextError) {
+      if (!workspaceMountedRef.current || !previewGuard.isCurrent(operationId)) return;
+      const appError = appErrorFromUnknown(nextError);
+      useExportStore.getState().setError(appError);
+      setError(appError.message);
+    }
+  }, [invalidateResolvePreview, previewGuard, settingsSnapshot]);
 
   const captureTask = useCallback((): TaskData | null => {
     const currentProject = useProjectStore.getState().current;
@@ -261,16 +311,18 @@ export function WorkspacePage() {
 
   const clearWorkspaceData = useCallback(async () => {
     operationGuard.invalidate();
+    previewGuard.invalidate();
     useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     await getCsvWorkerService().clear();
-  }, [operationGuard]);
+  }, [operationGuard, previewGuard]);
 
   useEffect(() => () => {
     workspaceMountedRef.current = false;
     operationGuard.invalidate();
+    previewGuard.invalidate();
     taskListGuard.invalidate();
     taskLoadGuard.invalidate();
     void autosave.flush();
@@ -287,7 +339,7 @@ export function WorkspacePage() {
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     useTaskStore.getState().clear();
-  }, [autosave, operationGuard, taskListGuard, taskLoadGuard]);
+  }, [autosave, operationGuard, previewGuard, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
     if (!project) return;
@@ -301,6 +353,7 @@ export function WorkspacePage() {
       customPrompt: project.lastRecognitionDefaults?.customPrompt || settings.customPrompt || "",
     });
     useRecognitionStore.getState().reset();
+    previewGuard.invalidate();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
@@ -310,7 +363,7 @@ export function WorkspacePage() {
       taskLoadGuard.invalidate();
       void autosave.flush();
     };
-  }, [autosave, config, project, replaceDraft, taskListGuard, taskLoadGuard]);
+  }, [autosave, config, previewGuard, project, replaceDraft, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
     if (!providerId) return;
@@ -398,6 +451,7 @@ export function WorkspacePage() {
       useRecognitionStore.getState().start(token, project?.id || null, restored.pageCount);
       useRecognitionStore.getState().complete(token, restored);
     }
+    await refreshResolvePreview();
     autosave.reset();
     useTaskStore.getState().setActive(taskId, task);
     useTaskStore.getState().setSaveState("saved");
@@ -477,6 +531,7 @@ export function WorkspacePage() {
     try {
       const table = await getCsvWorkerService().decode(await file.arrayBuffer());
       useExportStore.getState().setTable(table, file.name);
+      await refreshResolvePreview();
       setToast({ tone: "success", message: `已载入 ${table.rows.length.toLocaleString("zh-CN")} 行 Resolve CSV` });
       autosave.markDirty(captureTask());
     } catch (nextError) {
@@ -523,6 +578,7 @@ export function WorkspacePage() {
         ...(config?.workflow.slate.maxDirectoryDepth !== undefined ? { maxDepth: config.workflow.slate.maxDirectoryDepth } : {}),
       }));
       useMetadataStore.getState().setResult(result);
+      await refreshResolvePreview();
       autosave.markDirty(captureTask());
     } catch (nextError) {
       useMetadataStore.getState().setError(appErrorFromUnknown(nextError));
@@ -555,8 +611,10 @@ export function WorkspacePage() {
         diagnosticSessionId: null,
         taskId: null,
       };
+      invalidateResolvePreview();
       useRecognitionStore.getState().start(operationId, project.id, 0);
       useRecognitionStore.getState().complete(operationId, data);
+      await refreshResolvePreview();
       autosave.markDirty(captureTask());
       setToast({ tone: "success", message: `已生成 ${records.length} 条本地记录` });
     } catch (nextError) {
@@ -625,6 +683,7 @@ export function WorkspacePage() {
       const request = await buildRecognitionRequest();
       const operationId = operationGuard.start();
       activeOperationId = operationId;
+      invalidateResolvePreview();
       useRecognitionStore.getState().start(operationId, project.id, slate.pageCount);
       const api = getSlateSync();
       const unsubscribe = api.recognition.onProgress((event) => useRecognitionStore.getState().progress(operationId, event));
@@ -632,6 +691,7 @@ export function WorkspacePage() {
         const result = await unwrap(await api.recognition.run(request));
         if (result.projectId !== project.id) return;
         useRecognitionStore.getState().complete(operationId, result);
+        await refreshResolvePreview();
         // A route change invalidates workspace-owned mutations, but the
         // completed global recognition state remains useful to LogViewerPage.
         if (!workspaceMountedRef.current || !operationGuard.isCurrent(operationId)) return;
@@ -718,6 +778,17 @@ export function WorkspacePage() {
     }
   };
 
+  const canExport = Boolean(project && recognition.records.length && !exportState.processing && !recognition.running && !switchingTask);
+  // Keep the parent toolbar callback stable while this ref follows the latest
+  // draft, project, metadata, table edits, and export error handling closure.
+  exportCsvRef.current = () => { void exportCsv(); };
+  const invokeToolbarExport = useCallback(() => exportCsvRef.current(), []);
+  useEffect(() => {
+    if (!registerToolbarExport) return undefined;
+    registerToolbarExport(invokeToolbarExport, { canExport, processing: exportState.processing });
+    return () => registerToolbarExport(null);
+  }, [canExport, exportState.processing, invokeToolbarExport, registerToolbarExport]);
+
   if (!project) return <div className={styles.page}><InlineError message="请先从项目库打开一个项目。" /></div>;
   const settings = project.settings || defaultSettings(config);
   const provider = config?.providers.find((item) => item.id === providerId);
@@ -727,13 +798,12 @@ export function WorkspacePage() {
   const modelGroups = groupModelOptions(providerId, availableModels);
   const canMergeLocal = Boolean(!slate.imageDataGroups.length && exportState.slateCsvRecords?.length);
   const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId)) && !recognition.running && !slate.preparing && !switchingTask);
-  const canExport = Boolean(recognition.records.length && !exportState.processing && !recognition.running);
 
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <div><p className={styles.eyebrow}>工作台</p><h1 className={styles.heading}>{project.name}</h1></div>
-        <div className={styles.pageActions}><Badge tone={provider?.configured ? "success" : "warning"}>{provider?.configured ? `${provider.label} 已就绪` : "Provider 未配置"}</Badge><Button onClick={() => void exportCsv()} disabled={!canExport} loading={exportState.processing} startIcon={<Download size={15} />}>导出 Resolve CSV</Button></div>
+        <div className={styles.pageActions}><Badge tone={provider?.configured ? "success" : "warning"}>{provider?.configured ? `${provider.label} 已就绪` : "Provider 未配置"}</Badge></div>
       </div>
       {error && <div style={{ marginBottom: 16 }}>{useTaskStore.getState().saveState === "error" ? <InlineError message={error} onRetry={() => void autosave.retry()} /> : <InlineError message={error} />}</div>}
       <div className={styles.workspaceGrid}>
@@ -796,13 +866,13 @@ export function WorkspacePage() {
               {/* CSV selection lives in the optional-input surface; this panel
                   stays focused on previewing and editing the merged result. */}
               <div><p className={styles.kicker}>03 / CSV</p><h2 className={styles.sectionTitle}>回填预览</h2></div>
-              {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" onClick={() => { void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
+              {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" onClick={() => { previewGuard.invalidate(); void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
             </div>
             {exportState.error && <InlineError message={exportState.error.message} />}
-            {exportState.table && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
+            {(exportState.previewTable || exportState.table) && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.previewTable || exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
             {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>请在左侧可选输入中载入 Resolve CSV 后预览并编辑回填结果。</div>}
           </Surface>
-          <RecognitionResultPanel onRecordEdited={() => autosave.markDirty(captureTask())} />
+          <RecognitionResultPanel onRecordEdited={() => { void refreshResolvePreview(); autosave.markDirty(captureTask()); }} />
         </div>
       </div>
 

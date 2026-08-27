@@ -35,13 +35,22 @@ export async function loadLocalEnv(path) {
 
 export function createTaskLimiter(limit) {
   let active = 0;
+  let currentLimit = limit;
   return {
-    limit,
+    get limit() {
+      return currentLimit;
+    },
     get active() {
       return active;
     },
+    // Global settings can change the concurrency ceiling while the app is
+    // open. Existing work is allowed to finish; new work observes the new
+    // ceiling immediately, even when it is temporarily below `active`.
+    setLimit(nextLimit) {
+      currentLimit = nextLimit;
+    },
     acquire() {
-      if (active >= limit) {
+      if (active >= currentLimit) {
         const error = new Error(
           `正在处理 ${active} 个识别任务，请稍后重试`,
         );

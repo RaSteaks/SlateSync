@@ -12,6 +12,13 @@ type CsvTask =
   | { readonly type: "decode-slate-csv"; readonly data: ArrayBuffer }
   | { readonly type: "records-from-slate-csv"; readonly records: readonly SlateCsvRecord[] }
   | {
+      readonly type: "merge-preview";
+      readonly records: readonly RecognitionRecord[];
+      readonly slateMetadata: readonly ScannedSlateMetadata[];
+      readonly fieldFormats: { readonly scene: string; readonly shot: string; readonly take: string };
+      readonly comments: { readonly goodTake: string; readonly holdTake: string };
+    }
+  | {
       readonly type: "export-resolve";
       readonly records: readonly RecognitionRecord[];
       readonly csvEdits: readonly (readonly [string, string])[];
@@ -135,6 +142,13 @@ export class CsvWorkerService {
   async recordsFromSlateCsv(records: readonly SlateCsvRecord[]) {
     const result = await this.request<{ records: RecognitionRecord[] }>({ type: "records-from-slate-csv", records });
     return result.records;
+  }
+
+  async mergePreview(task: Extract<CsvTask, { type: "merge-preview" }>) {
+    // Preview merges stay in the same Worker as export so a large Resolve CSV
+    // is never copied into React just to calculate the values the user sees.
+    const result = await this.request<{ table: ResolveCsvTable }>({ ...task });
+    return result.table;
   }
 
   async exportResolve(task: Extract<CsvTask, { type: "export-resolve" }>) {

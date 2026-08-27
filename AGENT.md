@@ -443,3 +443,58 @@ Worker 边界、验收证据和最终治理交接。
   （270/270）、`npm run test:modern`（18 个文件、60/60）、`npm run build:modern`、
   `npm run build:storybook`、premium strict audit 与 `git diff --check` 通过；
   `designmd lint` 因沙盒无法解析 registry.npmjs.org 未执行。
+
+## 2026-08-27 全局设置覆盖 `.env.example`
+
+- 全局设置页覆盖 `.env.example` 中全部非敏感配置：服务商 Base URL、OpenAI
+  兼容接口参数、模型请求限制、Vision OCR、PaddleOCR、缓存路径与工作流路径；
+  五个 Provider 的 API Key 继续通过同一页面的独立凭据入口配置，兼容 API 不再要求
+  用户手动编辑 `.env`。
+- 新增 `electron/global-settings.mjs` 的显式键白名单、枚举/URL/数值校验与默认值，
+  通过 `get-global-settings` / `save-global-settings` 类型化 IPC 连接 Main、Preload、
+  Modern Renderer 与 Legacy 回退页。保存请求只携带用户实际修改的脏字段，清空字段删除
+  覆盖；这样不会把 `.env` 或内置默认值误写成持久化覆盖。
+- 普通全局配置存储在 `<userData>/global-config.json`，带版本号，只写入已校验的非敏感
+  覆盖项，采用临时文件 + 原子重命名 + `0600` 权限；API Key 保持在独立的
+  `<userData>/provider-keys.json`，不进入全局配置、Project Library、任务数据或普通
+  配置 DTO。全局配置按机器用户共享，不随项目库导入/导出；恢复默认只清除全局覆盖。
+- 启动顺序为普通配置“全局设置 > 进程环境 > `.env` > 内置默认”，凭据为“独立本机
+  密钥 > 进程环境 > `.env`”；运行中可刷新请求、OCR 和并发参数，工作流路径变化提示
+  下次启动生效。旧 OCR 首次设置与新全局 `PADDLEOCR_PYTHON` 保持双向兼容。
+- 更新 `.env.example`，补齐代码实际支持的 `PADDLEOCR_PROFILE` 与
+  `VISIONOCR_TIMEOUT_MS`，并用回归测试锁定模板覆盖率、敏感项隔离、校验、文件权限、
+  损坏恢复、IPC/Preload 契约和 API Key 配置行为。
+
+## 2026-08-27 Renderer/Preload 版本兼容提示
+
+- 全局设置入口在调用新增 IPC 前检查 Preload 方法是否存在；开发环境的 Renderer HMR
+  若与旧窗口的 Preload 配对，会显示完整退出并重新启动的恢复指引，而不是暴露裸的
+  `api.settings.getGlobalSettings is not a function`。
+- Legacy 兼容桥同步执行同一类检查，并用回归测试锁定旧 Preload 的可诊断错误；README
+  明确说明 Main/Preload 修改需要完整重启，避免只刷新 Renderer。
+
+## 2026-08-27 工作台导出动作固定到顶部工作行
+
+- 将“导出 Resolve CSV”从工作台内容标题行移动到应用壳层已有的 sticky 顶部
+  `Toolbar`，只在工作台路由显示；按钮仍由共享 `Button` 提供禁用、处理中、焦点和
+  键盘交互状态。
+- `WorkspacePage` 继续独占导出业务闭包、当前识别设置、CSV Worker、表格编辑和
+  错误处理，仅向顶部工作行注册稳定回调及实时 `canExport` / `processing` 状态，避免
+  为移动按钮而复制 Resolve CSV 语义或改变持久化契约。
+- 顶部动作容器允许在窄窗口换行，保持 sticky header 的自然高度，避免导出动作造成
+  横向溢出或遮挡工作区内容；新增任务生命周期静态回归断言锁定按钮不回到页面标题行。
+- 验证结果：Modern Vitest 18 个文件、61/61 通过，`npm run typecheck`、
+  `npm run build:modern`、`npm run build:storybook`、`npm run check` 与
+  `git diff --check` 通过；Storybook 仅报告沙盒无法写入用户目录的既存提示，未启动
+  Electron 前台窗口。
+
+## 2026-08-27 识别结果同步到回填预览
+
+- Modern Renderer 将原始 Resolve CSV 与 Worker 生成的 `previewTable` 分开管理；识别
+  完成、场记 CSV 合并、素材元数据更新及识别记录编辑后，均通过同一 CSV Worker 重新
+  计算合成表并立即展示，导出和任务持久化仍以原始表为基准，手工稀疏编辑继续覆盖预览。
+- 新增 `merge-preview` Worker 任务及过期响应保护，避免任务切换、清表或连续编辑时旧的
+  合成结果回写；追加 Worker、合并算法和 Workspace wiring 回归覆盖。
+- 验证结果：`npm run check`、`npm run typecheck`、`npm run test:node`（277/277）、
+  `npm run test:modern`（18 个文件、63/63）与 `npm run build:modern` 通过；未启动
+  Electron 前台窗口。

@@ -31,6 +31,20 @@ test("CSV background processor retains metadata and exports sparse edits", () =>
   assert.deepEqual(exported.rows[0].slice(1, 5), ["009", "02", "03", "_OK"]);
 });
 
+test("CSV background processor builds the merged table used by the preview", () => {
+  const processTask = createCsvTaskProcessor();
+  processTask({ type: "decode-metadata", data: source });
+  const { table } = processTask({
+    type: "merge-preview",
+    records: [{ cardNumber: "A001", videoCode: "C001", scene: "1", shot: "2", take: "3", takeStatus: "过" }],
+    slateMetadata: [],
+    fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+    comments: { goodTake: "_OK", holdTake: "_KP" },
+  });
+
+  assert.deepEqual(table.rows[0].slice(1, 5), ["001", "02", "03", "_OK"]);
+});
+
 test("CSV background processor clears retained metadata", () => {
   const processTask = createCsvTaskProcessor();
   processTask({ type: "decode-metadata", data: source });

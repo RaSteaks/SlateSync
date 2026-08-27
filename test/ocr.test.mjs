@@ -152,6 +152,7 @@ test("automatic OCR timeout scales with the number of views", async () => {
     env: {
       PADDLEOCR_ENABLED: "true",
       PADDLEOCR_TIMEOUT_MS: "auto",
+      PADDLE_PDX_CACHE_HOME: "/tmp/slatesync-paddlex-cache",
     },
     cache: false,
     execute: async (payload, options) => {
@@ -170,6 +171,7 @@ test("automatic OCR timeout scales with the number of views", async () => {
 
   assert.equal(capturedPayload.maxBlocksPerView, 0);
   assert.equal(capturedOptions.timeoutMs, 47 * 60 * 1000);
+  assert.equal(capturedOptions.env.PADDLE_PDX_CACHE_HOME, "/tmp/slatesync-paddlex-cache");
 });
 
 test("OCR evidence keeps all full-page text while core mode focuses short field evidence", () => {
