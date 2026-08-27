@@ -78,12 +78,12 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   assert.equal(additions.extendsBaselineCommit, ipc.baselineCommit);
   assert.deepEqual(Object.keys(ipc.requestMethods).sort(), [...historicalIpcMethodNames].sort());
   assert.equal(ipc.cancelRecognitionChannel, null);
-  // checkCompatibleJsonSchema and readLogs are post-baseline additions: the
-  // former completes the uncommitted model-capability package's registration,
-  // the latter belongs to the local logging feature package.
+  // These are post-baseline additions: capability probes and local logging
+  // belong to their feature packages rather than the historical inventory.
   assert.deepEqual(Object.keys(additions.requestMethods).sort(), [
     "cancelRecognition",
     "checkCompatibleJsonSchema",
+    "checkVisionOcr",
     "deleteProject",
     "readLogs",
     "renameLibrary",
@@ -93,6 +93,7 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
     [
       "cancel-recognition",
       "check-compatible-json-schema",
+      "check-vision-ocr",
       "delete-project",
       "logs-read",
       "rename-library",
@@ -128,7 +129,8 @@ test("baseline and additive IPC contracts expose the exact reviewed Main surface
 
   for (const source of contracts) {
     for (const [method, contract] of Object.entries(source.requestMethods)) {
-      assert.ok(typedPreload.includes(`request("${contract.channel}"`), `${method} transport drift`);
+      const requestPattern = new RegExp(`request(?:<[^>]+>)?\\("${escapeRegex(contract.channel)}"`);
+      assert.match(typedPreload, requestPattern, `${method} transport drift`);
       for (const argument of contract.args) {
         if (String(argument).includes("|") || argument === "requestBody") continue;
         assert.match(typedPreload + sharedContracts, new RegExp(`\\b${escapeRegex(argument)}\\b`), `${method} missing ${argument}`);

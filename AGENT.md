@@ -371,3 +371,75 @@ Worker 边界、验收证据和最终治理交接。
 - 验证结果：`npm run check`、`npm run typecheck`、`npm run test:modern`
   （18 个文件、56/56）、`npm run build:modern` 与 `git diff --check` 通过；按既有
   GUI 测试边界未自动启动 Electron 前台窗口。
+
+## 2026-08-27 侧栏主题控件与全局设置同步
+
+- 左侧导航栏主题图标现在表示全局设置保存的偏好值：自动使用 Monitor，深色使用
+  Moon，浅色使用 Sun；自动模式下 macOS 外观变化仍只改变实际渲染主题，不会把图标
+  误显示成固定的浅色或深色设置。
+- 侧栏主题控件按全局设置相同顺序循环 `system → dark → light → system`，并通过
+  清晰的可访问名称说明当前偏好与下一步动作；全局设置同步将自动选项明确标为“自动 ·
+  跟随系统”。
+- 新增循环与标签单元测试，更新视觉基线脚本为直接选择显式主题，避免三态快捷控件受
+  运行环境系统外观影响；不改变主题持久化键、CSS token 或项目数据契约。
+
+## 2026-08-27 侧栏主题名称与折叠动效
+
+- 侧栏展开时在主题图标旁显示当前偏好名称（自动、深色或浅色），折叠及窄屏时保留
+  图标；控件的 aria-label/title 同时说明当前偏好和下一步动作。
+- 展开/折叠使用共享 `--ss-motion-slow` 与 `--ss-ease-in-out` 过渡侧栏列宽、品牌文字、
+  导航文字和主题名称；`prefers-reduced-motion` 下关闭这些过渡，不改变主题解析或持久化。
+- 增加侧栏布局与动效静态回归断言；与本次无关的 Main/OCR/Preload 工作区改动保持原样。
+
+## 2026-08-27 字体与背景层级优化
+
+- 全局字体改用 macOS 原生优先的 SF Pro / PingFang 回退栈，并启用抗锯齿与可读性渲染，
+  同时将共享按钮字重从 650 调整为 600，减少主题名称在侧栏中的视觉压迫。
+- 深色模式采用石墨画布、侧栏、控件三层背景；浅色模式同步提供冷灰画布与控件层，
+  主题快捷控件改用语义 control token，避免出现突兀的中性灰填充。
+- 增加字体栈与明暗控件背景 token 的静态回归断言；保留自动主题解析和已有工作区改动。
+
+## 2026-08-27 全局 OCR 能力可观测性
+
+- 全局设置新增 Main 进程驱动的 OCR 路由卡：同时展示 Apple Vision OCR 与
+  PaddleOCR 的启用、可用、运行模式和配置，并明确显示下一次识别实际优先使用的
+  引擎及选择原因。
+- 识别启动和公开配置共用 `lib/ocr/selection.mjs` 的优先级策略，避免设置页与实际
+  识别分叉；默认自动模式在 macOS 工具链可用时优先 Vision，显式开启/必需模式按
+  环境变量优先级处理。
+- 新增类型化 `check-vision-ocr` IPC，直接运行与识别相同的 Swift Vision bridge 的
+  `--check` 探针；不读取图片、不调用远端 Provider。PaddleOCR 继续使用现有 Python
+  `--check` 验证并保存环境路径。本次是用户明确要求的最小、只读 IPC 扩展。
+- 新增 Vision 路由、bridge 检查、IPC 和 public config 回归覆盖；未改变 OCR 证据格式、
+  Provider 请求、项目数据格式或持久化语义。
+
+## 2026-08-27 组件层级精简
+
+- 共享 Surface 使用更低对比度的 `surface-line` 语义 token，减少面板与侧栏分隔线的存在感；
+  accent/danger 表面保留轻量状态边界，不影响信息层级和可读性。
+- 主题快捷按钮默认回到无边框、透明背景，仅在悬停/按下时显示冷色控件层；键盘焦点环
+  继续由共享设计系统提供，保证发现性与无障碍导航。
+- 增加 surface token 与静默主题控件样式的静态回归断言；保持自动主题、字体栈及并行 OCR
+  工作区改动不变。
+
+## 2026-08-27 导航图标与文字对齐
+
+- 导航图标统一为 18px 的固定 flex 项，并显式使用 `display: block`；导航文字与主题
+  快捷项共用 `1.35` 行高，避免 inline SVG 基线和字体行盒造成视觉高低差。
+- 主题图标维持 16px，和名称文字使用同一垂直居中规则；不改变折叠宽度、主题状态或
+  已有 hover/focus 交互。
+- 增加图标尺寸、行高和导航 JSX 尺寸的静态回归断言；其他并行工作区改动保持原样。
+
+## 2026-08-27 审查意见修复
+
+- 将新增 `lib/ocr/selection.mjs` 的语法检查同步登记到
+  `.codex/refactor/baseline/contracts/build.json`，恢复 baseline 与实时
+  `package.json` 的一致性。
+- 共享 Button 现在组合调用方 `className` 与基础样式，保留统一的尺寸、布局、焦点、
+  disabled 和 busy 状态；新增注释说明该共享组件边界。
+- `DESIGN.md` 已镜像运行时 `tokens.css` 的暗色字体、背景层级、控件状态和语义边界，
+  并明确浅色主题继续由同名 token 映射维护。
+- 验证结果：`npm run check`、`npm run typecheck`、`npm run test:node`
+  （270/270）、`npm run test:modern`（18 个文件、60/60）、`npm run build:modern`、
+  `npm run build:storybook`、premium strict audit 与 `git diff --check` 通过；
+  `designmd lint` 因沙盒无法解析 registry.npmjs.org 未执行。

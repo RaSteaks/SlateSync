@@ -4,6 +4,7 @@ import type {
   LogsReadRequest,
   ModelsRequest,
   OcrCheckRequest,
+  VisionOcrCheckResult,
   OcrSettingsRequest,
   ProjectIdRequest,
   ProjectRequest,
@@ -122,6 +123,7 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       getOcrSettings: () => request("get-ocr-settings"),
       saveOcrSettings: (body: OcrSettingsRequest) => request("save-ocr-settings", body),
       checkOcr: (body: OcrCheckRequest) => request("check-ocr", body),
+      checkVisionOcr: () => request<VisionOcrCheckResult>("check-vision-ocr"),
       checkCompatibleJsonSchema: () => request("check-compatible-json-schema"),
     },
     // Logs stay read-only over IPC: the Main process is the single writer of

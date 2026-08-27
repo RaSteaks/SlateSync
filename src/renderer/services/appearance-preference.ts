@@ -2,6 +2,22 @@ import type { Density, Theme } from "../state";
 
 export const APPEARANCE_PREFERENCE_KEY = "slatesync.appearance.v1";
 
+const THEME_CYCLE: readonly Theme[] = ["system", "dark", "light"];
+
+/**
+ * The sidebar shortcut uses the same order as the Global Settings select so
+ * either entry point can reach and persist every appearance preference.
+ */
+export function cycleTheme(theme: Theme): Theme {
+  const currentIndex = THEME_CYCLE.indexOf(theme);
+  return THEME_CYCLE[(currentIndex + 1) % THEME_CYCLE.length] || "system";
+}
+
+/** Keep the icon-only sidebar control's state and action text unambiguous. */
+export function themePreferenceLabel(theme: Theme): string {
+  return theme === "system" ? "自动（跟随系统）" : theme === "dark" ? "深色" : "浅色";
+}
+
 export function resolveTheme(theme: Theme, prefersDark: boolean): "dark" | "light" {
   return theme === "system" ? (prefersDark ? "dark" : "light") : theme;
 }

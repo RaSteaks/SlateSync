@@ -14,6 +14,7 @@ import {
   createSessionCapture,
 } from "../lib/diagnostics.mjs";
 import { checkPaddleOcr } from "../lib/ocr/paddleocr.mjs";
+import { checkVisionOcr } from "../lib/ocr/vision.mjs";
 import {
   normalizeProjectSettings,
   projectSettingsFromWorkflow,
@@ -39,6 +40,7 @@ export function registerIpcHandlers(ipcMain, context) {
     libraryActions,
     logger,
     checkOcr = checkPaddleOcr,
+    checkVision = checkVisionOcr,
     checkJsonSchema = checkOpenAiCompatibleJsonSchema,
     recognize = recognizeSlate,
   } = context;
@@ -527,6 +529,10 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("check-ocr", async (_event, body) =>
     checkOcr({ pythonPath: String(body?.pythonPath ?? "").trim() }),
+  );
+
+  ipcMain.handle("check-vision-ocr", async () =>
+    checkVision({ env: runtimeEnv() }),
   );
 
   // Read-only view over the local application log. The handler degrades to an

@@ -84,6 +84,7 @@ describe("electron IPC handlers", () => {
       "get-ocr-settings",
       "save-ocr-settings",
       "check-ocr",
+      "check-vision-ocr",
       "logs-read",
     ];
     for (const channel of expectedChannels) {
@@ -136,6 +137,31 @@ describe("electron IPC handlers", () => {
       },
     );
     assert.deepEqual(calls, ["local-vision"]);
+  });
+
+  it("checks Vision OCR through the injected Main-side bridge probe", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeEnv: () => ({ VISIONOCR_BINARY: "/synthetic/vision-ocr" }),
+      checkVision: async ({ env }) => {
+        calls.push(env.VISIONOCR_BINARY);
+        return {
+          ok: true,
+          engine: "Vision",
+          modelVersion: "macOS-Vision",
+          systemVersion: "15.0",
+        };
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("check-vision-ocr"), {
+      ok: true,
+      engine: "Vision",
+      modelVersion: "macOS-Vision",
+      systemVersion: "15.0",
+    });
+    assert.deepEqual(calls, ["/synthetic/vision-ocr"]);
   });
 
   it("reads local logs through the additive filtered IPC handler", async () => {

@@ -6,6 +6,7 @@
     "deleteProject": { "channel": "delete-project", "args": ["id"] },
     "renameLibrary": { "channel": "rename-library", "args": ["name"] },
     "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
+    "checkVisionOcr": { "channel": "check-vision-ocr", "args": [] },
     "readLogs": { "channel": "logs-read", "args": ["request"] }
   }
 }

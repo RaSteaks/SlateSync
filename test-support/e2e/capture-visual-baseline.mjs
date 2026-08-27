@@ -182,7 +182,13 @@ try {
   await stable(page);
   paths.push(await captureElement(page, "02-new-project-dialog-dark", 1440, 900, page.getByRole("dialog", { name: "新建项目" })));
   await page.getByRole("button", { name: "取消" }).click();
-  await page.getByRole("button", { name: "切换浅色主题" }).click();
+  // Choose the same explicit preference exposed by Global Settings so the
+  // sidebar's three-state shortcut does not make the baseline OS-dependent.
+  await page.getByRole("button", { name: "全局设置" }).click();
+  await waitRoute(page, "全局设置");
+  await page.getByRole("combobox", { name: "主题" }).selectOption("light");
+  await page.getByRole("button", { name: "项目库" }).click();
+  await waitRoute(page, "项目库");
   await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
   paths.push(await capture(page, "03-project-library-light", 1440, 900));
   await page.getByRole("button", { name: "紧凑密度" }).click();
@@ -230,7 +236,11 @@ try {
     };
   });
   process.stdout.write(`VISUAL_SCROLL_GEOMETRY ${JSON.stringify(scrollGeometry)}\n`);
-  await page.getByRole("button", { name: "切换深色主题" }).click();
+  await page.getByRole("button", { name: "全局设置" }).click();
+  await waitRoute(page, "全局设置");
+  await page.getByRole("combobox", { name: "主题" }).selectOption("dark");
+  await page.getByRole("button", { name: "工作台" }).click();
+  await waitRoute(page, "工作台");
   await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   await page.emulateMedia({ reducedMotion: "reduce" });
   paths.push(await capture(page, "09-workspace-dark-reduced-motion", 1440, 900));

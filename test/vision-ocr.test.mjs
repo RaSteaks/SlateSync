@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveOcrEngine } from "../lib/ai-client.mjs";
 import { summarizeOcrResult } from "../lib/ocr/paddleocr.mjs";
+import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
 import {
+  checkVisionOcr,
   clearVisionOcrCache,
   runVisionOcrForPages,
   visionOcrPublicConfig,
@@ -264,6 +266,37 @@ test("disabled Vision engine returns an unused result without spawning", async (
   });
   assert.equal(spawned, false);
   assert.equal(result.used, false);
+});
+
+test("Vision settings probe reports a missing configured bridge", async () => {
+  const result = await checkVisionOcr({
+    env: { VISIONOCR_BINARY: "/synthetic/missing-vision-ocr" },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "build_failed");
+  assert.match(result.error.message, /VISIONOCR_BINARY/);
+});
+
+test("shared OCR selection exposes the same priority reason used by runtime", () => {
+  const vision = resolveOcrSelection({}, {
+    autoEnable: true,
+    vision: { id: "vision", label: "Vision", enabled: true, available: true, required: false },
+    paddle: { id: "paddleocr", label: "Paddle", enabled: true, available: true, required: false },
+  });
+  assert.equal(vision.id, "vision");
+  assert.equal(vision.mode, "auto");
+  assert.match(vision.reason, /优先使用 Vision OCR/);
+
+  const disabled = resolveOcrSelection({
+    VISIONOCR_ENABLED: "false",
+    PADDLEOCR_ENABLED: "false",
+  }, {
+    autoEnable: false,
+    vision: { id: "vision", label: "Vision", enabled: false, available: true, required: false },
+    paddle: { id: "paddleocr", label: "Paddle", enabled: false, available: true, required: false },
+  });
+  assert.equal(disabled.id, null);
+  assert.match(disabled.reason, /均已显式关闭/);
 });
 
 test("resolveOcrEngine honours explicit flags and injected implementations", () => {

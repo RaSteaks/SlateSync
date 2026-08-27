@@ -7,22 +7,37 @@
 /* The navigation shell consumes the same artwork as the packaged macOS app;
    object-fit preserves its native rounded silhouette without local restyling. */
 .brandIcon { display: block; width: 34px; height: 34px; flex: 0 0 auto; object-fit: contain; user-select: none; }
+.brandCopy { display: block; min-width: 0; max-width: 160px; overflow: hidden; opacity: 1; transform: translateX(0); transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out), transform var(--ss-motion-base) var(--ss-ease-in-out); }
+.brandCopy[data-collapsed="true"] { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(-6px); }
 .brandCopy strong, .brandCopy small { display: block; }
-.brandCopy[data-collapsed="true"] { display: none; }
 .brandCopy strong { font-size: .96rem; letter-spacing: -.02em; }
 .brandCopy small { margin-top: 2px; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; }
-.navItem { display: flex; min-height: 40px; align-items: center; gap: var(--ss-space-4); width: 100%; padding: 0 var(--ss-space-3); border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .84rem; text-align: left; cursor: pointer; }
+.navItem { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: var(--ss-space-4); width: 100%; padding: 0 var(--ss-space-3); border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .84rem; line-height: var(--ss-nav-label-line-height); text-align: left; cursor: pointer; transition: gap var(--ss-motion-slow) var(--ss-ease-in-out), padding-inline var(--ss-motion-slow) var(--ss-ease-in-out), color var(--ss-motion-base) var(--ss-ease), background var(--ss-motion-base) var(--ss-ease), border-color var(--ss-motion-base) var(--ss-ease); }
 .navItem:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
 .navItem[data-active="true"] { color: var(--ss-color-ink); border-color: color-mix(in srgb, var(--ss-color-accent) 24%, transparent); background: var(--ss-color-accent-soft); }
-.navItem svg { color: var(--ss-color-accent); }
+/* Inline SVGs have a font-like baseline by default; a fixed flex item keeps
+   every navigation glyph centered against the same label line box. */
+.navItem > svg { display: block; width: var(--ss-nav-icon-size); height: var(--ss-nav-icon-size); flex: 0 0 var(--ss-nav-icon-size); color: var(--ss-color-accent); }
 .navItem[data-collapsed="true"] { justify-content: center; padding-inline: 0; }
-.navItem[data-collapsed="true"] span { display: none; }
+.navItem span { display: block; min-width: 0; max-width: 180px; overflow: hidden; opacity: 1; text-overflow: ellipsis; transform: translateX(0); line-height: var(--ss-nav-label-line-height); transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out), transform var(--ss-motion-base) var(--ss-ease-in-out); white-space: nowrap; }
+.navItem[data-collapsed="true"] { gap: 0; }
+.navItem[data-collapsed="true"] span { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(-6px); }
 /* 侧栏分组沿用全局间距令牌；明确的上下留白避免标题贴住相邻导航项。 */
-.navSection { min-width: 0; margin: var(--ss-space-5) 0 var(--ss-space-2); padding: 0 var(--ss-space-3); color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; font-weight: 700; line-height: 1.35; letter-spacing: .14em; }
-.navSection[data-collapsed="true"] { display: none; }
+.navSection { min-width: 0; max-height: 80px; margin: var(--ss-space-5) 0 var(--ss-space-2); overflow: hidden; padding: 0 var(--ss-space-3); color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; font-weight: 700; line-height: 1.35; letter-spacing: .14em; opacity: 1; transition: max-height var(--ss-motion-slow) var(--ss-ease-in-out), margin var(--ss-motion-slow) var(--ss-ease-in-out), padding-block var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out); }
+.navSection[data-collapsed="true"] { max-height: 0; margin-block: 0; opacity: 0; padding-block: 0; pointer-events: none; }
 /* 当前项目上下文拆成两行：分组标签负责层级，项目名负责定位且可安全省略。 */
 .navSectionCurrent { display: grid; gap: var(--ss-space-1); }
 .navSectionProject { min-width: 0; overflow: hidden; color: var(--ss-color-ink-muted); font-family: var(--ss-font-body); font-size: .72rem; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
+/* The theme shortcut stays visually quiet at rest; tonal feedback appears only
+   during hover/press so the label reads as navigation, not another card. */
+.sidebarThemeButton { min-width: 0; width: 100%; justify-content: flex-start; overflow: hidden; border-color: transparent; font-family: var(--ss-font-body); font-size: .82rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; text-align: left; }
+.sidebarThemeButton[data-variant="ghost"] { color: var(--ss-color-ink-muted); background: transparent; }
+.sidebarThemeButton[data-variant="ghost"]:hover { border-color: transparent; color: var(--ss-color-ink); background: var(--ss-color-control-hover); }
+.sidebarThemeButton[data-variant="ghost"]:active { background: var(--ss-color-control-active); }
+.sidebarThemeButton > svg { display: block; width: 16px; height: 16px; flex: 0 0 16px; color: var(--ss-color-accent); }
+.sidebarThemeButton > span { min-width: 0; max-width: 180px; overflow: hidden; opacity: 1; text-overflow: ellipsis; transform: translateX(0); line-height: var(--ss-nav-label-line-height); transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out), transform var(--ss-motion-base) var(--ss-ease-in-out); white-space: nowrap; }
+.sidebarThemeButton[data-collapsed="true"] { width: 32px; min-height: 32px; justify-content: center; gap: 0; padding-inline: 0; }
+.sidebarThemeButton[data-collapsed="true"] > span { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(-6px); }
 /* 项目库右键菜单头部：显示项目库名称与可点击复制的路径，过长时省略。 */
 .libraryMenuHeader { display: grid; gap: 2px; min-width: 220px; padding: var(--ss-space-2); }
 .libraryMenuName { display: block; color: var(--ss-color-ink); font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -32,8 +47,9 @@
 /* Shared Sidebar cannot style feature-owned CSS-module class names directly;
    mirror its rail behavior so responsive and manually collapsed states agree. */
 @media (max-width: 920px) {
-  .navSection, .navItem span { display: none; }
+  .brandCopy, .navSection, .navItem span, .sidebarThemeButton > span { display: none; }
   .navItem { justify-content: center; padding-inline: 0; }
+  .sidebarThemeButton { width: 32px; min-height: 32px; justify-content: center; gap: 0; padding-inline: 0; }
 }
 
 .pageHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--ss-space-5); margin-bottom: var(--ss-space-8); }
@@ -146,6 +162,28 @@
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .routeHint { padding: 16px; border: 1px dashed var(--ss-color-line-strong); border-radius: var(--ss-radius-md); color: var(--ss-color-ink-subtle); text-align: center; }
 .dangerZone { display: flex; align-items: center; justify-content: space-between; gap: var(--ss-space-4); border-color: color-mix(in srgb, var(--ss-color-danger) 42%, var(--ss-color-line)); }
+/* Local OCR status separates the Main-side route decision from each engine's
+   capability and last probe result, so “available” is never mistaken for
+   “the engine that the next recognition will actually use”. */
+.ocrPanel { grid-column: 1 / -1; }
+.ocrDecision { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(220px, .7fr); gap: 16px; align-items: center; margin-top: 16px; padding: 16px; border: 1px solid color-mix(in srgb, var(--ss-color-accent) 34%, var(--ss-color-line)); border-left: 3px solid var(--ss-color-accent); border-radius: var(--ss-radius-lg); background: var(--ss-color-accent-soft); }
+.ocrDecisionTitle { margin: 6px 0 4px; }
+.ocrDecisionMeta { display: grid; justify-items: end; gap: 6px; }
+.ocrEngineGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.ocrEngineCard { display: grid; min-width: 0; gap: 12px; padding: 16px; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
+.ocrEngineCard[data-selected="true"] { border-color: var(--ss-color-accent); box-shadow: var(--ss-shadow-focus); }
+.ocrEngineHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ocrEngineHeader h3 { margin: 0; color: var(--ss-color-ink); font-size: .92rem; }
+.ocrEngineHeader p { margin: 5px 0 0; line-height: 1.45; }
+.ocrEngineDetails { display: grid; gap: 7px; margin: 0; padding-top: 2px; }
+.ocrEngineDetails > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ocrEngineDetails dt { color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; }
+.ocrEngineDetails dd { margin: 0; color: var(--ss-color-ink-muted); font-size: .73rem; text-align: right; overflow-wrap: anywhere; }
+.ocrCheckResult { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-md); background: var(--ss-color-surface); }
+.ocrCheckResult[data-tone="success"] { border-color: color-mix(in srgb, var(--ss-color-success) 40%, var(--ss-color-line)); background: var(--ss-color-success-soft); }
+.ocrCheckResult[data-tone="danger"] { border-color: color-mix(in srgb, var(--ss-color-danger) 42%, var(--ss-color-line)); background: var(--ss-color-danger-soft); }
+.ocrPaddleForm { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--ss-color-line); }
+.ocrFootnote { margin: 14px 0 0; }
 /* The custom model picker keeps fixed recommendations visible while vendor
    buckets remain compact until the user explicitly opens one. */
 .modelPicker { position: relative; width: 100%; }
@@ -204,10 +242,15 @@
   .pageActions > * { flex: 1; }
   .tableScroll { height: 54vh; }
   .dangerZone { align-items: stretch; flex-direction: column; }
+  .ocrDecision { grid-template-columns: 1fr; }
+  .ocrDecisionMeta { justify-items: start; }
+  .ocrEngineGrid { grid-template-columns: 1fr; }
+  .ocrEngineDetails > div { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .ocrEngineDetails dd { text-align: left; }
   .logFilters { grid-template-columns: 1fr; }
   .logEntryHeader { align-items: flex-start; flex-direction: column; gap: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon { transition: none; }
+  .brandCopy, .navSection, .navItem, .navItem span, .sidebarThemeButton, .sidebarThemeButton > span, .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon { transition: none; }
 }

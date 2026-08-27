@@ -56,11 +56,13 @@ export function Separator({ className, ...props }: HTMLAttributes<HTMLHRElement>
 }
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" | "danger"; size?: "sm" | "md" | "lg"; loading?: boolean; startIcon?: ReactNode; endIcon?: ReactNode };
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", loading = false, disabled, startIcon, endIcon, children, onClick, ...props }, ref) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = "secondary", size = "md", loading = false, disabled, startIcon, endIcon, children, onClick, className, ...props }, ref) {
   // Keep the action prop explicit: shared Buttons intentionally delegate the
   // concrete mutation to callers while retaining an inspectable interaction
   // contract for product and Storybook use.
-  return <button ref={ref} className={styles.button} data-variant={variant} data-size={size} disabled={disabled || loading} aria-busy={loading || undefined} onClick = {onClick} {...props}>
+  // Compose feature-level styling so shared geometry and interaction states
+  // remain intact when a caller supplies a className override.
+  return <button ref={ref} className={classes(styles.button, className)} data-variant={variant} data-size={size} disabled={disabled || loading} aria-busy={loading || undefined} onClick = {onClick} {...props}>
     {loading ? <LoaderCircle className={styles.spinner} size={16} aria-hidden="true" /> : startIcon}
     <span>{children}</span>
     {!loading && endIcon}

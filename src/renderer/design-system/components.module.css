@@ -1,6 +1,6 @@
 .surface {
   background: var(--ss-color-surface);
-  border: 1px solid var(--ss-color-line);
+  border: 1px solid var(--ss-color-surface-line);
   border-radius: var(--ss-radius-lg);
   color: var(--ss-color-ink);
 }
@@ -16,12 +16,12 @@
 
 .surfaceAccent {
   background: var(--ss-color-accent-soft);
-  border-color: color-mix(in srgb, var(--ss-color-accent) 34%, transparent);
+  border-color: color-mix(in srgb, var(--ss-color-accent) 22%, var(--ss-color-surface-line));
 }
 
 .surfaceDanger {
   background: var(--ss-color-danger-soft);
-  border-color: color-mix(in srgb, var(--ss-color-danger) 34%, transparent);
+  border-color: color-mix(in srgb, var(--ss-color-danger) 24%, var(--ss-color-surface-line));
 }
 
 .surfaceCompact {
@@ -75,7 +75,7 @@
   border: 1px solid transparent;
   border-radius: var(--ss-radius-md);
   font: inherit;
-  font-weight: 650;
+  font-weight: 600;
   transition: background var(--ss-motion-base) var(--ss-ease), border-color var(--ss-motion-base) var(--ss-ease), color var(--ss-motion-base) var(--ss-ease), transform var(--ss-motion-fast) var(--ss-ease), opacity var(--ss-motion-base) var(--ss-ease);
 }
 
@@ -177,13 +177,14 @@
 @keyframes dialogIn { from { opacity: 0; transform: translateY(6px) scale(.985); } }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
 
-.appShell { display: grid; min-height: 100vh; grid-template-columns: var(--ss-sidebar-width) minmax(0, 1fr); background: var(--ss-color-canvas); }
+.appShell { display: grid; min-height: 100vh; grid-template-columns: var(--ss-sidebar-width) minmax(0, 1fr); background: var(--ss-color-canvas); transition: grid-template-columns var(--ss-motion-slow) var(--ss-ease-in-out); }
 .appShell[data-collapsed="true"] { grid-template-columns: 76px minmax(0, 1fr); }
 /* Desktop navigation owns one viewport-height column. Only its middle nav may
    scroll, so the footer controls stay pinned while the workspace document moves. */
 .sidebar { position: sticky; top: 0; display: flex; align-self: start; width: 100%; height: 100vh; min-height: 0; flex-direction: column; overflow: hidden; padding: var(--ss-space-5) var(--ss-space-3); border-right: 1px solid var(--ss-color-line); background: var(--ss-color-surface); }
 .sidebar nav { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
-.brand { display: flex; align-items: center; gap: var(--ss-space-3); padding: var(--ss-space-2) var(--ss-space-3) var(--ss-space-5); color: var(--ss-color-ink); }
+.brand { display: flex; align-items: center; gap: var(--ss-space-3); padding: var(--ss-space-2) var(--ss-space-3) var(--ss-space-5); color: var(--ss-color-ink); transition: gap var(--ss-motion-slow) var(--ss-ease-in-out), padding-inline var(--ss-motion-slow) var(--ss-ease-in-out); }
+.appShell[data-collapsed="true"] .brand { justify-content: center; gap: 0; padding-inline: 0; }
 .brandMark { display: grid; width: 34px; height: 34px; place-items: center; overflow: hidden; border-radius: var(--ss-radius-md); color: var(--ss-color-on-accent); background: var(--ss-color-accent-strong); font-weight: 800; }
 .brandMark::before { align-self: start; width: 100%; height: 6px; content: ""; background: repeating-linear-gradient(120deg, rgba(255,255,255,.62) 0 7px, transparent 7px 14px); }
 .brandCopy strong, .brandCopy small { display: block; }
@@ -194,7 +195,7 @@
 .navItem:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
 .navItem[data-active="true"] { color: var(--ss-color-ink); border-color: color-mix(in srgb, var(--ss-color-accent) 24%, transparent); background: var(--ss-color-accent-soft); }
 .navItem svg { color: var(--ss-color-accent); }
-.sidebarFooter { display: grid; flex: 0 0 auto; gap: var(--ss-space-2); margin-top: auto; padding: var(--ss-space-3); border-top: 1px solid var(--ss-color-line); }
+.sidebarFooter { display: grid; flex: 0 0 auto; gap: var(--ss-space-2); margin-top: auto; padding: var(--ss-space-3); border-top: 1px solid var(--ss-color-surface-line); }
 .main { min-width: 0; }
 .toolbar { position: sticky; top: 0; z-index: var(--ss-z-sticky); display: flex; min-height: var(--ss-header-height); align-items: center; justify-content: space-between; gap: var(--ss-space-4); padding: 0 clamp(var(--ss-space-5), 4vw, var(--ss-space-10)); border-bottom: 1px solid var(--ss-color-line); background: color-mix(in srgb, var(--ss-color-canvas) 84%, transparent); backdrop-filter: blur(16px); }
 .toolbarTitle { min-width: 0; }
@@ -235,5 +236,6 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
   .button, .iconButton, .segmentedButton, .control, .progressBar { transition: none; }
+  .appShell, .brand { transition: none; }
   .toast, .dialogOverlay, .dialog { animation: none; }
 }

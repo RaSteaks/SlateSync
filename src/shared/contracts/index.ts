@@ -65,6 +65,17 @@ export interface OcrEngineStatus {
   readonly device?: string;
 }
 
+/** Main-side decision used by both Settings status and recognition startup. */
+export interface OcrSelection {
+  readonly id: "vision" | "paddleocr" | null;
+  readonly label: string;
+  readonly mode: string;
+  readonly reason: string;
+  readonly available: boolean;
+  readonly enabled: boolean;
+  readonly required: boolean;
+}
+
 export interface ResolveFieldFormats {
   readonly scene: string;
   readonly shot: string;
@@ -101,6 +112,7 @@ export interface ConfigData {
   readonly models: readonly ModelData[];
   readonly ocr: OcrEngineStatus;
   readonly ocrEngines: readonly OcrEngineStatus[];
+  readonly ocrSelection: OcrSelection;
   readonly upload: UploadLimits;
   readonly workflow: WorkflowConfig;
 }
@@ -283,6 +295,18 @@ export type OcrCheckResult =
       readonly ok: true;
       readonly paddleVersion: string;
       readonly paddleOcrVersion: string;
+    }
+  | {
+      readonly ok: false;
+      readonly error: { readonly code: string; readonly message: string };
+    };
+
+export type VisionOcrCheckResult =
+  | {
+      readonly ok: true;
+      readonly engine: string;
+      readonly modelVersion: string;
+      readonly systemVersion: string;
     }
   | {
       readonly ok: false;
@@ -705,6 +729,7 @@ export interface SlateSyncApi {
     getOcrSettings(): Promise<Result<OcrSettings>>;
     saveOcrSettings(request: OcrSettingsRequest): Promise<Result<OcrSettings>>;
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;
+    checkVisionOcr(): Promise<Result<VisionOcrCheckResult>>;
     checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
   };
   readonly logs: {

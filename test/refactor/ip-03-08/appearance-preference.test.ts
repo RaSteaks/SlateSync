@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
-import { parseAppearancePreference, resolveTheme, watchSystemTheme } from "../../../src/renderer/services/appearance-preference";
+import { cycleTheme, parseAppearancePreference, resolveTheme, themePreferenceLabel, watchSystemTheme } from "../../../src/renderer/services/appearance-preference";
 
 describe("appearance preference", () => {
   it("hydrates supported values and sanitizes stale or corrupted data", () => {
@@ -14,6 +14,13 @@ describe("appearance preference", () => {
     expect(resolveTheme("system", true)).toBe("dark");
     expect(resolveTheme("system", false)).toBe("light");
     expect(resolveTheme("light", true)).toBe("light");
+  });
+
+  it("cycles the sidebar through the same preferences exposed in Global Settings", () => {
+    expect(cycleTheme("system")).toBe("dark");
+    expect(cycleTheme("dark")).toBe("light");
+    expect(cycleTheme("light")).toBe("system");
+    expect(themePreferenceLabel("system")).toBe("自动（跟随系统）");
   });
 
   it("subscribes to live system appearance changes and releases the listener", () => {

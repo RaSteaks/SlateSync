@@ -441,6 +441,9 @@ test("public config exposes OCR readiness without leaking its Python path", () =
   });
   assert.equal(config.ocr.enabled, true);
   assert.equal(config.ocr.pythonPath, undefined);
+  assert.equal(config.ocrSelection.id, "paddleocr");
+  assert.equal(config.ocrSelection.mode, "explicit");
+  assert.match(config.ocrSelection.reason, /PADDLEOCR_ENABLED/);
   assert.equal(JSON.stringify(config).includes("/private/secret"), false);
 });
 
