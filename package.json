@@ -1,6 +1,6 @@
 {
   "name": "slatesync",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "author": "RaSteaks",
   "description": "Electron 场记单识别、场记结构学习与 DaVinci Resolve CSV 回填工具",
