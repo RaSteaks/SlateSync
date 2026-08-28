@@ -26,7 +26,7 @@
 
 | 输入 | 处理 | 输出 |
 | --- | --- | --- |
-| PDF、JPEG、PNG、WebP 场记单 | 本地 OCR、视觉模型识别、字段校验、版式 Profile 复用 | 保留原格式的 Resolve CSV |
+| PDF、JPEG、PNG、WebP 场记单 | 本地逐页栅格化、OCR evidence、视觉模型识别、字段校验、版式 Profile 复用 | 保留原格式的 Resolve CSV |
 | Resolve CSV、素材目录 | 条号对账、场镜次序检查、`slate.txt` 元数据读取 | 可预览、可校对、可导出的回填结果 |
 
 > [!NOTE]
@@ -55,10 +55,15 @@
 git clone https://github.com/RaSteaks/SlateSync.git
 cd SlateSync
 npm ci
+```
+
+启动应用后进入“全局设置”，即可填写 API Key、接口地址、运行参数和 OCR 配置，普通桌面用户不需要寻找或编辑 `.env`。完整变量模板仍见 [.env.example](./.env.example)；开发、CI 或需要预置环境的场景可以选择复制它：
+
+```bash
 cp .env.example .env
 ```
 
-在 `.env` 中至少配置一个模型服务商的密钥。完整模板见 [.env.example](./.env.example)。
+API Key 也可以直接在“全局设置”中保存；保存后不会回显。
 
 如果需要 PaddleOCR，再执行：
 
@@ -73,20 +78,22 @@ npm run ocr:check
 npm start
 ```
 
-`npm start` 会构建 Modern Renderer、重建 Electron 原生依赖并启动应用。也可以显式启动 Modern Renderer：
+`npm start` 会构建 Main/Preload、重建 Electron 原生依赖，然后启动 Vite Renderer 开发服务器和 Electron。修改 `src/renderer` 后会通过 HMR 自动更新窗口；也可以显式启动 Modern Renderer：
 
 ```bash
 npm run electron:dev:modern
 ```
 
-修改 Renderer 后可在窗口内刷新；修改 Main 或 Preload 后需要重启应用。
+修改 Main 或 Preload 后必须完全退出旧 Electron 进程再重启；Renderer HMR 只作用于
+`src/renderer`，仅刷新窗口不会重新加载 Preload。遇到“版本不一致”提示时，重新执行
+`npm run electron:dev:modern` 即可让启动钩子重新构建 Main/Preload。
 
 ## 工作流
 
 ```text
 导入场记单
     ↓
-页面准备 → 本地 OCR / 视觉模型识别 → 字段归一化与版式匹配
+PDF 逐页栅格化 → 本地 Vision/PaddleOCR → OCR evidence + 页面图片 → 视觉模型 → 字段归一化与版式匹配
     ↓
 载入 Resolve CSV + 可选扫描 slate.txt
     ↓
@@ -97,7 +104,7 @@ npm run electron:dev:modern
 
 | 阶段 | SlateSync 会做什么 |
 | --- | --- |
-| 识别 | 读取 PDF 或图片，结合 OCR 与视觉模型抽取场、镜、次和条次状态。 |
+| 识别 | PDF 先在本地逐页栅格化；本地 OCR 提取文字、置信度和坐标后，与页面图片一起交给视觉模型抽取场、镜、次和条次状态。 |
 | 学习 | 从 OCR 表头、坐标和版式生成场记结构 Profile，并在相似任务中复用。 |
 | 对账 | 载入 Resolve CSV，检查条号缺失、场镜次序异常和识别完整性。 |
 | 回填 | 只更新匹配到的素材与允许写入的字段，保留原 CSV 的其他内容。 |
@@ -152,6 +159,8 @@ Legacy Renderer（受限回退路径）
 | `MAX_CONCURRENT_RECOGNITIONS` | 并行识别任务数 |
 | `VISIONOCR_ENABLED` | Vision OCR 开关 |
 | `PADDLEOCR_ENABLED` | PaddleOCR 开关 |
+| `VISIONOCR_REQUIRED` | Vision OCR 必需模式；失败时停止识别 |
+| `PADDLEOCR_REQUIRED` | PaddleOCR 必需模式；失败时停止识别 |
 
 ### Resolve 字段回填
 
@@ -166,13 +175,25 @@ Legacy Renderer（受限回退路径）
 
 字段无法确认时不会被强行写入，必须人工校对。原 CSV 的编码、换行和未匹配字段保持不变。
 
+### 全局设置与配置优先级
+
+“全局设置”覆盖 `.env.example` 中除 API Key 外的全部可配置项，包括服务商 Base URL、OpenAI 兼容接口参数、模型请求并发/超时、Vision OCR、PaddleOCR 和模型缓存路径。API Key 使用同一页面的独立凭据入口。
+
+配置按以下优先级生效：普通配置为“全局设置覆盖 > 操作系统进程环境变量 > `.env` > 内置默认值”；通过页面保存的 Provider API Key 则为“本机凭据 > 操作系统进程环境变量 > `.env`”，并由 Main 进程单独管理。
+
+普通配置存放在 Electron 的 `<userData>/global-config.json`：带版本号、只保存已校验的非敏感覆盖项、写入采用临时文件加原子重命名，并使用 `0600` 权限。Provider 密钥仍放在独立的 `<userData>/provider-keys.json`，不会混入全局配置、Project Library、任务数据或 Renderer IPC 的普通配置 DTO。点击“恢复环境默认”只删除全局覆盖，之后回退到 `.env` 和内置默认值。
+
+全局配置按机器用户保存，不随 Project Library 导入/导出；因此同一台机器的多个项目共享它，而项目包仍可独立迁移。若未来需要更高等级的凭据保护，可将现有独立密钥文件迁移到 macOS Keychain/系统安全存储，普通配置文件无需改变。
+
 ## 数据与安全
 
-- 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library.slatesync-library`。
+- 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library`。
 - Project Library 使用 SQLite 保存任务、诊断、项目设置和场记结构 Profile。
 - 旧版本 JSON 数据会按兼容规则迁移，并保留兼容快照。
 - API Key 只由 Main 进程读取；Renderer 不直接访问密钥或 Node.js 能力。
-- PDF、图片、Resolve CSV 和素材目录默认在本地处理；发送给模型的内容取决于用户选择的识别服务。
+- PDF 原始字节只用于本地逐页栅格化；模型请求统一只发送页面图片与本地 OCR evidence，不发送原始 PDF 文件。
+- OCR 引擎未启用、不可用、超时、失败或没有文字块时，会显示“本地 OCR 不可用，已改用页面图片直接识别；识别精度可能下降。”并降级为页面图片识别；设置为必需时则停止识别。
+- 历史客户端提交原始 `pdfDataUrl` 会在 Main 模型调用前收到 400；旧 direct-PDF 路由已退役，不能通过环境变量重新启用。
 - 不要将 `.env`、本地 Project Library、`data/` 或任何用户数据提交到 Git。
 
 ## 开发与验证

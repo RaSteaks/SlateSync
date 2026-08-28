@@ -1,0 +1,14 @@
+{
+  "extendsBaselineCommit": "c7dafa4d972e5eb7be61f00e2b546d6826e70c87",
+  "purpose": "Post-baseline IPC additions. This fixture remains separate from baseline/contracts/ipc.json so the historical inventory stays immutable.",
+  "requestMethods": {
+    "cancelRecognition": { "channel": "cancel-recognition", "args": ["projectId"] },
+    "deleteProject": { "channel": "delete-project", "args": ["id"] },
+    "renameLibrary": { "channel": "rename-library", "args": ["name"] },
+    "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
+    "checkVisionOcr": { "channel": "check-vision-ocr", "args": [] },
+    "readLogs": { "channel": "logs-read", "args": ["request"] },
+    "getGlobalSettings": { "channel": "get-global-settings", "args": [] },
+    "saveGlobalSettings": { "channel": "save-global-settings", "args": ["request"] }
+  }
+}

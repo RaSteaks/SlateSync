@@ -13,6 +13,10 @@ describe("modern lifecycle boundaries", () => {
     store.progress(7, { phase: "running", percent: 62, completed: 1, total: 3, message: "one" });
     store.progress(7, { phase: "running", percent: 12, completed: 1, total: 3, message: "late lower" });
     expect(useRecognitionStore.getState().percent).toBe(62);
+    // A later provider phase must not erase the OCR fallback warning.
+    store.progress(7, { phase: "ocr", percent: 35, message: "图片识别", warning: "OCR fallback" });
+    store.progress(7, { phase: "primary", percent: 40, message: "模型识别" });
+    expect(useRecognitionStore.getState().warning).toBe("OCR fallback");
     store.complete(6, {} as never);
     expect(useRecognitionStore.getState().running).toBe(true);
     store.reset();

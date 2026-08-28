@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveOcrEngine } from "../lib/ai-client.mjs";
 import { summarizeOcrResult } from "../lib/ocr/paddleocr.mjs";
+import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
 import {
+  checkVisionOcr,
   clearVisionOcrCache,
   runVisionOcrForPages,
   visionOcrPublicConfig,
@@ -213,6 +215,32 @@ test("optional Vision failure degrades to multimodal-only recognition", async ()
   assert.match(result.warning, /已降级为纯多模态识别/);
 });
 
+test("Vision OCR cancellation is terminal instead of falling back to the model", async () => {
+  clearVisionOcrCache();
+  const controller = new AbortController();
+  let receivedSignal = null;
+  let signalStarted;
+  const started = new Promise((resolve) => { signalStarted = resolve; });
+  const ocr = runVisionOcrForPages([[imageDataUrl]], {
+    env: { VISIONOCR_ENABLED: "true" },
+    cache: false,
+    signal: controller.signal,
+    execute: async (_payload, options) => new Promise((_resolve, reject) => {
+      receivedSignal = options.signal;
+      signalStarted();
+      options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+    }),
+  });
+
+  await started;
+  controller.abort();
+  await assert.rejects(
+    ocr,
+    (error) => error.code === "RECOGNITION_CANCELED" && error.message === "识别已停止",
+  );
+  assert.equal(receivedSignal, controller.signal);
+});
+
 test("required Vision failure rejects the recognition request", async () => {
   clearVisionOcrCache();
   const execute = async () => {
@@ -240,6 +268,37 @@ test("disabled Vision engine returns an unused result without spawning", async (
   assert.equal(result.used, false);
 });
 
+test("Vision settings probe reports a missing configured bridge", async () => {
+  const result = await checkVisionOcr({
+    env: { VISIONOCR_BINARY: "/synthetic/missing-vision-ocr" },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "build_failed");
+  assert.match(result.error.message, /VISIONOCR_BINARY/);
+});
+
+test("shared OCR selection exposes the same priority reason used by runtime", () => {
+  const vision = resolveOcrSelection({}, {
+    autoEnable: true,
+    vision: { id: "vision", label: "Vision", enabled: true, available: true, required: false },
+    paddle: { id: "paddleocr", label: "Paddle", enabled: true, available: true, required: false },
+  });
+  assert.equal(vision.id, "vision");
+  assert.equal(vision.mode, "auto");
+  assert.match(vision.reason, /优先使用 Vision OCR/);
+
+  const disabled = resolveOcrSelection({
+    VISIONOCR_ENABLED: "false",
+    PADDLEOCR_ENABLED: "false",
+  }, {
+    autoEnable: false,
+    vision: { id: "vision", label: "Vision", enabled: false, available: true, required: false },
+    paddle: { id: "paddleocr", label: "Paddle", enabled: false, available: true, required: false },
+  });
+  assert.equal(disabled.id, null);
+  assert.match(disabled.reason, /均已显式关闭/);
+});
+
 test("resolveOcrEngine honours explicit flags and injected implementations", () => {
   const customImpl = async () => ({ id: "custom" });
   const injected = resolveOcrEngine({}, { ocrImpl: customImpl });
@@ -263,6 +322,16 @@ test("resolveOcrEngine honours explicit flags and injected implementations", () 
     PADDLEOCR_ENABLED: "true",
   });
   assert.equal(visionDisabled.meta.id, "paddleocr");
+
+  const requiredVision = resolveOcrEngine({
+    VISIONOCR_REQUIRED: "true",
+    PADDLEOCR_ENABLED: "true",
+  });
+  assert.equal(requiredVision.meta.id, "vision");
+  const requiredPaddle = resolveOcrEngine({
+    PADDLEOCR_REQUIRED: "true",
+  });
+  assert.equal(requiredPaddle.meta.id, "paddleocr");
 
   const auto = resolveOcrEngine({});
   assert.ok(["vision", "paddleocr"].includes(auto.meta.id));

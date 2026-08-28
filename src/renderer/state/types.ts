@@ -19,8 +19,8 @@ import type {
   TaskListItem,
 } from "../../shared/contracts/index.js";
 
-export type Route = "projects" | "workspace" | "project-settings" | "global-settings";
-export type Theme = "dark" | "light";
+export type Route = "projects" | "workspace" | "project-settings" | "global-settings" | "logs";
+export type Theme = "system" | "dark" | "light";
 export type Density = "comfortable" | "compact";
 
 export interface ProjectSlice {
@@ -52,6 +52,7 @@ export interface UiSlice {
   setRoute(route: Route): void;
   setTheme(theme: Theme): void;
   setDensity(density: Density): void;
+  hydrateAppearance(appearance: { readonly theme: Theme; readonly density: Density }): void;
   toggleSidebar(): void;
   setToast(toast: UiSlice["toast"]): void;
   setDialog(dialog: UiSlice["dialog"]): void;
@@ -63,12 +64,11 @@ export interface SlateSlice {
   fileSize: number;
   pageCount: number;
   imageDataGroups: readonly (readonly string[])[];
-  pdfDataUrl: string | null;
   preparing: boolean;
   preparationProgress: number;
   preparationMessage: string;
   error: AppError | null;
-  setInput(input: { filename: string; fileType: string; fileSize: number; pageCount: number; imageDataGroups: readonly (readonly string[])[]; pdfDataUrl?: string | null }): void;
+  setInput(input: { filename: string; fileType: string; fileSize: number; pageCount: number; imageDataGroups: readonly (readonly string[])[] }): void;
   clearInput(): void;
   setPreparing(preparing: boolean, progress?: number, message?: string): void;
   setError(error: AppError | null): void;
@@ -83,13 +83,19 @@ export interface RecognitionSlice {
   completedPages: number;
   totalPages: number;
   message: string;
+  warning: string | null;
   data: RecognitionData | null;
   records: readonly RecognitionRecord[];
   error: AppError | null;
   start(operationId: number, projectId: string | null, totalPages: number): void;
   progress(operationId: number, event: ProgressData): void;
   complete(operationId: number, data: RecognitionData): void;
+  requestCancel(operationId: number): void;
+  cancel(operationId: number): void;
+  cancelRequestFailed(operationId: number): void;
   updateRecord(index: number, patch: Partial<RecognitionRecord>): void;
+  addRecord(record: RecognitionRecord): void;
+  removeRecord(index: number): void;
   fail(operationId: number, error: AppError): void;
   reset(): void;
 }
@@ -123,6 +129,8 @@ export interface TaskSlice {
 
 export interface ExportSlice {
   table: ResolveCsvTable | null;
+  /** Worker-derived table shown in the preview; the raw table remains the export source. */
+  previewTable: ResolveCsvTable | null;
   filename: string | null;
   edits: ResolveCsvEdits;
   slateCsvRecords: readonly SlateCsvRecord[] | null;
@@ -130,6 +138,7 @@ export interface ExportSlice {
   processing: boolean;
   error: AppError | null;
   setTable(table: ResolveCsvTable | null, filename?: string | null): void;
+  setPreviewTable(table: ResolveCsvTable | null): void;
   setEdit(key: `${number}:${number}`, value: string): void;
   setEdits(edits: ResolveCsvEdits): void;
   setSlateCsvRecords(records: readonly SlateCsvRecord[] | null, filename?: string | null): void;

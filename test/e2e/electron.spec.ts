@@ -87,7 +87,7 @@ test.describe("modern production Electron", () => {
   test("fresh profile run two", async () => {
     const userData = await mkdtemp(join(tmpdir(), "slatesync-e2e-fresh-2-"));
     const { app, page } = await launch(userData);
-    try { await assertGateway(page); await expect(page.getByText("当前项目")).toBeVisible(); }
+    try { await assertGateway(page); await expect(page.getByText("项目列表")).toBeVisible(); }
     finally { await close(app, userData); }
   });
 

@@ -2,7 +2,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button, Dialog, Text } from "../../../src/renderer/design-system/index";
+import { Button, Dialog, Field, Input, Text, Textarea } from "../../../src/renderer/design-system/index";
+import { isEditableShortcutTarget } from "../../../src/renderer/services/keyboard-shortcuts";
 
 // React 19 uses this marker to make focus/portal assertions flush through the
 // same scheduler that the Electron renderer uses during interaction tests.
@@ -64,5 +65,24 @@ describe("modern design system", () => {
       });
     });
     expect(document.activeElement).toBe(opener);
+  });
+
+  it("connects inline errors and leaves readable space for textarea counts", () => {
+    const { host } = render(<Field label="项目名称" error="请输入项目名称。"><Input /></Field>);
+    const input = host.querySelector("input");
+    expect(input?.getAttribute("aria-invalid")).toBe("true");
+    expect(input?.getAttribute("data-state")).toBe("error");
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("请输入项目名称。");
+
+    const counted = render(<Textarea value="场记" onChange={() => undefined} maxLength={2000} showCount />);
+    expect(counted.host.textContent).toContain("2 / 2000");
+  });
+
+  it("does not let global shortcuts override editable controls", () => {
+    const { host } = render(<><Input /><button type="button">运行</button><div contentEditable /></>);
+    expect(isEditableShortcutTarget(host.querySelector("input"))).toBe(true);
+    expect(isEditableShortcutTarget(host.querySelector("button"))).toBe(true);
+    expect(isEditableShortcutTarget(host.querySelector("div[contenteditable]"))).toBe(true);
+    expect(isEditableShortcutTarget(host)).toBe(false);
   });
 });

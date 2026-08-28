@@ -1,14 +1,17 @@
 // Electron main process: composition root and window lifecycle.
 //
-// Loads .env + workflow config, wires up persisted keys/settings and the OCR
-// Python path, registers IPC handlers, then opens the sandboxed BrowserWindow.
+// Loads .env + user-level global config + workflow config, wires up persisted
+// keys/settings and the OCR Python path, registers IPC handlers, then opens the
+// sandboxed BrowserWindow.
 // The window loads the single compiled typed Preload directly because a
 // sandboxed Electron Preload cannot require another application-local file.
-// Ordinary and packaged startup load the modern out/renderer/index.html shell.
-// An internal --slatesync-renderer=legacy switch and bounded load-time fallback
+// Packaged startup loads the modern out/renderer/index.html shell. Development
+// startup may receive a local Vite URL for Renderer HMR; if that server is not
+// available, the compiled Modern shell remains the bounded fallback. An
+// internal --slatesync-renderer=legacy switch and bounded load-time fallback
 // preserve recovery without creating a second BrowserWindow or gateway. The
-// window blocks external navigation and only allows file:// URLs under the
-// selected legacy or modern shell root.
+// window blocks external navigation and only allows the active dev origin or
+// file:// URLs under the selected legacy or modern shell root.
 import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
 import { access } from "node:fs/promises";
 import {
@@ -21,17 +24,24 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureModelHttpAgent } from "../lib/ai-client.mjs";
+import { createAppLogger } from "../lib/app-logger.mjs";
 import { createWorkflowConfigProvider, PROVIDERS } from "../lib/config.mjs";
 import { loadLocalEnv, createTaskLimiter, electronSettings } from "./env-loader.mjs";
 import { registerIpcHandlers } from "./ipc-handlers.mjs";
 import { createKeyStore } from "./key-store.mjs";
+import { createGlobalConfigStore } from "./global-config-store.mjs";
+import { applyGlobalConfig } from "./global-settings.mjs";
 import { createFileDialogs } from "./file-dialogs.mjs";
+import {
+  isAllowedRendererDevNavigation,
+  parseRendererDevUrl,
+} from "./renderer-dev-url.mjs";
 import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";
 import {
   createProjectLibrary,
-  DEFAULT_LIBRARY_FOLDER,
-  defaultLibraryPath,
+  LEGACY_DEFAULT_LIBRARY_FOLDER,
+  migrateDefaultLibraryPath,
 } from "../lib/project-library.mjs";
 import {
   exportProjectLibrary,
@@ -60,61 +70,98 @@ if (isDev) {
   process.env.SLATESYNC_PROJECT_DIR = join(process.resourcesPath, "app");
 }
 
-// PaddleOCR model cache in userData to avoid writing to app install directory
-if (!process.env.PADDLE_PDX_CACHE_HOME) {
-  process.env.PADDLE_PDX_CACHE_HOME = join(
-    app.getPath("userData"),
-    "paddlex",
-  );
-}
-
 let mainWindow = null;
 let projectLibrary = null;
 let projectRuntime = null;
+let appLogger = null;
 
 async function initialize() {
+  // Start logging before any configuration or library work so startup failures
+  // still leave a local diagnostic trail; the logger itself never throws.
+  appLogger = createAppLogger(app.getPath("userData"));
+  appLogger.info("app", `SlateSync ${app.getVersion()} 启动`, {
+    platform: process.platform,
+    arch: process.arch,
+    packaged: app.isPackaged,
+  });
+
+  // Load machine stores before .env so the saved config path can participate
+  // in startup resolution without exposing any file access to the Renderer.
+  const userDataPath = app.getPath("userData");
+  const defaultPaddleCacheHome = join(userDataPath, "paddlex");
+  const settingsStore = createSettingsStore(userDataPath);
+  const runtimeSettings = await settingsStore.load();
+  const globalConfigStore = createGlobalConfigStore(userDataPath);
+  const storedGlobalConfig = await globalConfigStore.load();
+  const runtimeGlobalConfig = { ...(storedGlobalConfig?.values || {}) };
+
   // Load .env from project root (dev) or userData (packaged)
   const envPath = isDev
     ? join(resolve(__dirname, ".."), ".env")
-    : join(app.getPath("userData"), ".env");
+    : join(userDataPath, ".env");
   await loadLocalEnv(envPath);
-  configureModelHttpAgent(process.env);
+
+  // Persisted non-secret settings override .env, while the provider key map
+  // is applied separately below so credentials never enter global-config.json.
+  const keyStore = createKeyStore(userDataPath);
+  const runtimeProviderKeys = await keyStore.load();
+  function runtimeEnv() {
+    const env = { ...process.env };
+    // Resolve the cache default after .env is loaded so a user-provided
+    // PADDLE_PDX_CACHE_HOME remains effective; Global Settings then wins over
+    // both sources without writing anything into process.env.
+    if (!String(env.PADDLE_PDX_CACHE_HOME || "").trim()) {
+      env.PADDLE_PDX_CACHE_HOME = defaultPaddleCacheHome;
+    }
+    const configuredEnv = applyGlobalConfig(env, runtimeGlobalConfig);
+    for (const [providerId, apiKey] of runtimeProviderKeys) {
+      const provider = PROVIDERS[providerId];
+      if (provider) configuredEnv[provider.envKey] = apiKey;
+    }
+    // Keep the legacy first-run OCR setting readable, unless the new global
+    // config explicitly owns the same field (including an empty reset).
+    if (!Object.hasOwn(runtimeGlobalConfig, "PADDLEOCR_PYTHON") && runtimeSettings.ocrPythonPath) {
+      configuredEnv.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
+    }
+    return configuredEnv;
+  }
+
+  const initialRuntimeEnv = runtimeEnv();
+  configureModelHttpAgent(initialRuntimeEnv);
 
   // Load workflow config
   const configPath = isDev
     ? resolve(
         resolve(__dirname, ".."),
-        process.env.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
+        initialRuntimeEnv.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
       )
     : join(process.resourcesPath, "app", "slatesync.config.json");
   const getWorkflowConfig = createWorkflowConfigProvider(configPath);
   await getWorkflowConfig();
 
-  const settings = electronSettings(process.env);
+  const settings = electronSettings(initialRuntimeEnv);
   const recognitionLimiter = createTaskLimiter(settings.maxConcurrentRecognitions);
 
-  // Load persisted API keys and app settings
-  const keyStore = createKeyStore(app.getPath("userData"));
-  const runtimeProviderKeys = await keyStore.load();
-  const settingsStore = createSettingsStore(app.getPath("userData"));
-  const runtimeSettings = await settingsStore.load();
-
-  function runtimeEnv() {
-    const env = { ...process.env };
-    for (const [providerId, apiKey] of runtimeProviderKeys) {
-      const provider = PROVIDERS[providerId];
-      if (provider) env[provider.envKey] = apiKey;
-    }
-    if (runtimeSettings.ocrPythonPath) {
-      env.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
-    }
-    return env;
+  function refreshRuntimeSettings() {
+    const env = runtimeEnv();
+    Object.assign(settings, electronSettings(env));
+    recognitionLimiter.setLimit?.(settings.maxConcurrentRecognitions);
+    configureModelHttpAgent(env);
   }
 
   const fileDialogs = createFileDialogs(() => mainWindow);
   const slateScanner = createSlateScanner();
   const workflowDefaults = projectSettingsFromWorkflow(await getWorkflowConfig());
-  const libraryRoot = runtimeSettings.libraryPath || await initialLibraryPath();
+  const libraryRoot = await initialLibraryPath(runtimeSettings.libraryPath);
+  appLogger.info("app", "项目库路径已解析", { path: libraryRoot });
+  if (runtimeSettings.libraryPath && resolve(runtimeSettings.libraryPath) !== resolve(libraryRoot)) {
+    // Keep a previously persisted default path aligned with its successful
+    // on-disk rename; arbitrary user-selected package paths are never changed.
+    Object.assign(runtimeSettings, await settingsStore.save({
+      ...runtimeSettings,
+      libraryPath: libraryRoot,
+    }));
+  }
   projectLibrary = createProjectLibrary(libraryRoot, {
     defaultSettings: workflowDefaults,
   });
@@ -157,6 +204,12 @@ async function initialize() {
       await activateLibrary(relocated.path);
       return { canceled: false, restartRequired: true, library: relocated };
     },
+
+    async renameLibrary(nextName) {
+      const renamed = await projectLibrary.renameLibrary(nextName);
+      await activateLibrary(renamed.path);
+      return { canceled: false, restartRequired: true, library: renamed };
+    },
   };
 
   async function activateLibrary(nextPath) {
@@ -189,23 +242,43 @@ async function initialize() {
     projectRuntime,
     settingsStore,
     runtimeSettings,
+    globalConfigStore,
+    runtimeGlobalConfig,
+    refreshRuntimeSettings,
     libraryActions,
+    logger: appLogger,
   });
 }
 
-async function initialLibraryPath() {
-  const preferred = defaultLibraryPath(app.getPath("appData"));
+async function initialLibraryPath(configuredPath = "") {
+  const applicationSupportPath = app.getPath("appData");
+  const deployedPreviousDefault = join(
+    applicationSupportPath,
+    LEGACY_DEFAULT_LIBRARY_FOLDER,
+  );
   const previousDefault = join(
     app.getPath("userData"),
     "Libraries",
-    DEFAULT_LIBRARY_FOLDER,
+    LEGACY_DEFAULT_LIBRARY_FOLDER,
   );
-  // Existing development installs used <userData>/Libraries. Prefer that
-  // package only when the new Application Support default does not yet exist.
-  if (!(await exists(preferred)) && await exists(previousDefault)) {
-    return previousDefault;
+  if (configuredPath) {
+    // Only known historical defaults are eligible for automatic shortening.
+    // Imported and relocated Libraries retain their user-selected names.
+    const knownDefaults = [deployedPreviousDefault, previousDefault]
+      .map((path) => resolve(path));
+    if (!knownDefaults.includes(resolve(configuredPath))) {
+      return configuredPath;
+    }
+    return migrateDefaultLibraryPath(applicationSupportPath, [configuredPath], {
+      // A persisted existing Library wins when the short default path is also
+      // occupied; switching automatically could surface unrelated data.
+      preserveLegacyOnConflict: true,
+    });
   }
-  return preferred;
+  return migrateDefaultLibraryPath(applicationSupportPath, [
+    deployedPreviousDefault,
+    previousDefault,
+  ]);
 }
 
 async function exists(path) {
@@ -241,10 +314,12 @@ async function resolveRendererEntry() {
     });
     if (entry.mode === "legacy" && entry.reason === "modern-missing") {
       console.warn("Modern renderer entry is unavailable; using bounded legacy recovery.");
+      appLogger?.warn("app", "Modern Renderer 不可用，使用 legacy 恢复入口");
     }
     return entry;
   } catch (error) {
     console.error("Modern renderer selector is unavailable; using legacy recovery:", error);
+    appLogger?.error("app", "Modern Renderer 入口解析失败，使用 legacy 恢复入口", { error });
     return {
       mode: "legacy",
       root: legacyRoot,
@@ -261,6 +336,10 @@ function isWithinRoot(filePath, root) {
 
 async function createWindow() {
   const rendererEntry = await resolveRendererEntry();
+  const rendererDev = rendererEntry.mode === "modern" && isDev
+    ? parseRendererDevUrl(process.env.SLATESYNC_RENDERER_URL)
+    : null;
+  let activeRendererDevOrigin = rendererDev?.origin || null;
   let allowedRoot = rendererEntry.root;
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -279,10 +358,15 @@ async function createWindow() {
     },
   });
 
-  // Prevent navigation to external URLs and keep the fallback root exact so
-  // a modern-shell failure cannot widen the legacy file boundary.
+  // Apply the same boundary to user navigation and server redirects. A Vite
+  // response must not redirect the privileged Preload onto a remote origin.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  mainWindow.webContents.on("will-navigate", (event, url) => {
+  const guardRendererNavigation = (event, url) => {
+    if (activeRendererDevOrigin) {
+      if (isAllowedRendererDevNavigation(url, activeRendererDevOrigin)) return;
+      event.preventDefault();
+      return;
+    }
     if (!url.startsWith("file://")) {
       event.preventDefault();
       return;
@@ -291,25 +375,53 @@ async function createWindow() {
     if (!isWithinRoot(filePath, allowedRoot)) {
       event.preventDefault();
     }
-  });
+  };
+  mainWindow.webContents.on("will-navigate", guardRendererNavigation);
+  mainWindow.webContents.on("will-redirect", guardRendererNavigation);
 
   try {
-    await mainWindow.loadFile(rendererEntry.htmlPath);
-    console.log(`Loaded ${rendererEntry.mode} renderer: ${rendererEntry.htmlPath}`);
+    if (rendererDev) {
+      await mainWindow.loadURL(rendererDev.href);
+      console.log(`Loaded modern renderer HMR: ${rendererDev.href}`);
+      appLogger?.info("app", "已加载 Modern Renderer HMR", { origin: rendererDev.origin });
+    } else {
+      await mainWindow.loadFile(rendererEntry.htmlPath);
+      console.log(`Loaded ${rendererEntry.mode} renderer: ${rendererEntry.htmlPath}`);
+      appLogger?.info("app", `已加载 ${rendererEntry.mode} Renderer`, { path: rendererEntry.htmlPath });
+    }
   } catch (error) {
-    if (rendererEntry.mode !== "modern") {
+    if (rendererDev) {
+      // The dev orchestrator normally fails before Electron starts when Vite
+      // is unavailable. This fallback also covers a server that dies after
+      // the window was created, without widening the file access boundary.
+      activeRendererDevOrigin = null;
+      console.error("Renderer HMR server failed; falling back to compiled Modern renderer:", error);
+      appLogger?.warn("app", "Renderer HMR 加载失败，回退到编译后的 Modern Renderer", { error });
+      try {
+        await mainWindow.loadFile(rendererEntry.htmlPath);
+        console.log(`Loaded compiled modern renderer: ${rendererEntry.htmlPath}`);
+        appLogger?.info("app", "已加载编译后的 Modern Renderer", { path: rendererEntry.htmlPath });
+      } catch (fallbackError) {
+        console.error("Failed to load compiled Modern renderer:", fallbackError);
+        appLogger?.error("app", "编译后的 Modern Renderer 加载失败", { error: fallbackError });
+      }
+    } else if (rendererEntry.mode !== "modern") {
       console.error("Failed to load index.html:", error);
+      appLogger?.error("app", "legacy Renderer 加载失败", { error });
     } else {
       const legacyRoot = isDev
         ? join(resolve(__dirname, ".."), "public")
         : join(__dirname, "..", "public");
       allowedRoot = legacyRoot;
       console.error("Modern renderer failed during initial load; falling back to legacy renderer:", error);
+      appLogger?.warn("app", "Modern Renderer 初始加载失败，回退到 legacy Renderer", { error });
       try {
         await mainWindow.loadFile(join(legacyRoot, "index.html"));
         console.log(`Loaded legacy renderer fallback: ${join(legacyRoot, "index.html")}`);
+        appLogger?.info("app", "已加载 legacy Renderer 回退入口", { path: join(legacyRoot, "index.html") });
       } catch (fallbackError) {
         console.error("Failed to load legacy renderer fallback:", fallbackError);
+        appLogger?.error("app", "legacy Renderer 回退加载失败", { error: fallbackError });
       }
     }
   }
@@ -331,6 +443,7 @@ app.whenReady().then(async () => {
     await initialize();
   } catch (error) {
     console.error("SlateSync initialization failed:", error);
+    appLogger?.error("app", "SlateSync 初始化失败", { error });
     app.quit();
     return;
   }
@@ -344,12 +457,17 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  appLogger?.info("app", "所有窗口已关闭");
   app.quit();
 });
 
 app.on("will-quit", () => {
+  appLogger?.info("app", "应用即将退出");
   // Close cached project connections before Electron tears down the main
   // process. The library remains a portable folder that can be backed up.
   void projectRuntime?.close();
   void projectLibrary?.close();
+  // Awaiting the queue here preserves the final lifecycle line without making
+  // logging part of the recognition or window error paths.
+  void appLogger?.close();
 });

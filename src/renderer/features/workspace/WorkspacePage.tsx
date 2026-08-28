@@ -1,4 +1,4 @@
-import { Download, FileSpreadsheet, FolderSearch, Play, RefreshCw, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, FolderSearch, Play, RefreshCw, Square, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type {
@@ -17,10 +17,16 @@ import { createOperationGuard } from "../../services/operation-guard";
 import { getCsvWorkerService } from "../../services/csv-worker-service";
 import { getPreparationService } from "../../services/preparation-service";
 import { createTaskAutosave } from "../../services/task-autosave";
+import { RECOGNITION_SHORTCUT_EVENT } from "../../services/keyboard-shortcuts";
 import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "../../state";
+import { useFileDrop } from "../../hooks/use-file-drop";
+import { validateCsvFile } from "../../validation/input-validation";
 import { CsvVirtualTable } from "../csv/CsvVirtualTable";
 import { RecognitionResultPanel } from "../recognition/RecognitionResultPanel";
-import { SlateInputPanel } from "../slate/SlateInputPanel";
+import { ModelSelect } from "../recognition/ModelSelect";
+import { groupModelOptions } from "../recognition/model-options";
+import { useRecognitionDraft } from "../recognition/use-recognition-draft";
+import { SlateInputPanel, type SlateInputPanelHandle } from "../slate/SlateInputPanel";
 import { TaskRail } from "../tasks/TaskRail";
 import styles from "../../app/app.module.css";
 
@@ -47,8 +53,6 @@ const EMPTY_OCR: OcrSummary = {
   durationMs: 0,
   warning: null,
 };
-
-const IMAGE_ONLY_PROVIDERS = new Set(["tokenplan", "dashscope"]);
 
 function defaultSettings(config: ReturnType<typeof useProjectStore.getState>["config"]): ProjectSettings {
   return {
@@ -84,7 +88,17 @@ function normalizeRecord(record: PersistedRecognitionRecord, index: number): Rec
   };
 }
 
-export function WorkspacePage() {
+export interface WorkspaceToolbarExportState {
+  readonly canExport: boolean;
+  readonly processing: boolean;
+}
+
+export type RegisterWorkspaceToolbarExport = (
+  handler: (() => void) | null,
+  state?: WorkspaceToolbarExportState,
+) => void;
+
+export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport?: RegisterWorkspaceToolbarExport } = {}) {
   const project = useProjectStore((state) => state.current);
   const config = useProjectStore((state) => state.config);
   const scenarios = useProjectStore((state) => state.scenarios);
@@ -97,7 +111,6 @@ export function WorkspacePage() {
     fileSize: state.fileSize,
     pageCount: state.pageCount,
     imageDataGroups: state.imageDataGroups,
-    pdfDataUrl: state.pdfDataUrl,
     preparing: state.preparing,
   })));
   const recognition = useRecognitionStore(useShallow((state) => ({
@@ -107,10 +120,12 @@ export function WorkspacePage() {
     completedPages: state.completedPages,
     totalPages: state.totalPages,
     message: state.message,
+    warning: state.warning,
     records: state.records,
   })));
   const exportState = useExportStore(useShallow((state) => ({
     table: state.table,
+    previewTable: state.previewTable,
     filename: state.filename,
     edits: state.edits,
     slateCsvRecords: state.slateCsvRecords,
@@ -119,23 +134,40 @@ export function WorkspacePage() {
     error: state.error,
   })));
   const metadata = useMetadataStore(useShallow((state) => ({ result: state.result, scanning: state.scanning })));
-  const [providerId, setProviderId] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [accuracyMode, setAccuracyMode] = useState<"high" | "standard">("high");
-  const [scenarioId, setScenarioId] = useState("");
-  const [customPrompt, setCustomPrompt] = useState("");
+  const { draft, dirty: draftDirty, replace: replaceDraft, patch: patchDraft, setModelFallback, markClean: markDraftClean } = useRecognitionDraft();
+  const { providerId, modelId, accuracyMode, scenarioId, customPrompt } = draft;
   const [models, setModels] = useState<readonly import("../../../shared/contracts/index.js").ModelData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [switchingTask, setSwitchingTask] = useState(false);
   const taskSwitchInFlightRef = useRef(false);
+  const slatePanelRef = useRef<SlateInputPanelHandle>(null);
+  const slatePreviewRef = useRef<HTMLDivElement>(null);
+  const lastPreviewGroupsRef = useRef<readonly (readonly string[])[] | null>(null);
+  const slateCsvInputRef = useRef<HTMLInputElement>(null);
+  const resolveCsvInputRef = useRef<HTMLInputElement>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const operationGuard = useMemo(() => createOperationGuard(), []);
   const taskListGuard = useMemo(() => createOperationGuard(), []);
   const taskLoadGuard = useMemo(() => createOperationGuard(), []);
+  const previewGuard = useMemo(() => createOperationGuard(), []);
   const projectIdRef = useRef<string | null>(null);
   const workspaceMountedRef = useRef(true);
   const latestCapture = useRef<() => TaskData | null>(() => null);
+  const runRecognitionRef = useRef<() => void>(() => undefined);
+  const exportCsvRef = useRef<() => void>(() => undefined);
+  const cancelRequestedRef = useRef(false);
   projectIdRef.current = project?.id || null;
+
+  useEffect(() => {
+    if (!slate.imageDataGroups.length) {
+      lastPreviewGroupsRef.current = null;
+      return undefined;
+    }
+    if (lastPreviewGroupsRef.current === slate.imageDataGroups) return undefined;
+    lastPreviewGroupsRef.current = slate.imageDataGroups;
+    const frame = requestAnimationFrame(() => slatePreviewRef.current?.focus({ preventScroll: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [slate.imageDataGroups]);
 
   const settingsSnapshot = useCallback((): ProjectSettings => {
     const base = project?.settings || defaultSettings(config);
@@ -148,6 +180,43 @@ export function WorkspacePage() {
       customPrompt,
     };
   }, [accuracyMode, config, customPrompt, modelId, project?.settings, providerId, scenarioId]);
+
+  const invalidateResolvePreview = useCallback(() => {
+    // Each recognition run owns a new preview scope; clear the old projection
+    // before async work can fail or be canceled without producing a result.
+    previewGuard.invalidate();
+    useExportStore.getState().setPreviewTable(null);
+  }, [previewGuard]);
+
+  const refreshResolvePreview = useCallback(async () => {
+    const currentExport = useExportStore.getState();
+    const currentRecognition = useRecognitionStore.getState();
+    if (!currentExport.table || !currentRecognition.records.length) {
+      invalidateResolvePreview();
+      return;
+    }
+
+    const operationId = previewGuard.start();
+    const settings = settingsSnapshot();
+    try {
+      const previewTable = await getCsvWorkerService().mergePreview({
+        type: "merge-preview",
+        records: currentRecognition.records,
+        slateMetadata: useMetadataStore.getState().result?.metadata || [],
+        fieldFormats: settings.resolve.fieldFormats,
+        comments: settings.resolve.comments,
+      });
+      const latestExport = useExportStore.getState();
+      const latestRecognition = useRecognitionStore.getState();
+      if (!workspaceMountedRef.current || !previewGuard.isCurrent(operationId) || latestExport.table !== currentExport.table || latestRecognition.records !== currentRecognition.records) return;
+      useExportStore.getState().setPreviewTable(previewTable);
+    } catch (nextError) {
+      if (!workspaceMountedRef.current || !previewGuard.isCurrent(operationId)) return;
+      const appError = appErrorFromUnknown(nextError);
+      useExportStore.getState().setError(appError);
+      setError(appError.message);
+    }
+  }, [invalidateResolvePreview, previewGuard, settingsSnapshot]);
 
   const captureTask = useCallback((): TaskData | null => {
     const currentProject = useProjectStore.getState().current;
@@ -205,12 +274,26 @@ export function WorkspacePage() {
         taskState.setActive(id, { ...task, id });
       }
     },
-    onState: (state) => useTaskStore.getState().setSaveState(state),
+    onState: (state) => {
+      useTaskStore.getState().setSaveState(state);
+      if (state === "saved") markDraftClean();
+    },
   }), []);
 
   const markDirtyAfterRender = useCallback(() => {
     setTimeout(() => autosave.markDirty(latestCapture.current()), 0);
   }, [autosave]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!draftDirty && !autosave.hasPending() && !useRecognitionStore.getState().running) return;
+      event.preventDefault();
+      event.returnValue = "";
+      void autosave.flush();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [autosave, draftDirty]);
 
   const refreshTasks = useCallback(async (projectId = projectIdRef.current) => {
     if (!projectId) return;
@@ -228,40 +311,49 @@ export function WorkspacePage() {
 
   const clearWorkspaceData = useCallback(async () => {
     operationGuard.invalidate();
+    previewGuard.invalidate();
     useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     await getCsvWorkerService().clear();
-  }, [operationGuard]);
+  }, [operationGuard, previewGuard]);
 
   useEffect(() => () => {
     workspaceMountedRef.current = false;
     operationGuard.invalidate();
+    previewGuard.invalidate();
     taskListGuard.invalidate();
     taskLoadGuard.invalidate();
     void autosave.flush();
     getCsvWorkerService().terminate();
+    const preserveRecognitionForLogViewer = useUiStore.getState().route === "logs"
+      && useRecognitionStore.getState().running;
     // Route-owned projections must not retain full CSV/PDF/result graphs after
     // the workspace is gone. The immutable pending save was captured above;
     // returning to the route reloads the authoritative task from Main.
-    useRecognitionStore.getState().reset();
+    // A running recognition is the one exception: the system log page is a
+    // read-only observer and must keep receiving the global progress store.
+    if (!preserveRecognitionForLogViewer) useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     useTaskStore.getState().clear();
-  }, [autosave, operationGuard, taskListGuard, taskLoadGuard]);
+  }, [autosave, operationGuard, previewGuard, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
     if (!project) return;
     const settings = project.settings || defaultSettings(config);
     autosave.reset();
-    setProviderId(project.lastRecognitionDefaults?.providerId || settings.providerId || config?.providers.find((item) => item.configured)?.id || config?.providers[0]?.id || "");
-    setModelId(project.lastRecognitionDefaults?.modelId || settings.modelId || "");
-    setAccuracyMode(settings.accuracyMode || "high");
-    setScenarioId(settings.scenarioId || "");
-    setCustomPrompt(project.lastRecognitionDefaults?.customPrompt || settings.customPrompt || "");
+    replaceDraft({
+      providerId: project.lastRecognitionDefaults?.providerId || settings.providerId || config?.providers.find((item) => item.configured)?.id || config?.providers[0]?.id || "",
+      modelId: project.lastRecognitionDefaults?.modelId || settings.modelId || "",
+      accuracyMode: settings.accuracyMode || "high",
+      scenarioId: settings.scenarioId || "",
+      customPrompt: project.lastRecognitionDefaults?.customPrompt || settings.customPrompt || "",
+    });
     useRecognitionStore.getState().reset();
+    previewGuard.invalidate();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
@@ -271,7 +363,7 @@ export function WorkspacePage() {
       taskLoadGuard.invalidate();
       void autosave.flush();
     };
-  }, [autosave, config, project, taskListGuard, taskLoadGuard]);
+  }, [autosave, config, previewGuard, project, replaceDraft, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
     if (!providerId) return;
@@ -281,13 +373,13 @@ export function WorkspacePage() {
         const result = await unwrap(await getSlateSync().recognition.getModels({ providerId, forceRefresh: false }));
         if (!active) return;
         setModels(result.models);
-        setModelId((current) => current || result.models[0]?.id || "");
+        setModelFallback(result.models[0]?.id || "");
       } catch {
         if (active) setModels(config?.models.filter((model) => model.providers.includes(providerId)) || []);
       }
     })();
     return () => { active = false; };
-  }, [config?.models, providerId]);
+  }, [config?.models, providerId, setModelFallback]);
 
   const applyTask = async (taskId: string, task: TaskData) => {
     const csvWorker = getCsvWorkerService();
@@ -327,11 +419,13 @@ export function WorkspacePage() {
     }
 
     const snapshot = task.projectSettingsSnapshot || project?.settings || defaultSettings(config);
-    setProviderId(task.provider || snapshot.providerId || "");
-    setModelId(task.model || snapshot.modelId || "");
-    setAccuracyMode(task.accuracyMode || snapshot.accuracyMode || "standard");
-    setScenarioId(task.scenarioId || snapshot.scenarioId || "");
-    setCustomPrompt(task.customPrompt ?? snapshot.customPrompt ?? "");
+    replaceDraft({
+      providerId: task.provider || snapshot.providerId || "",
+      modelId: task.model || snapshot.modelId || "",
+      accuracyMode: task.accuracyMode || snapshot.accuracyMode || "standard",
+      scenarioId: task.scenarioId || snapshot.scenarioId || "",
+      customPrompt: task.customPrompt ?? snapshot.customPrompt ?? "",
+    });
 
     const persisted = task.editedRecords?.length ? task.editedRecords : task.result?.records;
     if (persisted?.length || task.result) {
@@ -357,6 +451,7 @@ export function WorkspacePage() {
       useRecognitionStore.getState().start(token, project?.id || null, restored.pageCount);
       useRecognitionStore.getState().complete(token, restored);
     }
+    await refreshResolvePreview();
     autosave.reset();
     useTaskStore.getState().setActive(taskId, task);
     useTaskStore.getState().setSaveState("saved");
@@ -429,12 +524,14 @@ export function WorkspacePage() {
   }, [autosave, captureTask]);
 
   const loadResolveCsv = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".csv")) { setError("请选择 CSV 文件。"); return; }
+    const validation = validateCsvFile(file, "resolve");
+    if (!validation.ok) { setError(validation.message); return; }
     setError(null);
     useExportStore.getState().setProcessing(true);
     try {
       const table = await getCsvWorkerService().decode(await file.arrayBuffer());
       useExportStore.getState().setTable(table, file.name);
+      await refreshResolvePreview();
       setToast({ tone: "success", message: `已载入 ${table.rows.length.toLocaleString("zh-CN")} 行 Resolve CSV` });
       autosave.markDirty(captureTask());
     } catch (nextError) {
@@ -447,8 +544,8 @@ export function WorkspacePage() {
   };
 
   const loadSlateCsv = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".csv")) { setError("请选择场记 CSV 文件。"); return; }
-    if (file.size > 10 * 1024 * 1024) { setError("场记 CSV 超过 10 MB，请拆分后重试。"); return; }
+    const validation = validateCsvFile(file, "slate");
+    if (!validation.ok) { setError(validation.message); return; }
     setError(null);
     useExportStore.getState().setProcessing(true);
     try {
@@ -464,6 +561,9 @@ export function WorkspacePage() {
     }
   };
 
+  const slateCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running, onFile: loadSlateCsv });
+  const resolveCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running, onFile: loadResolveCsv });
+
   const selectMetadataDirectory = async () => {
     if (!exportState.table || !project) return;
     try {
@@ -478,6 +578,7 @@ export function WorkspacePage() {
         ...(config?.workflow.slate.maxDirectoryDepth !== undefined ? { maxDepth: config.workflow.slate.maxDirectoryDepth } : {}),
       }));
       useMetadataStore.getState().setResult(result);
+      await refreshResolvePreview();
       autosave.markDirty(captureTask());
     } catch (nextError) {
       useMetadataStore.getState().setError(appErrorFromUnknown(nextError));
@@ -510,8 +611,10 @@ export function WorkspacePage() {
         diagnosticSessionId: null,
         taskId: null,
       };
+      invalidateResolvePreview();
       useRecognitionStore.getState().start(operationId, project.id, 0);
       useRecognitionStore.getState().complete(operationId, data);
+      await refreshResolvePreview();
       autosave.markDirty(captureTask());
       setToast({ tone: "success", message: `已生成 ${records.length} 条本地记录` });
     } catch (nextError) {
@@ -522,6 +625,7 @@ export function WorkspacePage() {
   const buildRecognitionRequest = async (): Promise<RecognitionRequest> => {
     if (!project) throw new Error("项目上下文已失效。");
     const currentSlate = useSlateStore.getState();
+    const activeTaskId = useTaskStore.getState().activeId;
     const slateCsvRecords = useExportStore.getState().slateCsvRecords;
     const maxRequestBytes = config?.upload.maxRequestBytes || 80 * 1024 * 1024;
     const base = {
@@ -531,16 +635,16 @@ export function WorkspacePage() {
       accuracyMode,
       scenarioId: scenarioId || null,
       projectId: project.id,
+      // autosave.flush() runs before this builder, so a newly persisted draft
+      // already has the stable ID that Main must complete instead of cloning.
+      ...(activeTaskId ? { taskId: activeTaskId } : {}),
       ...(currentSlate.filename ? { filename: currentSlate.filename } : {}),
       ...(customPrompt.trim() ? { customPrompt: customPrompt.trim() } : {}),
       ...(slateCsvRecords?.length ? { slateCsvRecords } : {}),
     } as const;
-    const directPdf = Boolean(currentSlate.pdfDataUrl && currentSlate.fileType === "application/pdf" && !config?.ocr.required && !IMAGE_ONLY_PROVIDERS.has(providerId));
-    if (directPdf) {
-      const request = { ...base, pdfDataUrl: currentSlate.pdfDataUrl! };
-      if (requestBodyFits(JSON.stringify(request), maxRequestBytes)) return request;
-    }
-
+    // PDFs are rasterized by PreparationService before this builder runs. The
+    // model request deliberately contains only page images so local OCR always
+    // precedes every provider call, including optional-OCR fallback runs.
     let imageDataGroups = selectRecognitionImageGroups(currentSlate.imageDataGroups, accuracyMode) as readonly (readonly string[])[];
     let request: RecognitionRequest = { ...base, imageDataGroups };
     if (requestBodyFits(JSON.stringify(request), maxRequestBytes)) return request;
@@ -556,7 +660,6 @@ export function WorkspacePage() {
           fileSize: currentSlate.fileSize,
           pageCount: currentSlate.pageCount,
           imageDataGroups,
-          pdfDataUrl: currentSlate.pdfDataUrl,
         });
         return request;
       }
@@ -573,17 +676,25 @@ export function WorkspacePage() {
     if (!providerId || !modelId) return;
     if (!slate.imageDataGroups.length) return;
     setError(null);
+    cancelRequestedRef.current = false;
+    let activeOperationId: number | null = null;
     try {
       if (!(await autosave.flush())) throw new Error("当前任务保存失败；请重试保存后再开始识别。");
       const request = await buildRecognitionRequest();
       const operationId = operationGuard.start();
+      activeOperationId = operationId;
+      invalidateResolvePreview();
       useRecognitionStore.getState().start(operationId, project.id, slate.pageCount);
       const api = getSlateSync();
       const unsubscribe = api.recognition.onProgress((event) => useRecognitionStore.getState().progress(operationId, event));
       try {
         const result = await unwrap(await api.recognition.run(request));
-        if (!operationGuard.isCurrent(operationId) || result.projectId !== project.id) return;
+        if (result.projectId !== project.id) return;
         useRecognitionStore.getState().complete(operationId, result);
+        await refreshResolvePreview();
+        // A route change invalidates workspace-owned mutations, but the
+        // completed global recognition state remains useful to LogViewerPage.
+        if (!workspaceMountedRef.current || !operationGuard.isCurrent(operationId)) return;
         if (result.taskId) {
           autosave.reset();
           useTaskStore.getState().setActive(result.taskId, { ...captureTask(), id: result.taskId, projectId: project.id });
@@ -598,13 +709,51 @@ export function WorkspacePage() {
       }
     } catch (nextError) {
       const appError = appErrorFromUnknown(nextError);
-      const operationId = useRecognitionStore.getState().operationId;
-      if (operationGuard.isCurrent(operationId)) useRecognitionStore.getState().fail(operationId, appError);
-      setError(appError.message);
+      const operationId = activeOperationId ?? useRecognitionStore.getState().operationId;
+      if (cancelRequestedRef.current || appError.code === "RECOGNITION_CANCELED" || appError.message.includes("识别已停止")) {
+        useRecognitionStore.getState().cancel(operationId);
+        if (workspaceMountedRef.current) setError(null);
+        return;
+      }
+      if (useRecognitionStore.getState().operationId === operationId) useRecognitionStore.getState().fail(operationId, appError);
+      if (workspaceMountedRef.current && operationGuard.isCurrent(operationId)) setError(appError.message);
     } finally {
       useSlateStore.getState().setPreparing(false);
     }
   };
+
+  const stopRecognition = async () => {
+    if (!project || !recognition.running || recognition.phase === "stopping") return;
+    const operationId = useRecognitionStore.getState().operationId;
+    cancelRequestedRef.current = true;
+    useRecognitionStore.getState().requestCancel(operationId);
+    try {
+      const result = await unwrap(await getSlateSync().recognition.cancel({ projectId: project.id }));
+      if (!result.canceled) {
+        cancelRequestedRef.current = false;
+        useRecognitionStore.getState().cancelRequestFailed(operationId);
+        setError("没有可停止的识别任务。");
+        return;
+      }
+      operationGuard.invalidate();
+      useRecognitionStore.getState().cancel(operationId);
+      setToast({ tone: "neutral", message: "识别已停止" });
+    } catch (nextError) {
+      cancelRequestedRef.current = false;
+      useRecognitionStore.getState().cancelRequestFailed(operationId);
+      setError(appErrorFromUnknown(nextError).message);
+    }
+  };
+
+  // Keep the global listener stable while always invoking the latest draft and
+  // project state captured by the recognition action.
+  runRecognitionRef.current = () => { void runRecognition(); };
+
+  useEffect(() => {
+    const onShortcut = () => runRecognitionRef.current();
+    window.addEventListener(RECOGNITION_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(RECOGNITION_SHORTCUT_EVENT, onShortcut);
+  }, []);
 
   const exportCsv = async () => {
     const records = useRecognitionStore.getState().records;
@@ -629,77 +778,112 @@ export function WorkspacePage() {
     }
   };
 
+  const canExport = Boolean(project && recognition.records.length && !exportState.processing && !recognition.running && !switchingTask);
+  // Keep the parent toolbar callback stable while this ref follows the latest
+  // draft, project, metadata, table edits, and export error handling closure.
+  exportCsvRef.current = () => { void exportCsv(); };
+  const invokeToolbarExport = useCallback(() => exportCsvRef.current(), []);
+  useEffect(() => {
+    if (!registerToolbarExport) return undefined;
+    registerToolbarExport(invokeToolbarExport, { canExport, processing: exportState.processing });
+    return () => registerToolbarExport(null);
+  }, [canExport, exportState.processing, invokeToolbarExport, registerToolbarExport]);
+
   if (!project) return <div className={styles.page}><InlineError message="请先从项目库打开一个项目。" /></div>;
   const settings = project.settings || defaultSettings(config);
   const provider = config?.providers.find((item) => item.id === providerId);
+  const availableModels = models.length
+    ? models
+    : config?.models.filter((item) => item.providers.includes(providerId)) || [];
+  const modelGroups = groupModelOptions(providerId, availableModels);
   const canMergeLocal = Boolean(!slate.imageDataGroups.length && exportState.slateCsvRecords?.length);
   const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId)) && !recognition.running && !slate.preparing && !switchingTask);
-  const canExport = Boolean(recognition.records.length && !exportState.processing && !recognition.running);
 
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <div><p className={styles.eyebrow}>WORKSPACE / {project.id}</p><h1 className={styles.heading}>{project.name}</h1><p className={styles.subtitle}>从纸质场记到 Resolve 的一条受控路径：原始输入保留，识别与 CSV 计算分别拥有自己的生命周期。</p></div>
-        <div className={styles.pageActions}><Badge tone={provider?.configured ? "success" : "warning"}>{provider?.configured ? `${provider.label} 已就绪` : "Provider 未配置"}</Badge><Button onClick={() => void exportCsv()} disabled={!canExport} loading={exportState.processing} startIcon={<Download size={15} />}>导出 Resolve CSV</Button></div>
+        <div><p className={styles.eyebrow}>工作台</p><h1 className={styles.heading}>{project.name}</h1></div>
+        <div className={styles.pageActions}><Badge tone={provider?.configured ? "success" : "warning"}>{provider?.configured ? `${provider.label} 已就绪` : "Provider 未配置"}</Badge></div>
       </div>
       {error && <div style={{ marginBottom: 16 }}>{useTaskStore.getState().saveState === "error" ? <InlineError message={error} onRetry={() => void autosave.retry()} /> : <InlineError message={error} />}</div>}
       <div className={styles.workspaceGrid}>
         <div className={styles.workspaceLeft}>
           <Surface className={styles.panel}><TaskRail onSelect={(id) => void loadTask(id)} onRefresh={() => void refreshTasks()} onNew={() => void newTask()} onDelete={setDeleteTaskId} onRetrySave={() => void autosave.retry()} switching={switchingTask} /></Surface>
-          <SlateInputPanel onInputChanged={() => autosave.markDirty(captureTask())} />
+          <SlateInputPanel ref={slatePanelRef} onInputChanged={() => autosave.markDirty(captureTask())} />
+          {/* Keep optional sources together before recognition so the user can
+              finish all supporting-data choices before starting the job. */}
           <Surface className={styles.panel}>
-            <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / RECOGNITION</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
-            <div className={styles.grid}>
-              <Field label="Provider"><Select value={providerId} onChange={(event) => { setProviderId(event.target.value); setModelId(""); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
-              <Field label="模型"><Select value={modelId} onChange={(event) => { setModelId(event.target.value); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择视觉模型</option>{(models.length ? models : config?.models.filter((item) => item.providers.includes(providerId)) || []).map((model) => <option key={model.id} value={model.id}>{model.label || model.id}</option>)}</Select></Field>
-              <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { setAccuracyMode(event.target.value as "high" | "standard"); markDirtyAfterRender(); }} disabled={recognition.running}><option value="high">精确模式 · 主识别 + 查漏</option><option value="standard">快速模式 · 单次主识别</option></Select></Field>
-              <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { setScenarioId(event.target.value); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">自动识别并学习版式</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>
-              <Field label="项目提示"><Textarea value={customPrompt} onChange={(event) => setCustomPrompt(event.target.value)} onBlur={markDirtyAfterRender} maxLength={2000} disabled={recognition.running} placeholder={settings.customPrompt || "可选：补充本片的文字/机位约定"} /></Field>
-              <Button size="lg" onClick={() => void runRecognition()} disabled={!canRecognize} loading={recognition.running || slate.preparing} startIcon={<Play size={16} />}>{canMergeLocal ? "从场记 CSV 生成结果" : "开始识别"}</Button>
-              {!provider?.configured && !canMergeLocal && <Text tone="warning" size="xs">当前 Provider 未配置密钥，请先到全局设置保存，或载入场记 CSV 在本地生成结果。</Text>}
+            <div className={styles.sectionHeader}><div><p className={styles.kicker}>可选</p><h2 className={styles.sectionTitle}>可选输入</h2></div><FolderSearch size={18} aria-hidden="true" /></div>
+            <Text tone="muted" size="sm">载入 CSV 可辅助识别或回填；素材目录可补充帧率和拍摄日。</Text>
+            <Stack direction="row" gap={2} align="center" wrap style={{ marginTop: 14 }}>
+              {/* Both CSV sources use the same outlined affordance so neither
+                  input is visually mistaken for an unbounded text action. */}
+              <span className={styles.fileDropTarget} data-dragging={slateCsvDrop.dragging || undefined} {...slateCsvDrop.dropProps}><input ref={slateCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => slateCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></span>
+              <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
+              {exportState.slateCsvRecords && <Badge tone="accent">场记 CSV · {exportState.slateCsvRecords.length} 条</Badge>}
+              {exportState.table && <Badge tone="success">Resolve CSV · {exportState.table.rows.length} 行</Badge>}
+            </Stack>
+            {exportState.slateCsvRecords && <Button variant="ghost" size="sm" style={{ marginTop: 8 }} onClick={() => useExportStore.getState().setSlateCsvRecords(null, null)}>移除场记 CSV</Button>}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--ss-color-line)" }}>
+              <Text as="h3" size="sm" weight="medium">素材元数据回填</Text>
+              <Text tone="muted" size="sm" style={{ marginTop: 5 }}>从素材目录回填帧率和拍摄日。</Text>
+              <Stack direction="row" gap={2} align="center" style={{ marginTop: 14 }}><Button variant="secondary" size="sm" disabled={!exportState.table || metadata.scanning} loading={metadata.scanning} onClick={() => void selectMetadataDirectory()} startIcon={<FolderSearch size={14} />}>选择素材目录</Button>{metadata.result && <Badge tone="success">{metadata.result.metadata.length} 个元数据</Badge>}</Stack>
+              {metadata.result?.warnings.length ? <Text tone="warning" size="xs" style={{ marginTop: 10 }}>{metadata.result.warnings[0]}</Text> : null}
             </div>
           </Surface>
           <Surface className={styles.panel}>
-            <div className={styles.sectionHeader}><div><p className={styles.kicker}>METADATA / OPTIONAL</p><h2 className={styles.sectionTitle}>素材元数据</h2></div><FolderSearch size={18} aria-hidden="true" /></div>
-            <Text tone="muted" size="sm">载入 Resolve CSV 后，可定向扫描素材目录中的 slate.txt 并回填 Camera FPS / Shoot Day。</Text>
-            <Stack direction="row" gap={2} align="center" style={{ marginTop: 14 }}><Button variant="secondary" size="sm" disabled={!exportState.table || metadata.scanning} loading={metadata.scanning} onClick={() => void selectMetadataDirectory()} startIcon={<FolderSearch size={14} />}>选择素材目录</Button>{metadata.result && <Badge tone="success">{metadata.result.metadata.length} 个元数据</Badge>}</Stack>
-            {metadata.result?.warnings.length ? <Text tone="warning" size="xs" style={{ marginTop: 10 }}>{metadata.result.warnings[0]}</Text> : null}
+            <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / 识别</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
+            <div className={styles.grid}>
+              <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
+              <Field label="模型"><ModelSelect value={modelId} groups={modelGroups} onChange={(nextModelId) => { patchDraft({ modelId: nextModelId }); markDirtyAfterRender(); }} disabled={recognition.running} placeholder="选择视觉模型" /></Field>
+              <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { patchDraft({ accuracyMode: event.target.value as "high" | "standard" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次识别</option></Select></Field>
+              <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { patchDraft({ scenarioId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">自动识别</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>
+              <Field label="识别提示" hint="可选"><Textarea className="resize-none" value={customPrompt} onChange={(event) => { patchDraft({ customPrompt: event.target.value }); markDirtyAfterRender(); }} maxLength={2000} showCount disabled={recognition.running} placeholder={settings.customPrompt || "补充文字或机位约定"} /></Field>
+              <Stack direction="row" gap={2} align="center">
+                <Button size="lg" onClick={() => void runRecognition()} disabled={!canRecognize} loading={(recognition.running && recognition.phase !== "stopping") || slate.preparing} startIcon={<Play size={16} />}>{canMergeLocal ? "从场记 CSV 生成结果" : "开始识别"}</Button>
+                <Button variant="danger" size="lg" onClick={() => void stopRecognition()} disabled={!recognition.running || recognition.phase === "stopping"} loading={recognition.phase === "stopping"} startIcon={<Square size={14} />}>停止</Button>
+              </Stack>
+              {!provider?.configured && !canMergeLocal && <Text tone="warning" size="xs">未配置 Provider 密钥。可前往全局设置，或载入场记 CSV。</Text>}
+            </div>
           </Surface>
         </div>
 
         <div className={styles.workspaceMain}>
           <Surface className={styles.panel}>
-            <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>DOCUMENT PREVIEW</p><h2 className={styles.sectionTitle}>场记单预览</h2></div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} PAGES` : "EMPTY"}</Text>{slate.filename && <Button variant="ghost" size="sm" onClick={() => document.querySelector<HTMLInputElement>("input[data-slate-upload]")?.click()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
-            {slate.imageDataGroups.length ? <div className={styles.preview} style={{ marginTop: 14 }}><div className={styles.previewPages}>{slate.imageDataGroups.map((group, index) => <div className={styles.previewPage} key={`${slate.filename}-${index}`}><img src={group[0]} alt={`${slate.filename || "场记单"} 第 ${index + 1} 页`} /><span>PAGE {String(index + 1).padStart(2, "0")}</span></div>)}</div></div> : <div className={styles.routeHint} style={{ marginTop: 14 }}>选择场记单后，Worker 会生成可回看的页面预览。</div>}
-            {recognition.running && <div className={styles.recognitionBanner} style={{ marginTop: 14 }}><div className={styles.recognitionBannerHeader}><Stack direction="row" gap={2} align="center"><Badge tone="accent">{recognition.phase}</Badge><Text size="sm" weight="medium">{recognition.message}</Text></Stack><Text tone="accent" size="sm" mono>{Math.round(recognition.percent)}%</Text></div><Progress value={recognition.percent} label="识别进度" /><Text tone="subtle" size="xs">页面 {recognition.completedPages} / {recognition.totalPages} · 识别进行中不会发起第二个任务。</Text></div>}
+            <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>预览</p><h2 className={styles.sectionTitle}>场记单</h2></div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} 页` : "未载入"}</Text>{slate.filename && <Button variant="ghost" size="sm" onClick={() => slatePanelRef.current?.openPicker()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
+            {slate.imageDataGroups.length ? <div ref={slatePreviewRef} tabIndex={-1} aria-label="场记单预览" className={styles.preview} style={{ marginTop: 14 }}><div className={styles.previewPages}>{slate.imageDataGroups.map((group, index) => <div className={styles.previewPage} key={`${slate.filename}-${index}`}><img src={group[0]} alt={`${slate.filename || "场记单"} 第 ${index + 1} 页`} /><span>{String(index + 1).padStart(2, "0")}</span></div>)}</div></div> : <div className={styles.routeHint} style={{ marginTop: 14 }}>载入场记单后显示预览。</div>}
+            {recognition.running && <div className={styles.recognitionBanner} style={{ marginTop: 14 }}>
+              <div className={styles.recognitionBannerHeader}><Stack direction="row" gap={2} align="center"><Badge tone="accent">{recognition.phase}</Badge><Text size="sm" weight="medium">{recognition.message}</Text></Stack><Text tone="accent" size="sm" mono>{Math.round(recognition.percent)}%</Text></div>
+              <Progress value={recognition.percent} label="识别进度" />
+              <Text tone="subtle" size="xs">{recognition.completedPages} / {recognition.totalPages} 页</Text>
+              {/* Announce only the durable warning; rapidly changing progress keeps its own progressbar semantics. */}
+              {recognition.warning && <div className={styles.warningItem} role="status" aria-live="polite" aria-atomic="true">{recognition.warning}</div>}
+            </div>}
           </Surface>
 
           <Surface className={styles.panel}>
             <div className={styles.sectionHeader}>
-              <div><p className={styles.kicker}>03 / RESOLVE CSV</p><h2 className={styles.sectionTitle}>回填预览</h2></div>
-              <Stack direction="row" gap={2} align="center" wrap>
-                <label><input data-slate-csv-upload type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="ghost" size="sm" onClick={() => document.querySelector<HTMLInputElement>("input[data-slate-csv-upload]")?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></label>
-                <label><input data-csv-upload type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => document.querySelector<HTMLInputElement>("input[data-csv-upload]")?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></label>
-                {exportState.table && <Button variant="ghost" size="sm" onClick={() => { void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button>}
-              </Stack>
+              {/* CSV selection lives in the optional-input surface; this panel
+                  stays focused on previewing and editing the merged result. */}
+              <div><p className={styles.kicker}>03 / CSV</p><h2 className={styles.sectionTitle}>回填预览</h2></div>
+              {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" onClick={() => { previewGuard.invalidate(); void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
             </div>
-            {exportState.slateCsvRecords && <Stack direction="row" gap={2} align="center" style={{ marginBottom: 12 }}><Badge tone="accent">{exportState.slateCsvFilename || "场记 CSV"} · {exportState.slateCsvRecords.length} 条</Badge><Button variant="ghost" size="sm" onClick={() => useExportStore.getState().setSlateCsvRecords(null, null)}>移除场记 CSV</Button></Stack>}
             {exportState.error && <InlineError message={exportState.error.message} />}
-            {exportState.table && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
-            {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>Resolve CSV 是可选输入。没有表格时，仍可从识别记录或场记 CSV 生成独立 Resolve 表。</div>}
+            {(exportState.previewTable || exportState.table) && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.previewTable || exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
+            {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>请在左侧可选输入中载入 Resolve CSV 后预览并编辑回填结果。</div>}
           </Surface>
-          <RecognitionResultPanel onRecordEdited={() => autosave.markDirty(captureTask())} />
+          <RecognitionResultPanel onRecordEdited={() => { void refreshResolvePreview(); autosave.markDirty(captureTask()); }} />
         </div>
       </div>
 
       <Dialog
         open={Boolean(deleteTaskId)}
         title="删除任务？"
-        description="该任务快照将从当前项目移除，此操作不可撤销。"
+        description="此操作不可撤销。"
         onClose={() => !switchingTask && setDeleteTaskId(null)}
         footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" onClick={() => setDeleteTaskId(null)} disabled={switchingTask}>取消</Button><Button variant="danger" onClick={() => void deleteTask()} loading={switchingTask}>确认删除</Button></Stack>}
       >
-        <Text tone="muted" size="sm">删除不会影响项目中的其他任务，也不会访问项目库之外的文件。</Text>
+        <Text tone="muted" size="sm">只删除当前选中的任务。</Text>
       </Dialog>
     </div>
   );

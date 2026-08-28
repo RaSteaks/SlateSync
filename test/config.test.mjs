@@ -144,7 +144,6 @@ test("DashScope provider resolves with BaiLian defaults and fixed models", () =>
   assert.equal(provider.defaultBaseUrl, "https://dashscope.aliyuncs.com/compatible-mode/v1");
   assert.equal(provider.transport, "chat-completions");
   assert.equal(provider.chatJsonMode, "json_schema");
-  assert.equal(provider.supportsDirectPdf, false);
   assert.deepEqual(provider.requiredEnv, ["DASHSCOPE_API_KEY"]);
 
   const fixed = MODELS.filter((model) =>

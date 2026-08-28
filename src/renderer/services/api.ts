@@ -6,6 +6,20 @@ export function getSlateSync(): SlateSyncApi {
   return window.slateSync;
 }
 
+/**
+ * HMR replaces Renderer code without reloading Electron's Preload context.
+ * Check the newly added settings methods at the feature boundary so an old
+ * window reports an actionable restart instruction instead of a raw TypeError.
+ */
+export function requireGlobalSettingsApi(): SlateSyncApi {
+  const api = getSlateSync();
+  const settings = api.settings as Partial<SlateSyncApi["settings"]> | undefined;
+  if (typeof settings?.getGlobalSettings !== "function" || typeof settings.saveGlobalSettings !== "function") {
+    throw new Error("当前 Renderer 与 Preload 版本不一致，无法读取全局设置。请完全退出 SlateSync 后重新启动；开发环境请运行 npm run electron:dev:modern。不要只刷新窗口。");
+  }
+  return api;
+}
+
 export class RendererAppError extends Error {
   readonly code: string;
   readonly retryable: boolean;

@@ -123,6 +123,8 @@ test("OpenRouter discovery trusts declared modalities, uses live prices, and exc
     ],
   );
   assert.equal(result.models[2].fixed, true);
+  assert.equal(result.models[0].vendor, "qwen");
+  assert.equal(result.models.find((model) => model.id === "openai/gpt-5.6-luna").vendor, "openai");
   assert.equal(
     result.models.find((model) => model.id === "qwen/qwen3.7-plus")
       .pricePerMillion.input,
@@ -223,6 +225,30 @@ test("OpenAI-compatible discovery keeps the configured model fixed and exposes d
     resolveModel("openai-compatible", "vendor/other-vision", env).apiId,
     "vendor/other-vision",
   );
+});
+
+test("OpenAI-compatible model changes invalidate the cached custom descriptor", async () => {
+  clearModelDiscoveryCache();
+  let requestCount = 0;
+  const fetchImpl = async () => {
+    requestCount += 1;
+    return jsonResponse({ data: [{ id: "model-a" }, { id: "model-b" }] });
+  };
+  const envA = {
+    OPENAI_COMPATIBLE_API_KEY: "compatible-key",
+    OPENAI_COMPATIBLE_BASE_URL: "https://vision.example/v1",
+    OPENAI_COMPATIBLE_MODEL: "model-a",
+  };
+  const envB = { ...envA, OPENAI_COMPATIBLE_MODEL: "model-b" };
+
+  const first = await discoverVisionModels("openai-compatible", { env: envA, fetchImpl });
+  assert.equal(first.models.find((model) => model.id === CUSTOM_MODEL_ID).apiId, "model-a");
+  // Resolution must use the current setting even before the next discovery call.
+  assert.equal(resolveModel("openai-compatible", CUSTOM_MODEL_ID, envB).apiId, "model-b");
+
+  const second = await discoverVisionModels("openai-compatible", { env: envB, fetchImpl });
+  assert.equal(second.models.find((model) => model.id === CUSTOM_MODEL_ID).apiId, "model-b");
+  assert.equal(requestCount, 2);
 });
 
 test("static fallback is marked as unverified and never exposes credentials", () => {

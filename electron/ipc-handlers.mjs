@@ -5,6 +5,7 @@
 // pricing/cost fields before returning them to the client.
 import { recognizeSlate } from "../lib/ai-client.mjs";
 import { PROVIDERS, publicConfig } from "../lib/config.mjs";
+import { checkOpenAiCompatibleJsonSchema } from "../lib/model-capabilities.mjs";
 import {
   discoverVisionModels,
   staticProviderModels,
@@ -13,11 +14,18 @@ import {
   createSessionCapture,
 } from "../lib/diagnostics.mjs";
 import { checkPaddleOcr } from "../lib/ocr/paddleocr.mjs";
+import { checkVisionOcr } from "../lib/ocr/vision.mjs";
+import {
+  listGlobalOverrides,
+  normalizeGlobalSettingsPatch,
+  resolveGlobalSettingValues,
+} from "./global-settings.mjs";
 import {
   normalizeProjectSettings,
   projectSettingsFromWorkflow,
   validateProjectSettings,
 } from "../lib/project-settings.mjs";
+import { throwIfRecognitionCanceled } from "../lib/ocr/cancellation.mjs";
 
 export function registerIpcHandlers(ipcMain, context) {
   const {
@@ -34,20 +42,42 @@ export function registerIpcHandlers(ipcMain, context) {
     projectRuntime,
     settingsStore,
     runtimeSettings,
+    globalConfigStore,
+    runtimeGlobalConfig = {},
+    refreshRuntimeSettings,
     libraryActions,
+    logger,
     checkOcr = checkPaddleOcr,
+    checkVision = checkVisionOcr,
+    checkJsonSchema = checkOpenAiCompatibleJsonSchema,
     recognize = recognizeSlate,
   } = context;
   // A project cannot transition to archived while any request owns writable
   // stores for it. The reservation also closes the inverse race where a write
   // starts after the archive request has passed its first check.
   const activeProjectWrites = new Map();
+  const activeProjectReads = new Map();
+  const projectReadDrains = new Map();
   const archivingProjects = new Set();
+  const deletingProjects = new Set();
+  const activeRecognitions = new Map();
   let activeLibraryWrites = 0;
   let libraryTransferInProgress = false;
 
+  function effectiveRuntimeEnv() {
+    const env = { ...runtimeEnv() };
+    // Main's production runtimeEnv already applies this map. Keeping the
+    // fallback here makes the handler independently testable and preserves
+    // key readiness immediately after a save in recovery contexts.
+    for (const [providerId, apiKey] of runtimeProviderKeys || []) {
+      const provider = PROVIDERS[providerId];
+      if (provider && apiKey) env[provider.envKey] = apiKey;
+    }
+    return env;
+  }
+
   ipcMain.handle("get-config", async () => {
-    const config = publicConfig(runtimeEnv(), await getWorkflowConfig(), {
+    const config = publicConfig(effectiveRuntimeEnv(), await getWorkflowConfig(), {
       ocrAutoEnable: true,
     });
     return {
@@ -57,6 +87,67 @@ export function registerIpcHandlers(ipcMain, context) {
         maxRequestBytes: settings.maxBodyBytes,
       },
     };
+  });
+
+  function publicGlobalSettings(restartRequired = false) {
+    const env = effectiveRuntimeEnv();
+    return {
+      values: resolveGlobalSettingValues(env),
+      overrides: listGlobalOverrides(runtimeGlobalConfig),
+      // This map contains presence flags only. Secret text never crosses IPC.
+      keyConfigured: Object.fromEntries(
+        Object.values(PROVIDERS).map((provider) => [
+          provider.id,
+          Boolean(String(env[provider.envKey] || "").trim()),
+        ]),
+      ),
+      restartRequired,
+    };
+  }
+
+  ipcMain.handle("get-global-settings", async () => publicGlobalSettings());
+
+  ipcMain.handle("save-global-settings", async (_event, body = {}) => {
+    if (!globalConfigStore) throw new Error("全局配置存储不可用");
+    const previousEnv = effectiveRuntimeEnv();
+    const previous = { ...runtimeGlobalConfig };
+    const patch = body?.reset === true
+      ? {}
+      : normalizeGlobalSettingsPatch(body?.values || {});
+    const next = body?.reset === true ? {} : { ...previous };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next[key] = value;
+      else delete next[key];
+    }
+    const saved = await globalConfigStore.save(next);
+    for (const key of Object.keys(runtimeGlobalConfig)) delete runtimeGlobalConfig[key];
+    Object.assign(runtimeGlobalConfig, saved?.values || next);
+
+    // Keep the legacy first-run OCR wizard and the new global form pointed at
+    // the same interpreter. The flags remain in settings.json for migration.
+    const pathTouched = body?.reset === true
+      ? Object.hasOwn(previous, "PADDLEOCR_PYTHON")
+      : Object.hasOwn(patch, "PADDLEOCR_PYTHON");
+    if (pathTouched && runtimeSettings) {
+      const nextPythonPath = runtimeGlobalConfig.PADDLEOCR_PYTHON || "";
+      const pathChanged = runtimeSettings.ocrPythonPath !== nextPythonPath;
+      runtimeSettings.ocrPythonPath = nextPythonPath;
+      // A generic global-form edit is not the validated OCR wizard flow. If
+      // the interpreter changed or was cleared, make the next launch ask for
+      // verification again instead of keeping a stale completion marker.
+      if (pathChanged) {
+        runtimeSettings.ocrSetupCompleted = false;
+        runtimeSettings.ocrSetupSkipped = false;
+      }
+      await settingsStore?.save(runtimeSettings);
+    }
+    refreshRuntimeSettings?.();
+    const nextEnv = effectiveRuntimeEnv();
+    // The workflow provider is constructed once at startup. Other settings
+    // refresh for later jobs, but a changed workflow path needs a relaunch.
+    return publicGlobalSettings(
+      String(previousEnv.SLATESYNC_CONFIG_PATH || "") !== String(nextEnv.SLATESYNC_CONFIG_PATH || ""),
+    );
   });
 
   ipcMain.handle("list-projects", async () =>
@@ -82,6 +173,11 @@ export function registerIpcHandlers(ipcMain, context) {
     return withLibraryTransfer(() => libraryActions.changeLocation());
   });
 
+  ipcMain.handle("rename-library", async (_event, body) => {
+    if (!libraryActions?.renameLibrary) throw new Error("项目库改名不可用");
+    return withLibraryTransfer(() => libraryActions.renameLibrary(body?.name));
+  });
+
   ipcMain.handle("create-project", async (_event, body) => {
     if (!projectLibrary) throw new Error("项目库不可用");
     return withLibraryWrite(async () => sanitizeProject(
@@ -95,7 +191,9 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("load-project", async (_event, { id }) => {
     if (!projectLibrary) throw new Error("项目库不可用");
-    return sanitizeProject(await projectLibrary.getProject(id));
+    return withProjectRead(id, async () =>
+      sanitizeProject(await projectLibrary.getProject(id)),
+    );
   });
 
   ipcMain.handle("update-project", async (_event, body) => {
@@ -114,6 +212,7 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("archive-project", async (_event, { id }) => {
     if (!projectLibrary) throw new Error("项目库不可用");
     assertLibraryWritable();
+    if (archivingProjects.has(id) || deletingProjects.has(id)) throw projectDeleteBusy();
     if (Number(activeProjectWrites.get(id)) > 0) {
       throw projectWriteBusy();
     }
@@ -127,28 +226,52 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("restore-project", async (_event, { id }) => {
     if (!projectLibrary) throw new Error("项目库不可用");
+    if (deletingProjects.has(id)) throw projectDeleteBusy();
     return withLibraryWrite(async () =>
       sanitizeProject(await projectLibrary.restoreProject(id)),
     );
   });
 
+  ipcMain.handle("delete-project", async (_event, { id }) => {
+    if (!projectLibrary || !projectRuntime) throw new Error("项目库不可用");
+    assertLibraryWritable();
+    if (Number(activeProjectWrites.get(id)) > 0) throw projectWriteBusy("删除");
+    if (archivingProjects.has(id) || deletingProjects.has(id)) throw projectDeleteBusy();
+    deletingProjects.add(id);
+    activeLibraryWrites += 1;
+    try {
+      // Block new access first, then let already-started readers release their
+      // SQLite use before closeProject removes the cached runtime context.
+      await waitForProjectReads(id);
+      await projectRuntime.closeProject(id);
+      return await projectLibrary.deleteProject(id);
+    } finally {
+      activeLibraryWrites -= 1;
+      deletingProjects.delete(id);
+    }
+  });
+
   ipcMain.handle("list-scenarios", async (_event, body = {}) => {
-    const context = await resolveProjectContext(body.projectId, { readOnly: true });
-    return context.scenarioStore ? context.scenarioStore.listProfiles() : [];
+    return withProjectRead(body.projectId, async () => {
+      const context = await resolveProjectContext(body.projectId, { readOnly: true });
+      return context.scenarioStore ? context.scenarioStore.listProfiles() : [];
+    });
   });
 
   ipcMain.handle("load-scenario", async (_event, { projectId, id }) => {
-    const context = await resolveProjectContext(projectId, { readOnly: true });
-    if (!context.scenarioStore) throw new Error("场记结构存储不可用");
-    return context.scenarioStore.getProfile(id);
+    return withProjectRead(projectId, async () => {
+      const context = await resolveProjectContext(projectId, { readOnly: true });
+      if (!context.scenarioStore) throw new Error("场记结构存储不可用");
+      return context.scenarioStore.getProfile(id);
+    });
   });
 
   ipcMain.handle("import-scenario", async (_event, { projectId, profile }) => {
-    const context = await resolveProjectContext(projectId);
-    if (!context.scenarioStore) throw new Error("场记结构存储不可用");
-    return withProjectWrite(context.project?.id || projectId, () =>
-      context.scenarioStore.importProfile(profile),
-    );
+    return withProjectWrite(projectId, async () => {
+      const context = await resolveProjectContext(projectId);
+      if (!context.scenarioStore) throw new Error("场记结构存储不可用");
+      return context.scenarioStore.importProfile(profile);
+    });
   });
 
   ipcMain.handle("save-provider-key", async (_event, body) => {
@@ -156,9 +279,6 @@ export function registerIpcHandlers(ipcMain, context) {
     const provider = PROVIDERS[providerId];
     if (!provider) {
       throw new Error("未知 API 服务商");
-    }
-    if (providerId === "openai-compatible") {
-      throw new Error("OpenAI 兼容 API 需通过环境变量配置");
     }
     const apiKey = String(body?.apiKey || "").trim();
     if (apiKey) {
@@ -171,9 +291,7 @@ export function registerIpcHandlers(ipcMain, context) {
     }
     return {
       provider: providerId,
-      configured: Boolean(
-        runtimeProviderKeys.get(providerId) || process.env[provider.envKey],
-      ),
+      configured: provider.requiredEnv.every((key) => Boolean(String(effectiveRuntimeEnv()[key] || "").trim())),
     };
   });
 
@@ -200,19 +318,28 @@ export function registerIpcHandlers(ipcMain, context) {
     }
   });
 
+  ipcMain.handle("check-compatible-json-schema", async () =>
+    checkJsonSchema({ env: runtimeEnv() }),
+  );
+
   ipcMain.handle("recognize", async (event, body) => {
     const release = recognitionLimiter.acquire();
+    const controller = new AbortController();
+    const requestedProjectId = String(body?.projectId || "");
+    const activeRecognition = createActiveRecognition(controller);
+    addActiveRecognition(requestedProjectId, activeRecognition);
     const capture = createSessionCapture();
     let projectContext = null;
     let activeProjectId = null;
     try {
+      if (!requestedProjectId) throw new Error("请先选择项目");
+      // Acquire the write lease before resolving the runtime. This closes the
+      // gap where deletion could close a context while recognition was opening
+      // its SQLite-backed stores.
+      beginProjectWrite(requestedProjectId);
+      activeProjectId = requestedProjectId;
       const workflow = await getWorkflowConfig();
       projectContext = await resolveProjectContext(body?.projectId);
-      const resolvedProjectId = projectContext.project?.id || null;
-      if (resolvedProjectId) beginProjectWrite(resolvedProjectId);
-      // Assign only after the write lease succeeds; a recognition rejected by
-      // an in-progress archive must not persist even a failure diagnostic.
-      activeProjectId = resolvedProjectId;
       const projectSettings = normalizeProjectSettings(
         projectContext.project?.settings || projectSettingsFromWorkflow(workflow),
         projectSettingsFromWorkflow(workflow),
@@ -222,47 +349,88 @@ export function registerIpcHandlers(ipcMain, context) {
         capture.session.projectId = projectContext.project.id;
         capture.session.projectSettingsSnapshot = projectSettings;
       }
+      // The local log mirrors the full run (start, every progress event,
+      // outcome) so any recognition can be audited after the fact. Logging is
+      // fire-and-forget and failure-swallowing; it must never delay or break
+      // the recognition itself.
+      logger?.info(
+        "recognition",
+        `识别开始 · ${input.filename || "未命名文件"} · ${input.providerId}/${input.modelId}`,
+        {
+          provider: input.providerId,
+          model: input.modelId,
+          pageCount: input.pageCount,
+        },
+      );
       const result = await recognize(input, {
         env: runtimeEnv(),
         ocrAutoEnable: true,
         projectScopedOutput: Boolean(projectContext.project),
         scenarioStore: projectContext.scenarioStore,
         onProgress: (progressEvent) => {
+          logRecognitionProgress(logger, progressEvent);
           if (!event.sender.isDestroyed()) {
             event.sender.send("recognition-progress", progressEvent);
           }
         },
         capture,
+        signal: controller.signal,
       });
+      // Recognition can be stopped after the provider responds but before the
+      // Main-process persistence tail starts. Do not turn that late stop into
+      // a completed task or a success response for the Renderer.
+      throwIfRecognitionCanceled(controller.signal);
       const diagnosticsStore = projectContext.diagnostics;
       const taskStoreForProject = projectContext.taskStore;
       const sessionId = diagnosticsStore
         ? await diagnosticsStore.saveSession(capture.session)
         : null;
+      throwIfRecognitionCanceled(controller.signal);
+      const completedTask = {
+        projectId: projectContext.project?.id || body?.projectId || null,
+        projectSettingsSnapshot: projectSettings,
+        status: "completed",
+        filename: input.filename,
+        pageCount: result.pageCount,
+        provider: result.provider,
+        model: result.model,
+        scenarioId: result.scenario?.id || null,
+        scenarioMatch: result.scenario?.match || null,
+        scenarioFingerprint: result.scenario?.fingerprint || null,
+        customPrompt: input.customPrompt || null,
+        accuracyMode: result.accuracyMode,
+        result: result.result,
+        // Replace a draft's empty edit buffer with the newly recognized rows;
+        // listTasks otherwise prefers the stale empty array over result data.
+        editedRecords: result.result.records,
+        usage: result.usage,
+        durationMs: result.durationMs,
+        ocrSummary: result.ocr,
+        diagnosticSessionId: sessionId,
+      };
+      // Recognition is the completion phase of the current draft. Updating by
+      // its project-scoped ID keeps one logical task and preserves draft-only
+      // inputs; a run without a draft remains a legitimate new task.
       const taskId = taskStoreForProject
-        ? await taskStoreForProject.saveTask({
-            projectId: projectContext.project?.id || body?.projectId || null,
-            projectSettingsSnapshot: projectSettings,
-            status: "completed",
-            filename: input.filename,
-            pageCount: result.pageCount,
-            provider: result.provider,
-            model: result.model,
-            scenarioId: result.scenario?.id || null,
-            scenarioMatch: result.scenario?.match || null,
-            scenarioFingerprint: result.scenario?.fingerprint || null,
-            customPrompt: input.customPrompt || null,
-            accuracyMode: result.accuracyMode,
-            result: result.result,
-            usage: result.usage,
-            durationMs: result.durationMs,
-            ocrSummary: result.ocr,
-            diagnosticSessionId: sessionId,
-          })
+        ? body?.taskId
+          ? await taskStoreForProject.updateTask(body.taskId, completedTask)
+          : await taskStoreForProject.saveTask(completedTask)
         : null;
+      throwIfRecognitionCanceled(controller.signal);
       if (taskId && projectContext.project && projectLibrary) {
         await projectLibrary.touchProjectActivity(projectContext.project.id);
       }
+      const recordCount = result.result?.records?.length ?? 0;
+      logger?.info(
+        "recognition",
+        `识别完成 · ${recordCount} 条记录 · ${result.provider}/${result.model} · 耗时 ${(result.durationMs / 1000).toFixed(1)}s`,
+        {
+          provider: result.provider,
+          model: result.model,
+          records: recordCount,
+          durationMs: result.durationMs,
+        },
+      );
       return {
         ...clientRecognitionResult(result),
         // The renderer formats the immediate result with this exact snapshot,
@@ -281,14 +449,45 @@ export function registerIpcHandlers(ipcMain, context) {
       };
     } catch (error) {
       capture.setError(error);
+      // A user-requested stop is a normal outcome, not a failure: keep the two
+      // distinguishable in the log so reviews do not read stops as crashes.
+      if (controller.signal.aborted || error?.code === "RECOGNITION_CANCELED") {
+        logger?.warn("recognition", `识别已停止 · ${body?.filename || "未命名文件"}`);
+      } else {
+        logger?.error("recognition", `识别失败 · ${error?.message || String(error)}`);
+      }
       if (activeProjectId && projectContext?.diagnostics) {
         await projectContext.diagnostics.saveSession(capture.session).catch(() => {});
       }
       throw error;
     } finally {
-      if (activeProjectId) endProjectWrite(activeProjectId);
-      release();
+      removeActiveRecognition(requestedProjectId, activeRecognition);
+      try {
+        if (activeProjectId) endProjectWrite(activeProjectId);
+        release();
+      } finally {
+        // cancel-recognition waits for this signal, so it cannot claim the job
+        // stopped while its write lease or recognition limiter is still held.
+        // Resolve even if a defensive cleanup hook fails, otherwise the stop
+        // IPC could wait forever after the recognition promise has settled.
+        activeRecognition.resolveSettled();
+      }
     }
+  });
+
+  ipcMain.handle("cancel-recognition", async (_event, body = {}) => {
+    const projectId = String(body.projectId || "");
+    const recognitions = [...(activeRecognitions.get(projectId) || [])];
+    if (!recognitions.length) return { canceled: false };
+    logger?.warn("recognition", `请求停止识别 · ${projectId}`);
+    for (const recognition of recognitions) {
+      recognition.controller.abort(new DOMException("识别已停止", "AbortError"));
+    }
+    // An AbortController only requests cancellation. Waiting for each run's
+    // finalizer makes the IPC acknowledgement truthful for local OCR, model
+    // fetches, SQLite persistence, and the per-project write lease.
+    await Promise.allSettled(recognitions.map((recognition) => recognition.settled));
+    return { canceled: true };
   });
 
   ipcMain.handle("save-file", async (_event, { defaultFilename, data }) => {
@@ -310,25 +509,29 @@ export function registerIpcHandlers(ipcMain, context) {
   );
 
   ipcMain.handle("list-tasks", async (_event, body = {}) => {
-    const context = await resolveProjectContext(body.projectId, { readOnly: true });
-    // Keep the preload contract compact: task lists cross IPC as arrays.
-    if (!context.taskStore) return [];
-    return context.taskStore.listTasks();
+    return withProjectRead(body.projectId, async () => {
+      const context = await resolveProjectContext(body.projectId, { readOnly: true });
+      // Keep the preload contract compact: task lists cross IPC as arrays.
+      if (!context.taskStore) return [];
+      return context.taskStore.listTasks();
+    });
   });
 
   ipcMain.handle("load-task", async (_event, { projectId, id }) => {
-    const context = await resolveProjectContext(projectId, { readOnly: true });
-    if (!context.taskStore) throw new Error("任务存储不可用");
-    return context.taskStore.loadTask(id);
+    return withProjectRead(projectId, async () => {
+      const context = await resolveProjectContext(projectId, { readOnly: true });
+      if (!context.taskStore) throw new Error("任务存储不可用");
+      return context.taskStore.loadTask(id);
+    });
   });
 
   ipcMain.handle("save-task", async (_event, body) => {
     const task = body?.task || body;
     const projectId = body?.projectId || task?.projectId;
-    const context = await resolveProjectContext(projectId);
-    if (!context.taskStore) throw new Error("任务存储不可用");
-    const resolvedProjectId = context.project?.id || projectId;
-    return withProjectWrite(resolvedProjectId, async () => {
+    return withProjectWrite(projectId, async () => {
+      const context = await resolveProjectContext(projectId);
+      if (!context.taskStore) throw new Error("任务存储不可用");
+      const resolvedProjectId = context.project?.id || projectId;
       const safeTask = { ...task };
       if (context.project || projectId || task?.projectId) {
         safeTask.projectId = resolvedProjectId || task.projectId;
@@ -344,10 +547,10 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("delete-task", async (_event, { projectId, id }) => {
-    const context = await resolveProjectContext(projectId);
-    if (!context.taskStore) throw new Error("任务存储不可用");
-    const resolvedProjectId = context.project?.id || projectId;
-    return withProjectWrite(resolvedProjectId, async () => {
+    return withProjectWrite(projectId, async () => {
+      const context = await resolveProjectContext(projectId);
+      if (!context.taskStore) throw new Error("任务存储不可用");
+      const resolvedProjectId = context.project?.id || projectId;
       await context.taskStore.deleteTask(id);
       if (context.project && projectLibrary) {
         await projectLibrary.touchProjectActivity(context.project.id);
@@ -356,11 +559,16 @@ export function registerIpcHandlers(ipcMain, context) {
     });
   });
 
-  ipcMain.handle("get-ocr-settings", async () => ({
-    pythonPath: runtimeSettings?.ocrPythonPath || "",
-    setupCompleted: Boolean(runtimeSettings?.ocrSetupCompleted),
-    setupSkipped: Boolean(runtimeSettings?.ocrSetupSkipped),
-  }));
+  ipcMain.handle("get-ocr-settings", async () => {
+    const envPythonPath = effectiveRuntimeEnv().PADDLEOCR_PYTHON;
+    return {
+      // Include .env/OS fallbacks in the display while retaining the legacy
+      // settings-store fallback for isolated test/recovery contexts.
+      pythonPath: envPythonPath || runtimeSettings?.ocrPythonPath || "",
+      setupCompleted: Boolean(runtimeSettings?.ocrSetupCompleted),
+      setupSkipped: Boolean(runtimeSettings?.ocrSetupSkipped),
+    };
+  });
 
   ipcMain.handle("save-ocr-settings", async (_event, body) => {
     if (!settingsStore) throw new Error("设置存储不可用");
@@ -378,7 +586,10 @@ export function registerIpcHandlers(ipcMain, context) {
 
       // Validate before changing memory or disk, so a failed check cannot make
       // an unusable interpreter look like a completed OCR setup.
-      const checkResult = await checkOcr({ pythonPath });
+      const checkResult = await checkOcr({
+        pythonPath,
+        env: effectiveRuntimeEnv(),
+      });
       if (!checkResult?.ok) {
         throw new Error(
           checkResult?.error?.message || "PaddleOCR 检测失败，未保存设置。",
@@ -393,6 +604,15 @@ export function registerIpcHandlers(ipcMain, context) {
     }
     const savedSettings = await settingsStore.save(nextSettings);
     Object.assign(runtimeSettings, savedSettings || nextSettings);
+    if (globalConfigStore) {
+      const nextGlobalConfig = { ...runtimeGlobalConfig };
+      if (body?.skip === true) delete nextGlobalConfig.PADDLEOCR_PYTHON;
+      else nextGlobalConfig.PADDLEOCR_PYTHON = runtimeSettings.ocrPythonPath;
+      const savedGlobalConfig = await globalConfigStore.save(nextGlobalConfig);
+      for (const key of Object.keys(runtimeGlobalConfig)) delete runtimeGlobalConfig[key];
+      Object.assign(runtimeGlobalConfig, savedGlobalConfig?.values || nextGlobalConfig);
+    }
+    refreshRuntimeSettings?.();
     return {
       pythonPath: runtimeSettings.ocrPythonPath,
       setupCompleted: runtimeSettings.ocrSetupCompleted,
@@ -401,18 +621,81 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("check-ocr", async (_event, body) =>
-    checkOcr({ pythonPath: String(body?.pythonPath ?? "").trim() }),
+    checkOcr({
+      pythonPath: String(body?.pythonPath ?? "").trim(),
+      env: effectiveRuntimeEnv(),
+    }),
   );
+
+  ipcMain.handle("check-vision-ocr", async () =>
+    checkVision({ env: runtimeEnv() }),
+  );
+
+  // Read-only view over the local application log. The handler degrades to an
+  // empty result when logging is not wired (unit contexts, degraded start) so
+  // the viewer stays usable instead of surfacing an error for advisory data.
+  ipcMain.handle("logs-read", async (_event, body = {}) => {
+    if (!logger?.readEntries) return { entries: [], hasMore: false };
+    return logger.readEntries({
+      limit: body?.limit,
+      level: body?.level,
+      category: typeof body?.category === "string" && body.category
+        ? body.category
+        : undefined,
+    });
+  });
 
   async function resolveProjectContext(projectId, { readOnly = false } = {}) {
     if (!projectRuntime) throw new Error("项目运行时不可用");
     if (!projectId) throw new Error("请先选择项目");
+    if (deletingProjects.has(projectId)) throw projectDeleteBusy();
     return projectRuntime.get(projectId, { allowArchived: readOnly });
   }
 
+  function beginProjectRead(projectId) {
+    if (!projectId) throw new Error("请先选择项目");
+    if (deletingProjects.has(projectId)) throw projectDeleteBusy();
+    activeProjectReads.set(
+      projectId,
+      Number(activeProjectReads.get(projectId) || 0) + 1,
+    );
+  }
+
+  function endProjectRead(projectId) {
+    const remaining = Number(activeProjectReads.get(projectId) || 0) - 1;
+    if (remaining > 0) {
+      activeProjectReads.set(projectId, remaining);
+      return;
+    }
+    activeProjectReads.delete(projectId);
+    const drains = projectReadDrains.get(projectId);
+    projectReadDrains.delete(projectId);
+    drains?.forEach((resolve) => resolve());
+  }
+
+  async function waitForProjectReads(projectId) {
+    if (!Number(activeProjectReads.get(projectId))) return;
+    await new Promise((resolve) => {
+      const drains = projectReadDrains.get(projectId) || [];
+      drains.push(resolve);
+      projectReadDrains.set(projectId, drains);
+    });
+  }
+
+  async function withProjectRead(projectId, operation) {
+    beginProjectRead(projectId);
+    try {
+      return await operation();
+    } finally {
+      endProjectRead(projectId);
+    }
+  }
+
   function beginProjectWrite(projectId) {
+    if (!projectId) throw new Error("请先选择项目");
     assertLibraryWritable();
     if (archivingProjects.has(projectId)) throw projectArchiveBusy();
+    if (deletingProjects.has(projectId)) throw projectDeleteBusy();
     activeProjectWrites.set(
       projectId,
       Number(activeProjectWrites.get(projectId) || 0) + 1,
@@ -454,7 +737,7 @@ export function registerIpcHandlers(ipcMain, context) {
 
   async function withLibraryTransfer(operation) {
     assertLibraryWritable();
-    if (activeLibraryWrites || activeProjectWrites.size || archivingProjects.size) {
+    if (activeLibraryWrites || activeProjectWrites.size || archivingProjects.size || deletingProjects.size) {
       const error = new Error("项目库仍有任务正在写入，完成后才能继续");
       error.code = "LIBRARY_BUSY";
       throw error;
@@ -471,10 +754,35 @@ export function registerIpcHandlers(ipcMain, context) {
       if (!restartRequired) libraryTransferInProgress = false;
     }
   }
+
+  function createActiveRecognition(controller) {
+    let resolveSettled;
+    const settled = new Promise((resolve) => { resolveSettled = resolve; });
+    return { controller, settled, resolveSettled };
+  }
+
+  function addActiveRecognition(projectId, recognition) {
+    const recognitions = activeRecognitions.get(projectId) || new Set();
+    recognitions.add(recognition);
+    activeRecognitions.set(projectId, recognitions);
+  }
+
+  function removeActiveRecognition(projectId, recognition) {
+    const recognitions = activeRecognitions.get(projectId);
+    if (!recognitions) return;
+    recognitions.delete(recognition);
+    if (!recognitions.size) activeRecognitions.delete(projectId);
+  }
 }
 
-function projectWriteBusy() {
-  const error = new Error("项目正在写入数据，完成后才能归档");
+function projectWriteBusy(action = "归档") {
+  const error = new Error(`项目正在写入数据，完成后才能${action}`);
+  error.code = "PROJECT_BUSY";
+  return error;
+}
+
+function projectDeleteBusy() {
+  const error = new Error("项目正在归档或删除，无法继续操作");
   error.code = "PROJECT_BUSY";
   return error;
 }
@@ -486,6 +794,12 @@ function projectArchiveBusy() {
 }
 
 function recognitionInput(body, workflowConfig, projectSettings) {
+  if (Object.hasOwn(body || {}, "pdfDataUrl")) {
+    const error = new Error("原始 PDF 直传已停用，请先在本地将 PDF 转为逐页图片后再识别。");
+    error.status = 400;
+    error.providerError = false;
+    throw error;
+  }
   const settings = projectSettings || projectSettingsFromWorkflow(workflowConfig);
   return {
     // Provider/model/prompt are task defaults selected in the workspace. The
@@ -495,7 +809,6 @@ function recognitionInput(body, workflowConfig, projectSettings) {
     imageDataUrl: body.imageDataUrl,
     imageDataUrls: body.imageDataUrls,
     imageDataGroups: body.imageDataGroups,
-    pdfDataUrl: body.pdfDataUrl,
     pageCount: body.pageCount,
     filename: body.filename,
     // Electron accuracy is project-owned; the workspace mirrors this value
@@ -556,4 +869,33 @@ function clientRecognitionResult(result) {
     delete publicResult.usage.cost;
   }
   return publicResult;
+}
+
+/**
+ * Keep the progress stream in one logging tee next to the existing IPC send.
+ * The log is useful after a renderer crash, so a destroyed sender must not
+ * suppress it; only the UI delivery is guarded by `isDestroyed()` above.
+ */
+function logRecognitionProgress(logger, event = {}) {
+  if (!logger) return;
+  const numericPercent = Number(event.percent);
+  const percent = Number.isFinite(numericPercent) ? Math.round(numericPercent) : null;
+  const message = [
+    percent === null ? null : `${percent}%`,
+    event.message || "识别进度",
+    event.warning || null,
+  ].filter(Boolean).join(" · ");
+  const meta = {
+    phase: event.phase,
+    percent,
+    completed: event.completed,
+    total: event.total,
+    completedViews: event.completedViews,
+    totalViews: event.totalViews,
+    viewIndex: event.viewIndex,
+    pageNumber: event.pageNumber,
+    cacheHit: event.cacheHit,
+  };
+  const level = event.warning ? "warn" : "info";
+  logger[level]("recognition", message, meta);
 }

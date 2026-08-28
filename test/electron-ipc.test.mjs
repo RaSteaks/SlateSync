@@ -54,19 +54,25 @@ describe("electron IPC handlers", () => {
 
     const expectedChannels = [
       "get-config",
+      "get-global-settings",
+      "save-global-settings",
       "list-projects",
       "get-library-info",
       "import-project-library",
       "export-project-library",
       "change-library-location",
+      "rename-library",
       "create-project",
       "load-project",
       "update-project",
       "archive-project",
       "restore-project",
+      "delete-project",
       "save-provider-key",
       "get-models",
+      "check-compatible-json-schema",
       "recognize",
+      "cancel-recognition",
       "save-file",
       "select-directory",
       "scan-slate-directory",
@@ -80,6 +86,8 @@ describe("electron IPC handlers", () => {
       "get-ocr-settings",
       "save-ocr-settings",
       "check-ocr",
+      "check-vision-ocr",
+      "logs-read",
     ];
     for (const channel of expectedChannels) {
       assert.ok(
@@ -101,6 +109,86 @@ describe("electron IPC handlers", () => {
     assert.ok(config.workflow);
   });
 
+  it("checks compatible JSON Schema through an injected capability probe", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeEnv: () => ({ OPENAI_COMPATIBLE_MODEL: "local-vision" }),
+      checkJsonSchema: async ({ env }) => {
+        calls.push(env.OPENAI_COMPATIBLE_MODEL);
+        return {
+          supported: true,
+          model: env.OPENAI_COMPATIBLE_MODEL,
+          transport: "chat-completions",
+          status: 200,
+          checkedAt: "2026-08-26T00:00:00.000Z",
+          message: "ok",
+        };
+      },
+    }));
+
+    assert.deepEqual(
+      await ipcMain.invoke("check-compatible-json-schema"),
+      {
+        supported: true,
+        model: "local-vision",
+        transport: "chat-completions",
+        status: 200,
+        checkedAt: "2026-08-26T00:00:00.000Z",
+        message: "ok",
+      },
+    );
+    assert.deepEqual(calls, ["local-vision"]);
+  });
+
+  it("checks Vision OCR through the injected Main-side bridge probe", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeEnv: () => ({ VISIONOCR_BINARY: "/synthetic/vision-ocr" }),
+      checkVision: async ({ env }) => {
+        calls.push(env.VISIONOCR_BINARY);
+        return {
+          ok: true,
+          engine: "Vision",
+          modelVersion: "macOS-Vision",
+          systemVersion: "15.0",
+        };
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("check-vision-ocr"), {
+      ok: true,
+      engine: "Vision",
+      modelVersion: "macOS-Vision",
+      systemVersion: "15.0",
+    });
+    assert.deepEqual(calls, ["/synthetic/vision-ocr"]);
+  });
+
+  it("reads local logs through the additive filtered IPC handler", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      logger: {
+        readEntries: async (request) => {
+          calls.push(request);
+          return { entries: [{ timestamp: "2026-08-26 10:00:00.000", level: "warn", category: "recognition", message: "OCR 降级" }], hasMore: false };
+        },
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("logs-read", {
+      limit: 25,
+      level: "warn",
+      category: "recognition",
+    }), {
+      entries: [{ timestamp: "2026-08-26 10:00:00.000", level: "warn", category: "recognition", message: "OCR 降级" }],
+      hasMore: false,
+    });
+    assert.deepEqual(calls, [{ limit: 25, level: "warn", category: "recognition" }]);
+  });
+
   it("dispatches Project Library transfer actions", async () => {
     const calls = [];
     const ipcMain = createMockIpcMain();
@@ -118,6 +206,10 @@ describe("electron IPC handlers", () => {
           calls.push("location");
           return { canceled: true };
         },
+        renameLibrary: async (name) => {
+          calls.push(`rename:${name}`);
+          return { canceled: false, restartRequired: true, library: { path: "/renamed" } };
+        },
       },
     }));
 
@@ -131,7 +223,12 @@ describe("electron IPC handlers", () => {
     assert.deepEqual(await ipcMain.invoke("change-library-location"), {
       canceled: true,
     });
-    assert.deepEqual(calls, ["import", "export", "location"]);
+    assert.deepEqual(await ipcMain.invoke("rename-library", { name: "新名称" }), {
+      canceled: false,
+      restartRequired: true,
+      library: { path: "/renamed" },
+    });
+    assert.deepEqual(calls, ["import", "export", "location", "rename:新名称"]);
   });
 
   it("does not export while a project is being created", async () => {
@@ -207,6 +304,167 @@ describe("electron IPC handlers", () => {
     );
   });
 
+  it("closes a project runtime before deleting its library entry", async () => {
+    const calls = [];
+    const projectId = "project-delete";
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        deleteProject: async (id) => {
+          calls.push(`delete:${id}`);
+          return { deleted: id };
+        },
+      },
+      projectRuntime: {
+        closeProject: async (id) => calls.push(`close:${id}`),
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("delete-project", { id: projectId }), { deleted: projectId });
+    assert.deepEqual(calls, [`close:${projectId}`, `delete:${projectId}`]);
+  });
+
+  it("drains active project reads and rejects new reads while deleting", async () => {
+    const projectId = "project-delete-read-race";
+    let releaseRead;
+    let signalReadStarted;
+    const readStarted = new Promise((resolve) => { signalReadStarted = resolve; });
+    const readGate = new Promise((resolve) => { releaseRead = resolve; });
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        deleteProject: async (id) => {
+          calls.push(`delete:${id}`);
+          return { deleted: id };
+        },
+      },
+      projectRuntime: {
+        get: async () => ({
+          project: { id: projectId },
+          taskStore: {
+            listTasks: async () => {
+              signalReadStarted();
+              await readGate;
+              return [];
+            },
+          },
+        }),
+        closeProject: async (id) => calls.push(`close:${id}`),
+      },
+    }));
+
+    const reading = ipcMain.invoke("list-tasks", { projectId });
+    await readStarted;
+    const deletion = ipcMain.invoke("delete-project", { id: projectId });
+    await assert.rejects(
+      () => ipcMain.invoke("load-task", { projectId, id: "task-1" }),
+      /项目正在归档或删除/,
+    );
+    assert.deepEqual(calls, []);
+    releaseRead();
+    await reading;
+    assert.deepEqual(await deletion, { deleted: projectId });
+    assert.deepEqual(calls, [`close:${projectId}`, `delete:${projectId}`]);
+  });
+
+  it("waits for an active recognition to release its leases before confirming cancellation", async () => {
+    let signalStarted;
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    let signalAborted;
+    const aborted = new Promise((resolve) => { signalAborted = resolve; });
+    let releaseRecognition;
+    const recognitionGate = new Promise((resolve) => { releaseRecognition = resolve; });
+    const lifecycle = [];
+    const project = {
+      id: "project-cancel",
+      settings: {
+        accuracyMode: "standard",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+      },
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      recognitionLimiter: {
+        acquire: () => {
+          lifecycle.push("acquire");
+          return () => lifecycle.push("release");
+        },
+      },
+      projectLibrary: { touchProjectActivity: async () => {} },
+      projectRuntime: {
+        get: async () => ({ project, scenarioStore: null, diagnostics: null, taskStore: null }),
+      },
+      recognize: async (_input, { signal }) => new Promise((_resolve, reject) => {
+        signalStarted();
+        signal.addEventListener("abort", () => {
+          signalAborted();
+          recognitionGate.then(() => {
+            const error = new Error("识别已停止");
+            error.code = "RECOGNITION_CANCELED";
+            reject(error);
+          });
+        }, { once: true });
+      }),
+    }));
+
+    const recognition = ipcMain.invoke("recognize", { projectId: project.id, provider: "openai", model: "test-model", filename: "slate.png" });
+    await started;
+    const rejection = assert.rejects(() => recognition, /识别已停止/);
+    const cancelling = ipcMain.invoke("cancel-recognition", { projectId: project.id });
+    await aborted;
+    let cancellationSettled = false;
+    void cancelling.then(() => { cancellationSettled = true; });
+    await Promise.resolve();
+    assert.equal(cancellationSettled, false);
+    assert.deepEqual(lifecycle, ["acquire"]);
+    releaseRecognition();
+    await rejection;
+    assert.deepEqual(await cancelling, { canceled: true });
+    assert.deepEqual(lifecycle, ["acquire", "release"]);
+    assert.deepEqual(await ipcMain.invoke("cancel-recognition", { projectId: project.id }), { canceled: false });
+  });
+
+  it("rejects legacy PDF-only recognition in Main before invoking the model", async () => {
+    const project = {
+      id: "project-legacy-pdf",
+      settings: {
+        accuracyMode: "standard",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+      },
+    };
+    let recognizeCalls = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectRuntime: {
+        get: async () => ({ project, scenarioStore: null, diagnostics: null, taskStore: null }),
+      },
+      recognize: async () => {
+        recognizeCalls += 1;
+        throw new Error("model must not be called");
+      },
+    }));
+
+    // The Main boundary is the last compatibility gate before provider code;
+    // legacy raw PDF input must fail locally with zero model invocations.
+    await assert.rejects(
+      () => ipcMain.invoke("recognize", {
+        projectId: project.id,
+        provider: "openai",
+        model: "test-model",
+        pdfDataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
+      }),
+      (error) => error.status === 400 && /逐页图片/.test(error.message),
+    );
+    assert.equal(recognizeCalls, 0);
+  });
+
   it("save-provider-key rejects unknown provider", async () => {
     const ipcMain = createMockIpcMain();
     registerIpcHandlers(ipcMain, createMockContext());
@@ -217,18 +475,98 @@ describe("electron IPC handlers", () => {
     );
   });
 
-  it("save-provider-key rejects openai-compatible", async () => {
+  it("save-provider-key supports openai-compatible when its endpoint and model are present", async () => {
+    const runtimeProviderKeys = new Map();
     const ipcMain = createMockIpcMain();
-    registerIpcHandlers(ipcMain, createMockContext());
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeProviderKeys,
+      runtimeEnv: () => ({
+        OPENAI_COMPATIBLE_BASE_URL: "https://local.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "local-vision",
+      }),
+    }));
+
+    const result = await ipcMain.invoke("save-provider-key", {
+      provider: "openai-compatible",
+      apiKey: "sk-test",
+    });
+    assert.deepEqual(result, { provider: "openai-compatible", configured: true });
+  });
+
+  it("global settings persist validated non-secret overrides and refresh runtime settings", async () => {
+    const runtimeGlobalConfig = { MAX_BODY_MB: "80" };
+    const saves = [];
+    let refreshCount = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeGlobalConfig,
+      globalConfigStore: {
+        save: async (values) => {
+          const saved = { version: 1, values: { ...values } };
+          saves.push(saved);
+          return saved;
+        },
+      },
+      runtimeEnv: () => ({
+        MAX_BODY_MB: runtimeGlobalConfig.MAX_BODY_MB || "80",
+        SLATESYNC_CONFIG_PATH: runtimeGlobalConfig.SLATESYNC_CONFIG_PATH || "slatesync.config.json",
+      }),
+      refreshRuntimeSettings: () => { refreshCount += 1; },
+    }));
+
+    const initial = await ipcMain.invoke("get-global-settings");
+    assert.equal(initial.values.MAX_BODY_MB, "80");
+    assert.deepEqual(initial.overrides, ["MAX_BODY_MB"]);
 
     await assert.rejects(
-      () =>
-        ipcMain.invoke("save-provider-key", {
-          provider: "openai-compatible",
-          apiKey: "sk-test",
-        }),
-      { message: "OpenAI 兼容 API 需通过环境变量配置" },
+      () => ipcMain.invoke("save-global-settings", { values: { OPENAI_API_KEY: "secret" } }),
+      /不支持的全局配置项/,
     );
+
+    const saved = await ipcMain.invoke("save-global-settings", {
+      values: { MAX_BODY_MB: "120", OPENAI_BASE_URL: "https://local.example/v1" },
+    });
+    assert.equal(saved.values.MAX_BODY_MB, "120");
+    assert.deepEqual(saved.overrides, ["OPENAI_BASE_URL", "MAX_BODY_MB"]);
+    assert.equal(saved.restartRequired, false);
+    assert.deepEqual(saves.at(-1).values, { MAX_BODY_MB: "120", OPENAI_BASE_URL: "https://local.example/v1" });
+
+    const pathChange = await ipcMain.invoke("save-global-settings", {
+      values: { SLATESYNC_CONFIG_PATH: "custom.config.json" },
+    });
+    assert.equal(pathChange.restartRequired, true);
+
+    const cleared = await ipcMain.invoke("save-global-settings", { values: { MAX_BODY_MB: "" } });
+    assert.equal(cleared.values.MAX_BODY_MB, "80");
+    assert.equal(cleared.overrides.includes("MAX_BODY_MB"), false);
+    assert.ok(refreshCount >= 3);
+  });
+
+  it("global OCR path changes clear a stale first-run completion marker", async () => {
+    const runtimeGlobalConfig = { PADDLEOCR_PYTHON: "/old/bin/python" };
+    const runtimeSettings = {
+      ocrPythonPath: "/old/bin/python",
+      ocrSetupCompleted: true,
+      ocrSetupSkipped: false,
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeGlobalConfig,
+      runtimeSettings,
+      settingsStore: { save: async () => {} },
+      globalConfigStore: {
+        save: async (values) => ({ version: 1, values: { ...values } }),
+      },
+      runtimeEnv: () => ({ PADDLEOCR_PYTHON: runtimeGlobalConfig.PADDLEOCR_PYTHON }),
+    }));
+
+    await ipcMain.invoke("save-global-settings", {
+      values: { PADDLEOCR_PYTHON: "" },
+    });
+
+    assert.equal(runtimeSettings.ocrPythonPath, "");
+    assert.equal(runtimeSettings.ocrSetupCompleted, false);
+    assert.equal(runtimeSettings.ocrSetupSkipped, false);
   });
 
   it("save-provider-key stores and clears keys", async () => {
@@ -324,6 +662,67 @@ describe("electron IPC handlers", () => {
       id: "task-123",
       patch: { ...patch, projectId },
     }]);
+  });
+
+  it("completes an existing draft instead of creating a second task", async () => {
+    const project = {
+      id: "project-draft-completion",
+      settings: {
+        accuracyMode: "high",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+      },
+    };
+    const updates = [];
+    const persisted = new Map([[
+      "draft-task-1",
+      { id: "draft-task-1", status: "draft", resolveCsvFilename: "timeline.csv" },
+    ]]);
+    const taskStore = {
+      updateTask: async (id, patch) => {
+        updates.push({ id, patch });
+        persisted.set(id, { ...persisted.get(id), ...patch, id });
+        return id;
+      },
+      saveTask: async () => assert.fail("a persisted draft must not be duplicated"),
+    };
+    const projectRuntime = {
+      get: async () => ({ project, scenarioStore: null, diagnostics: null, taskStore }),
+    };
+    const recognize = async () => ({
+      provider: "openai",
+      model: "test-model",
+      pageCount: 1,
+      accuracyMode: "high",
+      result: { records: [{ scene: "001", shot: "01", take: "01" }] },
+      usage: null,
+      durationMs: 1,
+      ocr: null,
+      scenario: null,
+    });
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({ projectRuntime, recognize }));
+
+    const result = await ipcMain.invoke("recognize", {
+      projectId: project.id,
+      taskId: "draft-task-1",
+      provider: "openai",
+      model: "test-model",
+      filename: "slate.png",
+    });
+
+    assert.equal(result.taskId, "draft-task-1");
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].id, "draft-task-1");
+    assert.equal(updates[0].patch.status, "completed");
+    assert.equal(updates[0].patch.filename, "slate.png");
+    assert.equal(updates[0].patch.result.records.length, 1);
+    assert.deepEqual(updates[0].patch.editedRecords, updates[0].patch.result.records);
+    assert.equal(persisted.size, 1);
+    assert.equal(persisted.get("draft-task-1").status, "completed");
+    assert.equal(persisted.get("draft-task-1").resolveCsvFilename, "timeline.csv");
   });
 
   it("blocks project archival until an in-flight recognition finishes", async () => {

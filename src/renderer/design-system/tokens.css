@@ -6,22 +6,32 @@
  */
 :root {
   color-scheme: dark;
-  font-family: "Avenir Next", "SF Pro Display", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+  /* Prefer the native macOS metrics so Chinese and Latin labels share a
+     calmer baseline in the compact sidebar and dense data views. */
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   font-synthesis: none;
-  --ss-font-body: "Avenir Next", "SF Pro Text", "Segoe UI", "PingFang SC", system-ui, sans-serif;
-  --ss-font-display: "Avenir Next", "SF Pro Display", "Segoe UI", "PingFang SC", system-ui, sans-serif;
-  --ss-font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ss-font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Arial, sans-serif;
+  --ss-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Arial, sans-serif;
+  --ss-font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
 
-  --ss-color-canvas: #0b0f16;
-  --ss-color-surface: #111827;
-  --ss-color-surface-raised: #172131;
-  --ss-color-surface-sunken: #0a0e15;
-  --ss-color-surface-hover: #1d2a3d;
-  --ss-color-ink: #f3f6fb;
-  --ss-color-ink-muted: #a7b3c4;
-  --ss-color-ink-subtle: #7d8ca3;
-  --ss-color-line: rgba(190, 207, 230, 0.14);
-  --ss-color-line-strong: rgba(190, 207, 230, 0.27);
+  /* Three graphite surfaces keep the canvas, sidebar, and controls distinct
+     without falling back to the flat neutral-gray block in the reference. */
+  --ss-color-canvas: #0d121a;
+  --ss-color-surface: #151d29;
+  --ss-color-surface-raised: #1c2735;
+  --ss-color-surface-sunken: #0a0f16;
+  --ss-color-surface-hover: #202d3d;
+  --ss-color-control: #182231;
+  --ss-color-control-hover: #223247;
+  --ss-color-control-active: #2a3a50;
+  --ss-color-ink: #f4f7fb;
+  --ss-color-ink-muted: #b8c2cf;
+  --ss-color-ink-subtle: #8e9caf;
+  --ss-color-surface-line: rgba(191, 207, 226, 0.08);
+  --ss-color-line: rgba(191, 207, 226, 0.14);
+  --ss-color-line-strong: rgba(191, 207, 226, 0.28);
   --ss-color-accent: #8c9cff;
   --ss-color-accent-strong: #5e6ee8;
   --ss-color-accent-soft: rgba(140, 156, 255, 0.14);
@@ -61,28 +71,55 @@
   --ss-motion-base: 180ms;
   --ss-motion-slow: 240ms;
   --ss-ease: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --ss-ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
 
   --ss-z-sticky: 10;
   --ss-z-dropdown: 30;
   --ss-z-overlay: 60;
   --ss-z-toast: 80;
   --ss-control-height: 40px;
+  --ss-control-padding-inline: 14px;
+  --ss-control-padding-block: 9px;
+  --ss-nav-icon-size: 18px;
+  --ss-nav-label-line-height: 1.35;
+  --ss-panel-padding: 20px;
+  --ss-layout-gap: 16px;
   --ss-header-height: 68px;
   --ss-sidebar-width: 248px;
 }
 
+:root[data-density="compact"] {
+  --ss-space-3: 10px;
+  --ss-space-4: 14px;
+  --ss-space-5: 16px;
+  --ss-space-6: 20px;
+  --ss-space-8: 26px;
+  --ss-space-10: 32px;
+  --ss-space-12: 40px;
+  --ss-control-height: 36px;
+  --ss-control-padding-inline: 11px;
+  --ss-control-padding-block: 7px;
+  --ss-panel-padding: 16px;
+  --ss-layout-gap: 12px;
+  --ss-header-height: 60px;
+}
+
 :root[data-theme="light"] {
   color-scheme: light;
-  --ss-color-canvas: #e9edf3;
-  --ss-color-surface: #f8fafc;
+  --ss-color-canvas: #f1f4f7;
+  --ss-color-surface: #fbfcfd;
   --ss-color-surface-raised: #ffffff;
-  --ss-color-surface-sunken: #dde4ed;
-  --ss-color-surface-hover: #eef2f8;
-  --ss-color-ink: #192231;
-  --ss-color-ink-muted: #4c5b70;
-  --ss-color-ink-subtle: #5f6f84;
-  --ss-color-line: rgba(34, 51, 73, 0.15);
-  --ss-color-line-strong: rgba(34, 51, 73, 0.26);
+  --ss-color-surface-sunken: #e5ebf1;
+  --ss-color-surface-hover: #edf2f6;
+  --ss-color-control: #e8eef4;
+  --ss-color-control-hover: #dfe7ef;
+  --ss-color-control-active: #d6e0ea;
+  --ss-color-ink: #182330;
+  --ss-color-ink-muted: #506074;
+  --ss-color-ink-subtle: #5d6d82;
+  --ss-color-surface-line: rgba(24, 35, 48, 0.08);
+  --ss-color-line: rgba(24, 35, 48, 0.12);
+  --ss-color-line-strong: rgba(24, 35, 48, 0.23);
   --ss-color-accent: #3f50ba;
   --ss-color-accent-strong: #2f3d9a;
   --ss-color-accent-soft: rgba(63, 80, 186, 0.1);

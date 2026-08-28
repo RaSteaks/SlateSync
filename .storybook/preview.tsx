@@ -1,4 +1,7 @@
+/// <reference types="vite/client" />
+
 import type { Preview } from "@storybook/react-vite";
+// Load the renderer design tokens globally for every component story.
 import "../src/renderer/styles.css";
 
 const preview: Preview = {

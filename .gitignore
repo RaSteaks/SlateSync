@@ -42,3 +42,7 @@ public/vendor/
 session-*.md
 SlateSync.code-workspace
 .vscode/
+DESIGN.md
+premium-ui.json
+.gitignore
+UX-CONTRACT.md

@@ -4,13 +4,18 @@ import type {
   ConfigData,
   DirectorySelection,
   FileSaveResult,
+  GlobalSettingsData,
+  JsonSchemaCapabilityResult,
+  LogsReadResult,
   LibraryExportResult,
   LibraryImportResult,
   LibraryInfo,
   LibraryLocationResult,
+  LibraryRenameResult,
   ModelDiscoveryResult,
   OcrCheckResult,
   OcrEngineStatus,
+  OcrSelection,
   OcrSettings,
   ProgressData,
   ProjectData,
@@ -23,6 +28,7 @@ import type {
   ScenarioSummary,
   TaskData,
   TaskListItem,
+  VisionOcrCheckResult,
 } from "../../../src/shared/contracts/index";
 
 interface Listener {
@@ -71,6 +77,15 @@ const config = {
   models: [{ id: "openai/gpt", label: "GPT", description: "Vision", providers: ["openai"] }],
   ocr: ocrEngine,
   ocrEngines: [ocrEngine],
+  ocrSelection: {
+    id: null,
+    label: "未启用本地 OCR",
+    mode: "disabled",
+    reason: "没有检测到可用的本地 OCR；识别将降级为页面图片识别。",
+    available: false,
+    enabled: false,
+    required: false,
+  } satisfies OcrSelection,
   upload: { acceptedTypes: ["image/png"], maxBytes: 20, maxRequestBytes: 40 },
   workflow: {
     slate: { maxDirectoryDepth: 4 },
@@ -136,6 +151,11 @@ const exportedLibrary = {
   library: validatedLibrary,
 } satisfies LibraryExportResult;
 const changedLibrary = importedLibrary satisfies LibraryLocationResult;
+const renamedLibrary = {
+  canceled: false,
+  restartRequired: true,
+  library,
+} satisfies LibraryRenameResult;
 
 const scenarioField = {
   label: "",
@@ -356,6 +376,22 @@ const scan = {
 const saveResult = { saved: true, filePath: "/synthetic/demo.csv" } satisfies FileSaveResult;
 const ocrSettings = { pythonPath: "python3", setupCompleted: true, setupSkipped: false } satisfies OcrSettings;
 const ocrCheck = { ok: true, paddleVersion: "3", paddleOcrVersion: "3" } satisfies OcrCheckResult;
+const visionOcrCheck = { ok: true, engine: "Vision", modelVersion: "macOS-Vision", systemVersion: "15.0" } satisfies VisionOcrCheckResult;
+const globalSettings = {
+  values: {} as GlobalSettingsData["values"],
+  overrides: [],
+  keyConfigured: { openai: false },
+  restartRequired: false,
+} satisfies GlobalSettingsData;
+const jsonSchemaCheck = {
+  supported: true,
+  model: "local-vision",
+  transport: "chat-completions",
+  status: 200,
+  checkedAt: "2026-08-26T00:00:00.000Z",
+  message: "接口支持 JSON Schema，且模型返回符合探针结构。",
+} satisfies JsonSchemaCapabilityResult;
+const logsRead = { entries: [], hasMore: false } satisfies LogsReadResult;
 
 const responses: Readonly<Record<string, unknown>> = {
   "get-config": config,
@@ -364,11 +400,13 @@ const responses: Readonly<Record<string, unknown>> = {
   "import-project-library": importedLibrary,
   "export-project-library": exportedLibrary,
   "change-library-location": changedLibrary,
+  "rename-library": renamedLibrary,
   "create-project": project,
   "load-project": project,
   "update-project": project,
   "archive-project": project,
   "restore-project": project,
+  "delete-project": { deleted: project.id },
   "list-scenarios": [scenarioSummary],
   "load-scenario": scenario,
   "import-scenario": scenario,
@@ -378,13 +416,19 @@ const responses: Readonly<Record<string, unknown>> = {
   "delete-task": { deleted: "task-1" },
   "get-models": modelDiscovery,
   recognize: recognition,
+  "cancel-recognition": { canceled: true },
   "save-file": saveResult,
   "select-directory": directory,
   "scan-slate-directory": scan,
   "save-provider-key": { provider: "openai", configured: true },
+  "get-global-settings": globalSettings,
+  "save-global-settings": globalSettings,
   "get-ocr-settings": ocrSettings,
   "save-ocr-settings": ocrSettings,
   "check-ocr": ocrCheck,
+  "check-vision-ocr": visionOcrCheck,
+  "check-compatible-json-schema": jsonSchemaCheck,
+  "logs-read": logsRead,
 };
 
 function expectSuccess<T>(result: Result<T>, expected: T): void {
@@ -392,10 +436,10 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly six namespaces and exact success DTOs for all 27 operations", async () => {
+  it("exposes exactly seven namespaces and exact success DTOs for all 35 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
-    expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings"]);
+    expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings", "logs"]);
     expect(api).not.toHaveProperty("invoke");
     expect(api).not.toHaveProperty("electronAPI");
 
@@ -405,11 +449,13 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.projects.importLibrary(), importedLibrary);
     expectSuccess(await api.projects.exportLibrary(), exportedLibrary);
     expectSuccess(await api.projects.changeLibraryLocation(), changedLibrary);
+    expectSuccess(await api.projects.renameLibrary({ name: "Renamed" }), renamedLibrary);
     expectSuccess(await api.projects.create({ name: "Demo" }), project);
     expectSuccess(await api.projects.load({ id: project.id }), project);
     expectSuccess(await api.projects.update({ id: project.id, name: "Demo" }), project);
     expectSuccess(await api.projects.archive({ id: project.id }), project);
     expectSuccess(await api.projects.restore({ id: project.id }), project);
+    expectSuccess(await api.projects.delete({ id: project.id }), { deleted: project.id });
     expectSuccess(await api.projects.listScenarios({ projectId: project.id }), [scenarioSummary]);
     expectSuccess(await api.projects.loadScenario({ projectId: project.id, id: scenario.id }), scenario);
     expectSuccess(await api.projects.importScenario({ projectId: project.id, profile: scenarioProfile }), scenario);
@@ -418,19 +464,26 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.tasks.save({ projectId: project.id, task }), "task-1");
     expectSuccess(await api.tasks.delete({ projectId: project.id, id: "task-1" }), { deleted: "task-1" });
     expectSuccess(await api.recognition.getModels({ providerId: "openai", forceRefresh: true }), modelDiscovery);
-    expectSuccess(await api.recognition.run({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" }), recognition);
+    expectSuccess(await api.recognition.run({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" }), recognition);
+    expectSuccess(await api.recognition.cancel({ projectId: project.id }), { canceled: true });
     expectSuccess(await api.files.save({ defaultFilename: "demo.csv", data: new Uint8Array([1, 2, 3]) }), saveResult);
     expectSuccess(await api.files.selectDirectory(), directory);
     expectSuccess(await api.files.scanSlateDirectory({ dirPath: "/synthetic", expectedKeys: ["A:1:1"], maxDepth: 4 }), scan);
     expectSuccess(await api.settings.saveProviderKey({ provider: "openai", apiKey: "synthetic-key" }), { provider: "openai", configured: true });
+    expectSuccess(await api.settings.getGlobalSettings(), globalSettings);
+    expectSuccess(await api.settings.saveGlobalSettings({ values: { MAX_BODY_MB: "100" } }), globalSettings);
     expectSuccess(await api.settings.getOcrSettings(), ocrSettings);
     expectSuccess(await api.settings.saveOcrSettings({ pythonPath: "python3" }), ocrSettings);
     expectSuccess(await api.settings.checkOcr({ pythonPath: "python3" }), ocrCheck);
+    expectSuccess(await api.settings.checkVisionOcr(), visionOcrCheck);
+    expectSuccess(await api.settings.checkCompatibleJsonSchema(), jsonSchemaCheck);
+    expectSuccess(await api.logs.read({ limit: 10 }), logsRead);
 
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
-    expect(transport.calls[6]?.payload).toEqual({ name: "Demo" });
-    expect(transport.calls[11]?.payload).toEqual({ projectId: project.id });
-    expect(transport.calls[19]?.payload).toEqual({ provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[7]?.payload).toEqual({ name: "Demo" });
+    expect(transport.calls[13]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[21]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[22]?.payload).toEqual({ projectId: project.id });
   });
 
   it("maps the complete failure matrix without transport boilerplate, paths, or retry changes", async () => {

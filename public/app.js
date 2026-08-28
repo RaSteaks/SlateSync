@@ -61,7 +61,9 @@ import {
   loadTaskApi,
   saveTaskApi,
   deleteTaskApi,
+  getGlobalSettingsApi,
   getOcrSettingsApi,
+  saveGlobalSettingsApi,
   saveOcrSettingsApi,
   checkOcrApi,
 } from "./electron-bridge.js";
@@ -79,6 +81,7 @@ import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.mjs";
 const PDF_PREPARE_CONCURRENCY = 1;
 const MAX_DISCOVERED_MODELS = 24;
+const OPENROUTER_PRIMARY_MODELS = 10;
 
 const csvWorker = createCsvWorkerClient();
 const fallbackCsvProcessor = createCsvTaskProcessor();
@@ -108,6 +111,10 @@ const state = {
   slateCsvRecords: null,
   slateCsvFileName: null,
   ocrSettings: null,
+  globalSettings: null,
+  globalSettingsDraft: {},
+  globalSettingsDirty: new Set(),
+  globalSettingsLoading: false,
   csvEdits: new Map(),
   detailSort: { field: null, direction: 1 },
   detailSearch: "",
@@ -253,6 +260,11 @@ const elements = {
   globalApiKeyInput: document.querySelector("#global-api-key-input"),
   globalSaveKeyButton: document.querySelector("#global-save-key-button"),
   globalApiKeyNote: document.querySelector("#global-api-key-note"),
+  globalSettingsFields: document.querySelector("#global-settings-fields"),
+  globalSettingsCount: document.querySelector("#global-settings-count"),
+  globalSettingsStatus: document.querySelector("#global-settings-status"),
+  globalSettingsSave: document.querySelector("#global-settings-save"),
+  globalSettingsReset: document.querySelector("#global-settings-reset"),
   globalOcrOpen: document.querySelector("#global-ocr-open"),
   globalOcrStatus: document.querySelector("#global-ocr-status"),
   projectContext: document.querySelector("#project-context"),
@@ -269,6 +281,7 @@ const projectOperations = createLatestOperation();
 const projectModelOperations = createLatestOperation();
 const taskOperations = createLatestOperation();
 const taskListOperations = createLatestOperation();
+const legacyModelPickers = new Map();
 let allowWindowClose = false;
 
 const taskAutosave = createTaskAutosave({
@@ -295,6 +308,7 @@ async function init() {
     updateSlateDirectoryState();
     await loadProviderModels();
     renderGlobalProviderOptions();
+    await loadGlobalSettings();
     await refreshLibrary();
     renderRoute();
   } catch {
@@ -399,6 +413,8 @@ function renderRoute() {
   }
 
   if (state.route === "project-settings") renderProjectSettingsForm();
+  if (state.route === "global-settings" && !state.globalSettings) void loadGlobalSettings();
+  if (state.route === "global-settings") renderGlobalSettingsForm();
   updateProjectContextLabel();
 }
 
@@ -698,6 +714,7 @@ function renderProjectSettingsForm() {
   for (const control of elements.projectSettingsForm.elements) {
     control.disabled = readOnly;
   }
+  syncLegacyModelPicker(elements.projectModel);
   elements.projectSettingsStatus.textContent = readOnly
     ? "项目已归档，恢复后才能修改"
     : "";
@@ -820,7 +837,10 @@ function applyNewTaskRecognitionDefaults(project = state.currentProject) {
     const availableModels = [...elements.model.options].map((option) => option.value);
     const desiredModel = modelCandidates.find((modelId) =>
       availableModels.includes(modelId));
-    if (desiredModel) elements.model.value = desiredModel;
+    if (desiredModel) {
+      elements.model.value = desiredModel;
+      syncLegacyModelPicker(elements.model);
+    }
   };
   selectRememberedModel();
   elements.accuracyMode.value = settings.accuracyMode || "high";
@@ -862,11 +882,9 @@ function updateGlobalApiKeyFieldState() {
   const configurable = KEY_CONFIGURABLE_PROVIDERS.includes(provider.id);
   elements.globalApiKeyInput.disabled = !configurable;
   elements.globalSaveKeyButton.disabled = !configurable;
-  elements.globalApiKeyNote.textContent = !configurable
-    ? "OpenAI 兼容 API 需通过环境变量配置。"
-    : provider.configured
-      ? "已配置 · 输入新 Key 可覆盖，留空保存可清除"
-      : "未配置 · 粘贴 API Key 后保存";
+  elements.globalApiKeyNote.textContent = provider.configured
+    ? "已配置 · 输入新 Key 可覆盖，留空保存可清除"
+    : "未配置 · 粘贴 API Key 后保存";
 }
 
 async function saveGlobalProviderKey() {
@@ -875,13 +893,22 @@ async function saveGlobalProviderKey() {
   );
   if (!provider) return;
   try {
-    await saveProviderKeyApi(provider.id, elements.globalApiKeyInput.value.trim());
+    const savedKey = await saveProviderKeyApi(provider.id, elements.globalApiKeyInput.value.trim());
     elements.globalApiKeyInput.value = "";
     await loadConfig();
     renderProviderOptions();
     renderGlobalProviderOptions();
     renderApiStatus();
     await loadProviderModels();
+    if (state.globalSettings) {
+      state.globalSettings = {
+        ...state.globalSettings,
+        keyConfigured: {
+          ...(state.globalSettings.keyConfigured || {}),
+          [provider.id]: Boolean(savedKey?.configured),
+        },
+      };
+    }
     renderProjectSettingsForm();
     if (!state.currentTaskId) applyNewTaskRecognitionDefaults();
     elements.globalApiKeyNote.textContent = "已保存。";
@@ -906,22 +933,19 @@ function renderProjectModelOptions(
 ) {
   if (!elements.projectModel) return;
   const compatible = modelsForProvider(elements.projectProvider.value);
-  const fixed = compatible.filter((model) => model.fixed !== false);
-  const discovered = compatible.filter((model) => model.fixed === false).slice(0, MAX_DISCOVERED_MODELS);
-  const groups = [];
-  if (fixed.length) groups.push(modelOptionGroup("固定模型", fixed));
-  if (discovered.length) groups.push(modelOptionGroup("其他视觉模型", discovered));
+  const groups = modelOptionGroups(elements.projectProvider.value, compatible);
   const selectedAvailable = compatible.some((model) => model.id === selectedId);
   const rememberedOption = preserveUnknown && selectedId && !selectedAvailable
     ? `<option value="${escapeHtml(selectedId)}">${escapeHtml(selectedId)} · 已保存（当前未加载）</option>`
     : "";
   elements.projectModel.innerHTML = rememberedOption
-    + (groups.join("") || (rememberedOption
+    + (groups.map(modelOptionGroupHtml).join("") || (rememberedOption
       ? ""
       : '<option value="">没有发现可用的视觉模型</option>'));
   elements.projectModel.value = selectedAvailable || rememberedOption
     ? selectedId
     : compatible[0]?.id || "";
+  syncLegacyModelPicker(elements.projectModel, groups);
 }
 
 async function loadProviderModelsForSelect(
@@ -964,6 +988,10 @@ async function loadProviderModelsForSelect(
 }
 
 function bindEvents() {
+  // Keep the hidden native selects as the form/state source of truth while
+  // enhancing both legacy model fields with the same collapsible groups.
+  setupLegacyModelPicker(elements.model, "识别模型");
+  setupLegacyModelPicker(elements.projectModel, "识别模型");
   elements.navProjects?.addEventListener("click", () => navigate("projects"));
   elements.navWorkspace?.addEventListener("click", () => {
     if (state.currentProjectId) navigate("workspace");
@@ -1000,6 +1028,10 @@ function bindEvents() {
   });
   elements.globalProvider?.addEventListener("change", updateGlobalApiKeyFieldState);
   elements.globalSaveKeyButton?.addEventListener("click", saveGlobalProviderKey);
+  elements.globalSettingsFields?.addEventListener("input", handleGlobalSettingsInput);
+  elements.globalSettingsFields?.addEventListener("change", handleGlobalSettingsInput);
+  elements.globalSettingsSave?.addEventListener("click", () => void saveGlobalSettings());
+  elements.globalSettingsReset?.addEventListener("click", () => void saveGlobalSettings(true));
   elements.globalOcrOpen?.addEventListener("click", openOcrSetup);
 
   elements.provider.addEventListener("change", async () => {
@@ -1339,14 +1371,178 @@ function renderProviderOptions() {
   updateApiKeyFieldState();
 }
 
-// OpenAI-compatible endpoints require additional environment configuration;
-// the remaining providers can safely persist their single API key in Electron.
+// All supported providers can persist their API key through the Main process;
+// OpenAI-compatible endpoint/model details are edited in Modern Global Settings
+// (the bounded legacy page still exposes the credential action).
 const KEY_CONFIGURABLE_PROVIDERS = [
   "openai",
   "openrouter",
   "tokenplan",
   "dashscope",
+  "openai-compatible",
 ];
+
+// Keep the fallback settings form data-driven. The typed Modern Renderer has
+// richer affordances, but this inventory guarantees the recovery page cannot
+// silently lose a newly supported .env.example option.
+const GLOBAL_SETTINGS_GROUPS = [
+  {
+    title: "服务商接口",
+    fields: [
+      { key: "OPENAI_BASE_URL", label: "OpenAI Base URL", type: "url" },
+      { key: "OPENROUTER_BASE_URL", label: "OpenRouter Base URL", type: "url" },
+      { key: "OPENROUTER_SITE_URL", label: "OpenRouter 应用标识 URL", type: "url", hint: "可留空。" },
+      { key: "TOKENPLAN_BASE_URL", label: "Token Plan Base URL", type: "url" },
+      { key: "DASHSCOPE_BASE_URL", label: "DashScope Base URL", type: "url" },
+    ],
+  },
+  {
+    title: "OpenAI 兼容接口",
+    fields: [
+      { key: "OPENAI_COMPATIBLE_BASE_URL", label: "Base URL", type: "url" },
+      { key: "OPENAI_COMPATIBLE_MODEL", label: "模型 ID" },
+      { key: "OPENAI_COMPATIBLE_API_MODE", label: "请求接口", options: [["chat-completions", "Chat Completions"], ["responses", "Responses"]] },
+      { key: "OPENAI_COMPATIBLE_JSON_MODE", label: "JSON 模式", options: [["json_schema", "JSON Schema"], ["json_object", "JSON Object"], ["prompt", "Prompt 约束"]] },
+      { key: "OPENAI_COMPATIBLE_IMAGE_DETAIL", label: "图片细节", options: [["auto", "自动"], ["low", "低"], ["high", "高"], ["original", "原始"]] },
+    ],
+  },
+  {
+    title: "运行与缓存",
+    fields: [
+      { key: "SLATESYNC_CONFIG_PATH", label: "工作流配置路径", hint: "开发环境读取；修改后下次启动生效。" },
+      { key: "MAX_BODY_MB", label: "请求体上限（MB）", type: "number", min: 20, max: 200, step: 1 },
+      { key: "MODEL_REQUEST_TIMEOUT_MS", label: "模型请求超时（毫秒）", type: "number", min: 30000, max: 3600000, step: 1000 },
+      { key: "MODEL_REQUEST_MAX_RETRIES", label: "超时重试次数", type: "number", min: 0, max: 3, step: 1 },
+      { key: "MODEL_PAGE_CONCURRENCY", label: "并行提交页数", type: "number", min: 1, max: 6, step: 1 },
+      { key: "MAX_CONCURRENT_RECOGNITIONS", label: "并行识别任务数", type: "number", min: 1, max: 16, step: 1 },
+      { key: "PADDLE_PDX_CACHE_HOME", label: "Paddle 模型缓存路径", hint: "留空使用应用默认缓存目录。" },
+    ],
+  },
+  {
+    title: "Apple Vision OCR",
+    fields: [
+      { key: "VISIONOCR_ENABLED", label: "启用模式", options: [["auto", "自动"], ["true", "开启"], ["false", "关闭"]] },
+      { key: "VISIONOCR_REQUIRED", label: "必需模式", options: [["false", "可选"], ["true", "必需"]] },
+      { key: "VISIONOCR_LANGUAGE", label: "识别语言", hint: "可填写逗号分隔的语言。" },
+      { key: "VISIONOCR_RECOGNITION_LEVEL", label: "识别精度", options: [["accurate", "高精度"], ["fast", "快速"]] },
+      { key: "VISIONOCR_USE_LANGUAGE_CORRECTION", label: "语言校正", options: [["true", "启用"], ["false", "关闭"]] },
+      { key: "VISIONOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
+      { key: "VISIONOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
+      { key: "VISIONOCR_TIMEOUT_MS", label: "超时", hint: "填写 auto 或 10000–1800000 毫秒。" },
+      { key: "VISIONOCR_BINARY", label: "Vision bridge 路径", hint: "留空则自动查找。" },
+    ],
+  },
+  {
+    title: "PaddleOCR",
+    fields: [
+      { key: "PADDLEOCR_ENABLED", label: "启用模式", options: [["auto", "自动"], ["true", "开启"], ["false", "关闭"]] },
+      { key: "PADDLEOCR_REQUIRED", label: "必需模式", options: [["false", "可选"], ["true", "必需"]] },
+      { key: "PADDLEOCR_MODEL_VERSION", label: "模型版本" },
+      { key: "PADDLEOCR_PROFILE", label: "性能档", options: [["fast", "快速"], ["balanced", "平衡"], ["accurate", "高精度"]] },
+      { key: "PADDLEOCR_LANGUAGE", label: "识别语言" },
+      { key: "PADDLEOCR_DEVICE", label: "计算设备" },
+      { key: "PADDLEOCR_DETECTION_MODEL", label: "检测模型", hint: "留空使用性能档默认模型。" },
+      { key: "PADDLEOCR_RECOGNITION_MODEL", label: "识别模型", hint: "留空使用性能档默认模型。" },
+      { key: "PADDLEOCR_RECOGNITION_BATCH_SIZE", label: "识别批量大小", type: "number", min: 1, max: 64, step: 1 },
+      { key: "PADDLEOCR_PYTHON", label: "Python 环境路径", hint: "例如 .venv-paddleocr/bin/python；留空使用自动检测。" },
+      { key: "PADDLEOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
+      { key: "PADDLEOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
+      { key: "PADDLEOCR_TIMEOUT_MS", label: "OCR 超时", hint: "填写 auto 或 10000–3600000 毫秒。" },
+    ],
+  },
+];
+
+function globalFieldMarkup(field, values) {
+  const value = values?.[field.key] || "";
+  const common = `data-global-key="${escapeHtml(field.key)}" spellcheck="false"`;
+  const control = field.options
+    ? `<select ${common}>${field.options.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`
+    : `<input type="${field.type || "text"}" ${common}${field.min === undefined ? "" : ` min="${field.min}" max="${field.max}" step="${field.step}"`} value="${escapeHtml(value)}" />`;
+  return `<label class="field"><span>${escapeHtml(field.label)} <code>${escapeHtml(field.key)}</code></span>${control}${field.hint ? `<small class="global-settings-field-hint">${escapeHtml(field.hint)}</small>` : ""}</label>`;
+}
+
+function renderGlobalSettingsForm() {
+  if (!elements.globalSettingsFields) return;
+  if (!state.globalSettings) {
+    elements.globalSettingsFields.innerHTML = '<p class="settings-help">正在读取本机全局配置…</p>';
+    if (elements.globalSettingsCount) elements.globalSettingsCount.textContent = "读取中";
+    return;
+  }
+  const values = state.globalSettingsDraft;
+  elements.globalSettingsFields.innerHTML = GLOBAL_SETTINGS_GROUPS.map((group, index) => `
+    <details class="global-settings-group"${index === 0 ? " open" : ""}>
+      <summary>${escapeHtml(group.title)}</summary>
+      <div class="global-settings-group-fields">${group.fields.map((field) => globalFieldMarkup(field, values)).join("")}</div>
+    </details>
+  `).join("");
+  if (elements.globalSettingsCount) {
+    elements.globalSettingsCount.textContent = `已覆盖 ${state.globalSettings.overrides?.length || 0} 项`;
+  }
+  if (elements.globalSettingsSave) elements.globalSettingsSave.disabled = state.globalSettingsLoading;
+  if (elements.globalSettingsReset) elements.globalSettingsReset.disabled = state.globalSettingsLoading;
+}
+
+function setGlobalSettingsStatus(message, isError = false) {
+  if (!elements.globalSettingsStatus) return;
+  elements.globalSettingsStatus.textContent = message;
+  elements.globalSettingsStatus.classList.toggle("error", isError);
+}
+
+async function loadGlobalSettings() {
+  if (!elements.globalSettingsFields || state.globalSettingsLoading) return;
+  state.globalSettingsLoading = true;
+  renderGlobalSettingsForm();
+  try {
+    const data = await getGlobalSettingsApi();
+    state.globalSettings = data;
+    state.globalSettingsDraft = { ...(data.values || {}) };
+    state.globalSettingsDirty = new Set();
+    setGlobalSettingsStatus("");
+    renderGlobalSettingsForm();
+  } catch (error) {
+    setGlobalSettingsStatus(error.message || "读取全局配置失败。", true);
+  } finally {
+    state.globalSettingsLoading = false;
+    renderGlobalSettingsForm();
+  }
+}
+
+function handleGlobalSettingsInput(event) {
+  const key = event.target?.dataset?.globalKey;
+  if (!key) return;
+  state.globalSettingsDraft[key] = event.target.value;
+  state.globalSettingsDirty.add(key);
+  setGlobalSettingsStatus("有未保存修改");
+}
+
+async function saveGlobalSettings(reset = false) {
+  if (!state.globalSettings || state.globalSettingsLoading) return;
+  state.globalSettingsLoading = true;
+  renderGlobalSettingsForm();
+  try {
+    const values = {};
+    if (!reset) {
+      // Resolved values include .env/defaults; send only dirty fields so a
+      // normal save does not materialize inherited values as overrides.
+      for (const key of state.globalSettingsDirty) values[key] = state.globalSettingsDraft[key] || "";
+    }
+    const data = await saveGlobalSettingsApi(reset ? { reset: true } : { values });
+    state.globalSettings = data;
+    state.globalSettingsDraft = { ...(data.values || {}) };
+    state.globalSettingsDirty = new Set();
+    await loadConfig();
+    renderProviderOptions();
+    renderGlobalProviderOptions();
+    renderModelOptions();
+    renderApiStatus();
+    setGlobalSettingsStatus(data.restartRequired ? "已保存；工作流路径下次启动生效。" : reset ? "已恢复 .env 与内置默认。" : "已保存。");
+  } catch (error) {
+    setGlobalSettingsStatus(error.message || "保存全局配置失败。", true);
+  } finally {
+    state.globalSettingsLoading = false;
+    renderGlobalSettingsForm();
+  }
+}
 
 function updateApiKeyFieldState() {
   const provider = selectedProvider();
@@ -1401,20 +1597,9 @@ function renderModelOptions() {
   const providerId = elements.provider.value;
   const compatible = modelsForProvider(providerId);
   const previous = elements.model.value;
-
-  const fixed = compatible.filter((model) => model.fixed !== false);
-  const discovered = compatible.filter((model) => model.fixed === false);
-  const ranked = discovered.slice(0, MAX_DISCOVERED_MODELS);
-  const groups = [];
-  if (fixed.length) {
-    groups.push(modelOptionGroup("固定模型", fixed));
-  }
-  if (ranked.length) {
-    const suffix = discovered.length > ranked.length ? `（前 ${ranked.length}）` : "";
-    groups.push(modelOptionGroup(`其他视觉模型${suffix}`, ranked));
-  }
+  const groups = modelOptionGroups(providerId, compatible);
   elements.model.innerHTML = groups.length
-    ? groups.join("")
+    ? groups.map(modelOptionGroupHtml).join("")
     : '<option value="">没有发现可用的视觉模型</option>';
 
   if (compatible.some((model) => model.id === previous)) {
@@ -1422,6 +1607,7 @@ function renderModelOptions() {
   } else if (compatible.length) {
     elements.model.value = compatible[0].id;
   }
+  syncLegacyModelPicker(elements.model, groups);
   renderModelNote();
 }
 
@@ -1467,18 +1653,302 @@ async function loadProviderModels(forceRefresh = false) {
   }
 }
 
-function modelOptionGroup(label, models) {
-  const options = models
-    .map((model) => {
-      const indicators = [
-        model.qualityLabel ? `精度 ${model.qualityLabel}` : "",
-        model.valueLabel ? `性价比 ${model.valueLabel}` : "",
-      ].filter(Boolean);
-      const suffix = indicators.length ? ` · ${indicators.join(" · ")}` : "";
-      return `<option value="${escapeHtml(model.id)}">${escapeHtml(`${model.label}${suffix}`)}</option>`;
-    })
+// Keep the legacy fallback renderer aligned with the typed Renderer: fixed
+// recommendations remain visible, while discovered vendor buckets can collapse.
+function modelOptionGroups(providerId, models) {
+  if (providerId !== "openrouter") {
+    const fixed = models.filter(isRecommendedModel);
+    const discovered = models
+      .filter((model) => !isRecommendedModel(model))
+      .slice(0, MAX_DISCOVERED_MODELS);
+    const groups = [];
+    if (fixed.length) groups.push(modelOptionGroup("fixed", "固定模型", fixed, false));
+    if (discovered.length) groups.push(modelOptionGroup("discovered", "其他视觉模型", discovered, true));
+    return groups;
+  }
+
+  const featured = models.filter(isRecommendedModel);
+  for (const model of models) {
+    if (featured.length >= OPENROUTER_PRIMARY_MODELS) break;
+    if (!isRecommendedModel(model)) featured.push(model);
+  }
+  const featuredIds = new Set(featured.map((model) => model.id));
+  const groups = featured.length
+    ? [modelOptionGroup(
+      "openrouter-featured",
+      "推荐模型 · 优先 " + OPENROUTER_PRIMARY_MODELS + " 个",
+      featured,
+      false,
+    )]
+    : [];
+  const byVendor = new Map();
+  for (const model of models) {
+    if (featuredIds.has(model.id)) continue;
+    const vendor = model.vendor || model.id.split("/", 1)[0] || "other";
+    const vendorModels = byVendor.get(vendor) || [];
+    vendorModels.push(model);
+    byVendor.set(vendor, vendorModels);
+  }
+  for (const [vendor, vendorModels] of byVendor) {
+    groups.push(modelOptionGroup(
+      "openrouter-vendor-" + vendor,
+      formatVendorLabel(vendor) + " · 其余 " + vendorModels.length + " 个",
+      vendorModels,
+      true,
+    ));
+  }
+  return groups;
+}
+
+function isRecommendedModel(model) {
+  // Static config entries do not carry discovery metadata, so keep those
+  // curated choices alongside descriptors explicitly marked as fixed.
+  return model.fixed === true || (model.fixed !== false && model.discovered !== true);
+}
+
+function formatVendorLabel(vendor) {
+  const labels = {
+    anthropic: "Anthropic",
+    deepseek: "DeepSeek",
+    google: "Google",
+    meta: "Meta",
+    mistralai: "Mistral AI",
+    openai: "OpenAI",
+    qwen: "Qwen",
+    xai: "xAI",
+  };
+  const key = String(vendor || "other").toLowerCase();
+  return labels[key] || key
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function modelOptionGroup(key, label, models, collapsible) {
+  return { key, label, models, collapsible };
+}
+
+function modelOptionLabel(model) {
+  const indicators = [
+    model.qualityLabel ? "精度 " + model.qualityLabel : "",
+    model.valueLabel ? "性价比 " + model.valueLabel : "",
+  ].filter(Boolean);
+  const suffix = indicators.length ? " · " + indicators.join(" · ") : "";
+  return String(model.label || model.id) + suffix;
+}
+
+function modelOptionGroupHtml(group) {
+  const options = group.models
+    .map((model) => '<option value="' + escapeHtml(model.id) + '">' + escapeHtml(modelOptionLabel(model)) + "</option>")
     .join("");
-  return `<optgroup label="${escapeHtml(label)}">${options}</optgroup>`;
+  return '<optgroup label="' + escapeHtml(group.label) + '">' + options + "</optgroup>";
+}
+
+// The legacy page retains a native select for existing form serialization,
+// but presents the same disclosure-based model list as the modern Renderer.
+function setupLegacyModelPicker(select, accessibleLabel) {
+  if (!select || legacyModelPickers.has(select) || !select.parentElement) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = "legacy-model-picker";
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.id = select.id + "-trigger";
+  trigger.className = "legacy-model-picker-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-label", accessibleLabel);
+  const menu = document.createElement("div");
+  menu.className = "legacy-model-picker-menu";
+  menu.id = select.id + "-options";
+  menu.setAttribute("role", "listbox");
+  const picker = {
+    select,
+    wrapper,
+    trigger,
+    menu,
+    groups: [],
+    expandedGroups: new Set(),
+    open: false,
+  };
+  select.classList.add("legacy-model-picker-native");
+  // Keep the native control as the form/state source, but expose only the
+  // custom trigger to keyboard and assistive-technology users.
+  select.tabIndex = -1;
+  select.setAttribute("aria-hidden", "true");
+  const associatedLabel = document.querySelector('label[for="' + select.id + '"]');
+  if (associatedLabel) associatedLabel.htmlFor = trigger.id;
+  select.parentElement.insertBefore(wrapper, select);
+  wrapper.append(select, trigger, menu);
+  legacyModelPickers.set(select, picker);
+  // Project settings wraps this control in a label; prevent nested buttons
+  // from re-triggering that label after they handle their own action.
+  wrapper.addEventListener("click", (event) => event.stopPropagation());
+  trigger.setAttribute("aria-controls", menu.id);
+  trigger.addEventListener("click", () => toggleLegacyModelPicker(picker));
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && picker.open) {
+      event.preventDefault();
+      closeLegacyModelPicker(picker, true);
+      return;
+    }
+    if (!picker.open && ["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      openLegacyModelPicker(picker);
+    }
+  });
+  select.addEventListener("change", () => syncLegacyModelPicker(select));
+  document.addEventListener("pointerdown", (event) => {
+    if (picker.open && event.target instanceof Node && !wrapper.contains(event.target)) {
+      closeLegacyModelPicker(picker);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (picker.open && event.key === "Escape") {
+      event.preventDefault();
+      closeLegacyModelPicker(picker, true);
+    }
+  });
+  // Fixed positioning lets the menu escape panel scroll containers; close it
+  // when geometry changes so it never stays detached from its trigger.
+  const closeOnLegacyPickerScroll = (event) => {
+    if (event.target instanceof Node && picker.wrapper.contains(event.target)) return;
+    if (picker.open) closeLegacyModelPicker(picker);
+  };
+  document.addEventListener("scroll", closeOnLegacyPickerScroll, true);
+  window.addEventListener("resize", closeOnLegacyPickerScroll);
+  syncLegacyModelPicker(select);
+}
+
+function positionLegacyModelPickerMenu(picker) {
+  const triggerRect = picker.trigger.getBoundingClientRect();
+  const gap = 6;
+  const viewportPadding = 12;
+  const preferredHeight = 320;
+  const availableBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - viewportPadding);
+  const availableAbove = Math.max(0, triggerRect.top - gap - viewportPadding);
+  const openBelow =
+    availableBelow >= Math.min(preferredHeight, window.innerHeight - viewportPadding * 2) ||
+    availableBelow >= availableAbove;
+  const availableHeight = openBelow ? availableBelow : availableAbove;
+  picker.menu.style.left = triggerRect.left + "px";
+  picker.menu.style.width = triggerRect.width + "px";
+  picker.menu.style.top = openBelow ? triggerRect.bottom + gap + "px" : "";
+  picker.menu.style.bottom = openBelow ? "" : window.innerHeight - triggerRect.top + gap + "px";
+  picker.menu.style.maxHeight = Math.min(420, availableHeight) + "px";
+}
+
+function openLegacyModelPicker(picker) {
+  if (picker.select.disabled) return;
+  const selectedGroup = picker.groups.find((group) =>
+    group.models.some((model) => model.id === picker.select.value),
+  );
+  if (selectedGroup?.collapsible) picker.expandedGroups.add(selectedGroup.key);
+  picker.open = true;
+  picker.trigger.setAttribute("aria-expanded", "true");
+  positionLegacyModelPickerMenu(picker);
+  renderLegacyModelPickerMenu(picker);
+}
+
+function closeLegacyModelPicker(picker, restoreFocus = false) {
+  picker.open = false;
+  picker.trigger.setAttribute("aria-expanded", "false");
+  picker.menu.hidden = true;
+  if (restoreFocus) picker.trigger.focus();
+}
+
+function toggleLegacyModelPicker(picker) {
+  if (picker.open) closeLegacyModelPicker(picker);
+  else openLegacyModelPicker(picker);
+}
+
+function syncLegacyModelPicker(select, groups) {
+  const picker = legacyModelPickers.get(select);
+  if (!picker) return;
+  if (groups) picker.groups = groups;
+  const selectedOption = select.selectedOptions?.[0];
+  picker.trigger.textContent = selectedOption?.textContent?.trim() || "选择视觉模型";
+  picker.trigger.disabled = select.disabled;
+  if (select.disabled && picker.open) closeLegacyModelPicker(picker);
+  renderLegacyModelPickerMenu(picker);
+}
+
+function renderLegacyModelPickerMenu(picker, focusGroupKey = null) {
+  // Rebuilding keeps the rendered groups in sync; a requested focus key lets
+  // a disclosure toggle preserve the keyboard user's position through it.
+  picker.menu.replaceChildren();
+  if (!picker.groups.length) {
+    const empty = document.createElement("div");
+    empty.className = "legacy-model-picker-empty";
+    empty.textContent = "暂无可用模型";
+    picker.menu.append(empty);
+    picker.menu.hidden = !picker.open;
+    return;
+  }
+  for (const group of picker.groups) {
+    const section = document.createElement("section");
+    section.className = "legacy-model-picker-group";
+    const collapsible = group.collapsible === true;
+    const expanded = !collapsible || picker.expandedGroups.has(group.key);
+    const optionsId = picker.menu.id + "-" + String(group.key).replace(/[^a-zA-Z0-9_-]/g, "-");
+    const header = document.createElement(collapsible ? "button" : "div");
+    header.className = "legacy-model-picker-group-header";
+    header.textContent = group.label;
+    if (collapsible) {
+      header.type = "button";
+      header.dataset.groupKey = group.key;
+      header.dataset.expanded = String(expanded);
+      header.setAttribute("aria-expanded", String(expanded));
+      header.setAttribute("aria-controls", optionsId);
+      header.addEventListener("click", () => {
+        const shouldRestoreFocus = document.activeElement === header;
+        if (picker.expandedGroups.has(group.key)) picker.expandedGroups.delete(group.key);
+        else picker.expandedGroups.add(group.key);
+        renderLegacyModelPickerMenu(picker, shouldRestoreFocus ? group.key : null);
+      });
+    } else {
+      header.dataset.fixed = "true";
+    }
+    section.append(header);
+    if (expanded) {
+      const options = document.createElement("div");
+      options.id = optionsId;
+      options.className = "legacy-model-picker-options";
+      options.setAttribute("role", "group");
+      options.setAttribute("aria-label", group.label);
+      for (const model of group.models) {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "legacy-model-picker-option";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(picker.select.value === model.id));
+        option.textContent = modelOptionLabel(model);
+        if (picker.select.value === model.id) {
+          const check = document.createElement("span");
+          check.className = "legacy-model-picker-check";
+          check.textContent = "✓";
+          check.setAttribute("aria-hidden", "true");
+          option.append(check);
+        }
+        option.addEventListener("click", () => {
+          if (picker.select.disabled) return;
+          picker.select.value = model.id;
+          picker.select.dispatchEvent(new Event("change", { bubbles: true }));
+          closeLegacyModelPicker(picker, true);
+        });
+        options.append(option);
+      }
+      section.append(options);
+    }
+    picker.menu.append(section);
+  }
+  picker.menu.hidden = !picker.open;
+  if (focusGroupKey) {
+    const focusTarget = Array.from(picker.menu.querySelectorAll(".legacy-model-picker-group-header")).find(
+      (candidate) => candidate.dataset.groupKey === focusGroupKey,
+    );
+    if (focusTarget) focusTarget.focus();
+  }
 }
 
 function modelsForProvider(providerId) {
@@ -1629,10 +2099,22 @@ async function saveOcrSettings() {
   elements.ocrSaveButton.disabled = true;
   try {
     await saveOcrSettingsApi({ pythonPath });
+    if (state.globalSettings) {
+      state.globalSettings = {
+        ...state.globalSettings,
+        values: { ...state.globalSettings.values, PADDLEOCR_PYTHON: pythonPath },
+        overrides: state.globalSettings.overrides.includes("PADDLEOCR_PYTHON")
+          ? state.globalSettings.overrides
+          : [...state.globalSettings.overrides, "PADDLEOCR_PYTHON"],
+      };
+      state.globalSettingsDraft.PADDLEOCR_PYTHON = pythonPath;
+      state.globalSettingsDirty.delete("PADDLEOCR_PYTHON");
+    }
     elements.ocrSetupOverlay.hidden = true;
     await loadConfig();
     renderApiStatus();
     renderGlobalOcrStatus();
+    renderGlobalSettingsForm();
   } catch (error) {
     showError(error.message);
   } finally {
@@ -2355,7 +2837,9 @@ function renderResults(data) {
     : [
         `API ${data.provider}`,
         `MODEL ${data.model}`,
-        `MODE ${data.inputMode === "pdf" ? "PDF" : data.accuracyMode === "high" ? "HIGH ACCURACY" : "IMAGE"}`,
+        // Historical snapshots may say "pdf", but every current model request
+        // is rasterized into page images before it reaches Main.
+        `MODE ${data.accuracyMode === "high" ? "HIGH ACCURACY" : "IMAGE"}`,
         `PAGES ${state.pageCount}`,
         `TIME ${(data.durationMs / 1000).toFixed(1)}s`,
       ];
@@ -3074,6 +3558,7 @@ function updateRecognizeState() {
   // task-level control whose submitted value the main process must ignore.
   elements.provider.disabled = readOnly;
   elements.model.disabled = readOnly;
+  syncLegacyModelPicker(elements.model);
   elements.modelRefresh.disabled = readOnly;
   elements.accuracyMode.disabled = readOnly || projectManagedAccuracy;
   elements.accuracyMode.title = projectManagedAccuracy
@@ -3361,6 +3846,7 @@ function restoreTask(task, operation = {}) {
       ) return;
       if ([...elements.model.options].some((o) => o.value === task.model)) {
         elements.model.value = task.model;
+        syncLegacyModelPicker(elements.model);
         renderModelNote();
       }
     });

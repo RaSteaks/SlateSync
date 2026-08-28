@@ -6,8 +6,12 @@ class FakeWorker {
   readonly messages: Array<{ message: unknown; transfer: Transferable[] }> = [];
   private readonly listeners = new Map<string, Array<(event: unknown) => void>>();
   terminated = false;
+  readonly url: string;
 
-  constructor() { FakeWorker.instances.push(this); }
+  constructor(url: URL | string) {
+    this.url = String(url);
+    FakeWorker.instances.push(this);
+  }
   addEventListener(type: string, listener: (event: unknown) => void) {
     this.listeners.set(type, [...(this.listeners.get(type) || []), listener]);
   }
@@ -36,9 +40,40 @@ describe("typed CSV Worker service", () => {
     const pending = service.decode(bytes);
     const worker = FakeWorker.instances[0];
     expect(worker).toBeDefined();
+    expect(worker?.url).toBe("file:///app/public/csv-worker.js");
     const sent = worker?.messages[0];
     expect(sent?.message).toMatchObject({ id: 1, version: CSV_WORKER_PROTOCOL_VERSION, task: { type: "decode-metadata", data: bytes } });
     expect(sent?.transfer).toEqual([bytes]);
+    worker?.reply({ table: { headers: ["Scene"], rows: [["001"]], format: {} } });
+    await expect(pending).resolves.toMatchObject({ headers: ["Scene"] });
+  });
+
+  it("uses the Vite-owned source URL only when the dev marker is present", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    vi.stubGlobal("window", { location: { href: "http://localhost:5173/", origin: "http://localhost:5173" } });
+    vi.stubGlobal("__SLATESYNC_CSV_WORKER_DEV_URL__", "/@fs//repo/public/csv-worker.js");
+    const service = new CsvWorkerService();
+    const pending = service.clear();
+    const worker = FakeWorker.instances[0];
+
+    expect(worker?.url).toBe("http://localhost:5173/@fs//repo/public/csv-worker.js");
+    worker?.reply({ ready: true });
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("requests a Worker-derived merge table for the preview", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    vi.stubGlobal("window", { location: { href: "file:///app/out/renderer/index.html" } });
+    const service = new CsvWorkerService();
+    const pending = service.mergePreview({
+      type: "merge-preview",
+      records: [],
+      slateMetadata: [],
+      fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+      comments: { goodTake: "_OK", holdTake: "_KP" },
+    });
+    const worker = FakeWorker.instances[0];
+    expect(worker?.messages[0]?.message).toMatchObject({ task: { type: "merge-preview" } });
     worker?.reply({ table: { headers: ["Scene"], rows: [["001"]], format: {} } });
     await expect(pending).resolves.toMatchObject({ headers: ["Scene"] });
   });

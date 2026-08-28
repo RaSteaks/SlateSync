@@ -3,7 +3,6 @@ import type { AppError } from "../../shared/contracts/index.js";
 interface PreparationResult {
   readonly pageCount: number;
   readonly imageDataGroups: readonly (readonly string[])[];
-  readonly pdfDataUrl: string | null;
 }
 
 interface Pending {
@@ -24,12 +23,12 @@ export class PreparationService {
   private ensureWorker() {
     if (this.worker) return this.worker;
     this.worker = new Worker(new URL("../workers/preparation.worker.ts", import.meta.url), { type: "module" });
-    this.worker.addEventListener("message", (event: MessageEvent<{ id: number; type: string; progress?: number; message?: string; pageCount?: number; imageDataGroups?: string[][]; pdfDataUrl?: string | null }>) => {
+    this.worker.addEventListener("message", (event: MessageEvent<{ id: number; type: string; progress?: number; message?: string; pageCount?: number; imageDataGroups?: string[][] }>) => {
       const message = event.data;
       const request = this.pending.get(message.id);
       if (!request) return;
       if (message.type === "progress") this.queueProgress(message.id, request, message.progress || 0, message.message || "正在准备素材");
-      else if (message.type === "result") { this.finishRequest(message.id, request); request.resolve({ pageCount: message.pageCount || 0, imageDataGroups: message.imageDataGroups || [], pdfDataUrl: message.pdfDataUrl || null }); }
+      else if (message.type === "result") { this.finishRequest(message.id, request); request.resolve({ pageCount: message.pageCount || 0, imageDataGroups: message.imageDataGroups || [] }); }
       else if (message.type === "recompressed") { this.finishRequest(message.id, request); request.resolve(message.imageDataGroups || []); }
       else { this.finishRequest(message.id, request); request.reject(new Error(message.message || "场记单准备失败")); }
     });

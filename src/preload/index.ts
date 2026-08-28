@@ -1,8 +1,12 @@
 import type {
   AppError,
   BinaryPayload,
+  GlobalSettingsData,
+  GlobalSettingsRequest,
+  LogsReadRequest,
   ModelsRequest,
   OcrCheckRequest,
+  VisionOcrCheckResult,
   OcrSettingsRequest,
   ProjectIdRequest,
   ProjectRequest,
@@ -15,6 +19,7 @@ import type {
   ScanSlateDirectoryRequest,
   ScenarioIdRequest,
   ScenarioImportRequest,
+  LibraryRenameRequest,
   SlateSyncApi,
   ProgressData,
 } from "../shared/contracts/index.js";
@@ -84,11 +89,13 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       importLibrary: () => request("import-project-library"),
       exportLibrary: () => request("export-project-library"),
       changeLibraryLocation: () => request("change-library-location"),
+      renameLibrary: (body: LibraryRenameRequest) => request("rename-library", body),
       create: (body: ProjectRequest) => request("create-project", body),
       load: (body: ProjectIdRequest) => request("load-project", body),
       update: (body: ProjectRequest) => request("update-project", body),
       archive: (body: ProjectIdRequest) => request("archive-project", body),
       restore: (body: ProjectIdRequest) => request("restore-project", body),
+      delete: (body: ProjectIdRequest) => request("delete-project", body),
       listScenarios: (body: ProjectScopedRequest) => request("list-scenarios", body),
       loadScenario: (body: ScenarioIdRequest) => request("load-scenario", body),
       importScenario: (body: ScenarioImportRequest) => request("import-scenario", body),
@@ -102,6 +109,7 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
     recognition: {
       getModels: (body: ModelsRequest) => request("get-models", body),
       run: (body: RecognitionRequest) => request("recognize", body),
+      cancel: (body: ProjectScopedRequest) => request("cancel-recognition", body),
       onProgress,
     },
     files: {
@@ -114,9 +122,18 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
     },
     settings: {
       saveProviderKey: (body: ProviderKeyRequest) => request("save-provider-key", body),
+      getGlobalSettings: () => request<GlobalSettingsData>("get-global-settings"),
+      saveGlobalSettings: (body: GlobalSettingsRequest) => request<GlobalSettingsData>("save-global-settings", body),
       getOcrSettings: () => request("get-ocr-settings"),
       saveOcrSettings: (body: OcrSettingsRequest) => request("save-ocr-settings", body),
       checkOcr: (body: OcrCheckRequest) => request("check-ocr", body),
+      checkVisionOcr: () => request<VisionOcrCheckResult>("check-vision-ocr"),
+      checkCompatibleJsonSchema: () => request("check-compatible-json-schema"),
+    },
+    // Logs stay read-only over IPC: the Main process is the single writer of
+    // the local log files, and the viewer polls instead of subscribing.
+    logs: {
+      read: (body: LogsReadRequest) => request("logs-read", body),
     },
   };
 }

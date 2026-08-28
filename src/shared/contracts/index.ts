@@ -28,6 +28,8 @@ export interface ModelData {
   readonly label: string;
   readonly description: string;
   readonly providers: readonly string[];
+  /** Provider/organization slug used to group large OpenRouter catalogs. */
+  readonly vendor?: string;
   readonly imageDetail?: "auto" | "low" | "high" | "original";
   readonly directId?: string;
   readonly apiId?: string;
@@ -61,6 +63,17 @@ export interface OcrEngineStatus {
   readonly recognitionModel?: string;
   readonly recognitionBatchSize?: number;
   readonly device?: string;
+}
+
+/** Main-side decision used by both Settings status and recognition startup. */
+export interface OcrSelection {
+  readonly id: "vision" | "paddleocr" | null;
+  readonly label: string;
+  readonly mode: string;
+  readonly reason: string;
+  readonly available: boolean;
+  readonly enabled: boolean;
+  readonly required: boolean;
 }
 
 export interface ResolveFieldFormats {
@@ -99,6 +112,7 @@ export interface ConfigData {
   readonly models: readonly ModelData[];
   readonly ocr: OcrEngineStatus;
   readonly ocrEngines: readonly OcrEngineStatus[];
+  readonly ocrSelection: OcrSelection;
   readonly upload: UploadLimits;
   readonly workflow: WorkflowConfig;
 }
@@ -167,6 +181,18 @@ export type LibraryExportResult =
 
 export type LibraryLocationResult = LibraryImportResult;
 
+export interface LibraryRenameRequest {
+  readonly name: string;
+}
+
+export type LibraryRenameResult =
+  | { readonly canceled: true }
+  | {
+      readonly canceled: false;
+      readonly restartRequired: true;
+      readonly library: LibraryInfo;
+    };
+
 export interface ProjectRequest {
   readonly id?: string;
   readonly name?: string;
@@ -208,6 +234,66 @@ export interface ProviderKeyRequest {
   readonly apiKey: string;
 }
 
+// Non-secret values that can be overridden from the machine-level Global
+// Settings page. API keys stay on the separate Main-process key-store path.
+export type GlobalSettingKey =
+  | "OPENAI_BASE_URL"
+  | "OPENROUTER_BASE_URL"
+  | "OPENROUTER_SITE_URL"
+  | "TOKENPLAN_BASE_URL"
+  | "DASHSCOPE_BASE_URL"
+  | "OPENAI_COMPATIBLE_BASE_URL"
+  | "OPENAI_COMPATIBLE_MODEL"
+  | "OPENAI_COMPATIBLE_API_MODE"
+  | "OPENAI_COMPATIBLE_JSON_MODE"
+  | "OPENAI_COMPATIBLE_IMAGE_DETAIL"
+  | "SLATESYNC_CONFIG_PATH"
+  | "MAX_BODY_MB"
+  | "MODEL_REQUEST_TIMEOUT_MS"
+  | "MODEL_REQUEST_MAX_RETRIES"
+  | "MODEL_PAGE_CONCURRENCY"
+  | "MAX_CONCURRENT_RECOGNITIONS"
+  | "PADDLEOCR_ENABLED"
+  | "PADDLEOCR_REQUIRED"
+  | "PADDLEOCR_MODEL_VERSION"
+  | "PADDLEOCR_PROFILE"
+  | "PADDLEOCR_LANGUAGE"
+  | "PADDLEOCR_DEVICE"
+  | "PADDLEOCR_DETECTION_MODEL"
+  | "PADDLEOCR_RECOGNITION_MODEL"
+  | "PADDLEOCR_RECOGNITION_BATCH_SIZE"
+  | "PADDLEOCR_PYTHON"
+  | "PADDLEOCR_MIN_CONFIDENCE"
+  | "PADDLEOCR_MAX_BLOCKS_PER_VIEW"
+  | "PADDLEOCR_TIMEOUT_MS"
+  | "PADDLE_PDX_CACHE_HOME"
+  | "VISIONOCR_ENABLED"
+  | "VISIONOCR_REQUIRED"
+  | "VISIONOCR_LANGUAGE"
+  | "VISIONOCR_RECOGNITION_LEVEL"
+  | "VISIONOCR_USE_LANGUAGE_CORRECTION"
+  | "VISIONOCR_MIN_CONFIDENCE"
+  | "VISIONOCR_MAX_BLOCKS_PER_VIEW"
+  | "VISIONOCR_TIMEOUT_MS"
+  | "VISIONOCR_BINARY";
+
+export type GlobalSettingValues = Readonly<Record<GlobalSettingKey, string>>;
+export type GlobalSettingsPatch = Partial<Record<GlobalSettingKey, string | null>>;
+
+export interface GlobalSettingsRequest {
+  readonly values?: GlobalSettingsPatch;
+  readonly reset?: boolean;
+}
+
+export interface GlobalSettingsData {
+  readonly values: GlobalSettingValues;
+  readonly overrides: readonly GlobalSettingKey[];
+  /** Provider IDs only; values are booleans and never API key text. */
+  readonly keyConfigured: Readonly<Record<string, boolean>>;
+  /** True after saving SLATESYNC_CONFIG_PATH, which is read at next startup. */
+  readonly restartRequired: boolean;
+}
+
 export interface SlateCsvRecord {
   readonly fileName?: string | null;
   readonly materialKey?: string | null;
@@ -222,12 +308,13 @@ export interface SlateCsvRecord {
 }
 
 export interface RecognitionRequest {
+  /** Existing draft to complete in place; omitted only for a genuinely new run. */
+  readonly taskId?: string | null;
   readonly provider?: string;
   readonly model?: string;
   readonly imageDataUrl?: string;
   readonly imageDataUrls?: readonly string[];
   readonly imageDataGroups?: readonly (readonly string[])[];
-  readonly pdfDataUrl?: string;
   readonly pageCount?: number;
   readonly filename?: string;
   readonly accuracyMode?: "high" | "standard";
@@ -273,6 +360,27 @@ export type OcrCheckResult =
       readonly ok: false;
       readonly error: { readonly code: string; readonly message: string };
     };
+
+export type VisionOcrCheckResult =
+  | {
+      readonly ok: true;
+      readonly engine: string;
+      readonly modelVersion: string;
+      readonly systemVersion: string;
+    }
+  | {
+      readonly ok: false;
+      readonly error: { readonly code: string; readonly message: string };
+    };
+
+export interface JsonSchemaCapabilityResult {
+  readonly supported: boolean;
+  readonly model: string;
+  readonly transport: "chat-completions" | "responses";
+  readonly status: number | null;
+  readonly checkedAt: string;
+  readonly message: string;
+}
 
 export interface RecognitionRecord {
   readonly id: string;
@@ -365,7 +473,8 @@ export interface ScenarioSelection {
 export interface RecognitionData {
   readonly provider: string;
   readonly model: string;
-  readonly inputMode: "images" | "pdf";
+  /** Model requests are always backed by locally rasterized page images. */
+  readonly inputMode: "images";
   readonly durationMs: number;
   readonly pageCount: number;
   readonly accuracyMode: "high" | "standard";
@@ -385,6 +494,7 @@ export interface ProgressData {
   readonly phase?: string;
   readonly percent?: number;
   readonly message?: string;
+  readonly warning?: string | null;
   readonly pageNumber?: number | null;
   readonly completed?: number;
   readonly total?: number;
@@ -392,6 +502,40 @@ export interface ProgressData {
   readonly totalViews?: number;
   readonly viewIndex?: number | null;
   readonly cacheHit?: boolean;
+}
+
+/** Severity of a local log entry; read filters use a severity threshold. */
+export type LogLevel = "info" | "warn" | "error";
+
+/** One parsed line of the local plain-text log written by the Main process. */
+export interface LogEntry {
+  /** Local wall-clock time in `YYYY-MM-DD HH:mm:ss.SSS` form. */
+  readonly timestamp: string;
+  readonly level: LogLevel;
+  /** Logical source: "app" for lifecycle, "recognition" for recognition runs. */
+  readonly category: string;
+  readonly message: string;
+  /** Recognition progress fields carried by progress entries; null otherwise. */
+  readonly phase?: string | null;
+  readonly percent?: number | null;
+  readonly completed?: number | null;
+  readonly total?: number | null;
+  readonly pageNumber?: number | null;
+}
+
+export interface LogsReadRequest {
+  /** Maximum number of entries returned (newest first); defaults to 500. */
+  readonly limit?: number;
+  /** Severity threshold: "warn" keeps warn and error entries. */
+  readonly level?: LogLevel;
+  /** Exact category match, e.g. "recognition"; omit for all categories. */
+  readonly category?: string;
+}
+
+export interface LogsReadResult {
+  readonly entries: readonly LogEntry[];
+  /** True when more matching entries exist beyond the returned limit. */
+  readonly hasMore: boolean;
 }
 
 export interface TaskListItem {
@@ -609,11 +753,13 @@ export interface SlateSyncApi {
     importLibrary(): Promise<Result<LibraryImportResult>>;
     exportLibrary(): Promise<Result<LibraryExportResult>>;
     changeLibraryLocation(): Promise<Result<LibraryLocationResult>>;
+    renameLibrary(request: LibraryRenameRequest): Promise<Result<LibraryRenameResult>>;
     create(request: ProjectRequest): Promise<Result<ProjectData>>;
     load(request: ProjectIdRequest): Promise<Result<ProjectData>>;
     update(request: ProjectRequest): Promise<Result<ProjectData>>;
     archive(request: ProjectIdRequest): Promise<Result<ProjectData>>;
     restore(request: ProjectIdRequest): Promise<Result<ProjectData>>;
+    delete(request: ProjectIdRequest): Promise<Result<{ readonly deleted: string }>>;
     listScenarios(request: ProjectScopedRequest): Promise<Result<ScenarioSummary[]>>;
     loadScenario(request: ScenarioIdRequest): Promise<Result<ScenarioData>>;
     importScenario(request: ScenarioImportRequest): Promise<Result<ScenarioData>>;
@@ -627,6 +773,7 @@ export interface SlateSyncApi {
   readonly recognition: {
     getModels(request: ModelsRequest): Promise<Result<ModelDiscoveryResult>>;
     run(request: RecognitionRequest): Promise<Result<RecognitionData>>;
+    cancel(request: ProjectScopedRequest): Promise<Result<{ readonly canceled: boolean }>>;
     onProgress(listener: (event: ProgressData) => void): () => void;
   };
   readonly files: {
@@ -639,9 +786,16 @@ export interface SlateSyncApi {
       readonly provider: string;
       readonly configured: boolean;
     }>>;
+    getGlobalSettings(): Promise<Result<GlobalSettingsData>>;
+    saveGlobalSettings(request: GlobalSettingsRequest): Promise<Result<GlobalSettingsData>>;
     getOcrSettings(): Promise<Result<OcrSettings>>;
     saveOcrSettings(request: OcrSettingsRequest): Promise<Result<OcrSettings>>;
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;
+    checkVisionOcr(): Promise<Result<VisionOcrCheckResult>>;
+    checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
+  };
+  readonly logs: {
+    read(request: LogsReadRequest): Promise<Result<LogsReadResult>>;
   };
 }
 

@@ -1010,6 +1010,160 @@ select:focus {
   box-shadow: 0 0 0 3px var(--focus-soft);
 }
 
+/* The legacy picker keeps the native select in the DOM for existing form
+   handlers, while the visible trigger can fold large vendor groups. */
+.legacy-model-picker {
+  position: relative;
+  width: 100%;
+}
+
+.legacy-model-picker-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.legacy-model-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 41px;
+  padding: 9px 12px;
+  border: 1px solid #cbd5df;
+  border-radius: var(--r-ctl);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 13px;
+  text-align: left;
+  transition: 140ms ease;
+}
+
+.legacy-model-picker-trigger::after {
+  margin-left: 10px;
+  color: var(--muted);
+  content: "▾";
+  font-size: 12px;
+}
+
+.legacy-model-picker-trigger:hover,
+.legacy-model-picker-trigger[aria-expanded="true"] {
+  border-color: var(--line-strong);
+}
+
+.legacy-model-picker-trigger:focus-visible {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-soft);
+}
+
+.legacy-model-picker-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.legacy-model-picker-menu {
+  position: fixed;
+  z-index: 30;
+  padding: 6px;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.legacy-model-picker-group + .legacy-model-picker-group {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+
+.legacy-model-picker-group-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  color: var(--muted);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: left;
+}
+
+button.legacy-model-picker-group-header {
+  cursor: pointer;
+}
+
+button.legacy-model-picker-group-header::before {
+  margin-right: 6px;
+  content: "›";
+  transition: transform 140ms ease;
+}
+
+button.legacy-model-picker-group-header[data-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+
+.legacy-model-picker-group-header:hover,
+.legacy-model-picker-group-header:focus-visible {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.legacy-model-picker-options {
+  display: grid;
+  gap: 2px;
+  padding: 2px 0 2px 7px;
+}
+
+.legacy-model-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 35px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-ctl);
+  color: var(--ink-soft);
+  background: transparent;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.legacy-model-picker-option:hover,
+.legacy-model-picker-option[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--tape-soft);
+}
+
+.legacy-model-picker-check {
+  flex: 0 0 auto;
+  color: var(--tape-deep);
+  font-weight: 700;
+}
+
+.legacy-model-picker-empty {
+  padding: 12px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 .model-field {
   margin-top: 15px;
 }
@@ -2594,6 +2748,21 @@ body {
   grid-column: 1 / -1;
 }
 
+/* The legacy fallback mirrors the typed settings surface with collapsed
+   groups, keeping the recovery UI usable while still exposing every safe
+   .env.example override. */
+.global-settings-card { grid-column: 1 / -1; }
+.global-settings-fields { display: grid; gap: 10px; margin-top: 18px; }
+.global-settings-group { border: 1px solid var(--line); border-radius: var(--r-ctl); background: color-mix(in srgb, var(--paper) 82%, var(--canvas)); }
+.global-settings-group > summary { padding: 12px 14px; color: var(--ink); font-weight: 700; cursor: pointer; }
+.global-settings-group > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.global-settings-group[open] > summary { border-bottom: 1px solid var(--line); }
+.global-settings-group-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 14px 14px; }
+.global-settings-group-fields .field { margin-top: 14px; }
+.global-settings-field-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.global-settings-card .settings-actions { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.global-settings-card .settings-save-status.error { color: var(--danger); }
+
 .settings-card .field {
   margin-top: 18px;
 }
@@ -2881,6 +3050,9 @@ body {
   .settings-layout > .settings-actions {
     grid-column: auto;
   }
+
+  .global-settings-card { grid-column: auto; }
+  .global-settings-group-fields { grid-template-columns: 1fr; }
 
   .page-shell,
   footer {

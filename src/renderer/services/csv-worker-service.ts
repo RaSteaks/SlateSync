@@ -1,5 +1,7 @@
 import type { RecognitionRecord, ResolveCsvTable, ScannedSlateMetadata, SlateCsvRecord } from "../../shared/contracts/index.js";
 
+declare const __SLATESYNC_CSV_WORKER_DEV_URL__: string;
+
 export const CSV_WORKER_PROTOCOL_VERSION = 1 as const;
 
 type CsvTask =
@@ -9,6 +11,13 @@ type CsvTask =
   | { readonly type: "collect-material-keys" }
   | { readonly type: "decode-slate-csv"; readonly data: ArrayBuffer }
   | { readonly type: "records-from-slate-csv"; readonly records: readonly SlateCsvRecord[] }
+  | {
+      readonly type: "merge-preview";
+      readonly records: readonly RecognitionRecord[];
+      readonly slateMetadata: readonly ScannedSlateMetadata[];
+      readonly fieldFormats: { readonly scene: string; readonly shot: string; readonly take: string };
+      readonly comments: { readonly goodTake: string; readonly holdTake: string };
+    }
   | {
       readonly type: "export-resolve";
       readonly records: readonly RecognitionRecord[];
@@ -49,10 +58,15 @@ export class CsvWorkerService {
 
   private createWorker(): Worker {
     if (typeof Worker !== "function") throw workerFailure("当前环境不支持 CSV Worker");
-    // Renderer output lives under out/renderer while the compatibility Worker
-    // remains packaged once under public/. Resolving from the loaded HTML keeps
-    // both development file:// and packaged app:// paths in the same contract.
-    const url = new URL("../../public/csv-worker.js", window.location.href);
+    // Vite owns repository-level module resolution in HMR mode. Production
+    // intentionally keeps the established file:// path to the Worker packaged
+    // once under public/, so this development repair cannot widen that shell.
+    const devUrl = typeof __SLATESYNC_CSV_WORKER_DEV_URL__ === "undefined"
+      ? ""
+      : __SLATESYNC_CSV_WORKER_DEV_URL__;
+    const url = devUrl
+      ? new URL(devUrl, window.location.origin)
+      : new URL("../../public/csv-worker.js", window.location.href);
     const worker = new Worker(url, { type: "module" });
     worker.addEventListener("message", (event: MessageEvent<WorkerReply>) => this.handleMessage(event.data));
     worker.addEventListener("error", (event) => this.handleFailure(worker, event.message || "CSV Worker 不可用"));
@@ -128,6 +142,13 @@ export class CsvWorkerService {
   async recordsFromSlateCsv(records: readonly SlateCsvRecord[]) {
     const result = await this.request<{ records: RecognitionRecord[] }>({ type: "records-from-slate-csv", records });
     return result.records;
+  }
+
+  async mergePreview(task: Extract<CsvTask, { type: "merge-preview" }>) {
+    // Preview merges stay in the same Worker as export so a large Resolve CSV
+    // is never copied into React just to calculate the values the user sees.
+    const result = await this.request<{ table: ResolveCsvTable }>({ ...task });
+    return result.table;
   }
 
   async exportResolve(task: Extract<CsvTask, { type: "export-resolve" }>) {
