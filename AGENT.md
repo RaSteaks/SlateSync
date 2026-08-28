@@ -545,3 +545,6 @@ Worker 边界、验收证据和最终治理交接。
 - 浏览器实测 1280px 窗口：侧栏由 248px 收至 76px 时主区域由 1032px 平滑扩至
   1204px，前后均无横向溢出；从日志页点击品牌图标可返回项目库。`npm run check`、
   `npm run validate:modern`（19 个文件、68/68）与 `git diff --check` 通过。
+- `global-settings.test.tsx` 显式引用 Node 类型，使 jsdom/Renderer 推断项目能够识别
+  `node:fs/promises`，无需把 Node 全局类型引入 Renderer 生产配置；单文件 TypeScript
+  检查与 Vitest 3/3 通过。

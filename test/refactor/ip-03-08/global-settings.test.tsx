@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+/// <reference types="node" />
+// This jsdom component test also reads the CSS source through Node's test runtime.
 import { readFile } from "node:fs/promises";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
