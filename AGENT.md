@@ -498,3 +498,50 @@ Worker 边界、验收证据和最终治理交接。
 - 验证结果：`npm run check`、`npm run typecheck`、`npm run test:node`（277/277）、
   `npm run test:modern`（18 个文件、63/63）与 `npm run build:modern` 通过；未启动
   Electron 前台窗口。
+
+## 2026-08-28 全局设置布局、侧栏动效与 OCR 手动选路
+
+- 全局设置将“访问密钥与接口”和“工作台外观”放入独立双列首行；条件式兼容接口与
+  运行参数继续跨越整行，窄窗口恢复单列，不依赖动态卡片顺序维持布局。
+- 侧栏收展收敛为一条共享列宽过渡；标签只做透明度与轻微位移，品牌 App Icon 保持
+  固定轴线，导航图标用 transform 平滑归入折叠轨道。所有相关动效继续遵循
+  `prefers-reduced-motion`。
+- 本地 OCR 增加首选引擎选择，可在自动、Apple Vision OCR、PaddleOCR 与关闭之间
+  切换。手动选择同步写入两套 `*_ENABLED` 并清除冲突的 `*_REQUIRED`，继续复用 Main
+  的唯一 `lib/ocr/selection.mjs` 选路，不增加 Renderer 独立策略。
+- OCR 引擎卡网格改为顶部对齐；展开 Vision OCR 参数只改变 Vision 卡自身高度，
+  PaddleOCR 卡不再被同一网格行拉伸。
+- 验证结果：premium strict audit 为 0 findings，官方 `designmd lint` 为 0 errors
+  （保留 26 条既有 token/primary 映射 warning）；`npm run check`、`npm run typecheck`、
+  `npm run test:node`（278/278）、`npm run test:modern`（19 个文件、67/67）、
+  `npm run build:modern`、`npm run build:storybook` 与 `git diff --check` 通过。
+  Storybook 仅报告沙盒无法写入用户目录的全局 settings；按项目约束未启动 Electron
+  前台窗口。
+
+## 2026-08-28 折叠侧栏图标统一中轴
+
+- 侧栏品牌、主导航、收展按钮与外观按钮复用 `--ss-sidebar-icon-track` 网格轨道；
+  桌面折叠态、响应式窄轨和移动顶栏分别按可用内容宽度调整轨道，图标均由首列自然居中。
+- 移除导航和外观图标的局部 `translateX` 补偿，标签透明度变化不再参与图标定位；
+  收展过程中品牌与各导航图标保持固定中轴，选中态底板仍使用完整可点击宽度。
+- `DESIGN.md` 同步记录共享图标中轴和禁止局部位移补偿的持久设计规则；壳层静态回归测试
+  锁定品牌、导航和底部控件消费同一轨道。
+- 浏览器实测桌面展开、桌面折叠与 880px 窄轨：品牌、主导航、收展和外观图标中心均为
+  `x = 38px`；320px 移动顶栏图标统一为 `y = 28px`，两种窄布局横向溢出均为 0。
+  `npm run check`、`npm run typecheck`、
+  `npm run test:modern`（19 个文件、67/67）、`npm run build:modern`、
+  `npm run build:storybook`、premium strict audit 与 `git diff --check` 通过；
+  `designmd lint` 为 0 errors，保留 26 条既有 token/primary 映射 warning。
+
+## 2026-08-28 侧栏收展稳定项目排布与品牌返回入口
+
+- 项目库卡片不再使用随主区域宽度实时换列的 `auto-fill`；改为 4 / 3 / 2 / 1 列窗口断点。
+  同一窗口内收展侧栏时，项目保持原行列顺序，仅卡片轨道宽度随壳层平滑变化。
+- 左上角官方 App Icon 改为原生按钮，提供“返回项目库”可访问名称、hover / active /
+  `focus-visible` 状态，并复用侧栏“项目库”的 `leaveProject` 行为；识别进行中仍阻止切换并
+  显示既有警告，不绕过工作区清理或并发保护。
+- `DESIGN.md` 与 `UX-CONTRACT.md` 同步记录稳定列数及品牌返回契约；壳层测试锁定断点、
+  语义按钮、键盘焦点和受保护路由复用。
+- 浏览器实测 1280px 窗口：侧栏由 248px 收至 76px 时主区域由 1032px 平滑扩至
+  1204px，前后均无横向溢出；从日志页点击品牌图标可返回项目库。`npm run check`、
+  `npm run validate:modern`（19 个文件、68/68）与 `git diff --check` 通过。

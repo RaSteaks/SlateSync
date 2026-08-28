@@ -6,38 +6,43 @@
 .bootScreen { display: grid; min-height: 100vh; place-items: center; color: var(--ss-color-ink-muted); background: var(--ss-color-canvas); }
 /* The navigation shell consumes the same artwork as the packaged macOS app;
    object-fit preserves its native rounded silhouette without local restyling. */
+.brandHomeButton { display: grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 0; border-radius: var(--ss-radius-md); background: transparent; cursor: pointer; }
+.brandHomeButton:hover { background: var(--ss-color-surface-hover); }
+.brandHomeButton:active { background: var(--ss-color-control-active); }
+.brandHomeButton:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: 3px; box-shadow: var(--ss-shadow-focus); }
 .brandIcon { display: block; width: 34px; height: 34px; flex: 0 0 auto; object-fit: contain; user-select: none; }
-.brandCopy { display: block; min-width: 0; max-width: 160px; overflow: hidden; opacity: 1; transform: translateX(0); transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out), transform var(--ss-motion-base) var(--ss-ease-in-out); }
-.brandCopy[data-collapsed="true"] { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(-6px); }
+.brandCopy { display: block; min-width: 0; max-width: 160px; margin-left: var(--ss-space-2); overflow: hidden; opacity: 1; transform: translateX(0); transition: opacity var(--ss-motion-base) var(--ss-ease), transform var(--ss-motion-base) var(--ss-ease); }
+.brandCopy[data-collapsed="true"] { opacity: 0; pointer-events: none; transform: translateX(-4px); }
 .brandCopy strong, .brandCopy small { display: block; }
 .brandCopy strong { font-size: .96rem; letter-spacing: -.02em; }
 .brandCopy small { margin-top: 2px; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; }
-.navItem { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: var(--ss-space-4); width: 100%; padding: 0 var(--ss-space-3); border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .84rem; line-height: var(--ss-nav-label-line-height); text-align: left; cursor: pointer; transition: gap var(--ss-motion-slow) var(--ss-ease-in-out), padding-inline var(--ss-motion-slow) var(--ss-ease-in-out), color var(--ss-motion-base) var(--ss-ease), background var(--ss-motion-base) var(--ss-ease), border-color var(--ss-motion-base) var(--ss-ease); }
+.navItem { display: grid; min-width: 0; min-height: 40px; grid-template-columns: calc(var(--ss-sidebar-icon-track) - 2px) minmax(0, 1fr); align-items: center; width: 100%; padding: 0; border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); background: transparent; font: inherit; font-size: .84rem; line-height: var(--ss-nav-label-line-height); text-align: left; cursor: pointer; transition: color var(--ss-motion-base) var(--ss-ease), background var(--ss-motion-base) var(--ss-ease), border-color var(--ss-motion-base) var(--ss-ease); }
 .navItem:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
 .navItem[data-active="true"] { color: var(--ss-color-ink); border-color: color-mix(in srgb, var(--ss-color-accent) 24%, transparent); background: var(--ss-color-accent-soft); }
-/* Inline SVGs have a font-like baseline by default; a fixed flex item keeps
-   every navigation glyph centered against the same label line box. */
-.navItem > svg { display: block; width: var(--ss-nav-icon-size); height: var(--ss-nav-icon-size); flex: 0 0 var(--ss-nav-icon-size); color: var(--ss-color-accent); }
-.navItem[data-collapsed="true"] { justify-content: center; padding-inline: 0; }
-.navItem span { display: block; min-width: 0; max-width: 180px; overflow: hidden; opacity: 1; text-overflow: ellipsis; transform: translateX(0); line-height: var(--ss-nav-label-line-height); transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out), transform var(--ss-motion-base) var(--ss-ease-in-out); white-space: nowrap; }
-.navItem[data-collapsed="true"] { gap: 0; }
-.navItem[data-collapsed="true"] span { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(-6px); }
+/* Each glyph is centered inside the shared rail track instead of receiving a
+   per-control offset. The grid subtracts both 1px borders so its content-box
+   center lands on the brand and button outer-box center. */
+.navItem > svg { display: block; width: var(--ss-nav-icon-size); height: var(--ss-nav-icon-size); justify-self: center; color: var(--ss-color-accent); }
+.navItem span { display: block; min-width: 0; max-width: 180px; overflow: hidden; opacity: 1; text-overflow: ellipsis; transform: translateX(0); line-height: var(--ss-nav-label-line-height); transition: opacity var(--ss-motion-base) var(--ss-ease), transform var(--ss-motion-base) var(--ss-ease); white-space: nowrap; }
+.navItem[data-collapsed="true"] span { opacity: 0; pointer-events: none; transform: translateX(-4px); }
 /* 侧栏分组沿用全局间距令牌；明确的上下留白避免标题贴住相邻导航项。 */
-.navSection { min-width: 0; max-height: 80px; margin: var(--ss-space-5) 0 var(--ss-space-2); overflow: hidden; padding: 0 var(--ss-space-3); color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; font-weight: 700; line-height: 1.35; letter-spacing: .14em; opacity: 1; transition: max-height var(--ss-motion-slow) var(--ss-ease-in-out), margin var(--ss-motion-slow) var(--ss-ease-in-out), padding-block var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out); }
-.navSection[data-collapsed="true"] { max-height: 0; margin-block: 0; opacity: 0; padding-block: 0; pointer-events: none; }
+.navSection { min-width: 0; max-height: 80px; margin: var(--ss-space-5) 0 var(--ss-space-2); overflow: hidden; padding: 0 var(--ss-space-3); color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; font-weight: 700; line-height: 1.35; letter-spacing: .14em; opacity: 1; transform: translateX(0); transition: opacity var(--ss-motion-base) var(--ss-ease), transform var(--ss-motion-base) var(--ss-ease); }
+.navSection[data-collapsed="true"] { opacity: 0; pointer-events: none; transform: translateX(-4px); }
 /* 当前项目上下文拆成两行：分组标签负责层级，项目名负责定位且可安全省略。 */
 .navSectionCurrent { display: grid; gap: var(--ss-space-1); }
 .navSectionProject { min-width: 0; overflow: hidden; color: var(--ss-color-ink-muted); font-family: var(--ss-font-body); font-size: .72rem; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
 /* The theme shortcut stays visually quiet at rest; tonal feedback appears only
    during hover/press so the label reads as navigation, not another card. */
-.sidebarThemeButton { min-width: 0; width: 100%; justify-content: flex-start; overflow: hidden; border-color: transparent; font-family: var(--ss-font-body); font-size: .82rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; text-align: left; }
+.sidebarThemeButton { display: grid; min-width: 0; width: 100%; grid-template-columns: calc(var(--ss-sidebar-icon-track) - 2px) minmax(0, 1fr); gap: 0; padding-inline: 0; overflow: hidden; border-color: transparent; font-family: var(--ss-font-body); font-size: .82rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; text-align: left; }
+/* Shared small Buttons add inline padding at higher specificity; the rail owns
+   this control's complete grid geometry, so remove that competing inset. */
+.sidebarThemeButton[data-size="sm"] { padding-inline: 0; }
 .sidebarThemeButton[data-variant="ghost"] { color: var(--ss-color-ink-muted); background: transparent; }
 .sidebarThemeButton[data-variant="ghost"]:hover { border-color: transparent; color: var(--ss-color-ink); background: var(--ss-color-control-hover); }
 .sidebarThemeButton[data-variant="ghost"]:active { background: var(--ss-color-control-active); }
-.sidebarThemeButton > svg { display: block; width: 16px; height: 16px; flex: 0 0 16px; color: var(--ss-color-accent); }
-.sidebarThemeButton > span { min-width: 0; max-width: 180px; overflow: hidden; opacity: 1; text-overflow: ellipsis; transform: translateX(0); line-height: var(--ss-nav-label-line-height); transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out), opacity var(--ss-motion-base) var(--ss-ease-in-out), transform var(--ss-motion-base) var(--ss-ease-in-out); white-space: nowrap; }
-.sidebarThemeButton[data-collapsed="true"] { width: 32px; min-height: 32px; justify-content: center; gap: 0; padding-inline: 0; }
-.sidebarThemeButton[data-collapsed="true"] > span { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(-6px); }
+.sidebarThemeButton > svg { display: block; width: 16px; height: 16px; justify-self: center; color: var(--ss-color-accent); }
+.sidebarThemeButton > span { min-width: 0; max-width: 180px; overflow: hidden; opacity: 1; text-overflow: ellipsis; transform: translateX(0); line-height: var(--ss-nav-label-line-height); transition: opacity var(--ss-motion-base) var(--ss-ease), transform var(--ss-motion-base) var(--ss-ease); white-space: nowrap; }
+.sidebarThemeButton[data-collapsed="true"] > span { opacity: 0; pointer-events: none; transform: translateX(-4px); }
 /* 项目库右键菜单头部：显示项目库名称与可点击复制的路径，过长时省略。 */
 .libraryMenuHeader { display: grid; gap: 2px; min-width: 220px; padding: var(--ss-space-2); }
 .libraryMenuName { display: block; color: var(--ss-color-ink); font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -48,8 +53,8 @@
    mirror its rail behavior so responsive and manually collapsed states agree. */
 @media (max-width: 920px) {
   .brandCopy, .navSection, .navItem span, .sidebarThemeButton > span { display: none; }
-  .navItem { justify-content: center; padding-inline: 0; }
-  .sidebarThemeButton { width: 32px; min-height: 32px; justify-content: center; gap: 0; padding-inline: 0; }
+  /* The inherited responsive track remains the single alignment owner. */
+  .sidebarThemeButton { min-height: 32px; }
 }
 
 .pageHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--ss-space-5); margin-bottom: var(--ss-space-8); }
@@ -61,7 +66,13 @@
 .grid { display: grid; gap: var(--ss-layout-gap); }
 .gridThree { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gridTwo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.cardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+/* Provider credentials and appearance are the two device-level entry points;
+   this explicit row keeps them paired regardless of conditional provider cards. */
+.settingsOverviewGrid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ss-layout-gap); align-items: start; }
+/* Viewport-owned column counts keep card order stable while only the sidebar
+   changes width; tracks resize fluidly instead of crossing an auto-fill
+   threshold and moving projects between rows halfway through the transition. */
+.cardGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .metric { padding: 16px; }
 .metricValue { display: block; margin-top: 6px; color: var(--ss-color-ink); font-family: var(--ss-font-mono); font-size: 1.35rem; font-weight: 700; letter-spacing: -.04em; }
 .metricNote { display: block; margin-top: 4px; color: var(--ss-color-ink-subtle); font-size: .75rem; }
@@ -168,8 +179,9 @@
 .ocrPanel { grid-column: 1 / -1; }
 .ocrDecision { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(220px, .7fr); gap: 16px; align-items: center; margin-top: 16px; padding: 16px; border: 1px solid color-mix(in srgb, var(--ss-color-accent) 34%, var(--ss-color-line)); border-left: 3px solid var(--ss-color-accent); border-radius: var(--ss-radius-lg); background: var(--ss-color-accent-soft); }
 .ocrDecisionTitle { margin: 6px 0 4px; }
-.ocrDecisionMeta { display: grid; justify-items: end; gap: 6px; }
-.ocrEngineGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.ocrDecisionMeta { display: grid; min-width: 0; justify-items: stretch; gap: 8px; }
+.ocrDecisionMeta > :first-child { justify-self: end; }
+.ocrEngineGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; margin-top: 14px; }
 .ocrEngineCard { display: grid; min-width: 0; gap: 12px; padding: 16px; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
 .ocrEngineCard[data-selected="true"] { border-color: var(--ss-color-accent); box-shadow: var(--ss-shadow-focus); }
 .ocrEngineHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -247,9 +259,17 @@
   .workspaceLeft { position: static; max-height: none; }
 }
 
+@media (max-width: 1439px) {
+  .cardGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1139px) {
+  .cardGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 720px) {
   .pageHeader { align-items: flex-start; flex-direction: column; }
-  .gridThree, .gridTwo, .formGrid { grid-template-columns: 1fr; }
+  .gridThree, .gridTwo, .formGrid, .settingsOverviewGrid, .cardGrid { grid-template-columns: 1fr; }
   .formFieldFull { grid-column: auto; }
   .pageActions { width: 100%; }
   .pageActions > * { flex: 1; }
@@ -265,5 +285,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brandCopy, .navSection, .navItem, .navItem span, .sidebarThemeButton, .sidebarThemeButton > span, .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon { transition: none; }
+  .brandHomeButton, .brandCopy, .navSection, .navItem, .navItem span, .sidebarThemeButton, .sidebarThemeButton > span, .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon { transition: none; }
 }

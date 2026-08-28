@@ -8,14 +8,33 @@ const appSource = new URL("../../../src/renderer/App.tsx", import.meta.url);
 
 describe("application shell layout", () => {
   it("uses the packaged App Icon as the sidebar brand mark", async () => {
-    const source = await readFile(appSource, "utf8");
+    const [source, css] = await Promise.all([
+      readFile(appSource, "utf8"),
+      readFile(appStyles, "utf8"),
+    ]);
 
     // Importing the canonical build asset lets Vite package the exact artwork
-    // used by Electron instead of maintaining a second Renderer-only logo.
+    // used by Electron. Its native button reuses the guarded Library route.
     expect(source).toContain('import appIconUrl from "../../build/icon.png"');
+    expect(source).toContain('className={styles.brandHomeButton} aria-label="返回项目库"');
+    expect(source).toContain('title="返回项目库" onClick={leaveProject}');
     expect(source).toContain("className={styles.brandIcon}");
     expect(source).toContain("src={appIconUrl}");
     expect(source).not.toContain('aria-hidden="true">S</span>');
+    expect(css).toContain(".brandHomeButton { display: grid; width: 34px; height: 34px;");
+    expect(css).toContain(".brandHomeButton:focus-visible { outline: 2px solid var(--ss-color-accent);");
+  });
+
+  it("keeps project card columns stable while only the sidebar width changes", async () => {
+    const css = await readFile(appStyles, "utf8");
+
+    // Viewport breakpoints do not change during a sidebar toggle, so cards
+    // stay in the same rows while their tracks absorb the available width.
+    expect(css).toContain(".cardGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(css).toMatch(/@media \(max-width: 1439px\) \{\s*\.cardGrid \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/s);
+    expect(css).toMatch(/@media \(max-width: 1139px\) \{\s*\.cardGrid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/s);
+    expect(css).toMatch(/@media \(max-width: 720px\) \{[\s\S]*\.gridThree, \.gridTwo, \.formGrid, \.settingsOverviewGrid, \.cardGrid \{ grid-template-columns: 1fr; \}/s);
+    expect(css).not.toContain("repeat(auto-fill, minmax(240px, 1fr))");
   });
 
   it("uses the saved appearance preference for the sidebar theme control", async () => {
@@ -43,12 +62,21 @@ describe("application shell layout", () => {
       readFile(appStyles, "utf8"),
     ]);
 
-    // Width and label visibility share one eased timeline; reduced-motion
-    // remains an explicit opt-out for users who request no transitions.
-    expect(shellCss).toContain("transition: grid-template-columns var(--ss-motion-slow) var(--ss-ease-in-out);");
-    expect(shellCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.appShell, \.brand \{ transition: none; \}/s);
-    expect(appCss).toContain("transition: max-width var(--ss-motion-slow) var(--ss-ease-in-out)");
-    expect(appCss).toContain('.navItem[data-collapsed="true"] span { max-width: 0;');
+    // One rail-width transition owns spatial movement. Every sidebar control
+    // shares a centered icon track while labels fade around that fixed axis.
+    expect(shellCss).toContain("transition: grid-template-columns var(--ss-motion-slow) var(--ss-ease);");
+    expect(shellCss).toContain("--ss-sidebar-icon-track: 52px;");
+    expect(shellCss).toContain("grid-template-columns: var(--ss-sidebar-icon-track) minmax(0, 1fr);");
+    expect(shellCss).toContain(".sidebarFooter > .iconButton { width: var(--ss-sidebar-icon-track); align-self: center;");
+    expect(shellCss).not.toContain('.appShell[data-collapsed="true"] .brand');
+    expect(shellCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.appShell \{ transition: none; \}/s);
+    expect(appCss).not.toContain("transition: max-width");
+    expect(appCss).toContain('.navItem[data-collapsed="true"] span { opacity: 0;');
+    expect(appCss).toContain("grid-template-columns: calc(var(--ss-sidebar-icon-track) - 2px) minmax(0, 1fr);");
+    expect(appCss).toContain(".navItem > svg { display: block; width: var(--ss-nav-icon-size); height: var(--ss-nav-icon-size); justify-self: center;");
+    expect(appCss).toContain(".sidebarThemeButton > svg { display: block; width: 16px; height: 16px; justify-self: center;");
+    expect(appCss).toContain('.sidebarThemeButton[data-size="sm"] { padding-inline: 0; }');
+    expect(appCss).not.toContain('[data-collapsed="true"] > svg { transform:');
   });
 
   it("uses native typography and layered theme surfaces for the sidebar control", async () => {

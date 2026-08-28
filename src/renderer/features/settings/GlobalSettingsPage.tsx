@@ -17,6 +17,7 @@ const PROVIDER_BASE_URL_KEYS: Partial<Record<string, GlobalSettingKey>> = {
 
 type StatusTone = "neutral" | "success" | "warning" | "danger";
 type GlobalSaveState = "idle" | "saving" | "saved" | "error";
+type OcrPreference = "auto" | "vision" | "paddleocr" | "disabled";
 
 function engineStatus(config: ConfigData | null, id: "vision" | "paddleocr"): OcrEngineStatus | null {
   return config?.ocrEngines.find((engine) => engine.id === id) || null;
@@ -76,6 +77,31 @@ function settingValue(values: Partial<GlobalSettingsData["values"]>, key: Global
   return values[key] ?? fallback;
 }
 
+function ocrPreferenceFromValues(values: Partial<GlobalSettingsData["values"]>): OcrPreference {
+  const visionMode = settingValue(values, "VISIONOCR_ENABLED", "auto");
+  const paddleMode = settingValue(values, "PADDLEOCR_ENABLED", "auto");
+  const visionRequired = settingValue(values, "VISIONOCR_REQUIRED", "false") === "true";
+  const paddleRequired = settingValue(values, "PADDLEOCR_REQUIRED", "false") === "true";
+  // Mirror Main's required/explicit precedence so the selector never promises a
+  // different engine from the recognition request that will actually run.
+  if (visionRequired) return "vision";
+  if (paddleRequired) return "paddleocr";
+  if (visionMode === "true") return "vision";
+  if (paddleMode === "true") return "paddleocr";
+  if (visionMode === "false" && paddleMode === "false") return "disabled";
+  return "auto";
+}
+
+function ocrPreferencePatch(preference: OcrPreference): Partial<Record<GlobalSettingKey, string>> {
+  // A top-level preference owns routing. Resetting both required flags prevents
+  // a hidden advanced value from overriding the engine the user just selected.
+  const required = { VISIONOCR_REQUIRED: "false", PADDLEOCR_REQUIRED: "false" } as const;
+  if (preference === "vision") return { ...required, VISIONOCR_ENABLED: "true", PADDLEOCR_ENABLED: "false" };
+  if (preference === "paddleocr") return { ...required, VISIONOCR_ENABLED: "false", PADDLEOCR_ENABLED: "true" };
+  if (preference === "disabled") return { ...required, VISIONOCR_ENABLED: "false", PADDLEOCR_ENABLED: "false" };
+  return { ...required, VISIONOCR_ENABLED: "auto", PADDLEOCR_ENABLED: "auto" };
+}
+
 interface OcrStatusPanelProps {
   config: ConfigData | null;
   ocr: OcrSettings | null;
@@ -110,6 +136,13 @@ function OcrStatusPanel({
   const paddle = engineStatus(config, "paddleocr");
   const visionSelected = selection?.id === "vision";
   const paddleSelected = selection?.id === "paddleocr";
+  const ocrPreference = ocrPreferenceFromValues(values);
+
+  const setOcrPreference = (preference: OcrPreference) => {
+    for (const [key, value] of Object.entries(ocrPreferencePatch(preference))) {
+      setValue(key as GlobalSettingKey, value);
+    }
+  };
 
   return <Surface className={`${styles.panel} ${styles.ocrPanel}`} aria-labelledby="local-ocr-title">
     <div className={styles.sectionHeader}>
@@ -130,6 +163,14 @@ function OcrStatusPanel({
       <div className={styles.ocrDecisionMeta}>
         <StatusIndicator tone={selectionTone(selection)} label={selectionStatusLabel(selection)} />
         <Text tone="subtle" size="xs">选择方式：{selection ? selectionModeLabel(selection.mode) : "等待能力状态"}</Text>
+        <Field label="首选 OCR 引擎" hint="保存全局配置后作用于下一次识别。">
+          <Select value={ocrPreference} onChange={(event) => setOcrPreference(event.target.value as OcrPreference)}>
+            <option value="auto">自动选择</option>
+            <option value="vision">Apple Vision OCR</option>
+            <option value="paddleocr">PaddleOCR</option>
+            <option value="disabled">关闭本地 OCR</option>
+          </Select>
+        </Field>
       </div>
     </div>
 
@@ -226,7 +267,7 @@ function OcrStatusPanel({
       </article>
     </div>
 
-    <Text tone="subtle" size="xs" className={styles.ocrFootnote}>选择顺序由 Main 进程统一决定：必需模式 → 显式开启 → 自动模式；自动模式在 macOS 上优先 Vision OCR。OCR 只提供文字证据，最终结果仍由视觉模型结合页面图片确认。</Text>
+    <Text tone="subtle" size="xs" className={styles.ocrFootnote}>首选引擎会同步配置两套 OCR 的启用状态；手动选择会关闭另一引擎及冲突的必需模式。自动模式在 macOS 上优先 Vision OCR。OCR 只提供文字证据，最终结果仍由视觉模型结合页面图片确认。</Text>
   </Surface>;
 }
 
@@ -427,7 +468,8 @@ export function GlobalSettingsPage() {
     {globalError && <InlineError message={globalError} />}
 
     <div className={`${styles.grid} ${styles.gridTwo}`}>
-      <Surface className={styles.panel}>
+      <div className={styles.settingsOverviewGrid} data-testid="settings-overview-grid">
+        <Surface className={styles.panel}>
         <div className={styles.sectionHeader}><div><p className={styles.kicker}>Provider</p><h2 className={styles.sectionTitle}>访问密钥与接口</h2></div><KeyRound size={19} aria-hidden="true" /></div>
         <Text tone="muted" size="sm">密钥保存在独立的本机凭据文件，保存后不会回显；Base URL 等普通参数写入全局配置。</Text>
         <div className={styles.formGrid} style={{ marginTop: 18 }}>
@@ -445,9 +487,15 @@ export function GlobalSettingsPage() {
             <Button onClick={() => void saveKey()} loading={keyState === "saving"} startIcon={<Save size={15} />}>保存密钥</Button>
           </Stack>
         </div>
-      </Surface>
+        </Surface>
 
-      {provider?.id === "openai-compatible" && <Surface className={styles.panel} tone="accent">
+        <Surface className={styles.panel}>
+          <div className={styles.sectionHeader}><div><p className={styles.kicker}>外观</p><h2 className={styles.sectionTitle}>工作台外观</h2></div>{theme === "system" ? <Monitor size={18} aria-hidden="true" /> : theme === "dark" ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}</div>
+          <div className={styles.grid} style={{ marginTop: 14 }}><Field label="主题" hint={theme === "system" ? "自动跟随 macOS 的浅色/深色外观。" : "侧栏主题图标与此设置保持同步。"}><Select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}><option value="system">自动 · 跟随系统</option><option value="dark">深色 · Graphite</option><option value="light">浅色 · Paper</option></Select></Field><Field label="信息密度"><Select value={density} onChange={(event) => setDensity(event.target.value as "comfortable" | "compact")}><option value="comfortable">标准</option><option value="compact">紧凑 · 大表格</option></Select></Field></div>
+        </Surface>
+      </div>
+
+      {provider?.id === "openai-compatible" && <Surface className={`${styles.panel} ${styles.runtimeSettingsPanel}`} tone="accent">
         <div className={styles.sectionHeader}><div><p className={styles.kicker}>兼容接口</p><h2 className={styles.sectionTitle}>模型与响应格式</h2></div><Braces size={19} aria-hidden="true" /></div>
         <Text tone="muted" size="sm">Key、Base URL 与模型 ID 都需要配置；其他选项决定兼容服务商接受哪一种请求格式。</Text>
         <div className={styles.formGrid} style={{ marginTop: 18 }}>
@@ -480,11 +528,6 @@ export function GlobalSettingsPage() {
           <Text tone="subtle" size="xs">已覆盖 {globalSettings?.overrides.length ?? 0} 项非敏感配置</Text>
           <Button size="sm" loading={globalSaveState === "saving"} onClick={() => void saveGlobalSettings()} startIcon={<Save size={15} />}>保存运行参数</Button>
         </div>
-      </Surface>
-
-      <Surface className={styles.panel}>
-        <div className={styles.sectionHeader}><div><p className={styles.kicker}>外观</p><h2 className={styles.sectionTitle}>工作台外观</h2></div>{theme === "system" ? <Monitor size={18} aria-hidden="true" /> : theme === "dark" ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}</div>
-        <div className={styles.grid} style={{ marginTop: 14 }}><Field label="主题" hint={theme === "system" ? "自动跟随 macOS 的浅色/深色外观。" : "侧栏主题图标与此设置保持同步。"}><Select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}><option value="system">自动 · 跟随系统</option><option value="dark">深色 · Graphite</option><option value="light">浅色 · Paper</option></Select></Field><Field label="信息密度"><Select value={density} onChange={(event) => setDensity(event.target.value as "comfortable" | "compact")}><option value="comfortable">标准</option><option value="compact">紧凑 · 大表格</option></Select></Field></div>
       </Surface>
 
       <OcrStatusPanel config={config} ocr={ocr} values={globalValues} setValue={setValue} paddleCheck={paddleCheck} ocrState={ocrState} checkAndSaveOcr={checkAndSaveOcr} visionCheck={visionCheck} visionCheckState={visionCheckState} checkVision={checkVision} saveGlobalSettings={() => saveGlobalSettings()} globalSaveState={globalSaveState} />

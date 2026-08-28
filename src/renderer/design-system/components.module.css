@@ -177,14 +177,16 @@
 @keyframes dialogIn { from { opacity: 0; transform: translateY(6px) scale(.985); } }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
 
-.appShell { display: grid; min-height: 100vh; grid-template-columns: var(--ss-sidebar-width) minmax(0, 1fr); background: var(--ss-color-canvas); transition: grid-template-columns var(--ss-motion-slow) var(--ss-ease-in-out); }
+.appShell { display: grid; min-height: 100vh; grid-template-columns: var(--ss-sidebar-width) minmax(0, 1fr); overflow-x: clip; background: var(--ss-color-canvas); transition: grid-template-columns var(--ss-motion-slow) var(--ss-ease); }
 .appShell[data-collapsed="true"] { grid-template-columns: 76px minmax(0, 1fr); }
 /* Desktop navigation owns one viewport-height column. Only its middle nav may
    scroll, so the footer controls stay pinned while the workspace document moves. */
-.sidebar { position: sticky; top: 0; display: flex; align-self: start; width: 100%; height: 100vh; min-height: 0; flex-direction: column; overflow: hidden; padding: var(--ss-space-5) var(--ss-space-3); border-right: 1px solid var(--ss-color-line); background: var(--ss-color-surface); }
+.sidebar { --ss-sidebar-icon-track: 52px; position: sticky; top: 0; display: flex; align-self: start; width: 100%; height: 100vh; min-height: 0; flex-direction: column; overflow: hidden; padding: var(--ss-space-5) var(--ss-space-3); border-right: 1px solid var(--ss-color-line); background: var(--ss-color-surface); }
 .sidebar nav { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
-.brand { display: flex; align-items: center; gap: var(--ss-space-3); padding: var(--ss-space-2) var(--ss-space-3) var(--ss-space-5); color: var(--ss-color-ink); transition: gap var(--ss-motion-slow) var(--ss-ease-in-out), padding-inline var(--ss-motion-slow) var(--ss-ease-in-out); }
-.appShell[data-collapsed="true"] .brand { justify-content: center; gap: 0; padding-inline: 0; }
+/* The brand, feature navigation, and footer controls inherit one rail track.
+   Its centered first cell keeps every icon on the same fixed inline axis. */
+.brand { display: grid; grid-template-columns: var(--ss-sidebar-icon-track) minmax(0, 1fr); align-items: center; padding: var(--ss-space-2) 0 var(--ss-space-5); color: var(--ss-color-ink); }
+.brand > :first-child { justify-self: center; }
 .brandMark { display: grid; width: 34px; height: 34px; place-items: center; overflow: hidden; border-radius: var(--ss-radius-md); color: var(--ss-color-on-accent); background: var(--ss-color-accent-strong); font-weight: 800; }
 .brandMark::before { align-self: start; width: 100%; height: 6px; content: ""; background: repeating-linear-gradient(120deg, rgba(255,255,255,.62) 0 7px, transparent 7px 14px); }
 .brandCopy strong, .brandCopy small { display: block; }
@@ -195,7 +197,10 @@
 .navItem:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
 .navItem[data-active="true"] { color: var(--ss-color-ink); border-color: color-mix(in srgb, var(--ss-color-accent) 24%, transparent); background: var(--ss-color-accent-soft); }
 .navItem svg { color: var(--ss-color-accent); }
-.sidebarFooter { display: grid; flex: 0 0 auto; gap: var(--ss-space-2); margin-top: auto; padding: var(--ss-space-3); border-top: 1px solid var(--ss-color-surface-line); }
+.sidebarFooter { display: grid; flex: 0 0 auto; gap: var(--ss-space-2); margin-top: auto; padding: var(--ss-space-3) 0; border-top: 1px solid var(--ss-color-surface-line); }
+/* The icon-only rail toggle uses the same track width as labeled controls,
+   so its glyph cannot drift when neighboring labels are clipped. */
+.sidebarFooter > .iconButton { width: var(--ss-sidebar-icon-track); align-self: center; justify-self: start; }
 .main { min-width: 0; }
 .toolbar { position: sticky; top: 0; z-index: var(--ss-z-sticky); display: flex; min-height: var(--ss-header-height); align-items: center; justify-content: space-between; gap: var(--ss-space-4); padding: 0 clamp(var(--ss-space-5), 4vw, var(--ss-space-10)); border-bottom: 1px solid var(--ss-color-line); background: color-mix(in srgb, var(--ss-color-canvas) 84%, transparent); backdrop-filter: blur(16px); }
 .toolbarTitle { min-width: 0; }
@@ -211,8 +216,8 @@
 
 @media (max-width: 920px) {
   .appShell { grid-template-columns: 76px minmax(0, 1fr); }
-  .sidebar { padding-inline: var(--ss-space-2); }
-  .brand { justify-content: center; padding-inline: 0; }
+  .sidebar { --ss-sidebar-icon-track: 60px; padding-inline: var(--ss-space-2); }
+  .brand { padding-inline: 0; }
   .brandCopy, .navSection, .navItem span { display: none; }
   .navItem { justify-content: center; padding-inline: 0; }
   .sidebarFooter { padding-inline: 0; }
@@ -223,7 +228,7 @@
   .appShell { display: block; }
   /* The narrow layout becomes a natural-height top bar rather than inheriting
      the desktop viewport column and clipping the workspace below it. */
-  .sidebar { position: sticky; top: 0; z-index: calc(var(--ss-z-sticky) + 1); align-self: auto; height: auto; min-height: auto; flex-direction: row; align-items: center; gap: var(--ss-space-2); overflow: visible; padding: var(--ss-space-2); border-right: 0; border-bottom: 1px solid var(--ss-color-line); }
+  .sidebar { --ss-sidebar-icon-track: 40px; position: sticky; top: 0; z-index: calc(var(--ss-z-sticky) + 1); align-self: auto; height: auto; min-height: auto; flex-direction: row; align-items: center; gap: var(--ss-space-2); overflow: visible; padding: var(--ss-space-2); border-right: 0; border-bottom: 1px solid var(--ss-color-line); }
   .brand { padding: 0; }
   .sidebar nav { display: flex; min-height: auto; flex: 1; gap: var(--ss-space-1); overflow: visible; }
   .sidebar nav .navItem { min-height: 40px; }
@@ -238,6 +243,6 @@
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation: none; }
   .button, .iconButton, .segmentedButton, .control, .progressBar { transition: none; }
-  .appShell, .brand { transition: none; }
+  .appShell { transition: none; }
   .toast, .dialogOverlay, .dialog { animation: none; }
 }
