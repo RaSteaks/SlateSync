@@ -144,6 +144,17 @@ function OcrStatusPanel({
     }
   };
 
+  const setOcrEngineMode = (id: "vision" | "paddleocr", value: string) => {
+    // Enabling a card is equivalent to choosing it as the next recognition
+    // route; keep the advanced controls and the top-level preference aligned
+    // before the user presses Save.
+    if (value === "true") {
+      setOcrPreference(id);
+      return;
+    }
+    setValue(id === "vision" ? "VISIONOCR_ENABLED" : "PADDLEOCR_ENABLED", value);
+  };
+
   return <Surface className={`${styles.panel} ${styles.ocrPanel}`} aria-labelledby="local-ocr-title">
     <div className={styles.sectionHeader}>
       <div>
@@ -192,7 +203,7 @@ function OcrStatusPanel({
         <details className={styles.settingsDetails}>
           <summary>调整 Vision OCR 参数</summary>
           <div className={styles.formGrid}>
-            <Field label="启用模式" hint="自动会在 macOS 能力可用时优先选择 Vision。"><Select value={settingValue(values, "VISIONOCR_ENABLED", "auto")} onChange={(event) => setValue("VISIONOCR_ENABLED", event.target.value)}><option value="auto">自动</option><option value="true">开启</option><option value="false">关闭</option></Select></Field>
+            <Field label="启用模式" hint="自动会在 macOS 能力可用时优先选择 Vision。"><Select value={settingValue(values, "VISIONOCR_ENABLED", "auto")} onChange={(event) => setOcrEngineMode("vision", event.target.value)}><option value="auto">自动</option><option value="true">开启</option><option value="false">关闭</option></Select></Field>
             <Field label="必需模式" hint="开启后 Vision 不可用会阻止识别。"><Select value={settingValue(values, "VISIONOCR_REQUIRED", "false")} onChange={(event) => setValue("VISIONOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
             <Field label="识别语言" hint="可填写逗号分隔的语言，如 zh-Hans,en-US。"><Input value={settingValue(values, "VISIONOCR_LANGUAGE", "zh-Hans")} onChange={(event) => setValue("VISIONOCR_LANGUAGE", event.target.value)} /></Field>
             <Field label="识别精度"><Select value={settingValue(values, "VISIONOCR_RECOGNITION_LEVEL", "accurate")} onChange={(event) => setValue("VISIONOCR_RECOGNITION_LEVEL", event.target.value)}><option value="accurate">高精度</option><option value="fast">快速</option></Select></Field>
@@ -236,7 +247,7 @@ function OcrStatusPanel({
         <details className={styles.settingsDetails}>
           <summary>调整 PaddleOCR 参数</summary>
           <div className={styles.formGrid}>
-            <Field label="启用模式" hint="自动会在检测到 Python 环境时启用。"><Select value={settingValue(values, "PADDLEOCR_ENABLED", "auto")} onChange={(event) => setValue("PADDLEOCR_ENABLED", event.target.value)}><option value="auto">自动</option><option value="true">开启</option><option value="false">关闭</option></Select></Field>
+            <Field label="启用模式" hint="自动会在检测到 Python 环境时启用。开启后将优先使用 PaddleOCR。"><Select value={settingValue(values, "PADDLEOCR_ENABLED", "auto")} onChange={(event) => setOcrEngineMode("paddleocr", event.target.value)}><option value="auto">自动</option><option value="true">开启</option><option value="false">关闭</option></Select></Field>
             <Field label="必需模式" hint="开启后 PaddleOCR 不可用会阻止识别。"><Select value={settingValue(values, "PADDLEOCR_REQUIRED", "false")} onChange={(event) => setValue("PADDLEOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
             <Field label="模型版本"><Input value={settingValue(values, "PADDLEOCR_MODEL_VERSION", "PP-OCRv5")} onChange={(event) => setValue("PADDLEOCR_MODEL_VERSION", event.target.value)} /></Field>
             <Field label="性能档"><Select value={settingValue(values, "PADDLEOCR_PROFILE", "balanced")} onChange={(event) => setValue("PADDLEOCR_PROFILE", event.target.value)}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>

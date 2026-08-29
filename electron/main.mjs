@@ -12,8 +12,8 @@
 // preserve recovery without creating a second BrowserWindow or gateway. The
 // window blocks external navigation and only allows the active dev origin or
 // file:// URLs under the selected legacy or modern shell root.
-import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
-import { access } from "node:fs/promises";
+import { app, BrowserWindow, ipcMain, nativeImage, shell } from "electron";
+import { access, mkdir } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -247,7 +247,16 @@ async function initialize() {
     refreshRuntimeSettings,
     libraryActions,
     logger: appLogger,
+    openLogDirectory,
   });
+}
+
+/** Create the log directory on demand, then reveal it in the native file manager. */
+async function openLogDirectory(logsDir) {
+  await mkdir(logsDir, { recursive: true, mode: 0o700 });
+  const openError = await shell.openPath(logsDir);
+  if (openError) throw new Error(openError);
+  return { opened: true };
 }
 
 async function initialLibraryPath(configuredPath = "") {

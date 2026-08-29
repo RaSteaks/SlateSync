@@ -118,6 +118,41 @@ describe("global settings layout and OCR routing", () => {
     });
   });
 
+  it("treats the PaddleOCR card enable control as a routing choice", async () => {
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...initialGlobalSettings,
+        values: { ...initialGlobalSettings.values, ...request.values },
+      },
+    }));
+    const host = await renderSettings(save);
+    const enableFields = [...host.querySelectorAll("label")].filter((label) => label.textContent?.includes("启用模式"));
+    const paddleEnable = enableFields.at(-1)?.querySelector("select");
+    if (!(paddleEnable instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR enable select");
+
+    // Directly enabling the engine card must produce the same patch as the
+    // top-level preference, otherwise Vision can remain the active route.
+    act(() => changeSelect(paddleEnable, "true"));
+
+    const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
+    await act(async () => {
+      saveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      values: {
+        VISIONOCR_ENABLED: "false",
+        PADDLEOCR_ENABLED: "true",
+        VISIONOCR_REQUIRED: "false",
+        PADDLEOCR_REQUIRED: "false",
+      },
+    });
+  });
+
   it("top-aligns OCR engine cards so disclosures size independently", async () => {
     const css = await readFile("src/renderer/app/app.module.css", "utf8");
 

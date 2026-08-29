@@ -18,6 +18,7 @@ import { checkVisionOcr } from "../lib/ocr/vision.mjs";
 import {
   listGlobalOverrides,
   normalizeGlobalSettingsPatch,
+  normalizeOcrRoutingPatch,
   resolveGlobalSettingValues,
 } from "./global-settings.mjs";
 import {
@@ -47,6 +48,7 @@ export function registerIpcHandlers(ipcMain, context) {
     refreshRuntimeSettings,
     libraryActions,
     logger,
+    openLogDirectory,
     checkOcr = checkPaddleOcr,
     checkVision = checkVisionOcr,
     checkJsonSchema = checkOpenAiCompatibleJsonSchema,
@@ -113,7 +115,9 @@ export function registerIpcHandlers(ipcMain, context) {
     const previous = { ...runtimeGlobalConfig };
     const patch = body?.reset === true
       ? {}
-      : normalizeGlobalSettingsPatch(body?.values || {});
+      : normalizeOcrRoutingPatch(
+        normalizeGlobalSettingsPatch(body?.values || {}),
+      );
     const next = body?.reset === true ? {} : { ...previous };
     for (const [key, value] of Object.entries(patch)) {
       if (value) next[key] = value;
@@ -641,8 +645,16 @@ export function registerIpcHandlers(ipcMain, context) {
       level: body?.level,
       category: typeof body?.category === "string" && body.category
         ? body.category
-        : undefined,
+      : undefined,
     });
+  });
+
+  // The renderer never receives the log path. Main creates/reveals its own
+  // private directory through the OS opener, keeping filesystem access out of
+  // the sandboxed Renderer and making the action safe before the first log.
+  ipcMain.handle("logs-open-directory", async () => {
+    if (!logger?.logsDir || !openLogDirectory) throw new Error("本地日志目录不可用");
+    return openLogDirectory(logger.logsDir);
   });
 
   async function resolveProjectContext(projectId, { readOnly = false } = {}) {

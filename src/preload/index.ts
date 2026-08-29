@@ -3,6 +3,7 @@ import type {
   BinaryPayload,
   GlobalSettingsData,
   GlobalSettingsRequest,
+  LogsOpenDirectoryResult,
   LogsReadRequest,
   ModelsRequest,
   OcrCheckRequest,
@@ -131,9 +132,11 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       checkCompatibleJsonSchema: () => request("check-compatible-json-schema"),
     },
     // Logs stay read-only over IPC: the Main process is the single writer of
-    // the local log files, and the viewer polls instead of subscribing.
+    // the local log files. Opening the folder is an OS action, not a Renderer
+    // filesystem escape, so it also stays behind the typed Main boundary.
     logs: {
       read: (body: LogsReadRequest) => request("logs-read", body),
+      openDirectory: () => request<LogsOpenDirectoryResult>("logs-open-directory"),
     },
   };
 }

@@ -548,3 +548,93 @@ Worker 边界、验收证据和最终治理交接。
 - `global-settings.test.tsx` 显式引用 Node 类型，使 jsdom/Renderer 推断项目能够识别
   `node:fs/promises`，无需把 Node 全局类型引入 Renderer 生产配置；单文件 TypeScript
   检查与 Vitest 3/3 通过。
+
+## 2026-08-29 识别任务跨日志页恢复与场记 OCR 增强
+
+- 识别会话状态增加 `taskId` 与一次性 `resumeOnWorkspace` 交接标记；进度监听提升到
+  `App` 生命周期，避免 Workspace 卸载后停止接收 Main 的进度事件。Workspace 离开到
+  日志页时保留正在运行的识别、任务快照、图片输入、CSV Worker 和元数据；回到工作台后
+  运行中的任务直接显示原进度，任务结束后按任务 ID 从 Main 重新载入权威结果并刷新任务列表。
+  非日志路由仍释放大体积工作区数据；自动保存 / 请求准备的短暂 in-flight 窗口也纳入交接保护。
+- 图片上传与 PDF 统一使用整页图 + 两张重复表头的核心字段局部放大图；快速模式仍只提交
+  整页，精确模式复用全部视图进行 OCR、主识别和核心查漏。标识归一化只对无歧义的卡号/视频码
+  补齐固定数字位宽，范围或畸形值保留原样；序列校正结果降级为需人工复核，避免静默猜测。
+- 已新增状态交接、全局进度监听、图片多视图准备及标识归一化回归断言。
+- 验证结果：`npm run typecheck`、`npm run check`、`npm run test:modern`（19 个文件、70/70）、
+  `npm run build:modern`、定向 OCR/识别测试（58/58）和 `git diff --check` 通过；完整
+  `npm run test:node` 为 279 项通过 278 项，唯一失败是既有 baseline 清单的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），本次未改动该配置。
+
+## 2026-08-29 场记单预览放大查看与多页触控板切换
+
+- 工作台场记单预览的每一页改为原生 `<button>`，点击、Enter 和 Space 均打开同一张大图；
+  按钮名称包含文件名和页码，保留页码角标、可见 hover/pressed/focus 状态，并在预览标题下
+  提示“点击页面可放大查看”。
+- 大图复用共享 `Dialog`，新增 `wide` 尺寸以给文档保留更大的阅读宽度；关闭按钮、点击遮罩
+  和 Escape 均可返回，Dialog 原有的焦点陷阱与关闭后恢复到触发缩略图的行为保持不变。
+- 大图底部提供上一页/下一页按钮，Dialog 接收左右方向键；预览区域消费触控板的水平
+  `wheel.deltaX`，以“整段 wheel burst 锁定 + 320ms 空闲解锁”合并一次连续手势，避免惯性
+  尾部再次触发而跳过多页。垂直滚动与 Ctrl + wheel 的捏合缩放不拦截。
+- 预览选中项同时记录页码和图片来源；任务切换、替换或清空场记单时若来源不再匹配，自动
+  关闭放大层，避免显示已离开当前任务的旧图片。大图使用窗口高度上限和 `object-fit: contain`，
+  并沿用现有浅色/深色语义 token 与 reduced-motion 规则。
+- 已新增工作台预览静态回归与共享 Dialog `wide` / 局部键盘处理测试。`npm run typecheck`、
+  `npm run test:modern`（19 个文件、73/73）、`npm run build:modern`、`npm run build:storybook`、
+  `npm run check` 与 `git diff --check` 通过；未启动前台 Electron。
+
+## 2026-08-29 项目进入自动加载历史任务与任务搜索
+
+- 工作台在项目 ID 进入或切换时自动刷新任务摘要；首屏已有任务时保留旧列表并以
+  `aria-busy` 表示同步中，首屏为空时显示“正在加载历史任务”，避免用户必须点击刷新才能
+  看见历史记录。刷新开始时清理任务列表错误，失败时保留旧列表并提供重试入口。
+- 任务栏增加原生搜索框，按文件名、任务 ID 或本地化状态实时过滤历史任务；筛选后重新计算
+  TanStack Virtual 的行数并回到首行，零结果显示明确说明和“清除搜索”操作。搜索字段保留
+  Escape 清除、可见焦点和键盘可操作性，沿用现有设计系统控件与页面 token。
+- 新增 TaskRail jsdom 交互回归及工作台/任务生命周期静态断言，后续验证记录在本节。
+- 验证结果：`npm run typecheck`、`npm run test:modern`（20 个文件、76/76）、
+  `npm run build:modern`、`npm run build:storybook`、`npm run check` 与
+  `git diff --check` 通过；Storybook 仅报告沙盒无法写入用户目录的既有提示，未启动
+  Electron 前台窗口。
+
+## 2026-08-29 四项任务生命周期审查修复
+
+- 自动保存回传 Main 分配的任务 ID，并由识别请求优先使用；工作台即使在日志页交接期间卸载，
+  也会继续更新同一草稿，不再因 `activeId` 尚未回写而创建重复完成任务。
+- 任务状态记录 `loadedProjectId`：项目打开时的首个历史列表读取会被工作台复用，日志页或其他
+  路由返回时仍会触发权威刷新；日志交接恢复完成后再次刷新任务栏摘要，避免停留在草稿/零进度。
+- `normalizeVideoCode` 与 Resolve 的 `C0XX` 约束保持一致，`C115`、`C0115` 等超出范围的
+  数字编号不再进入可匹配素材键；新增自动保存 ID、项目列表归属和编号边界回归测试。
+- 验证结果：`npm run typecheck`、`npm run test:modern`（20 个文件、79/79）、`npm run check`、
+  定向 Node 回归（83/83）、`npm run build:modern` 与 `git diff --check` 均通过；未启动
+  Electron 前台窗口。
+
+## 2026-08-29 PaddleOCR 全局路由一致性修复
+
+- 修复全局设置中直接开启 PaddleOCR 时，旧的 Vision `enabled/required` 配置仍可能抢占
+  识别路由的问题。Main 保存全局配置时把显式开启某个 OCR 引擎归一化为互斥路由，同时
+  清除另一引擎的必需标记；Modern Renderer 的引擎卡片开关复用顶部首选引擎逻辑，保存前
+  即同步两套开关。自动模式仍保留 macOS 上优先 Vision OCR 的原有行为。
+- 新增全局配置、IPC 保存和 Modern 设置组件回归测试，覆盖“Paddle 开启后下一次识别不再
+  选择 Vision”的配置链路；未修改 OCR 推理算法、模型请求或 Project Library 数据格式。
+- 验证结果：`npm run check`、`npm run typecheck`、`npm run build:modern`、`npm run test:modern`
+  （20 个文件、80/80）与定向 OCR/全局设置回归均通过。`npm run test:node` 为 281 项中
+  280 项通过，唯一失败是既有 baseline `package.version` 漂移（实时 `0.2.0`、基线
+  `0.1.0`），本次未改动该配置。
+
+## 2026-08-29 日志目录快捷打开与工作台路由驻留
+
+- 日志查看器的“本地日志”卡片新增文件夹图标；Renderer 只通过
+  logs-open-directory 类型化 IPC 请求，Main 按需创建 0700 日志目录并交给系统
+  文件管理器打开，不向沙盒 Renderer 暴露本地路径。
+- 工作台实例在日志、项目设置和全局设置路由间保持挂载并隐藏，保留草稿、图片输入、
+  CSV Worker、编辑数据和识别进度；离开项目库时仍清理工作区。返回工作台时先等待同一
+  自动保存队列，再从 Main 读取活动任务详情并刷新任务列表，防止展示旧快照。
+- 根据复审补齐隐藏路由边界：进行中的图片准备/压缩请求继续完成，准备服务在 Worker
+  空闲后释放资源，回到工作台会取消延迟释放；图像裁剪取所有有效内容带的外包围范围，
+  不因标题与表格间的留白丢失识别内容；日志目录按钮在旧 Preload 缺少新方法时显示
+  完整重启指引，而不是暴露裸 TypeError。
+- 新增日志目录 IPC、Preload/Shared Contract、日志页交互和工作台返回刷新回归覆盖。
+- 本轮验证：npm run typecheck、npm run check、npm run test:modern（20 个文件、
+  85/85）、图像预处理回归（5/5）、npm run build:modern、npm run build:storybook、
+  Electron IPC 定向测试和 git diff --check 均通过。Storybook 仅报告沙盒无法写入
+  用户目录的既有提示；未启动 Electron 前台窗口。

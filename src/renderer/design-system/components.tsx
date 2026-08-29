@@ -148,7 +148,7 @@ export function Toast({ message, tone = "neutral", onDismiss }: { message: strin
   return <div className={styles.toast} role="status" aria-live="polite"><Stack direction="row" gap={3} align="center"><StatusIndicator tone={tone} label={message} />{onDismiss && <IconButton label="关闭通知" size="sm" onClick={onDismiss}><X size={16} /></IconButton>}</Stack></div>;
 }
 
-export function Dialog({ open, title, description, onClose, children, footer }: { open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Dialog({ open, title, description, onClose, children, footer, size = "default", onKeyDown }: { open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: "default" | "wide"; onKeyDown?: ComponentPropsWithoutRef<"div">["onKeyDown"] }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -192,7 +192,9 @@ export function Dialog({ open, title, description, onClose, children, footer }: 
   }, [open]);
   if (!open) return null;
   return createPortal(<div className={styles.dialogOverlay} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    {/* Wide dialogs keep document previews readable without changing the shared
+        focus trap, Escape handling, or opener restoration contract. */}
+    <div ref={dialogRef} className={styles.dialog} data-size={size} role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={onKeyDown}>
       <div className={styles.dialogHeader}><div><Text as="h2" id={titleId} size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}</div><IconButton label="关闭对话框" onClick={onClose}><X size={18} /></IconButton></div>
       {children}
       {footer && <><Separator /><div style={{ marginTop: "var(--ss-space-5)" }}>{footer}</div></>}

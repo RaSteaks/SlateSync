@@ -136,6 +136,21 @@ export function normalizeGlobalSettingsPatch(value = {}) {
   return normalized;
 }
 
+// An explicit enable action is also a routing choice. Normalize the two OCR
+// flags at the settings boundary so the legacy form and the Modern Renderer
+// cannot leave a stale Vision preference masking a newly enabled PaddleOCR.
+export function normalizeOcrRoutingPatch(patch = {}) {
+  const normalized = { ...patch };
+  if (normalized.PADDLEOCR_ENABLED === "true") {
+    normalized.VISIONOCR_ENABLED = "false";
+    normalized.VISIONOCR_REQUIRED = "false";
+  } else if (normalized.VISIONOCR_ENABLED === "true") {
+    normalized.PADDLEOCR_ENABLED = "false";
+    normalized.PADDLEOCR_REQUIRED = "false";
+  }
+  return normalized;
+}
+
 export function applyGlobalConfig(env = {}, globalConfig = {}) {
   const nextEnv = { ...env };
   for (const [key, value] of Object.entries(sanitizeGlobalConfig(globalConfig))) {

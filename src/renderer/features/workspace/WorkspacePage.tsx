@@ -1,5 +1,5 @@
-import { Download, FileSpreadsheet, FolderSearch, Play, RefreshCw, Square, Upload } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, FolderSearch, Play, RefreshCw, Square, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type {
   OcrSummary,
@@ -98,10 +98,12 @@ export type RegisterWorkspaceToolbarExport = (
   state?: WorkspaceToolbarExportState,
 ) => void;
 
-export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport?: RegisterWorkspaceToolbarExport } = {}) {
+export function WorkspacePage({ registerToolbarExport, hidden = false }: { registerToolbarExport?: RegisterWorkspaceToolbarExport; hidden?: boolean } = {}) {
   const project = useProjectStore((state) => state.current);
   const config = useProjectStore((state) => state.config);
   const scenarios = useProjectStore((state) => state.scenarios);
+  const route = useUiStore((state) => state.route);
+  const loadedTaskProjectId = useTaskStore((state) => state.loadedProjectId);
   const setToast = useUiStore((state) => state.setToast);
   // High-frequency progress and sparse table edits subscribe only to rendered
   // fields. Worker-retained tables and task snapshots are read by actions.
@@ -114,6 +116,9 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     preparing: state.preparing,
   })));
   const recognition = useRecognitionStore(useShallow((state) => ({
+    projectId: state.projectId,
+    taskId: state.taskId,
+    resumeOnWorkspace: state.resumeOnWorkspace,
     running: state.running,
     phase: state.phase,
     percent: state.percent,
@@ -139,6 +144,10 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
   const [models, setModels] = useState<readonly import("../../../shared/contracts/index.js").ModelData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [switchingTask, setSwitchingTask] = useState(false);
+  const [previewSelection, setPreviewSelection] = useState<{ page: number; source: string } | null>(null);
+  const previewWheelDeltaRef = useRef(0);
+  const previewWheelLockedRef = useRef(false);
+  const previewWheelUnlockTimerRef = useRef<number | null>(null);
   const taskSwitchInFlightRef = useRef(false);
   const slatePanelRef = useRef<SlateInputPanelHandle>(null);
   const slatePreviewRef = useRef<HTMLDivElement>(null);
@@ -156,7 +165,22 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
   const runRecognitionRef = useRef<() => void>(() => undefined);
   const exportCsvRef = useRef<() => void>(() => undefined);
   const cancelRequestedRef = useRef(false);
+  const recognitionInFlightRef = useRef(false);
+  const previousRouteRef = useRef<ReturnType<typeof useUiStore.getState>["route"] | null>(null);
   projectIdRef.current = project?.id || null;
+
+  useEffect(() => {
+    const preparation = getPreparationService();
+    if (hidden) {
+      // Route detours must not cancel an active prepare/recompress request, but
+      // an idle Worker should not stay alive merely because Workspace is hidden.
+      preparation.terminateWhenIdle();
+      return;
+    }
+    // Returning to Workspace cancels a deferred idle release before the user
+    // can start another upload or recognition compression pass.
+    preparation.keepAlive();
+  }, [hidden]);
 
   useEffect(() => {
     if (!slate.imageDataGroups.length) {
@@ -168,6 +192,98 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     const frame = requestAnimationFrame(() => slatePreviewRef.current?.focus({ preventScroll: false }));
     return () => cancelAnimationFrame(frame);
   }, [slate.imageDataGroups]);
+
+  const previewPages = useMemo(() => slate.imageDataGroups.flatMap((group, page) => {
+    const source = group[0];
+    return source ? [{ page, source }] : [];
+  }), [slate.imageDataGroups]);
+
+  useEffect(() => {
+    // A task switch or replacement must never leave the lightbox pointing at
+    // an image that no longer belongs to the visible slate preview.
+    setPreviewSelection((current) => current && previewPages.some((item) => item.page === current.page && item.source === current.source) ? current : null);
+  }, [previewPages]);
+
+  const selectedPreview = useMemo(() => {
+    if (!previewSelection) return null;
+    return previewPages.find((item) => item.page === previewSelection.page && item.source === previewSelection.source) || null;
+  }, [previewPages, previewSelection]);
+  const selectedPreviewPosition = selectedPreview ? previewPages.indexOf(selectedPreview) : -1;
+
+  const selectPreviewPage = useCallback((page: number) => {
+    const next = previewPages.find((item) => item.page === page);
+    if (next) setPreviewSelection({ page: next.page, source: next.source });
+  }, [previewPages]);
+
+  const movePreviewPage = useCallback((offset: number) => {
+    setPreviewSelection((current) => {
+      if (!current) return current;
+      const currentPosition = previewPages.findIndex((item) => item.page === current.page && item.source === current.source);
+      const next = currentPosition >= 0 ? previewPages[currentPosition + offset] : undefined;
+      return next ? { page: next.page, source: next.source } : current;
+    });
+  }, [previewPages]);
+
+  const handlePreviewKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!selectedPreview || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+    event.preventDefault();
+    movePreviewPage(event.key === "ArrowRight" ? 1 : -1);
+  }, [movePreviewPage, selectedPreview]);
+
+  const schedulePreviewWheelUnlock = useCallback(() => {
+    if (previewWheelUnlockTimerRef.current !== null) window.clearTimeout(previewWheelUnlockTimerRef.current);
+    previewWheelUnlockTimerRef.current = window.setTimeout(() => {
+      // Trackpad momentum can outlive a short throttle window. Unlock only
+      // after the full horizontal wheel burst has gone quiet.
+      previewWheelDeltaRef.current = 0;
+      previewWheelLockedRef.current = false;
+      previewWheelUnlockTimerRef.current = null;
+    }, 320);
+  }, []);
+
+  const handlePreviewWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    // Ctrl + wheel is commonly emitted by trackpad pinch-to-zoom; leave that
+    // browser gesture untouched and only consume an intentional horizontal move.
+    if (!selectedPreview || event.ctrlKey) return;
+    const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+    if (!delta) return;
+    event.preventDefault();
+
+    // A single trackpad swipe arrives as many wheel events, including momentum
+    // tail events; the lock limits the whole burst to one page transition.
+    schedulePreviewWheelUnlock();
+    if (previewWheelLockedRef.current) return;
+    previewWheelDeltaRef.current += delta;
+    if (Math.abs(previewWheelDeltaRef.current) < 48) return;
+
+    const direction = previewWheelDeltaRef.current > 0 ? 1 : -1;
+    previewWheelDeltaRef.current = 0;
+    previewWheelLockedRef.current = true;
+    movePreviewPage(direction);
+  }, [movePreviewPage, schedulePreviewWheelUnlock, selectedPreview]);
+
+  useEffect(() => {
+    if (selectedPreview) return;
+    previewWheelDeltaRef.current = 0;
+    previewWheelLockedRef.current = false;
+    if (previewWheelUnlockTimerRef.current !== null) {
+      window.clearTimeout(previewWheelUnlockTimerRef.current);
+      previewWheelUnlockTimerRef.current = null;
+    }
+  }, [selectedPreview]);
+
+  useEffect(() => () => {
+    if (previewWheelUnlockTimerRef.current !== null) window.clearTimeout(previewWheelUnlockTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (route === "workspace") return;
+    // Route detours preserve the task projection, but transient workspace
+    // dialogs must close so a portal cannot cover the destination settings or
+    // log page while the workspace root is hidden.
+    setDeleteTaskId(null);
+    setPreviewSelection(null);
+  }, [route]);
 
   const settingsSnapshot = useCallback((): ProjectSettings => {
     const base = project?.settings || defaultSettings(config);
@@ -265,7 +381,7 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     capture: () => latestCapture.current(),
     save: async (task) => {
       const projectId = task.projectId || projectIdRef.current;
-      if (!projectId) return;
+      if (!projectId) return null;
       const expectedTaskId = task.id || null;
       const id = await unwrap(await getSlateSync().tasks.save({ projectId, task }));
       const taskState = useTaskStore.getState();
@@ -273,6 +389,9 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
       if (workspaceMountedRef.current && useProjectStore.getState().current?.id === projectId && taskState.activeId === expectedTaskId) {
         taskState.setActive(id, { ...task, id });
       }
+      // The returned ID remains authoritative even if the route was changed
+      // while this save was awaiting Main; autosave exposes it to recognition.
+      return id;
     },
     onState: (state) => {
       useTaskStore.getState().setSaveState(state);
@@ -298,16 +417,29 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
   const refreshTasks = useCallback(async (projectId = projectIdRef.current) => {
     if (!projectId) return;
     const operationId = taskListGuard.start();
+    useTaskStore.getState().setError(null);
     useTaskStore.getState().setLoading(true);
     try {
       const items = await unwrap(await getSlateSync().tasks.list({ projectId }));
-      if (taskListGuard.isCurrent(operationId) && projectIdRef.current === projectId) useTaskStore.getState().setItems(items);
+      if (taskListGuard.isCurrent(operationId) && projectIdRef.current === projectId) useTaskStore.getState().setItems(items, projectId);
     } catch (nextError) {
       if (taskListGuard.isCurrent(operationId)) useTaskStore.getState().setError(appErrorFromUnknown(nextError));
     } finally {
       if (taskListGuard.isCurrent(operationId)) useTaskStore.getState().setLoading(false);
     }
   }, [taskListGuard]);
+
+  useEffect(() => {
+    const projectId = project?.id;
+    if (!projectId) return undefined;
+    const returningFromLogViewer = recognition.resumeOnWorkspace && recognition.projectId === projectId;
+    // App's opening read already owns the first projection. A missing marker
+    // means this is a route return (or a direct Workspace mount), while a log
+    // handoff always forces a fresh authoritative summary after completion.
+    if (loadedTaskProjectId === projectId && !returningFromLogViewer) return undefined;
+    void refreshTasks(projectId);
+    return undefined;
+  }, [loadedTaskProjectId, project?.id, recognition.projectId, recognition.resumeOnWorkspace, refreshTasks]);
 
   const clearWorkspaceData = useCallback(async () => {
     operationGuard.invalidate();
@@ -326,15 +458,19 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     taskListGuard.invalidate();
     taskLoadGuard.invalidate();
     void autosave.flush();
-    getCsvWorkerService().terminate();
     const preserveRecognitionForLogViewer = useUiStore.getState().route === "logs"
-      && useRecognitionStore.getState().running;
-    // Route-owned projections must not retain full CSV/PDF/result graphs after
-    // the workspace is gone. The immutable pending save was captured above;
-    // returning to the route reloads the authoritative task from Main.
-    // A running recognition is the one exception: the system log page is a
-    // read-only observer and must keep receiving the global progress store.
-    if (!preserveRecognitionForLogViewer) useRecognitionStore.getState().reset();
+      && (useRecognitionStore.getState().running || recognitionInFlightRef.current);
+    if (preserveRecognitionForLogViewer) {
+      // Logs is a read-only detour. Keep every route-owned input and the
+      // worker alive so returning to Workspace can render the same task while
+      // the App-level progress listener continues receiving events.
+      useRecognitionStore.getState().markWorkspaceHandoff(projectIdRef.current, useTaskStore.getState().activeId);
+      return;
+    }
+    getCsvWorkerService().terminate();
+    // Non-log routes still release the potentially large image/CSV graphs;
+    // their next visit reloads the authoritative task from Main.
+    useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
@@ -343,27 +479,36 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
 
   useEffect(() => {
     if (!project) return;
+    // Initialize once per project identity. Settings-page saves and global
+    // config refreshes may replace these objects while this instance is hidden;
+    // they must not clear the user's retained workspace projection.
     const settings = project.settings || defaultSettings(config);
+    const retainedRecognition = useRecognitionStore.getState();
+    const resumeFromLogViewer = retainedRecognition.resumeOnWorkspace
+      && retainedRecognition.projectId === project.id;
+    const retainedTask = resumeFromLogViewer ? useTaskStore.getState().active : null;
     autosave.reset();
     replaceDraft({
-      providerId: project.lastRecognitionDefaults?.providerId || settings.providerId || config?.providers.find((item) => item.configured)?.id || config?.providers[0]?.id || "",
-      modelId: project.lastRecognitionDefaults?.modelId || settings.modelId || "",
-      accuracyMode: settings.accuracyMode || "high",
-      scenarioId: settings.scenarioId || "",
-      customPrompt: project.lastRecognitionDefaults?.customPrompt || settings.customPrompt || "",
+      providerId: retainedTask?.provider || project.lastRecognitionDefaults?.providerId || settings.providerId || config?.providers.find((item) => item.configured)?.id || config?.providers[0]?.id || "",
+      modelId: retainedTask?.model || project.lastRecognitionDefaults?.modelId || settings.modelId || "",
+      accuracyMode: retainedTask?.accuracyMode || settings.accuracyMode || "high",
+      scenarioId: retainedTask?.scenarioId || settings.scenarioId || "",
+      customPrompt: retainedTask?.customPrompt ?? project.lastRecognitionDefaults?.customPrompt ?? settings.customPrompt ?? "",
     });
-    useRecognitionStore.getState().reset();
-    previewGuard.invalidate();
-    useSlateStore.getState().clearInput();
-    useExportStore.getState().clear();
-    useMetadataStore.getState().clear();
-    void getCsvWorkerService().clear();
+    if (!resumeFromLogViewer) {
+      useRecognitionStore.getState().reset();
+      previewGuard.invalidate();
+      useSlateStore.getState().clearInput();
+      useExportStore.getState().clear();
+      useMetadataStore.getState().clear();
+      void getCsvWorkerService().clear();
+    }
     return () => {
       taskListGuard.invalidate();
       taskLoadGuard.invalidate();
       void autosave.flush();
     };
-  }, [autosave, config, previewGuard, project, replaceDraft, taskListGuard, taskLoadGuard]);
+  }, [autosave, previewGuard, project?.id, replaceDraft, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
     if (!providerId) return;
@@ -381,7 +526,7 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     return () => { active = false; };
   }, [config?.models, providerId, setModelFallback]);
 
-  const applyTask = async (taskId: string, task: TaskData) => {
+  const applyTask = useCallback(async (taskId: string, task: TaskData) => {
     const csvWorker = getCsvWorkerService();
     // Prime retained Worker state before publishing the restored table to
     // React, so an immediately clicked Export cannot observe half-restored UI.
@@ -455,7 +600,83 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     autosave.reset();
     useTaskStore.getState().setActive(taskId, task);
     useTaskStore.getState().setSaveState("saved");
-  };
+  }, [autosave, config, project, refreshResolvePreview, refreshTasks, replaceDraft]);
+
+  useEffect(() => {
+    if (!project || !recognition.resumeOnWorkspace || recognition.projectId !== project.id) return undefined;
+    const taskId = recognition.taskId;
+    // A running request already has its complete in-memory projection. Only
+    // reload after it stops, otherwise a draft snapshot from Main could erase
+    // the live progress/result while the user is back on the Workspace route.
+    if (recognition.running) return undefined;
+    if (!taskId) {
+      useRecognitionStore.getState().clearWorkspaceHandoff();
+      return undefined;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const task = await unwrap(await getSlateSync().tasks.load({ projectId: project.id, id: taskId }));
+        const currentRecognition = useRecognitionStore.getState();
+        if (!active || currentRecognition.running || !currentRecognition.resumeOnWorkspace || currentRecognition.taskId !== taskId) return;
+        if (task.result || task.editedRecords?.length) {
+          await applyTask(taskId, task);
+        } else {
+          // Preserve a failed/canceled in-memory result when Main only has the
+          // original draft, but still make the handoff one-shot.
+          useTaskStore.getState().setActive(taskId, task);
+          useTaskStore.getState().setSaveState("saved");
+          useRecognitionStore.getState().clearWorkspaceHandoff();
+        }
+        // The restored detail is authoritative; refresh the rail so its
+        // summary/status cannot remain the pre-handoff draft projection.
+        await refreshTasks(project.id);
+      } catch (nextError) {
+        if (!active) return;
+        useRecognitionStore.getState().clearWorkspaceHandoff();
+        setError(appErrorFromUnknown(nextError).message);
+      }
+    })();
+    return () => { active = false; };
+  }, [project, recognition.projectId, recognition.resumeOnWorkspace, recognition.running, recognition.taskId, refreshTasks]);
+
+  const refreshWorkspaceAfterRouteReturn = useCallback(async (projectId: string) => {
+    // Finish the same autosave queue before re-reading Main; otherwise a fast
+    // settings/logs round-trip could replace the user's newest local edits with
+    // an older persisted task snapshot.
+    if (!(await autosave.flush())) {
+      if (useTaskStore.getState().saveState === "error") setError("工作台快照保存失败，暂不刷新当前任务。");
+      return;
+    }
+    const currentRecognition = useRecognitionStore.getState();
+    if (currentRecognition.running) {
+      // A live request already owns the freshest detail in the global store;
+      // only the task rail needs the authoritative Main-side summary.
+      await refreshTasks(projectId);
+      return;
+    }
+
+    const activeTaskId = useTaskStore.getState().activeId || autosave.getLastSavedTaskId();
+    if (activeTaskId) {
+      const task = await unwrap(await getSlateSync().tasks.load({ projectId, id: activeTaskId }));
+      if (useUiStore.getState().route !== "workspace" || projectIdRef.current !== projectId || useRecognitionStore.getState().running) return;
+      // Rehydrate the detail projection after the detour so completed edits and
+      // any task data written by Main during the detour are immediately visible.
+      await applyTask(activeTaskId, task);
+    }
+    await refreshTasks(projectId);
+  }, [applyTask, autosave, refreshTasks, setError]);
+
+  useEffect(() => {
+    const previousRoute = previousRouteRef.current;
+    previousRouteRef.current = route;
+    if (!project?.id || route !== "workspace" || !previousRoute || previousRoute === "workspace") return undefined;
+    void refreshWorkspaceAfterRouteReturn(project.id).catch((nextError) => {
+      if (useUiStore.getState().route === "workspace" && projectIdRef.current === project.id) setError(appErrorFromUnknown(nextError).message);
+    });
+    return undefined;
+  }, [project?.id, refreshWorkspaceAfterRouteReturn, route, setError]);
 
   const loadTask = async (taskId: string) => {
     if (!project || switchingTask || taskSwitchInFlightRef.current || taskId === useTaskStore.getState().activeId) return;
@@ -622,10 +843,10 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     }
   };
 
-  const buildRecognitionRequest = async (): Promise<RecognitionRequest> => {
+  const buildRecognitionRequest = async (taskIdOverride?: string | null): Promise<RecognitionRequest> => {
     if (!project) throw new Error("项目上下文已失效。");
     const currentSlate = useSlateStore.getState();
-    const activeTaskId = useTaskStore.getState().activeId;
+    const activeTaskId = taskIdOverride ?? useTaskStore.getState().activeId;
     const slateCsvRecords = useExportStore.getState().slateCsvRecords;
     const maxRequestBytes = config?.upload.maxRequestBytes || 80 * 1024 * 1024;
     const base = {
@@ -677,17 +898,24 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
     if (!slate.imageDataGroups.length) return;
     setError(null);
     cancelRequestedRef.current = false;
+    // Cover the short preparation/autosave window before the global store is
+    // marked running; a log detour during that window must not release inputs.
+    recognitionInFlightRef.current = true;
     let activeOperationId: number | null = null;
     try {
       if (!(await autosave.flush())) throw new Error("当前任务保存失败；请重试保存后再开始识别。");
-      const request = await buildRecognitionRequest();
+      // Prefer the ID returned by the completed save; activeId belongs to the
+      // mounted Workspace and can still be null after a log detour.
+      const persistedTaskId = autosave.getLastSavedTaskId() || useTaskStore.getState().activeId;
+      const request = await buildRecognitionRequest(persistedTaskId);
       const operationId = operationGuard.start();
       activeOperationId = operationId;
       invalidateResolvePreview();
-      useRecognitionStore.getState().start(operationId, project.id, slate.pageCount);
+      // Bind the durable owner atomically with running state so Main updates
+      // the draft even when this Workspace instance is no longer mounted.
+      useRecognitionStore.getState().start(operationId, project.id, slate.pageCount, persistedTaskId);
       const api = getSlateSync();
-      const unsubscribe = api.recognition.onProgress((event) => useRecognitionStore.getState().progress(operationId, event));
-      try {
+      {
         const result = await unwrap(await api.recognition.run(request));
         if (result.projectId !== project.id) return;
         useRecognitionStore.getState().complete(operationId, result);
@@ -704,8 +932,6 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
         }
         await refreshTasks(project.id);
         setToast({ tone: "success", message: `识别完成 · ${result.result.records.length} 条记录` });
-      } finally {
-        unsubscribe();
       }
     } catch (nextError) {
       const appError = appErrorFromUnknown(nextError);
@@ -718,6 +944,7 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
       if (useRecognitionStore.getState().operationId === operationId) useRecognitionStore.getState().fail(operationId, appError);
       if (workspaceMountedRef.current && operationGuard.isCurrent(operationId)) setError(appError.message);
     } finally {
+      recognitionInFlightRef.current = false;
       useSlateStore.getState().setPreparing(false);
     }
   };
@@ -800,7 +1027,7 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
   const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId)) && !recognition.running && !slate.preparing && !switchingTask);
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} hidden={hidden}>
       <div className={styles.pageHeader}>
         <div><p className={styles.eyebrow}>工作台</p><h1 className={styles.heading}>{project.name}</h1></div>
         <div className={styles.pageActions}><Badge tone={provider?.configured ? "success" : "warning"}>{provider?.configured ? `${provider.label} 已就绪` : "Provider 未配置"}</Badge></div>
@@ -850,12 +1077,18 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
 
         <div className={styles.workspaceMain}>
           <Surface className={styles.panel}>
-            <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>预览</p><h2 className={styles.sectionTitle}>场记单</h2></div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} 页` : "未载入"}</Text>{slate.filename && <Button variant="ghost" size="sm" onClick={() => slatePanelRef.current?.openPicker()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
-            {slate.imageDataGroups.length ? <div ref={slatePreviewRef} tabIndex={-1} aria-label="场记单预览" className={styles.preview} style={{ marginTop: 14 }}><div className={styles.previewPages}>{slate.imageDataGroups.map((group, index) => <div className={styles.previewPage} key={`${slate.filename}-${index}`}><img src={group[0]} alt={`${slate.filename || "场记单"} 第 ${index + 1} 页`} /><span>{String(index + 1).padStart(2, "0")}</span></div>)}</div></div> : <div className={styles.routeHint} style={{ marginTop: 14 }}>载入场记单后显示预览。</div>}
+            <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>预览</p><h2 className={styles.sectionTitle}>场记单</h2>{slate.imageDataGroups.length > 0 && <Text tone="subtle" size="xs" style={{ marginTop: 4 }}>点击页面可放大查看</Text>}</div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} 页` : "未载入"}</Text>{slate.filename && <Button variant="ghost" size="sm" onClick={() => slatePanelRef.current?.openPicker()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
+            {slate.imageDataGroups.length ? <div ref={slatePreviewRef} tabIndex={-1} aria-label="场记单预览" className={styles.preview} style={{ marginTop: 14 }}><div className={styles.previewPages}>{previewPages.map(({ page, source }) => {
+              const pageLabel = `${slate.filename || "场记单"} 第 ${page + 1} 页`;
+              return <button type="button" className={styles.previewPageButton} key={`${slate.filename}-${page}`} aria-label={`放大查看${pageLabel}`} onClick={() => selectPreviewPage(page)}>
+                <span className={styles.previewPage}><img src={source} alt={pageLabel} /><span>{String(page + 1).padStart(2, "0")}</span></span>
+              </button>;
+            })}</div></div> : <div className={styles.routeHint} style={{ marginTop: 14 }}>载入场记单后显示预览。</div>}
             {recognition.running && <div className={styles.recognitionBanner} style={{ marginTop: 14 }}>
               <div className={styles.recognitionBannerHeader}><Stack direction="row" gap={2} align="center"><Badge tone="accent">{recognition.phase}</Badge><Text size="sm" weight="medium">{recognition.message}</Text></Stack><Text tone="accent" size="sm" mono>{Math.round(recognition.percent)}%</Text></div>
               <Progress value={recognition.percent} label="识别进度" />
               <Text tone="subtle" size="xs">{recognition.completedPages} / {recognition.totalPages} 页</Text>
+              {recognition.resumeOnWorkspace && <Text tone="accent" size="xs">已从日志页返回，识别任务仍在后台继续。</Text>}
               {/* Announce only the durable warning; rapidly changing progress keeps its own progressbar semantics. */}
               {recognition.warning && <div className={styles.warningItem} role="status" aria-live="polite" aria-atomic="true">{recognition.warning}</div>}
             </div>}
@@ -884,6 +1117,20 @@ export function WorkspacePage({ registerToolbarExport }: { registerToolbarExport
         footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" onClick={() => setDeleteTaskId(null)} disabled={switchingTask}>取消</Button><Button variant="danger" onClick={() => void deleteTask()} loading={switchingTask}>确认删除</Button></Stack>}
       >
         <Text tone="muted" size="sm">只删除当前选中的任务。</Text>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(selectedPreview)}
+        title={selectedPreview ? `${slate.filename || "场记单"} · 第 ${selectedPreview.page + 1} 页` : "场记单预览"}
+        description="左右滑动触控板或使用 ← → 切换页面；按 Escape 或关闭按钮返回预览。"
+        onClose={() => setPreviewSelection(null)}
+        onKeyDown={handlePreviewKeyDown}
+        size="wide"
+        footer={<Stack className={styles.previewLightboxFooter} direction="row" justify="between" align="center"><Button type="button" variant="ghost" onClick={() => movePreviewPage(-1)} disabled={selectedPreviewPosition <= 0} startIcon={<ChevronLeft size={15} aria-hidden="true" />}>上一页</Button><Text tone="subtle" size="xs" mono>{selectedPreviewPosition >= 0 ? `${selectedPreviewPosition + 1} / ${previewPages.length}` : ""}</Text><Button type="button" variant="ghost" onClick={() => movePreviewPage(1)} disabled={selectedPreviewPosition < 0 || selectedPreviewPosition >= previewPages.length - 1} endIcon={<ChevronRight size={15} aria-hidden="true" />}>下一页</Button></Stack>}
+      >
+        {selectedPreview && <div className={styles.previewLightbox} onWheel={handlePreviewWheel}>
+          <img src={selectedPreview.source} alt={`${slate.filename || "场记单"} 第 ${selectedPreview.page + 1} 页，大图`} draggable={false} />
+        </div>}
       </Dialog>
     </div>
   );

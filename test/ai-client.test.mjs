@@ -8,7 +8,12 @@ import {
   resolveModel,
   resolveProvider,
 } from "../lib/config.mjs";
-import { normalizeSlateResult, normalizeTakeStatus } from "../lib/schema.mjs";
+import {
+  normalizeCardNumber,
+  normalizeSlateResult,
+  normalizeTakeStatus,
+  normalizeVideoCode,
+} from "../lib/schema.mjs";
 import {
   materialKey,
   syntheticProductionDayGroundTruth,
@@ -86,6 +91,23 @@ test("slate symbols normalize into Resolve Comments status values", () => {
   assert.equal(normalizeTakeStatus("X"), "废条");
   assert.equal(normalizeTakeStatus("×"), "废条");
   assert.equal(normalizeTakeStatus(""), null);
+});
+
+test("OCR/model identifier variants normalize without guessing malformed values", () => {
+  assert.equal(normalizeCardNumber(" a-10 "), "A010");
+  assert.equal(normalizeVideoCode(" c 15 "), "C015");
+  assert.equal(normalizeVideoCode("C0015"), "C015");
+  assert.equal(normalizeVideoCode("C115"), null);
+  assert.equal(normalizeVideoCode("C0115"), null);
+  assert.equal(normalizeVideoCode("C011-18"), "C011-18");
+  assert.equal(normalizeCardNumber("camera-A"), "CAMERA-A");
+  const result = normalizeSlateResult({
+    sheetTitle: null,
+    records: [{ ...modelResult.records[0], cardNumber: "A10", videoCode: "15" }],
+    warnings: [],
+  });
+  assert.equal(result.records[0].cardNumber, "A010");
+  assert.equal(result.records[0].videoCode, "C015");
 });
 
 test("recognition preserves every scene in a multi-scene value", () => {

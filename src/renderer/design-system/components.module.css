@@ -166,6 +166,7 @@
 
 .dialogOverlay { position: fixed; inset: 0; z-index: var(--ss-z-overlay); display: grid; place-items: center; padding: var(--ss-space-6); background: var(--ss-overlay); backdrop-filter: blur(10px); animation: fadeIn var(--ss-motion-base) var(--ss-ease); }
 .dialog { width: min(100%, 560px); max-height: min(720px, calc(100vh - 48px)); overflow: auto; padding: var(--ss-space-6); border: 1px solid var(--ss-color-line-strong); border-radius: var(--ss-radius-xl); background: var(--ss-color-surface-raised); box-shadow: var(--ss-shadow-md); animation: dialogIn var(--ss-motion-base) var(--ss-ease); }
+.dialog[data-size="wide"] { width: min(100%, 980px); }
 .dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ss-space-4); margin-bottom: var(--ss-space-5); }
 .popover { position: absolute; z-index: var(--ss-z-dropdown); min-width: 180px; padding: var(--ss-space-3); border: 1px solid var(--ss-color-line-strong); border-radius: var(--ss-radius-md); background: var(--ss-color-surface-raised); box-shadow: var(--ss-shadow-md); }
 .tooltipWrap { position: relative; display: inline-flex; }

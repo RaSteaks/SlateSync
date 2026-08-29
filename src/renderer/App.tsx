@@ -148,6 +148,23 @@ export function App() {
   }, [setError]);
 
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      // Recognition belongs to the app session rather than the Workspace
+      // route. Keeping one listener here means Logs and Workspace observe the
+      // same operation without competing subscriptions during route changes.
+      unsubscribe = getSlateSync().recognition.onProgress((event) => {
+        const recognition = useRecognitionStore.getState();
+        if (recognition.running) recognition.progress(recognition.operationId, event);
+      });
+    } catch {
+      // Renderer-only tests can mount without the Electron preload bridge;
+      // the real desktop window always installs the bridge before this effect.
+    }
+    return () => unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
     if (!appearanceHydrated) return;
     // Appearance is renderer-only UI state. A versioned key persists it without
     // expanding Shared Contract v1 or mixing it into project data.
@@ -276,7 +293,9 @@ export function App() {
       flushSync(() => {
         useProjectStore.getState().setCurrent(loaded);
         useProjectStore.getState().setScenarios(scenarios);
-        useTaskStore.getState().setItems(tasks);
+        // Mark the project represented by the opening read so Workspace does
+        // not immediately issue the same history request again on mount.
+        useTaskStore.getState().setItems(tasks, id);
         useUiStore.getState().setRoute(nextRoute);
       });
     } catch (error) { if (projectLoadGuard.isCurrent(operationId)) useProjectStore.getState().setError(appErrorFromUnknown(error)); }
@@ -361,5 +380,8 @@ export function App() {
       </Dialog>;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "workspace" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  // Keep one Workspace instance mounted while Logs or either settings page is
+  // visible. Its draft, image inputs, CSV Worker and in-flight recognition
+  // stay intact; the hidden page is excluded from the accessibility tree.
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

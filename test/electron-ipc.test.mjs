@@ -88,6 +88,7 @@ describe("electron IPC handlers", () => {
       "check-ocr",
       "check-vision-ocr",
       "logs-read",
+      "logs-open-directory",
     ];
     for (const channel of expectedChannels) {
       assert.ok(
@@ -187,6 +188,21 @@ describe("electron IPC handlers", () => {
       hasMore: false,
     });
     assert.deepEqual(calls, [{ limit: 25, level: "warn", category: "recognition" }]);
+  });
+
+  it("opens the Main-owned local log directory through the injected OS action", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      logger: { logsDir: "/synthetic/user-data/logs" },
+      openLogDirectory: async (logsDir) => {
+        calls.push(logsDir);
+        return { opened: true };
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("logs-open-directory"), { opened: true });
+    assert.deepEqual(calls, ["/synthetic/user-data/logs"]);
   });
 
   it("dispatches Project Library transfer actions", async () => {
@@ -567,6 +583,33 @@ describe("electron IPC handlers", () => {
     assert.equal(runtimeSettings.ocrPythonPath, "");
     assert.equal(runtimeSettings.ocrSetupCompleted, false);
     assert.equal(runtimeSettings.ocrSetupSkipped, false);
+  });
+
+  it("saving PaddleOCR enablement clears a stale Vision route", async () => {
+    const runtimeGlobalConfig = {
+      VISIONOCR_ENABLED: "true",
+      VISIONOCR_REQUIRED: "true",
+      PADDLEOCR_ENABLED: "auto",
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeGlobalConfig,
+      runtimeEnv: () => ({ ...runtimeGlobalConfig }),
+      globalConfigStore: {
+        save: async (values) => ({ version: 1, values: { ...values } }),
+      },
+    }));
+
+    const saved = await ipcMain.invoke("save-global-settings", {
+      values: { PADDLEOCR_ENABLED: "true" },
+    });
+
+    assert.equal(runtimeGlobalConfig.PADDLEOCR_ENABLED, "true");
+    assert.equal(runtimeGlobalConfig.VISIONOCR_ENABLED, "false");
+    assert.equal(runtimeGlobalConfig.VISIONOCR_REQUIRED, "false");
+    assert.equal(saved.values.PADDLEOCR_ENABLED, "true");
+    assert.equal(saved.values.VISIONOCR_ENABLED, "false");
+    assert.equal(saved.values.VISIONOCR_REQUIRED, "false");
   });
 
   it("save-provider-key stores and clears keys", async () => {

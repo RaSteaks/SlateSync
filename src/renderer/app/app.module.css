@@ -114,12 +114,28 @@
 .fileCopy small { margin-top: 4px; color: var(--ss-color-ink-subtle); font-size: .7rem; }
 .preview { display: grid; min-height: 290px; place-items: center; padding: 22px; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
 .previewPages { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; width: 100%; max-height: 420px; overflow: auto; }
-.previewPage { position: relative; overflow: hidden; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-md); background: #fff; aspect-ratio: 3 / 4; }
+.previewPage { position: relative; display: block; overflow: hidden; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-md); background: #fff; aspect-ratio: 3 / 4; }
 .previewPage img { width: 100%; height: 100%; object-fit: contain; }
 .previewPage span { position: absolute; left: 6px; bottom: 6px; padding: 3px 6px; border-radius: var(--ss-radius-sm); color: #192231; background: rgba(255, 255, 255, .86); font-family: var(--ss-font-mono); font-size: .65rem; }
+/* The thumbnail is a real button so pointer, Enter, and Space all open the
+   same inspection surface, while the page itself keeps the existing contact
+   sheet geometry. */
+.previewPageButton { display: block; align-self: start; width: 100%; min-width: 0; padding: 0; border: 0; border-radius: var(--ss-radius-md); color: inherit; background: transparent; font: inherit; text-align: left; cursor: zoom-in; }
+.previewPageButton:hover .previewPage { border-color: var(--ss-color-accent); box-shadow: 0 0 0 2px var(--ss-color-accent-soft); }
+.previewPageButton:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: 3px; box-shadow: var(--ss-shadow-focus); }
+.previewPageButton:active .previewPage { transform: translateY(1px); }
+.previewPage { transition: border-color var(--ss-motion-fast) var(--ss-ease), box-shadow var(--ss-motion-fast) var(--ss-ease), transform var(--ss-motion-fast) var(--ss-ease); }
+.previewLightbox { display: grid; min-width: 0; min-height: 220px; place-items: center; padding: var(--ss-space-3); border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); overscroll-behavior: contain; }
+.previewLightbox img { display: block; width: auto; max-width: 100%; max-height: min(64vh, 620px); object-fit: contain; }
+.previewLightboxFooter { width: 100%; }
 .recognitionBanner { display: grid; gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--ss-color-accent) 30%, transparent); border-radius: var(--ss-radius-lg); background: var(--ss-color-accent-soft); }
 .recognitionBannerHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .taskSaveStatus { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.taskSearch { display: grid; gap: 6px; margin-bottom: 8px; }
+.taskSearchRow { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.taskSearchControl { position: relative; min-width: 0; flex: 1 1 auto; }
+.taskSearchControl > svg { position: absolute; top: 50%; left: 10px; z-index: 1; color: var(--ss-color-ink-subtle); pointer-events: none; transform: translateY(-50%); }
+.taskSearchInput { padding-left: 32px; }
 .taskRail { max-height: 250px; overflow: auto; }
 .taskVirtualSizer { position: relative; width: 100%; }
 .taskVirtualRow { position: absolute; top: 0; left: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; align-items: center; width: 100%; padding-bottom: 6px; }
@@ -285,5 +301,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brandHomeButton, .brandCopy, .navSection, .navItem, .navItem span, .sidebarThemeButton, .sidebarThemeButton > span, .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon { transition: none; }
+  .brandHomeButton, .brandCopy, .navSection, .navItem, .navItem span, .sidebarThemeButton, .sidebarThemeButton > span, .projectCard, .uploadZone, .modelPickerTrigger, .modelPickerTriggerIcon, .modelPickerGroupHeaderIcon, .previewPage { transition: none; }
 }

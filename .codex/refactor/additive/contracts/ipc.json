@@ -8,6 +8,7 @@
     "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
     "checkVisionOcr": { "channel": "check-vision-ocr", "args": [] },
     "readLogs": { "channel": "logs-read", "args": ["request"] },
+    "openLogsDirectory": { "channel": "logs-open-directory", "args": [] },
     "getGlobalSettings": { "channel": "get-global-settings", "args": [] },
     "saveGlobalSettings": { "channel": "save-global-settings", "args": ["request"] }
   }

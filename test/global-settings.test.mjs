@@ -8,6 +8,7 @@ import {
   GLOBAL_SETTING_KEYS,
   applyGlobalConfig,
   normalizeGlobalSettingsPatch,
+  normalizeOcrRoutingPatch,
   resolveGlobalSettingValues,
   sanitizeGlobalConfig,
 } from "../electron/global-settings.mjs";
@@ -61,6 +62,25 @@ test("Global Settings validates patches and only overlays approved keys", () => 
   assert.equal(resolveGlobalSettingValues({}).MAX_BODY_MB, "80");
   assert.equal(sanitizeGlobalConfig({ MAX_BODY_MB: "100", OPENAI_BASE_URL: "file:///tmp/no" }).MAX_BODY_MB, "100");
   assert.equal(sanitizeGlobalConfig({ MAX_BODY_MB: "999", OPENAI_BASE_URL: "file:///tmp/no" }).MAX_BODY_MB, undefined);
+});
+
+test("explicit OCR enablement clears the competing engine route", () => {
+  assert.deepEqual(
+    normalizeOcrRoutingPatch({ PADDLEOCR_ENABLED: "true" }),
+    {
+      PADDLEOCR_ENABLED: "true",
+      VISIONOCR_ENABLED: "false",
+      VISIONOCR_REQUIRED: "false",
+    },
+  );
+  assert.deepEqual(
+    normalizeOcrRoutingPatch({ VISIONOCR_ENABLED: "true" }),
+    {
+      VISIONOCR_ENABLED: "true",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "false",
+    },
+  );
 });
 
 test("global-config.json is versioned, private, atomic, and resilient to bad input", async () => {

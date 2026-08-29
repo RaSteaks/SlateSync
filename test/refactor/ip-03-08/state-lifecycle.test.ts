@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createOperationGuard } from "../../../src/renderer/services/operation-guard";
 import { createTaskAutosave } from "../../../src/renderer/services/task-autosave";
 import { useRecognitionStore } from "../../../src/renderer/state/recognition-store";
+import { useTaskStore } from "../../../src/renderer/state/task-store";
 
 describe("modern lifecycle boundaries", () => {
   it("ignores stale recognition progress and never regresses capped progress", () => {
@@ -19,6 +20,32 @@ describe("modern lifecycle boundaries", () => {
     expect(useRecognitionStore.getState().warning).toBe("OCR fallback");
     store.complete(6, {} as never);
     expect(useRecognitionStore.getState().running).toBe(true);
+    store.reset();
+  });
+
+  it("keeps the task-bound recognition snapshot across a log detour", () => {
+    const store = useRecognitionStore.getState();
+    store.reset();
+    // The same marker also carries project/task identity during the brief
+    // autosave/preparation window before start() has published running=true.
+    store.markWorkspaceHandoff("project-1", "task-1");
+    expect(useRecognitionStore.getState().projectId).toBe("project-1");
+    expect(useRecognitionStore.getState().taskId).toBe("task-1");
+    store.reset();
+    store.start(11, "project-1", 4);
+    store.setTaskId("task-1");
+    store.progress(11, { phase: "primary", percent: 48, completed: 2, total: 4, message: "第 2 页" });
+    store.markWorkspaceHandoff();
+
+    const handoff = useRecognitionStore.getState();
+    expect(handoff.taskId).toBe("task-1");
+    expect(handoff.resumeOnWorkspace).toBe(true);
+    expect(handoff.percent).toBe(48);
+
+    // Completion must retain the handoff marker until Workspace rehydrates the
+    // authoritative saved task; resetting then closes the one-shot handoff.
+    store.complete(11, { taskId: "task-1", pageCount: 4, result: { sheetTitle: null, records: [], warnings: [] } } as never);
+    expect(useRecognitionStore.getState().resumeOnWorkspace).toBe(true);
     store.reset();
   });
 
@@ -100,5 +127,31 @@ describe("modern lifecycle boundaries", () => {
     expect(await autosave.retry()).toBe(true);
     expect(attempts).toBe(2);
     expect(states.at(-1)).toBe("saved");
+  });
+
+  it("exposes the Main-assigned task ID after an autosave", async () => {
+    const autosave = createTaskAutosave({
+      capture: () => null,
+      save: async () => "task-from-main",
+      onState: () => undefined,
+      delayMs: 0,
+    });
+
+    // Recognition can continue after Workspace unmounts, so its request must
+    // read the ID from the save result rather than from a UI-owned activeId.
+    autosave.markDirty({ filename: "draft" });
+    expect(await autosave.flush()).toBe(true);
+    expect(autosave.getLastSavedTaskId()).toBe("task-from-main");
+    autosave.reset();
+    expect(autosave.getLastSavedTaskId()).toBeNull();
+  });
+
+  it("records which project the task rail items belong to", () => {
+    const store = useTaskStore.getState();
+    store.clear();
+    store.setItems([], "project-1");
+    expect(useTaskStore.getState().loadedProjectId).toBe("project-1");
+    store.clear();
+    expect(useTaskStore.getState().loadedProjectId).toBeNull();
   });
 });

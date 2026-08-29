@@ -2299,10 +2299,10 @@ async function loadReportFile(file) {
       meta = `${formatBytes(file.size)} · ${pageCount} 页 · 多视图双重查漏`;
     } else {
       const processed = await prepareImage(file);
-      imageGroups = [[processed.dataUrl]];
+      imageGroups = [processed.imageDataGroup];
       previewPages = [processed.dataUrl];
       pageCount = 1;
-      meta = `${formatBytes(file.size)} · ${processed.width} × ${processed.height}`;
+      meta = `${formatBytes(file.size)} · ${processed.width} × ${processed.height} · 多视图核心复核`;
     }
 
     state.reportFile = file;
@@ -2377,15 +2377,6 @@ async function prepareImage(file) {
   const width = Math.max(1, Math.round(image.width * scale));
   const height = Math.max(1, Math.round(image.height * scale));
 
-  if (scale === 1 && file.type !== "image/png") {
-    updateTaskProgress({
-      phase: "preparing",
-      percent: 95,
-      message: "原图清晰度符合识别要求",
-    });
-    return { dataUrl: source, width, height };
-  }
-
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -2394,8 +2385,27 @@ async function prepareImage(file) {
   context.fillRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
 
+  const croppedCanvas = cropVerticalWhitespace(canvas);
+  const detailLayout = calculateDetailSegments(croppedCanvas.height);
+  // Image uploads must receive the same full + repeated-header core views as
+  // PDFs; otherwise high-accuracy mode gets only one downscaled JPEG for the
+  // tiny C0XX and scene/shot/take cells in a photographed slate.
+  const imageDataGroup = [
+    await canvasToDataUrl(resizeCanvas(croppedCanvas, 2600), "image/jpeg", 0.92),
+  ];
+  for (const segment of detailLayout.segments) {
+    await yieldToRenderer();
+    const detailCanvas = resizeCanvas(
+      createDetailComposite(croppedCanvas, detailLayout.header, segment),
+      3000,
+      true,
+    );
+    imageDataGroup.push(await canvasToDataUrl(detailCanvas, "image/jpeg", 0.93));
+  }
+
   const prepared = {
-    dataUrl: await canvasToDataUrl(canvas, "image/jpeg", 0.9),
+    dataUrl: imageDataGroup[0],
+    imageDataGroup,
     width,
     height,
   };

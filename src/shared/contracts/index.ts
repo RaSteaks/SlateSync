@@ -538,6 +538,11 @@ export interface LogsReadResult {
   readonly hasMore: boolean;
 }
 
+/** Result of asking the Main process to reveal the private local log folder. */
+export interface LogsOpenDirectoryResult {
+  readonly opened: boolean;
+}
+
 export interface TaskListItem {
   readonly id?: string;
   readonly filename?: string | null;
@@ -796,6 +801,7 @@ export interface SlateSyncApi {
   };
   readonly logs: {
     read(request: LogsReadRequest): Promise<Result<LogsReadResult>>;
+    openDirectory(): Promise<Result<LogsOpenDirectoryResult>>;
   };
 }
 
