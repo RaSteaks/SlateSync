@@ -57,11 +57,16 @@ export interface OcrEngineStatus {
   readonly minimumConfidence?: number;
   readonly maxBlocksPerView?: number;
   readonly modelVersion?: string;
+  /** Effective Paddle preset and model-side detection sizing, when exposed. */
+  readonly preset?: string;
+  readonly presetLabel?: string;
   readonly profile?: string;
   readonly profileLabel?: string;
   readonly detectionModel?: string;
   readonly recognitionModel?: string;
   readonly recognitionBatchSize?: number;
+  /** Effective text detector longest side after preset/custom resolution. */
+  readonly textDetLimitSideLen?: number;
   readonly device?: string;
 }
 
@@ -256,6 +261,7 @@ export type GlobalSettingKey =
   | "PADDLEOCR_ENABLED"
   | "PADDLEOCR_REQUIRED"
   | "PADDLEOCR_MODEL_VERSION"
+  | "PADDLEOCR_PRESET"
   | "PADDLEOCR_PROFILE"
   | "PADDLEOCR_LANGUAGE"
   | "PADDLEOCR_DEVICE"
@@ -265,6 +271,7 @@ export type GlobalSettingKey =
   | "PADDLEOCR_PYTHON"
   | "PADDLEOCR_MIN_CONFIDENCE"
   | "PADDLEOCR_MAX_BLOCKS_PER_VIEW"
+  | "PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN"
   | "PADDLEOCR_TIMEOUT_MS"
   | "PADDLE_PDX_CACHE_HOME"
   | "VISIONOCR_ENABLED"

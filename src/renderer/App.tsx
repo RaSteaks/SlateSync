@@ -1,4 +1,4 @@
-import { Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import appIconUrl from "../../build/icon.png";
@@ -10,6 +10,7 @@ import { APPEARANCE_PREFERENCE_KEY, cycleTheme, parseAppearancePreference, resol
 import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
 import { validateLibraryName } from "./validation/input-validation";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
+import { HelpPage } from "./features/help/HelpPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
 import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
@@ -25,7 +26,9 @@ function routeTitle(route: ReturnType<typeof useUiStore.getState>["route"]) {
         ? "项目设置"
         : route === "logs"
           ? "日志查看器"
-          : "全局设置";
+          : route === "help"
+            ? "说明"
+            : "全局设置";
 }
 
 // 项目库路径展示简化：去掉末尾的项目库目录（默认名称或便携包名称），只显示
@@ -334,7 +337,7 @@ export function App() {
     <button type="button" className={styles.navItem} data-active={route === "projects"} data-collapsed={sidebarCollapsed || undefined} title="项目库" onClick={leaveProject} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setLibraryMenu({ open: true, x: event.clientX, y: event.clientY }); }}><Icon icon={FolderKanban} size={18} /><span>项目库</span></button>
     {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => setRoute("workspace")}><Icon icon={LayoutDashboard} size={18} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => setRoute("project-settings")}><Icon icon={SlidersHorizontal} size={18} /><span>项目设置</span></button></>}
     <div style={{ flex: 1 }} />
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => setRoute("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => setRoute("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button><button type="button" className={styles.navItem} data-active={route === "help"} data-collapsed={sidebarCollapsed || undefined} title="说明" onClick={() => setRoute("help")}><Icon icon={BookOpen} size={18} /><span>说明</span></button>
   </>;
 
   // The App Icon is the shell-level home action. Reusing leaveProject keeps
@@ -380,8 +383,8 @@ export function App() {
       </Dialog>;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
-  // Keep one Workspace instance mounted while Logs or either settings page is
+  // Keep one Workspace instance mounted while Logs, Help, or either settings page is
   // visible. Its draft, image inputs, CSV Worker and in-flight recognition
   // stay intact; the hidden page is excluded from the accessibility tree.
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}{route === "help" && <HelpPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

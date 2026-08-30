@@ -1,12 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { recognizeSlate } from "../lib/ai-client.mjs";
 import { createSessionCapture } from "../lib/diagnostics.mjs";
 import { publicConfig } from "../lib/config.mjs";
 import {
   clearPaddleOcrCache,
+  closePaddleOcrWorker,
   formatOcrEvidence,
   paddleOcrPublicConfig,
+  preloadPaddleOcr,
   runPaddleOcrForPages,
   summarizeOcrResult,
 } from "../lib/ocr/paddleocr.mjs";
@@ -72,7 +78,10 @@ test("OCR cache separates page/view grouping and output settings", async () => {
     };
   };
   const baseOptions = {
-    env: { PADDLEOCR_ENABLED: "true" },
+    env: {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+    },
     execute,
   };
 
@@ -88,6 +97,7 @@ test("OCR cache separates page/view grouping and output settings", async () => {
     ...baseOptions,
     env: {
       PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
       PADDLEOCR_MIN_CONFIDENCE: "0.9",
     },
   });
@@ -95,6 +105,7 @@ test("OCR cache separates page/view grouping and output settings", async () => {
     ...baseOptions,
     env: {
       PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
       PADDLEOCR_PROFILE: "accurate",
     },
   });
@@ -107,15 +118,23 @@ test("OCR cache separates page/view grouping and output settings", async () => {
 
 test("PP-OCRv5 profiles select speed and accuracy models safely", () => {
   const balanced = paddleOcrPublicConfig(
-    { PADDLEOCR_ENABLED: "true" },
+    { PADDLEOCR_ENABLED: "true", PADDLEOCR_MODEL_VERSION: "PP-OCRv5" },
     { autoEnable: false },
   );
   const fast = paddleOcrPublicConfig(
-    { PADDLEOCR_ENABLED: "true", PADDLEOCR_PROFILE: "fast" },
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+      PADDLEOCR_PROFILE: "fast",
+    },
     { autoEnable: false },
   );
   const accurate = paddleOcrPublicConfig(
-    { PADDLEOCR_ENABLED: "true", PADDLEOCR_PROFILE: "accurate" },
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+      PADDLEOCR_PROFILE: "accurate",
+    },
     { autoEnable: false },
   );
   const legacy = paddleOcrPublicConfig(
@@ -138,6 +157,204 @@ test("PP-OCRv5 profiles select speed and accuracy models safely", () => {
   assert.equal(legacy.profile, "accurate");
   assert.equal(legacy.detectionModel, "");
   assert.equal(legacy.recognitionModel, "");
+});
+
+test("named PaddleOCR presets override conflicting manual values", () => {
+  const balanced = paddleOcrPublicConfig(
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_PRESET: "balanced",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+      PADDLEOCR_DETECTION_MODEL: "old_det",
+      PADDLEOCR_RECOGNITION_MODEL: "old_rec",
+      PADDLEOCR_RECOGNITION_BATCH_SIZE: "2",
+      PADDLEOCR_MIN_CONFIDENCE: "0.9",
+      PADDLEOCR_MAX_BLOCKS_PER_VIEW: "9",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "500",
+    },
+    { autoEnable: false },
+  );
+  assert.deepEqual(
+    [
+      balanced.preset,
+      balanced.modelVersion,
+      balanced.detectionModel,
+      balanced.recognitionModel,
+      balanced.recognitionBatchSize,
+      balanced.minimumConfidence,
+      balanced.maxBlocksPerView,
+      balanced.textDetLimitSideLen,
+    ],
+    ["balanced", "PP-OCRv6", "PP-OCRv6_small_det", "PP-OCRv6_small_rec", 8, 0.1, 256, 960],
+  );
+  for (const [preset, expected] of [
+    ["performance", ["PP-OCRv6_medium_det", "PP-OCRv6_medium_rec", 4, 0.05, 0, 1280]],
+    ["fast", ["PP-OCRv6_tiny_det", "PP-OCRv6_tiny_rec", 16, 0.25, 64, 736]],
+  ]) {
+    const resolved = paddleOcrPublicConfig(
+      { PADDLEOCR_ENABLED: "true", PADDLEOCR_PRESET: preset },
+      { autoEnable: false },
+    );
+    assert.deepEqual(
+      [resolved.detectionModel, resolved.recognitionModel, resolved.recognitionBatchSize, resolved.minimumConfidence, resolved.maxBlocksPerView, resolved.textDetLimitSideLen],
+      expected,
+    );
+  }
+
+  const custom = paddleOcrPublicConfig(
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_PRESET: "custom",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+      PADDLEOCR_DETECTION_MODEL: "old_det",
+      PADDLEOCR_RECOGNITION_MODEL: "old_rec",
+      PADDLEOCR_RECOGNITION_BATCH_SIZE: "2",
+      PADDLEOCR_MIN_CONFIDENCE: "0.9",
+      PADDLEOCR_MAX_BLOCKS_PER_VIEW: "9",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "500",
+    },
+    { autoEnable: false },
+  );
+  assert.deepEqual(
+    [
+      custom.preset,
+      custom.modelVersion,
+      custom.detectionModel,
+      custom.recognitionModel,
+      custom.recognitionBatchSize,
+      custom.minimumConfidence,
+      custom.maxBlocksPerView,
+      custom.textDetLimitSideLen,
+    ],
+    ["custom", "PP-OCRv5", "old_det", "old_rec", 2, 0.9, 9, 500],
+  );
+});
+
+test("empty custom detector limit keeps the documented default", () => {
+  const status = paddleOcrPublicConfig(
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_PRESET: "custom",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "",
+    },
+    { autoEnable: false },
+  );
+
+  assert.equal(status.textDetLimitSideLen, 960);
+});
+
+test("custom model version switches keep effective model IDs compatible", () => {
+  const v5 = paddleOcrPublicConfig(
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_PRESET: "custom",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+      PADDLEOCR_PROFILE: "balanced",
+      PADDLEOCR_DETECTION_MODEL: "PP-OCRv6_small_det",
+      PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv6_small_rec",
+    },
+    { autoEnable: false },
+  );
+  assert.deepEqual(
+    [v5.modelVersion, v5.detectionModel, v5.recognitionModel],
+    ["PP-OCRv5", "PP-OCRv5_mobile_det", "PP-OCRv5_server_rec"],
+  );
+
+  const v6 = paddleOcrPublicConfig(
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_PRESET: "custom",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+      PADDLEOCR_DETECTION_MODEL: "PP-OCRv5_mobile_det",
+      PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv5_server_rec",
+    },
+    { autoEnable: false },
+  );
+  assert.deepEqual(
+    [v6.modelVersion, v6.detectionModel, v6.recognitionModel],
+    ["PP-OCRv6", "", ""],
+  );
+
+  const custom = paddleOcrPublicConfig(
+    {
+      PADDLEOCR_ENABLED: "true",
+      PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+      PADDLEOCR_DETECTION_MODEL: "my_custom_det",
+      PADDLEOCR_RECOGNITION_MODEL: "my_custom_rec",
+    },
+    { autoEnable: false },
+  );
+  assert.deepEqual(
+    [custom.detectionModel, custom.recognitionModel],
+    ["my_custom_det", "my_custom_rec"],
+  );
+});
+
+test("resident PaddleOCR Worker warms once and switches configuration cleanly", async () => {
+  clearPaddleOcrCache();
+  const root = await mkdtemp(join(tmpdir(), "slatesync-paddle-worker-"));
+  const counterPath = join(root, "warmups.txt");
+  const runnerPath = fileURLToPath(new URL("./fixtures/fake-paddleocr-runner.py", import.meta.url));
+  const env = {
+    PADDLEOCR_ENABLED: "true",
+    PADDLEOCR_PYTHON: "python3",
+    PADDLEOCR_PRESET: "balanced",
+    FAKE_PADDLE_COUNTER: counterPath,
+    PADDLE_PDX_CACHE_HOME: root,
+  };
+  try {
+    await preloadPaddleOcr(env, { runnerPath });
+    await preloadPaddleOcr(env, { runnerPath });
+    await runPaddleOcrForPages([[imageDataUrl]], {
+      env,
+      runnerPath,
+      cache: false,
+    });
+    assert.equal(await readFile(counterPath, "utf8"), "1");
+
+    const fastEnv = { ...env, PADDLEOCR_PRESET: "fast" };
+    await preloadPaddleOcr(fastEnv, { runnerPath });
+    await runPaddleOcrForPages([[imageDataUrl]], {
+      env: fastEnv,
+      runnerPath,
+      cache: false,
+    });
+    assert.equal(await readFile(counterPath, "utf8"), "2");
+  } finally {
+    await closePaddleOcrWorker({ force: true });
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("resident PaddleOCR Worker cancellation does not fall back to one-shot", async () => {
+  clearPaddleOcrCache();
+  const root = await mkdtemp(join(tmpdir(), "slatesync-paddle-cancel-"));
+  const runnerPath = fileURLToPath(new URL("./fixtures/fake-paddleocr-runner.py", import.meta.url));
+  const controller = new AbortController();
+  const env = {
+    PADDLEOCR_ENABLED: "true",
+    PADDLEOCR_PYTHON: "python3",
+    PADDLEOCR_PRESET: "balanced",
+    FAKE_PADDLE_DELAY_SECONDS: "1",
+    PADDLE_PDX_CACHE_HOME: root,
+  };
+  try {
+    const recognition = runPaddleOcrForPages([[imageDataUrl]], {
+      env,
+      runnerPath,
+      cache: false,
+      signal: controller.signal,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort();
+    await assert.rejects(
+      recognition,
+      (error) => error.code === "RECOGNITION_CANCELED" && error.message === "识别已停止",
+    );
+  } finally {
+    await closePaddleOcrWorker({ force: true });
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("automatic OCR timeout scales with the number of views", async () => {
@@ -170,6 +387,7 @@ test("automatic OCR timeout scales with the number of views", async () => {
   });
 
   assert.equal(capturedPayload.maxBlocksPerView, 0);
+  assert.equal(capturedPayload.textDetLimitSideLen, 960);
   assert.equal(capturedOptions.timeoutMs, 47 * 60 * 1000);
   assert.equal(capturedOptions.env.PADDLE_PDX_CACHE_HOME, "/tmp/slatesync-paddlex-cache");
 });

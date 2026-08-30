@@ -19,6 +19,7 @@ const INTEGER_RANGES = {
   MAX_CONCURRENT_RECOGNITIONS: [1, 16],
   PADDLEOCR_RECOGNITION_BATCH_SIZE: [1, 64],
   PADDLEOCR_MAX_BLOCKS_PER_VIEW: [0, 10_000],
+  PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: [320, 4096],
   VISIONOCR_MAX_BLOCKS_PER_VIEW: [0, 10_000],
 };
 
@@ -33,6 +34,7 @@ const ENUM_VALUES = {
   OPENAI_COMPATIBLE_IMAGE_DETAIL: ["auto", "low", "high", "original"],
   PADDLEOCR_ENABLED: ["auto", "true", "false"],
   PADDLEOCR_REQUIRED: ["true", "false"],
+  PADDLEOCR_PRESET: ["custom", "performance", "balanced", "fast"],
   PADDLEOCR_PROFILE: ["fast", "balanced", "accurate"],
   VISIONOCR_ENABLED: ["auto", "true", "false"],
   VISIONOCR_REQUIRED: ["true", "false"],
@@ -59,7 +61,10 @@ const DEFAULT_VALUES = {
   MAX_CONCURRENT_RECOGNITIONS: "1",
   PADDLEOCR_ENABLED: "auto",
   PADDLEOCR_REQUIRED: "false",
-  PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+  // New installs expose PP-OCRv6 as the manual baseline, while an existing
+  // .env/global override remains authoritative through the normal merge.
+  PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+  PADDLEOCR_PRESET: "custom",
   PADDLEOCR_PROFILE: "balanced",
   PADDLEOCR_LANGUAGE: "ch",
   PADDLEOCR_DEVICE: "cpu",
@@ -69,6 +74,7 @@ const DEFAULT_VALUES = {
   PADDLEOCR_PYTHON: "",
   PADDLEOCR_MIN_CONFIDENCE: "0.10",
   PADDLEOCR_MAX_BLOCKS_PER_VIEW: "0",
+  PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "",
   PADDLEOCR_TIMEOUT_MS: "auto",
   PADDLE_PDX_CACHE_HOME: "",
   VISIONOCR_ENABLED: "auto",

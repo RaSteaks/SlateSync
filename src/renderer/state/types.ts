@@ -19,7 +19,7 @@ import type {
   TaskListItem,
 } from "../../shared/contracts/index.js";
 
-export type Route = "projects" | "workspace" | "project-settings" | "global-settings" | "logs";
+export type Route = "projects" | "workspace" | "project-settings" | "global-settings" | "logs" | "help";
 export type Theme = "system" | "dark" | "light";
 export type Density = "comfortable" | "compact";
 

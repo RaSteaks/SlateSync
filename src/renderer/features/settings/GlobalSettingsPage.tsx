@@ -18,6 +18,65 @@ const PROVIDER_BASE_URL_KEYS: Partial<Record<string, GlobalSettingKey>> = {
 type StatusTone = "neutral" | "success" | "warning" | "danger";
 type GlobalSaveState = "idle" | "saving" | "saved" | "error";
 type OcrPreference = "auto" | "vision" | "paddleocr" | "disabled";
+type PaddlePreset = "custom" | "performance" | "balanced" | "fast";
+type PaddleModelVersion = "PP-OCRv5" | "PP-OCRv6";
+
+type PaddlePresetValues = {
+  label: string;
+  modelVersion: PaddleModelVersion;
+  detectionModel: string;
+  recognitionModel: string;
+  recognitionBatchSize: string;
+  minimumConfidence: string;
+  maxBlocksPerView: string;
+  textDetLimitSideLen: string;
+  // The legacy profile is only used when a named preset is copied to custom.
+  profile: "fast" | "balanced" | "accurate";
+};
+
+// Keep this display table aligned with the Main-side preset resolver. The
+// actual OCR request never trusts Renderer values; this only previews the
+// effective read-only values before the next global-settings save.
+const PADDLE_PRESET_VALUES: Record<Exclude<PaddlePreset, "custom">, PaddlePresetValues> = {
+  performance: {
+    label: "性能（质量优先）",
+    modelVersion: "PP-OCRv6",
+    detectionModel: "PP-OCRv6_medium_det",
+    recognitionModel: "PP-OCRv6_medium_rec",
+    recognitionBatchSize: "4",
+    minimumConfidence: "0.05",
+    maxBlocksPerView: "0",
+    textDetLimitSideLen: "1280",
+    profile: "accurate",
+  },
+  balanced: {
+    label: "平衡（推荐）",
+    modelVersion: "PP-OCRv6",
+    detectionModel: "PP-OCRv6_small_det",
+    recognitionModel: "PP-OCRv6_small_rec",
+    recognitionBatchSize: "8",
+    minimumConfidence: "0.10",
+    maxBlocksPerView: "256",
+    textDetLimitSideLen: "960",
+    profile: "balanced",
+  },
+  fast: {
+    label: "快速（低延迟）",
+    modelVersion: "PP-OCRv6",
+    detectionModel: "PP-OCRv6_tiny_det",
+    recognitionModel: "PP-OCRv6_tiny_rec",
+    recognitionBatchSize: "16",
+    minimumConfidence: "0.25",
+    maxBlocksPerView: "64",
+    textDetLimitSideLen: "736",
+    profile: "fast",
+  },
+};
+
+const PADDLE_MODEL_VERSION_OPTIONS: Array<{ value: PaddleModelVersion; label: string }> = [
+  { value: "PP-OCRv6", label: "PP-OCRv6（推荐）" },
+  { value: "PP-OCRv5", label: "PP-OCRv5（兼容）" },
+];
 
 function engineStatus(config: ConfigData | null, id: "vision" | "paddleocr"): OcrEngineStatus | null {
   return config?.ocrEngines.find((engine) => engine.id === id) || null;
@@ -75,6 +134,50 @@ function selectionStatusLabel(selection: OcrSelection | undefined): string {
 
 function settingValue(values: Partial<GlobalSettingsData["values"]>, key: GlobalSettingKey, fallback = "") {
   return values[key] ?? fallback;
+}
+
+function paddlePresetFromValues(values: Partial<GlobalSettingsData["values"]>): PaddlePreset {
+  const value = settingValue(values, "PADDLEOCR_PRESET", "custom").toLowerCase();
+  return value === "performance" || value === "balanced" || value === "fast" ? value : "custom";
+}
+
+function paddleModelVersionFromValues(values: Partial<GlobalSettingsData["values"]>): PaddleModelVersion {
+  const value = settingValue(values, "PADDLEOCR_MODEL_VERSION", "PP-OCRv6").toLowerCase();
+  return value === "pp-ocrv5"
+    ? "PP-OCRv5"
+    : "PP-OCRv6";
+}
+
+function paddleEffectiveValues(
+  values: Partial<GlobalSettingsData["values"]>,
+  preset: PaddlePreset,
+): PaddlePresetValues {
+  if (preset !== "custom") return PADDLE_PRESET_VALUES[preset];
+  return {
+    label: "自定义",
+    modelVersion: paddleModelVersionFromValues(values),
+    detectionModel: settingValue(values, "PADDLEOCR_DETECTION_MODEL"),
+    recognitionModel: settingValue(values, "PADDLEOCR_RECOGNITION_MODEL"),
+    recognitionBatchSize: settingValue(values, "PADDLEOCR_RECOGNITION_BATCH_SIZE"),
+    minimumConfidence: settingValue(values, "PADDLEOCR_MIN_CONFIDENCE", "0.10"),
+    maxBlocksPerView: settingValue(values, "PADDLEOCR_MAX_BLOCKS_PER_VIEW", "0"),
+    textDetLimitSideLen: settingValue(values, "PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN"),
+    profile: settingValue(values, "PADDLEOCR_PROFILE", "balanced") as PaddlePresetValues["profile"],
+  };
+}
+
+function paddlePresetCopyPatch(preset: PaddlePreset, values: PaddlePresetValues): Partial<Record<GlobalSettingKey, string>> {
+  return {
+    PADDLEOCR_PRESET: preset,
+    PADDLEOCR_MODEL_VERSION: values.modelVersion,
+    PADDLEOCR_PROFILE: values.profile,
+    PADDLEOCR_DETECTION_MODEL: values.detectionModel,
+    PADDLEOCR_RECOGNITION_MODEL: values.recognitionModel,
+    PADDLEOCR_RECOGNITION_BATCH_SIZE: values.recognitionBatchSize,
+    PADDLEOCR_MIN_CONFIDENCE: values.minimumConfidence,
+    PADDLEOCR_MAX_BLOCKS_PER_VIEW: values.maxBlocksPerView,
+    PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: values.textDetLimitSideLen,
+  };
 }
 
 function ocrPreferenceFromValues(values: Partial<GlobalSettingsData["values"]>): OcrPreference {
@@ -137,6 +240,8 @@ function OcrStatusPanel({
   const visionSelected = selection?.id === "vision";
   const paddleSelected = selection?.id === "paddleocr";
   const ocrPreference = ocrPreferenceFromValues(values);
+  const paddlePreset = paddlePresetFromValues(values);
+  const paddleEffective = paddleEffectiveValues(values, paddlePreset);
 
   const setOcrPreference = (preference: OcrPreference) => {
     for (const [key, value] of Object.entries(ocrPreferencePatch(preference))) {
@@ -153,6 +258,49 @@ function OcrStatusPanel({
       return;
     }
     setValue(id === "vision" ? "VISIONOCR_ENABLED" : "PADDLEOCR_ENABLED", value);
+  };
+
+  const setPaddlePreset = (nextPreset: PaddlePreset) => {
+    if (nextPreset === "custom" && paddlePreset !== "custom") {
+      // Materialize the visible preset before entering custom mode so the
+      // editor never jumps back to unrelated stale values from the last save.
+      for (const [key, value] of Object.entries(paddlePresetCopyPatch("custom", paddleEffective))) {
+        if (key === "PADDLEOCR_PRESET") continue;
+        setValue(key as GlobalSettingKey, value || "");
+      }
+    }
+    setValue("PADDLEOCR_PRESET", nextPreset);
+  };
+
+  const setPaddleModelVersion = (nextVersion: PaddleModelVersion) => {
+    if (paddlePreset !== "custom") return;
+    const currentVersion = paddleModelVersionFromValues(values);
+    setValue("PADDLEOCR_MODEL_VERSION", nextVersion);
+    if (currentVersion !== nextVersion) {
+      // Detection/recognition model names are version-specific. Clear the
+      // previous version's overrides so Main can select the new version's
+      // profile defaults instead of constructing a mixed v5/v6 pipeline.
+      setValue("PADDLEOCR_DETECTION_MODEL", "");
+      setValue("PADDLEOCR_RECOGNITION_MODEL", "");
+    }
+  };
+
+  const setPaddleField = (key: Exclude<GlobalSettingKey, "PADDLEOCR_PRESET">, value: string) => {
+    if (paddlePreset === "custom") {
+      setValue(key, value);
+      return;
+    }
+    // Read-only preset controls normally prevent this branch. Keeping the
+    // fallback makes keyboard/programmatic edits safe and automatically opts
+    // into custom with the currently visible preset values.
+    const customPatch = paddlePresetCopyPatch("custom", paddleEffective);
+    for (const [copyKey, copyValue] of Object.entries(customPatch)) {
+      if (copyKey === "PADDLEOCR_PRESET") {
+        setValue("PADDLEOCR_PRESET", "custom");
+      } else {
+        setValue(copyKey as GlobalSettingKey, copyKey === key ? value : copyValue || "");
+      }
+    }
   };
 
   return <Surface className={`${styles.panel} ${styles.ocrPanel}`} aria-labelledby="local-ocr-title">
@@ -242,25 +390,28 @@ function OcrStatusPanel({
         <dl className={styles.ocrEngineDetails}>
           <div><dt>运行模式</dt><dd>{engineModeLabel(paddle?.mode || "")}</dd></div>
           <div><dt>能力来源</dt><dd>{paddle?.available ? "已发现 Python 环境与 PaddleOCR" : "未发现可用 Python 环境"}</dd></div>
-          <div><dt>模型配置</dt><dd>{paddle ? `${paddle.modelVersion || "PP-OCRv5"} · ${paddle.profileLabel || paddle.profile || "平衡"}` : "—"}</dd></div>
+          <div><dt>模型配置</dt><dd>{paddle ? `${paddle.modelVersion || "PP-OCRv6"} · ${paddle.presetLabel || paddle.profileLabel || paddle.profile || "自定义"}` : "—"}</dd></div>
         </dl>
         <details className={styles.settingsDetails}>
           <summary>调整 PaddleOCR 参数</summary>
           <div className={styles.formGrid}>
             <Field label="启用模式" hint="自动会在检测到 Python 环境时启用。开启后将优先使用 PaddleOCR。"><Select value={settingValue(values, "PADDLEOCR_ENABLED", "auto")} onChange={(event) => setOcrEngineMode("paddleocr", event.target.value)}><option value="auto">自动</option><option value="true">开启</option><option value="false">关闭</option></Select></Field>
             <Field label="必需模式" hint="开启后 PaddleOCR 不可用会阻止识别。"><Select value={settingValue(values, "PADDLEOCR_REQUIRED", "false")} onChange={(event) => setValue("PADDLEOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
-            <Field label="模型版本"><Input value={settingValue(values, "PADDLEOCR_MODEL_VERSION", "PP-OCRv5")} onChange={(event) => setValue("PADDLEOCR_MODEL_VERSION", event.target.value)} /></Field>
-            <Field label="性能档"><Select value={settingValue(values, "PADDLEOCR_PROFILE", "balanced")} onChange={(event) => setValue("PADDLEOCR_PROFILE", event.target.value)}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>
+            <Field label="参数预设" hint="命名预设会同时切换 PP-OCRv6 模型、批量、检测边长和输出过滤；自定义保留手动参数。"><Select value={paddlePreset} onChange={(event) => setPaddlePreset(event.target.value as PaddlePreset)}><option value="custom">自定义</option><option value="performance">性能（质量优先）</option><option value="balanced">平衡（推荐）</option><option value="fast">快速（低延迟）</option></Select></Field>
+            <Field label="模型版本" hint="切换版本会清理另一版本的检测/识别模型覆盖，批量和过滤参数保持不变。"><Select value={paddleEffective.modelVersion} onChange={(event) => setPaddleModelVersion(event.target.value as PaddleModelVersion)} disabled={paddlePreset !== "custom"}>{PADDLE_MODEL_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
+            <Field label="兼容性能档" hint="仅自定义模式使用；用于兼容已有 PP-OCRv5 配置。"><Select value={paddleEffective.profile || "balanced"} onChange={(event) => setPaddleField("PADDLEOCR_PROFILE", event.target.value)} disabled={paddlePreset !== "custom"}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>
             <Field label="识别语言"><Input value={settingValue(values, "PADDLEOCR_LANGUAGE", "ch")} onChange={(event) => setValue("PADDLEOCR_LANGUAGE", event.target.value)} /></Field>
             <Field label="计算设备"><Input value={settingValue(values, "PADDLEOCR_DEVICE", "cpu")} onChange={(event) => setValue("PADDLEOCR_DEVICE", event.target.value)} /></Field>
-            <Field label="检测模型" hint="留空使用性能档默认模型。"><Input value={settingValue(values, "PADDLEOCR_DETECTION_MODEL")} onChange={(event) => setValue("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="使用默认" /></Field>
-            <Field label="识别模型" hint="留空使用性能档默认模型。"><Input value={settingValue(values, "PADDLEOCR_RECOGNITION_MODEL")} onChange={(event) => setValue("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="使用默认" /></Field>
-            <Field label="识别批量大小"><Input type="number" min="1" max="64" step="1" value={settingValue(values, "PADDLEOCR_RECOGNITION_BATCH_SIZE")} onChange={(event) => setValue("PADDLEOCR_RECOGNITION_BATCH_SIZE", event.target.value)} placeholder="使用性能档" /></Field>
-            <Field label="最低置信度"><Input type="number" min="0" max="1" step="0.01" value={settingValue(values, "PADDLEOCR_MIN_CONFIDENCE", "0.10")} onChange={(event) => setValue("PADDLEOCR_MIN_CONFIDENCE", event.target.value)} /></Field>
-            <Field label="每个视图最多文字块" hint="0 表示不限制。"><Input type="number" min="0" max="10000" step="1" value={settingValue(values, "PADDLEOCR_MAX_BLOCKS_PER_VIEW", "0")} onChange={(event) => setValue("PADDLEOCR_MAX_BLOCKS_PER_VIEW", event.target.value)} /></Field>
+            <Field label="检测模型" hint="自定义模式留空使用对应版本默认模型。"><Input value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="使用默认" disabled={paddlePreset !== "custom"} /></Field>
+            <Field label="识别模型" hint="自定义模式留空使用对应版本默认模型。"><Input value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="使用默认" disabled={paddlePreset !== "custom"} /></Field>
+            <Field label="识别批量大小"><Input type="number" min="1" max="64" step="1" value={paddleEffective.recognitionBatchSize} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_BATCH_SIZE", event.target.value)} placeholder="使用性能档" disabled={paddlePreset !== "custom"} /></Field>
+            <Field label="最低置信度" hint="0–1；低于此值的文字块不会作为证据。"><Input type="number" min="0" max="1" step="0.01" value={paddleEffective.minimumConfidence} onChange={(event) => setPaddleField("PADDLEOCR_MIN_CONFIDENCE", event.target.value)} disabled={paddlePreset !== "custom"} /></Field>
+            <Field label="每个视图最多文字块" hint="0 表示不限制；限制时仍均匀覆盖整页。"><Input type="number" min="0" max="10000" step="1" value={paddleEffective.maxBlocksPerView} onChange={(event) => setPaddleField("PADDLEOCR_MAX_BLOCKS_PER_VIEW", event.target.value)} disabled={paddlePreset !== "custom"} /></Field>
+            <Field label="检测最长边" hint="320–4096；越小通常越快，但小字细节可能减少。"><Input type="number" min="320" max="4096" step="1" value={paddleEffective.textDetLimitSideLen} onChange={(event) => setPaddleField("PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN", event.target.value)} placeholder="Paddle 默认" disabled={paddlePreset !== "custom"} /></Field>
             <Field label="OCR 超时" hint="auto 按视图数量计算，也可填 10000–3600000 毫秒。"><Input value={settingValue(values, "PADDLEOCR_TIMEOUT_MS", "auto")} onChange={(event) => setValue("PADDLEOCR_TIMEOUT_MS", event.target.value)} /></Field>
             <Field label="Python 环境路径" hint="例如 .venv-paddleocr/bin/python；Vision OCR 不需要填写。"><Input value={settingValue(values, "PADDLEOCR_PYTHON")} onChange={(event) => setValue("PADDLEOCR_PYTHON", event.target.value)} placeholder="python3 或绝对路径" spellCheck={false} /></Field>
           </div>
+          {paddlePreset === "fast" && <Text tone="warning" size="sm">快速预设使用 tiny 模型和更高置信度门槛；复杂手写、低置信度文字可能减少。</Text>}
           <Stack direction="row" justify="between" align="center" wrap>
             <Text tone="subtle" size="xs">{ocr?.setupCompleted ? "当前环境已完成设置" : "先检查路径，再保存参数"}</Text>
             <Stack direction="row" gap={2} wrap>

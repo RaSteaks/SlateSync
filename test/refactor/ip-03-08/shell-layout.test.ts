@@ -136,4 +136,15 @@ describe("application shell layout", () => {
     // including the theme label introduced for the expanded rail.
     expect(css).toMatch(/@media \(max-width: 920px\) \{[\s\S]*\.brandCopy, \.navSection, \.navItem span, \.sidebarThemeButton > span \{ display: none; \}/s);
   });
+
+  it("exposes the local help page under the system navigation", async () => {
+    const source = await readFile(appSource, "utf8");
+
+    // Help is a shell-level route so users can reach configuration guidance
+    // from any project state without coupling the page to project data.
+    expect(source).toContain('title="说明" onClick={() => setRoute("help")}');
+    expect(source).toContain('data-active={route === "help"}');
+    expect(source).toContain('{route === "help" && <HelpPage />}');
+    expect(source).toContain(': route === "help"');
+  });
 });

@@ -34,6 +34,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
       OPENAI_COMPATIBLE_API_MODE: "RESPONSES",
       MAX_BODY_MB: "120",
       PADDLEOCR_MIN_CONFIDENCE: "0.25",
+      PADDLEOCR_PRESET: "FAST",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "736",
       PADDLEOCR_PYTHON: null,
     }),
     {
@@ -41,6 +43,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
       OPENAI_COMPATIBLE_API_MODE: "responses",
       MAX_BODY_MB: "120",
       PADDLEOCR_MIN_CONFIDENCE: "0.25",
+      PADDLEOCR_PRESET: "fast",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "736",
       PADDLEOCR_PYTHON: "",
     },
   );
@@ -48,6 +52,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
   assert.throws(() => normalizeGlobalSettingsPatch({ OPENAI_BASE_URL: "file:///tmp/provider" }), /http|https/);
   assert.throws(() => normalizeGlobalSettingsPatch({ MAX_BODY_MB: "201" }), /20–200/);
   assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_PROFILE: "turbo" }), /fast、balanced、accurate/);
+  assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_PRESET: "turbo" }), /custom、performance、balanced、fast/);
+  assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "319" }), /320–4096/);
   assert.equal(normalizeGlobalSettingsPatch({ VISIONOCR_TIMEOUT_MS: "1800000" }).VISIONOCR_TIMEOUT_MS, "1800000");
   assert.throws(() => normalizeGlobalSettingsPatch({ VISIONOCR_TIMEOUT_MS: "1800001" }), /10000–1800000/);
   assert.throws(() => normalizeGlobalSettingsPatch({ MAX_BODY_MB: 120 }), /必须是文本值/);

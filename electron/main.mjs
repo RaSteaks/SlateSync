@@ -50,6 +50,11 @@ import {
 } from "../lib/project-library-transfer.mjs";
 import { createProjectRuntime } from "../lib/project-runtime.mjs";
 import { projectSettingsFromWorkflow } from "../lib/project-settings.mjs";
+import {
+  closePaddleOcrWorker,
+  preloadPaddleOcr,
+} from "../lib/ocr/paddleocr.mjs";
+import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -147,6 +152,24 @@ async function initialize() {
     Object.assign(settings, electronSettings(env));
     recognitionLimiter.setLimit?.(settings.maxConcurrentRecognitions);
     configureModelHttpAgent(env);
+    refreshPaddleOcrPreload(env, "settings-saved");
+  }
+
+  function refreshPaddleOcrPreload(env, reason) {
+    const selection = resolveOcrSelection(env, { autoEnable: true });
+    if (selection.id !== "paddleocr") {
+      // Vision/disabled routing does not need a resident Paddle pipeline; the
+      // close operation still drains an active OCR request before releasing it.
+      void closePaddleOcrWorker().catch((error) => {
+        appLogger?.warn("ocr", "PaddleOCR Worker 释放失败", { reason, error });
+      });
+      return;
+    }
+    // Preload is deliberately fire-and-forget: saving settings must not wait
+    // for model downloads, while recognition later awaits this same Worker.
+    void preloadPaddleOcr(env, { autoEnable: true }).catch((error) => {
+      appLogger?.warn("ocr", "PaddleOCR 后台预加载失败", { reason, error });
+    });
   }
 
   const fileDialogs = createFileDialogs(() => mainWindow);
@@ -249,6 +272,10 @@ async function initialize() {
     logger: appLogger,
     openLogDirectory,
   });
+
+  // Return a closure so startup preload runs after the window is ready while
+  // retaining the initialized runtime environment and global-config stores.
+  return () => refreshPaddleOcrPreload(runtimeEnv(), "startup");
 }
 
 /** Create the log directory on demand, then reveal it in the native file manager. */
@@ -448,8 +475,9 @@ function configureDevelopmentIcon() {
 
 app.whenReady().then(async () => {
   configureDevelopmentIcon();
+  let startPaddleOcrPreload;
   try {
-    await initialize();
+    startPaddleOcrPreload = await initialize();
   } catch (error) {
     console.error("SlateSync initialization failed:", error);
     appLogger?.error("app", "SlateSync 初始化失败", { error });
@@ -457,6 +485,9 @@ app.whenReady().then(async () => {
     return;
   }
   await createWindow();
+  // Warm the selected local OCR route after the window is usable so cold model
+  // download/initialization is outside the first recognition interaction.
+  startPaddleOcrPreload?.();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -476,6 +507,9 @@ app.on("will-quit", () => {
   // process. The library remains a portable folder that can be backed up.
   void projectRuntime?.close();
   void projectLibrary?.close();
+  // Electron is leaving; force mode prevents a native Paddle process from
+  // keeping the event loop alive while ordinary settings changes drain safely.
+  void closePaddleOcrWorker({ force: true });
   // Awaiting the queue here preserves the final lifecycle line without making
   // logging part of the recognition or window error paths.
   void appLogger?.close();

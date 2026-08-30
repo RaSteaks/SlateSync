@@ -1437,7 +1437,8 @@ const GLOBAL_SETTINGS_GROUPS = [
     fields: [
       { key: "PADDLEOCR_ENABLED", label: "启用模式", options: [["auto", "自动"], ["true", "开启"], ["false", "关闭"]] },
       { key: "PADDLEOCR_REQUIRED", label: "必需模式", options: [["false", "可选"], ["true", "必需"]] },
-      { key: "PADDLEOCR_MODEL_VERSION", label: "模型版本" },
+      { key: "PADDLEOCR_MODEL_VERSION", label: "模型版本", options: [["PP-OCRv6", "PP-OCRv6（推荐）"], ["PP-OCRv5", "PP-OCRv5（兼容）"]] },
+      { key: "PADDLEOCR_PRESET", label: "参数预设", options: [["custom", "自定义"], ["performance", "性能（质量优先）"], ["balanced", "平衡（推荐）"], ["fast", "快速（低延迟）"]] },
       { key: "PADDLEOCR_PROFILE", label: "性能档", options: [["fast", "快速"], ["balanced", "平衡"], ["accurate", "高精度"]] },
       { key: "PADDLEOCR_LANGUAGE", label: "识别语言" },
       { key: "PADDLEOCR_DEVICE", label: "计算设备" },
@@ -1447,6 +1448,7 @@ const GLOBAL_SETTINGS_GROUPS = [
       { key: "PADDLEOCR_PYTHON", label: "Python 环境路径", hint: "例如 .venv-paddleocr/bin/python；留空使用自动检测。" },
       { key: "PADDLEOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
       { key: "PADDLEOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
+      { key: "PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN", label: "检测最长边", type: "number", min: 320, max: 4096, step: 1, hint: "320–4096；留空使用 PaddleOCR 默认值。" },
       { key: "PADDLEOCR_TIMEOUT_MS", label: "OCR 超时", hint: "填写 auto 或 10000–3600000 毫秒。" },
     ],
   },

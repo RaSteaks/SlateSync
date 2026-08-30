@@ -46,11 +46,14 @@ afterEach(() => {
   Object.defineProperty(window, "slateSync", { configurable: true, value: undefined });
 });
 
-async function renderSettings(saveGlobalSettings: ReturnType<typeof vi.fn>) {
+async function renderSettings(
+  saveGlobalSettings: ReturnType<typeof vi.fn>,
+  settings = initialGlobalSettings,
+) {
   const api = {
     app: { getConfig: vi.fn(async () => ({ ok: true as const, data: config })) },
     settings: {
-      getGlobalSettings: vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings })),
+      getGlobalSettings: vi.fn(async () => ({ ok: true as const, data: settings })),
       getOcrSettings: vi.fn(async () => ({ ok: true as const, data: { pythonPath: "", setupCompleted: false, setupSkipped: false } })),
       saveGlobalSettings,
     },
@@ -150,6 +153,89 @@ describe("global settings layout and OCR routing", () => {
         VISIONOCR_REQUIRED: "false",
         PADDLEOCR_REQUIRED: "false",
       },
+    });
+  });
+
+  it("shows named preset values read-only and materializes them on custom", async () => {
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...initialGlobalSettings,
+        values: { ...initialGlobalSettings.values, ...request.values },
+      },
+    }));
+    const host = await renderSettings(save);
+    const presetLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("参数预设"));
+    const preset = presetLabel?.querySelector("select");
+    if (!(preset instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR preset select");
+
+    act(() => changeSelect(preset, "balanced"));
+    const modelLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("模型版本"));
+    const modelSelect = modelLabel?.querySelector("select");
+    expect(modelSelect?.disabled).toBe(true);
+    expect(modelSelect?.value).toBe("PP-OCRv6");
+
+    act(() => changeSelect(preset, "custom"));
+    const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
+    await act(async () => {
+      saveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      values: expect.objectContaining({
+        PADDLEOCR_PRESET: "custom",
+        PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+        PADDLEOCR_DETECTION_MODEL: "PP-OCRv6_small_det",
+        PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv6_small_rec",
+        PADDLEOCR_RECOGNITION_BATCH_SIZE: "8",
+        PADDLEOCR_MIN_CONFIDENCE: "0.10",
+        PADDLEOCR_MAX_BLOCKS_PER_VIEW: "256",
+        PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "960",
+      }),
+    });
+  });
+
+  it("switches model versions with compatible model defaults", async () => {
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...initialGlobalSettings,
+        values: { ...initialGlobalSettings.values, ...request.values },
+      },
+    }));
+    const settings = {
+      ...initialGlobalSettings,
+      values: {
+        ...initialGlobalSettings.values,
+        PADDLEOCR_PRESET: "custom",
+        PADDLEOCR_MODEL_VERSION: "PP-OCRv5",
+        PADDLEOCR_DETECTION_MODEL: "PP-OCRv5_mobile_det",
+        PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv5_server_rec",
+      },
+    };
+    const host = await renderSettings(save, settings);
+    const modelLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("模型版本"));
+    const modelSelect = modelLabel?.querySelector("select");
+    if (!(modelSelect instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR model version select");
+
+    act(() => changeSelect(modelSelect, "PP-OCRv6"));
+    const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
+    await act(async () => {
+      saveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      values: expect.objectContaining({
+        PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+        PADDLEOCR_DETECTION_MODEL: "",
+        PADDLEOCR_RECOGNITION_MODEL: "",
+      }),
     });
   });
 

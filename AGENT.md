@@ -638,3 +638,82 @@ Worker 边界、验收证据和最终治理交接。
   85/85）、图像预处理回归（5/5）、npm run build:modern、npm run build:storybook、
   Electron IPC 定向测试和 git diff --check 均通过。Storybook 仅报告沙盒无法写入
   用户目录的既有提示；未启动 Electron 前台窗口。
+
+## 2026-08-30 PaddleOCR 参数预设、v6 模型与后台预加载
+
+- 新增 `PADDLEOCR_PRESET=custom|performance|balanced|fast`。命名预设完整接管
+  PP-OCRv6 模型、检测最长边、识别 batch、最低置信度和文字块上限；性能档使用
+  medium/1280/4/0.05/不限，平衡档使用 small/960/8/0.10/256，快速档使用
+  tiny/736/16/0.25/64。`custom` 或缺省预设逐字段保留既有手动设置，因此原有
+  PP-OCRv5 只需选择自定义并保留 `PADDLEOCR_MODEL_VERSION=PP-OCRv5`。
+- `PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN` 已加入全局配置白名单与 Shared Contract，校验
+  范围为 320–4096；有效预设参数进入 OCR 状态、请求 payload、缓存键和 Worker 配置键。
+  文字块/置信度仍是输出证据过滤，快速档截断继续使用均匀页面覆盖，避免只留下页面顶部。
+- Python bridge 新增 `--server` 常驻模式、requestId 逐行协议和合成图片 warmup；同一
+  模型配置只创建一个 CPU Worker。Main 在启动完成、OCR 设置保存或模型/预设变化后后台
+  预热；识别等待同一 Worker promise，配置切换先排空活动任务再释放旧进程，退出时强制关闭。
+  预加载失败不阻塞保存，One-shot runner 仍作为兼容回退；未新增 Renderer IPC 或改变
+  OCR evidence、任务存储和 Provider 请求格式。
+- Modern 全局设置使用现有 Graphite/indigo token、Field/Select 和焦点样式；命名预设下
+  的受控字段只读，切换自定义会物化当前预设值，快速档显示复杂手写/低置信度文字可能
+  减少的提示。Legacy 回退设置表同步登记两个新字段。
+- 官方 Apple M4 端到端基准（PP-OCRv6 页面给出的 200 张图）为 medium 8.82 秒/张、
+  small 3.07 秒/张、tiny 0.96 秒/张；该页面同时提示 v5/v6 评测集不同，准确率不作
+  直接横向结论。本机现有缓存的 v5 balanced 单视图基线为：模型 ready 约 1.9 秒、
+  识别约 3.851 秒、runner 约 4.457 秒、端到端墙钟约 5.949 秒；v6 权重未在本轮
+  预下载，避免为三个档位重复下载，需在目标机器首次选择预设后记录冷/热启动与
+  1/4/12 视图实测。
+- `paddleocr_runner.py --check` 实测 Paddle 3.3.1 / PaddleOCR 3.7.0；新增预设解析、
+  Worker warmup/配置切换/取消和设置页物化回归。最终验证结果记录在本节末尾，后续若
+  改动 Worker 生命周期或参数优先级，必须同步更新本节与对应测试。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（20 个文件、
+  86/86）、`npm run build:modern`、OCR/全局设置定向回归与 `git diff --check` 通过；
+  `npm run test:node` 为 286 项通过 285 项，唯一失败仍是既有 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），本次未修改该无关基线。
+
+## 2026-08-30 PaddleOCR 模型版本下拉与版本切换
+
+- Modern 与 Legacy 设置均将 `PADDLEOCR_MODEL_VERSION` 改为 `PP-OCRv6（推荐）` /
+  `PP-OCRv5（兼容）` 下拉选项；命名参数预设仍锁定其自身的 PP-OCRv6 版本，只有自定义
+  模式允许手动选择版本。
+- 自定义模式切换版本时自动清空旧版本的检测/识别模型覆盖，改用所选版本与性能档的默认
+  管线；Main 与 Python runner 还会过滤已知的跨版本模型名，同时保留手填的自定义模型 ID，
+  避免构造混合 v5/v6 管线。批量、置信度、文字块上限和检测边长不因版本切换被重置。
+- 版本字符串在 Main/Python 边界统一为规范的 `PP-OCRv5` / `PP-OCRv6`；未来或本地版本
+  字符串仍保留兼容能力，但设置界面只暴露已有默认模型映射的两个版本。
+- 新增模型版本下拉交互、跨版本模型覆盖清理与 Main 配置解析回归；后续验证结果记录在
+  本节末尾，若调整版本映射或下拉选项需同步更新设置页、runner 和测试。
+- 最终验证：Modern 设置定向测试 6/6、OCR/全局设置定向 Node 测试 20/20，`npm run
+  test:modern` 20 个文件 87/87、`npm run check`、`npm run typecheck`、`npm run
+  build:modern`、Python AST/字节码检查和 `git diff --check` 均通过；完整
+  `npm run test:node` 为 287 项通过 286 项，唯一失败是 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`）。
+
+## 2026-08-30 系统说明页
+
+- 在左侧“系统”分组新增“说明”入口和 `help` Renderer 路由；说明页不依赖项目上下文，
+  从项目库、工作台导入/识别/校对/导出，到全局 Provider、模型和本地 OCR 配置均可直接
+  查看。保留 Workspace 的隐藏挂载逻辑，不新增 Renderer IPC、任务存储或 Provider 请求格式。
+- 说明页使用现有 Graphite/indigo 设计 token、`Surface`、`Field`、`Input`、`Badge` 和
+  `Text`；左侧目录采用原生锚点，搜索只过滤本地章节。搜索、锚点、键盘焦点和窄窗口布局
+  均在页面内完成，并为快速 PaddleOCR 预设明确提示 tiny/高门槛可能减少手写和低置信度文字。
+- 内容与当前实现保持同步：Provider 列表及 OpenAI 兼容接口选项、Vision 路由优先级和参数、
+  PP-OCRv5/v6、自定义/性能/平衡/快速预设、检测最长边、识别 batch、置信度、文字块上限、
+  缓存、常驻 Worker 以及全局并行/超时/重试参数均有说明。后续增加设置字段或调整路由时，
+  必须同步更新 `HelpPage.tsx` 与本节记录。
+- 新增说明页渲染/关键词筛选回归和系统导航静态契约测试。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（21 个文件、
+  90/90）、`npm run build:modern` 和 `git diff --check` 均通过。
+
+## 2026-08-30 复审意见修复
+
+- PaddleOCR 数值配置将空白 `.env` 值视为未配置，`PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN=`
+  因而保留自定义模式的 960 默认值，不再被错误夹到 320；新增对应配置回归测试。
+- OCR 识别为排队、Worker 预热、识别和兼容性 one-shot 回退共用一个绝对截止时间；队列在
+  调用方超时后仍保持串行占用，已开始的 Worker 超时会清理进程，排队尚未开始的任务不会
+  误杀其他识别任务。回退只使用剩余预算，超时不再重新获得一轮完整 timeout。
+- 说明页目录改为渲染当前可见章节；搜索或无匹配结果时不会保留指向已卸载 DOM 的失效锚点，
+  并补充目录目标与筛选联动测试。
+- 本轮验证：`node --test test/ocr.test.mjs`（17/17）、说明页定向 Vitest（2/2）、
+  `npm run check`、`npm run typecheck`、`npm run test:modern`（21 个文件、90/90）、
+  `npm run build:modern` 与 `git diff --check` 均通过。
