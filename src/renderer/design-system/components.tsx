@@ -96,17 +96,26 @@ export function Field({ label, hint, error, children, htmlFor }: { label: string
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [hintId, errorId].filter((value): value is string => Boolean(value)).join(" ") || undefined;
-  // Field owns the label/control relationship so every design-system input
-  // remains accessible even when a feature omits a manual htmlFor id.
-  const control = isValidElement(children)
+  const directControl = isValidElement(children) && isFieldControlElement(children);
+  // Field owns direct control IDs, but leaves layout wrappers intact. This
+  // keeps an explicit htmlFor target on a nested control from being duplicated
+  // onto its wrapper (for example the PP-OCRv6 select plus custom input).
+  const control = directControl
     ? cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean; "data-state"?: ControlState }>, { id, ...(describedBy ? { "aria-describedby": describedBy } : {}), ...(error ? { "aria-invalid": true, "data-state": "error" } : {}) })
     : children;
-  return <label htmlFor={id}>
+  return <label {...(directControl || htmlFor ? { htmlFor: id } : {})}>
     <span className={styles.fieldLabel}>{label}</span>
     {control}
     {hint && <span className={styles.fieldHint} id={hintId}>{hint}</span>}
     {error && <span className={styles.fieldHint} id={errorId} role="alert" data-tone="danger">{error}</span>}
   </label>;
+}
+
+function isFieldControlElement(element: ReactElement): boolean {
+  // Custom controls such as ModelSelect receive Field's generated props;
+  // intrinsic layout elements must not receive an ID that belongs to a child.
+  if (typeof element.type !== "string") return true;
+  return ["button", "input", "select", "textarea"].includes(element.type);
 }
 
 export function Checkbox({ label, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {

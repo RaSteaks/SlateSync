@@ -581,6 +581,22 @@
           </div>
           <small id="global-api-key-note" class="api-key-note">选择服务商查看配置状态。</small>
         </section>
+        <section class="settings-card custom-provider-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">CUSTOM REGISTRY</span>
+              <h2>自定义模型接口</h2>
+            </div>
+            <button id="custom-provider-new" class="secondary-button compact" type="button">新增接口</button>
+          </div>
+          <p class="settings-help">可添加任意数量的 OpenAI 兼容接口。密钥可选，模型列表不完整时可手动添加并逐项验证。</p>
+          <div class="custom-provider-layout">
+            <div id="custom-provider-list" class="custom-provider-list" aria-live="polite"></div>
+            <div id="custom-provider-detail" class="custom-provider-detail">
+              <p class="settings-help">选择接口查看模型检测与能力验证。</p>
+            </div>
+          </div>
+        </section>
         <section class="settings-card global-settings-card">
           <div class="settings-card-heading">
             <div>

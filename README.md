@@ -185,6 +185,19 @@ Legacy Renderer（受限回退路径）
 
 全局配置按机器用户保存，不随 Project Library 导入/导出；因此同一台机器的多个项目共享它，而项目包仍可独立迁移。若未来需要更高等级的凭据保护，可将现有独立密钥文件迁移到 macOS Keychain/系统安全存储，普通配置文件无需改变。
 
+#### 多自定义 OpenAI 兼容接口
+
+全局设置的“自定义模型接口”支持任意数量的连接，每条记录使用
+`openai-compatible:<uuid>` 稳定 ID，可自定义名称、Base URL、Chat Completions/Responses、
+JSON 模式、图片细节和多个手动模型 ID。`global-config.json` 已升级为 v2；v1 或早期
+direct-object 文件会兼容读取并在下一次保存时写入 v2。删除接口只清理该接口的 Key、
+发现和能力缓存，不改写项目数据库，旧项目引用会提示重新选择。
+
+模型检测先读取 `/models`。明确声明图像输入+文本输出、维护模型族推断或已验证的模型
+进入“可用于识别”；未声明 modality 的模型进入“待验证”，由用户选择后使用不含项目数据
+的合成图片与最小 JSON 探针验证。探针并发上限为 2、单模型超时 30 秒，支持进度、取消和
+逐项重试。精度/性价比只展示带来源和日期的参考评级；未知模型显示“精度暂无数据”“价格未知”。
+
 ## 数据与安全
 
 - 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library`。

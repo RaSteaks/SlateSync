@@ -1,6 +1,10 @@
 import type {
   AppError,
   BinaryPayload,
+  CustomProviderConfigRequest,
+  CustomProviderDeleteRequest,
+  CustomProviderSummary,
+  UpdateCustomProviderRequest,
   GlobalSettingsData,
   GlobalSettingsRequest,
   LogsOpenDirectoryResult,
@@ -23,6 +27,9 @@ import type {
   LibraryRenameRequest,
   SlateSyncApi,
   ProgressData,
+  ModelProbeRequest,
+  ModelProbeResult,
+  ModelProbeProgress,
 } from "../shared/contracts/index.js";
 import { toAppError } from "../shared/errors/index.js";
 
@@ -30,12 +37,13 @@ import { toAppError } from "../shared/errors/index.js";
 export const PRELOAD_BUILD_TARGET = "preload" as const;
 
 type ProgressListener = (event: ProgressData) => void;
+type ModelProbeProgressListener = (event: ModelProbeProgress) => void;
 
 interface PreloadTransport {
   invoke(channel: string): Promise<unknown>;
   invoke(channel: string, payload: unknown): Promise<unknown>;
-  on(channel: string, listener: (_event: unknown, payload: ProgressData) => void): void;
-  removeListener(channel: string, listener: (_event: unknown, payload: ProgressData) => void): void;
+  on(channel: string, listener: (_event: unknown, payload: any) => void): void;
+  removeListener(channel: string, listener: (_event: unknown, payload: any) => void): void;
 }
 
 interface ContextBridge {
@@ -77,6 +85,16 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       if (!active) return;
       active = false;
       transport.removeListener("recognition-progress", wrapped);
+    };
+  };
+  const onModelProbeProgress = (listener: ModelProbeProgressListener): (() => void) => {
+    const wrapped = (_event: unknown, payload: ModelProbeProgress) => listener(payload);
+    let active = true;
+    transport.on("model-probe-progress", wrapped);
+    return () => {
+      if (!active) return;
+      active = false;
+      transport.removeListener("model-probe-progress", wrapped);
     };
   };
 
@@ -130,6 +148,13 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       checkOcr: (body: OcrCheckRequest) => request("check-ocr", body),
       checkVisionOcr: () => request<VisionOcrCheckResult>("check-vision-ocr"),
       checkCompatibleJsonSchema: () => request("check-compatible-json-schema"),
+      listCustomProviders: () => request<CustomProviderSummary[]>("list-custom-providers"),
+      createCustomProvider: (body: CustomProviderConfigRequest) => request<CustomProviderSummary>("create-custom-provider", body),
+      updateCustomProvider: (body: UpdateCustomProviderRequest) => request<CustomProviderSummary>("update-custom-provider", body),
+      deleteCustomProvider: (body: CustomProviderDeleteRequest) => request<{ deleted: string }>("delete-custom-provider", body),
+      probeCustomModels: (body: ModelProbeRequest) => request<ModelProbeResult>("probe-custom-models", body),
+      cancelCustomModelProbe: (body: { providerId: string }) => request<{ canceled: boolean }>("cancel-custom-model-probe", body),
+      onModelProbeProgress,
     },
     // Logs stay read-only over IPC: the Main process is the single writer of
     // the local log files. Opening the folder is an OS action, not a Renderer

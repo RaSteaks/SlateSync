@@ -99,6 +99,10 @@ async function initialize() {
   const globalConfigStore = createGlobalConfigStore(userDataPath);
   const storedGlobalConfig = await globalConfigStore.load();
   const runtimeGlobalConfig = { ...(storedGlobalConfig?.values || {}) };
+  // Custom endpoint records are kept in a mutable Main-owned array so CRUD
+  // handlers can refresh the registry without putting connection details in
+  // environment variables or exposing a private key to the Renderer.
+  const runtimeCustomProviders = [...(storedGlobalConfig?.customProviders || [])];
 
   // Load .env from project root (dev) or userData (packaged)
   const envPath = isDev
@@ -267,6 +271,7 @@ async function initialize() {
     runtimeSettings,
     globalConfigStore,
     runtimeGlobalConfig,
+    runtimeCustomProviders,
     refreshRuntimeSettings,
     libraryActions,
     logger: appLogger,

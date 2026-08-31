@@ -21,7 +21,70 @@ export interface ProviderSummary {
   readonly label: string;
   readonly configured: boolean;
   readonly requiredEnv: readonly string[];
+  readonly type?: "builtin" | "custom";
+  readonly editable?: boolean;
 }
+
+export type ModelCapabilityStatus =
+  | "declared"
+  | "inferred"
+  | "verified"
+  | "pending"
+  | "unsupported"
+  | "failed"
+  | "canceled";
+
+export interface CustomProviderCapabilityVerification {
+  readonly status: "verified" | "failed" | "canceled";
+  readonly revision: number;
+  readonly checkedAt: string | null;
+  readonly capabilitySource?: string;
+  readonly message?: string;
+}
+
+/** Non-secret provider configuration returned to the Renderer. */
+export interface CustomProviderSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly label?: string;
+  readonly baseUrl: string;
+  readonly transport: "chat-completions" | "responses";
+  readonly jsonMode: "json_schema" | "json_object" | "prompt";
+  readonly imageDetail: "auto" | "low" | "high" | "original";
+  readonly manualModelIds: readonly string[];
+  readonly revision: number;
+  readonly keyConfigured: boolean;
+  /** Revision-scoped outcomes for every model actually probed, not only manual IDs. */
+  readonly capabilityCache?: Readonly<Record<string, CustomProviderCapabilityVerification>>;
+}
+
+export interface CustomProviderConfigRequest {
+  readonly id?: string;
+  readonly providerId?: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly transport?: "chat-completions" | "responses";
+  readonly jsonMode?: "json_schema" | "json_object" | "prompt";
+  readonly imageDetail?: "auto" | "low" | "high" | "original";
+  readonly manualModelIds?: readonly string[];
+  /** Accepted only by Main and never returned or logged. */
+  readonly apiKey?: string;
+  readonly replaceApiKey?: boolean;
+  readonly clearApiKey?: boolean;
+}
+
+// Additive aliases keep the contract discoverable for callers that model the
+// persisted shape (`Config`) separately from the create/update request shape.
+export type CustomProviderConfig = CustomProviderSummary;
+export type NewCustomProviderRequest = CustomProviderConfigRequest;
+export type UpdateCustomProviderRequest = CustomProviderConfigRequest & { readonly id: string };
+
+export interface CustomProviderDeleteRequest {
+  readonly id: string;
+  readonly confirm?: boolean;
+}
+
+export type DeleteCustomProviderRequest = CustomProviderDeleteRequest;
 
 export interface ModelData {
   readonly id: string;
@@ -38,10 +101,20 @@ export interface ModelData {
   readonly fixedPriority?: number | null;
   readonly discovered?: boolean;
   readonly verifiedAvailable?: boolean;
-  readonly qualityScore?: number;
-  readonly valueScore?: number;
+  readonly qualityScore?: number | null;
+  readonly valueScore?: number | null;
   readonly qualityLabel?: string;
   readonly valueLabel?: string;
+  readonly capabilityStatus?: ModelCapabilityStatus;
+  readonly capabilitySource?: string;
+  /** Safe, redacted probe failure detail suitable for recovery UI. */
+  readonly capabilityMessage?: string | null;
+  readonly capabilityCheckedAt?: string | null;
+  readonly qualitySource?: string;
+  readonly qualityUpdatedAt?: string | null;
+  readonly valueSource?: string;
+  readonly valueUpdatedAt?: string | null;
+  readonly priceUpdatedAt?: string | null;
 }
 
 export interface OcrEngineStatus {
@@ -120,6 +193,7 @@ export interface ConfigData {
   readonly ocrSelection: OcrSelection;
   readonly upload: UploadLimits;
   readonly workflow: WorkflowConfig;
+  readonly customProviders?: readonly CustomProviderSummary[];
 }
 
 export interface ProjectSettings {
@@ -299,6 +373,7 @@ export interface GlobalSettingsData {
   readonly keyConfigured: Readonly<Record<string, boolean>>;
   /** True after saving SLATESYNC_CONFIG_PATH, which is read at next startup. */
   readonly restartRequired: boolean;
+  readonly customProviders?: readonly CustomProviderSummary[];
 }
 
 export interface SlateCsvRecord {
@@ -387,6 +462,40 @@ export interface JsonSchemaCapabilityResult {
   readonly status: number | null;
   readonly checkedAt: string;
   readonly message: string;
+}
+
+export interface ModelProbeRequest {
+  readonly providerId: string;
+  readonly modelIds?: readonly string[];
+}
+
+export interface ModelProbeProgress {
+  readonly providerId: string;
+  /** Connection revision used for this event; stale late events can be ignored. */
+  readonly revision?: number;
+  readonly model: string;
+  readonly completed: number;
+  readonly total: number;
+  readonly percent: number;
+  readonly result?: ModelCapabilityProbeResult;
+}
+
+export interface ModelCapabilityProbeResult {
+  readonly supported: boolean;
+  readonly model: string;
+  readonly transport: "chat-completions" | "responses";
+  readonly status: number | null;
+  readonly checkedAt: string;
+  readonly message: string;
+  readonly capabilityStatus: ModelCapabilityStatus;
+}
+
+export interface ModelProbeResult {
+  readonly canceled: boolean;
+  readonly revision?: number;
+  readonly results: readonly ModelCapabilityProbeResult[];
+  readonly completed: number;
+  readonly total: number;
 }
 
 export interface RecognitionRecord {
@@ -751,8 +860,27 @@ export interface ModelDiscoveryResult {
   readonly availableModelCount: number | null;
   readonly visionModelCount: number;
   readonly fixedModelCount: number;
+  /** Number of models waiting for explicit capability verification. */
+  readonly pendingModelCount?: number;
+  /** False when a custom gateway has no usable GET /models endpoint. */
+  readonly modelsEndpointAvailable?: boolean;
   readonly warning?: string;
   readonly models: readonly ModelData[];
+  readonly pendingModels?: readonly ModelData[];
+  readonly unsupportedModelCount?: number;
+  readonly unsupportedModels?: readonly {
+    readonly id: string;
+    readonly reason: string;
+    readonly capabilityStatus?: "unsupported";
+  }[];
+  readonly failedModelCount?: number;
+  readonly failedModels?: readonly ModelData[];
+  readonly statusCounts?: Readonly<{
+    readonly usable: number;
+    readonly pending: number;
+    readonly unsupported: number;
+    readonly failed: number;
+  }>;
 }
 
 export interface SlateSyncApi {
@@ -805,6 +933,13 @@ export interface SlateSyncApi {
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;
     checkVisionOcr(): Promise<Result<VisionOcrCheckResult>>;
     checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
+    listCustomProviders(): Promise<Result<CustomProviderSummary[]>>;
+    createCustomProvider(request: CustomProviderConfigRequest): Promise<Result<CustomProviderSummary>>;
+    updateCustomProvider(request: UpdateCustomProviderRequest): Promise<Result<CustomProviderSummary>>;
+    deleteCustomProvider(request: CustomProviderDeleteRequest): Promise<Result<{ readonly deleted: string }>>;
+    probeCustomModels(request: ModelProbeRequest): Promise<Result<ModelProbeResult>>;
+    cancelCustomModelProbe(request: { readonly providerId: string }): Promise<Result<{ readonly canceled: boolean }>>;
+    onModelProbeProgress(listener: (event: ModelProbeProgress) => void): () => void;
   };
   readonly logs: {
     read(request: LogsReadRequest): Promise<Result<LogsReadResult>>;

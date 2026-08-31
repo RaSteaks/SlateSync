@@ -6,6 +6,22 @@ import {
   discoverVisionModels,
   staticProviderModels,
 } from "../lib/model-discovery.mjs";
+import {
+  clearRegisteredModels,
+  registerDiscoveredModels,
+  registeredModel,
+  sortVisionModels,
+} from "../lib/model-catalog.mjs";
+import { createProviderRegistry } from "../lib/provider-registry.mjs";
+
+test("unrated discovered models stay below models with known scores", () => {
+  const sorted = sortVisionModels([
+    { id: "unrated", label: "Unrated", fixed: false, valueScore: null, qualityScore: null },
+    { id: "known", label: "Known", fixed: false, valueScore: 1, qualityScore: 1 },
+  ]);
+
+  assert.deepEqual(sorted.map((model) => model.id), ["known", "unrated"]);
+});
 
 test("OpenAI discovery intersects Key access with the visual catalog and keeps fixed models first", async () => {
   clearModelDiscoveryCache();
@@ -249,6 +265,77 @@ test("OpenAI-compatible model changes invalidate the cached custom descriptor", 
   const second = await discoverVisionModels("openai-compatible", { env: envB, fetchImpl });
   assert.equal(second.models.find((model) => model.id === CUSTOM_MODEL_ID).apiId, "model-b");
   assert.equal(requestCount, 2);
+});
+
+test("null discovery revisions cannot satisfy a revisioned model lookup", () => {
+  const providerId = "revision-sentinel-test";
+  clearRegisteredModels(providerId);
+  registerDiscoveredModels(providerId, [{ id: "model-a" }], null);
+  assert.ok(registeredModel(providerId, "model-a", null));
+  assert.equal(registeredModel(providerId, "model-a", 2), null);
+
+  registerDiscoveredModels(providerId, [{ id: "model-b" }], 2);
+  registerDiscoveredModels(providerId, [{ id: "stale-model" }], 1);
+  assert.ok(registeredModel(providerId, "model-b", 2));
+  assert.equal(registeredModel(providerId, "stale-model", 2), null);
+  clearRegisteredModels(providerId);
+});
+
+test("materialized legacy models use persisted IDs and dedupe the compatibility alias", async () => {
+  clearModelDiscoveryCache();
+  const legacyRecord = {
+    id: "openai-compatible",
+    name: "Legacy gateway",
+    baseUrl: "https://legacy.example/v1",
+    transport: "chat-completions",
+    jsonMode: "json_object",
+    manualModelIds: ["vendor/persisted-model"],
+    revision: 1,
+    capabilityCache: {},
+  };
+  const registry = createProviderRegistry({
+    env: {
+      OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+      OPENAI_COMPATIBLE_MODEL: "vendor/stale-environment-model",
+    },
+    customProviders: [legacyRecord],
+  });
+  const result = await discoverVisionModels("openai-compatible", {
+    env: {
+      OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+      OPENAI_COMPATIBLE_MODEL: "vendor/stale-environment-model",
+    },
+    registry,
+    fetchImpl: async () => jsonResponse({
+      data: [
+        routerModel("vendor/persisted-model", ["text", "image"], ["text"], {}),
+        { id: "vendor/persisted-model" },
+      ],
+    }),
+    cache: false,
+  });
+
+  assert.equal(result.visionModelCount, 1);
+  assert.equal(result.models.length, 1);
+  assert.equal(result.models[0].id, CUSTOM_MODEL_ID);
+  assert.equal(result.models[0].apiId, "vendor/persisted-model");
+  assert.equal(
+    registry.resolveModel("openai-compatible", CUSTOM_MODEL_ID).apiId,
+    "vendor/persisted-model",
+  );
+
+  const noPersistedIdRegistry = createProviderRegistry({
+    env: {
+      OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+      OPENAI_COMPATIBLE_MODEL: "vendor/stale-environment-model",
+    },
+    customProviders: [{ ...legacyRecord, manualModelIds: [] }],
+  });
+  assert.equal(noPersistedIdRegistry.resolveModel("openai-compatible", CUSTOM_MODEL_ID), null);
+  assert.equal(
+    noPersistedIdRegistry.publicModels().some((model) => model.apiId === "vendor/stale-environment-model"),
+    false,
+  );
 });
 
 test("static fallback is marked as unverified and never exposes credentials", () => {

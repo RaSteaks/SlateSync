@@ -45,6 +45,7 @@ describe("HelpPage", () => {
     expect(host.textContent).toContain("速度、运行参数与排查");
     expect(host.textContent).toContain("v6_tiny_det");
     expect(host.textContent).toContain("JSON Schema");
+    expect(host.textContent).not.toContain("安全提醒");
   });
 
   it("filters sections by keyword and can restore the complete guide", () => {

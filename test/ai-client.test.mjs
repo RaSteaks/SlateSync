@@ -8,6 +8,7 @@ import {
   resolveModel,
   resolveProvider,
 } from "../lib/config.mjs";
+import { createProviderRegistry } from "../lib/provider-registry.mjs";
 import {
   normalizeCardNumber,
   normalizeSlateResult,
@@ -561,6 +562,52 @@ test("OpenAI-compatible Responses mode targets the custom /responses endpoint", 
   assert.equal(captured.body.input[1].content[1].type, "input_image");
   assert.equal(captured.body.text.format.type, "json_schema");
   assert.equal(result.result.records[0].scene, "012");
+});
+
+test("custom Responses JSON Object requests include the full Slate schema prompt", async () => {
+  const providerId = "openai-compatible:11111111-1111-4111-8111-111111111111";
+  let captured;
+  const registry = createProviderRegistry({
+    env: {},
+    customProviders: [{
+      id: providerId,
+      name: "Responses JSON Object",
+      baseUrl: "https://vision.example/v1",
+      transport: "responses",
+      jsonMode: "json_object",
+      manualModelIds: ["vendor/vision-json-object"],
+      revision: 1,
+      capabilityCache: {
+        "vendor/vision-json-object": {
+          status: "verified",
+          revision: 1,
+          checkedAt: "2026-08-26T00:00:00.000Z",
+        },
+      },
+    }],
+    providerKeys: new Map([[providerId, "custom-key"]]),
+  });
+
+  await recognizeSlate(
+    {
+      providerId,
+      modelId: "vendor/vision-json-object",
+      imageDataUrl,
+    },
+    {
+      env: {},
+      providerRegistry: registry,
+      fetchImpl: async (url, request) => {
+        captured = { url, body: JSON.parse(request.body) };
+        return jsonResponse({ output_text: JSON.stringify(modelResult) });
+      },
+    },
+  );
+
+  assert.equal(captured.url, "https://vision.example/v1/responses");
+  assert.equal(captured.body.text.format.type, "json_object");
+  assert.match(captured.body.input[0].content, /严格遵守以下 Schema/);
+  assert.match(captured.body.input[0].content, /sheetTitle/);
 });
 
 test("OpenAI-compatible Chat Completions can use prompt-only JSON mode", async () => {

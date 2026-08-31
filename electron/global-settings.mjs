@@ -238,7 +238,7 @@ function safeHttpUrl(key, value) {
   if (!["http:", "https:"].includes(parsed.protocol)) {
     throw new Error(`${key} 只支持 http:// 或 https://`);
   }
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+  if (parsed.username || parsed.password || parsed.search || parsed.hash || value.includes("?") || value.includes("#")) {
     throw new Error(`${key} 不能包含账号、密码、查询参数或片段`);
   }
   return parsed.toString().replace(/\/$/, "");

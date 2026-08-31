@@ -66,6 +66,8 @@ const HELP_SECTIONS: readonly HelpSection[] = [
     summary: "密钥属于设备级设置，Provider、模型和识别偏好可以在项目或任务级别选择。",
     keywords: "大模型 Provider API Key 密钥 Base URL OpenAI OpenRouter Token Plan DashScope 阿里云 百炼 兼容模型 模型 ID Chat Completions Responses JSON Schema JSON Object 图片细节 识别模式 精确 快速 场记结构 提示",
     icon: KeyRound,
+    // Keep this guide focused on configuration controls and behavior; it never
+    // renders credential values or an additional security callout.
     content: <>
       <ol className={styles.helpChecklist}>
         <li><strong>保存访问凭据：</strong>进入左侧“系统 → 全局设置”，在“访问密钥与接口”选择 Provider，填写 API Key 并保存。密钥存放在本机独立凭据文件中，保存后不会回显，也不会进入项目数据。</li>
@@ -95,9 +97,6 @@ const HELP_SECTIONS: readonly HelpSection[] = [
           <Text as="h3" size="sm" weight="bold">为什么 Provider 显示未配置？</Text>
           <Text tone="muted" size="sm">通常是 API Key 为空、Base URL 不可达，或 OpenAI 兼容接口缺少模型 ID。先在全局设置保存并检查，再回到工作台重新选择模型。</Text>
         </div>
-      </div>
-      <div className={styles.helpCallout} data-tone="warning">
-        <strong>安全提醒：</strong>不要把真实 API Key 写入提交到 Git 的文件、项目描述、识别提示或截图；`.env.example` 仅是配置模板。
       </div>
     </>,
   },
@@ -162,10 +161,10 @@ const HELP_SECTIONS: readonly HelpSection[] = [
       </div>
       <dl className={styles.helpDefinitions}>
         <div><dt>参数预设</dt><dd>命名预设一次性切换模型、检测尺寸、识别 batch 和 evidence 过滤；自定义模式逐字段读取手动值。</dd></div>
-        <div><dt>模型版本</dt><dd>选择 PP-OCRv5 或 PP-OCRv6。切换版本会清理已知的旧版本检测/识别模型覆盖，避免拼出 v5/v6 混合管线。</dd></div>
+        <div><dt>模型版本</dt><dd>选择 PP-OCRv5 或 PP-OCRv6。切换版本会清理已知的旧版本检测/识别模型覆盖，避免拼出 v5/v6 混合管线；PP-OCRv6 下的检测模型和识别模型可直接从对应档位下拉选择。</dd></div>
         <div><dt>兼容性能档</dt><dd>自定义模式下的旧版 fast、balanced、accurate 档，用于为未填写具体模型名的 v5/v6 配置提供默认模型。</dd></div>
-        <div><dt>检测模型</dt><dd>定位页面中的文字区域并生成文字块坐标。模型越大通常越能保留细节，但下载、准备和推理成本也越高。</dd></div>
-        <div><dt>识别模型</dt><dd>读取检测到的文字区域并输出文本。识别 batch 决定一次送入模型的文字裁剪数量。</dd></div>
+        <div><dt>检测模型</dt><dd>定位页面中的文字区域并生成文字块坐标。PP-OCRv6 可选择 medium、small 或 tiny；模型越大通常越能保留细节，但下载、准备和推理成本也越高。</dd></div>
+        <div><dt>识别模型</dt><dd>读取检测到的文字区域并输出文本。PP-OCRv6 可选择 medium、small 或 tiny；识别 batch 决定一次送入模型的文字裁剪数量。</dd></div>
         <div><dt>检测最长边</dt><dd>检测前将图像按最长边缩放到的尺寸，范围 320–4096；调小通常更快，但小字和密集排版可能丢失。</dd></div>
         <div><dt>识别批量大小</dt><dd>一次批量识别的文字块数量，范围 1–64；提高可能提升吞吐，但会增加 CPU 内存和瞬时负载。</dd></div>
         <div><dt>最低置信度</dt><dd>范围 0–1，低于阈值的文字块不会作为证据传给后续流程。它主要减少噪声和数据量，不直接减少已完成的模型计算。</dd></div>

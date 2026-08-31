@@ -82,28 +82,40 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   // machine-level settings belong to their feature packages rather than the
   // historical inventory.
   assert.deepEqual(Object.keys(additions.requestMethods).sort(), [
+    "cancelCustomModelProbe",
     "cancelRecognition",
     "checkCompatibleJsonSchema",
     "checkVisionOcr",
+    "createCustomProvider",
+    "deleteCustomProvider",
     "deleteProject",
     "getGlobalSettings",
+    "listCustomProviders",
     "openLogsDirectory",
+    "probeCustomModels",
     "readLogs",
     "renameLibrary",
     "saveGlobalSettings",
+    "updateCustomProvider",
   ]);
   assert.deepEqual(
     Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
     [
+      "cancel-custom-model-probe",
       "cancel-recognition",
       "check-compatible-json-schema",
       "check-vision-ocr",
+      "create-custom-provider",
+      "delete-custom-provider",
       "delete-project",
       "get-global-settings",
+      "list-custom-providers",
       "logs-open-directory",
       "logs-read",
+      "probe-custom-models",
       "rename-library",
       "save-global-settings",
+      "update-custom-provider",
     ],
   );
 });

@@ -12,8 +12,8 @@ export interface ModelOptionGroup {
 
 /**
  * Keep the common choices visible without throwing away discovered models.
- * OpenRouter's catalog is large, so its remaining entries are grouped by the
- * vendor prefix returned by the API; other providers retain a flat selection.
+ * OpenRouter and multi-vendor custom catalogs are grouped by the vendor
+ * metadata returned by the API; single-vendor providers retain a flat list.
  */
 export function groupModelOptions(
   providerId: string,
@@ -21,11 +21,15 @@ export function groupModelOptions(
 ): readonly ModelOptionGroup[] {
   const available = dedupeModels(models);
   if (!available.length) return [];
-  if (providerId !== "openrouter") {
+  if (providerId !== "openrouter" && !hasMultipleVendors(available)) {
     return [{ key: "available", label: "可用视觉模型", models: available, collapsible: false }];
   }
 
-  const recommended = available.filter(isRecommendedModel);
+  if (providerId !== "openrouter") {
+    return vendorGroups(providerId, available);
+  }
+
+  const recommended = providerId === "openrouter" ? available.filter(isRecommendedModel) : [];
   const featured = [...recommended];
   for (const model of available) {
     if (featured.length >= OPENROUTER_PRIMARY_COUNT) break;
@@ -44,8 +48,14 @@ export function groupModelOptions(
     });
   }
 
+  groups.push(...vendorGroups(providerId, remaining, "其余"));
+  return groups;
+}
+
+function vendorGroups(providerId: string, models: readonly ModelData[], suffix = "") {
+  const groups: ModelOptionGroup[] = [];
   const byVendor = new Map<string, ModelData[]>();
-  for (const model of remaining) {
+  for (const model of models) {
     const vendor = model.vendor || model.id.split("/", 1)[0] || "other";
     const bucket = byVendor.get(vendor) || [];
     bucket.push(model);
@@ -53,13 +63,18 @@ export function groupModelOptions(
   }
   for (const [vendor, vendorModels] of byVendor) {
     groups.push({
-      key: `openrouter-vendor-${vendor}`,
-      label: `${vendorLabel(vendor)} · 其余 ${vendorModels.length} 个`,
+      key: `${providerId}-vendor-${vendor}`,
+      label: `${vendorLabel(vendor)}${suffix ? ` · ${suffix} ${vendorModels.length} 个` : ` · ${vendorModels.length} 个`}`,
       models: vendorModels,
       collapsible: true,
     });
   }
   return groups;
+}
+
+function hasMultipleVendors(models: readonly ModelData[]): boolean {
+  const vendors = new Set(models.map((model) => model.vendor || model.id.split("/", 1)[0] || "other"));
+  return vendors.size > 1 && models.length >= 2;
 }
 
 export function modelOptionLabel(model: ModelData): string {
@@ -91,10 +106,12 @@ function vendorLabel(vendor: string): string {
     deepseek: "DeepSeek",
     google: "Google",
     meta: "Meta",
+    minimax: "MiniMax",
     mistralai: "Mistral AI",
     openai: "OpenAI",
     qwen: "Qwen",
     xai: "xAI",
+    other: "其他",
   };
   const key = vendor.toLowerCase();
   return knownLabels[key] || vendor

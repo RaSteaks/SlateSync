@@ -25,6 +25,11 @@ import {
 import { createCsvTaskProcessor } from "./csv-background-tasks.js";
 import { createCsvWorkerClient } from "./csv-worker-client.js";
 import {
+  clearCustomProviderProbeState,
+  defaultPendingSelection,
+  mergeCustomProviderDiscovery,
+} from "./custom-provider-state.js";
+import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
   findDenseRowBand,
@@ -66,6 +71,13 @@ import {
   saveGlobalSettingsApi,
   saveOcrSettingsApi,
   checkOcrApi,
+  listCustomProvidersApi,
+  createCustomProviderApi,
+  updateCustomProviderApi,
+  deleteCustomProviderApi,
+  probeCustomModelsApi,
+  cancelCustomModelProbeApi,
+  onModelProbeProgressApi,
 } from "./electron-bridge.js";
 import {
   REQUEST_COMPRESSION_PROFILES,
@@ -115,6 +127,13 @@ const state = {
   globalSettingsDraft: {},
   globalSettingsDirty: new Set(),
   globalSettingsLoading: false,
+  customProviders: [],
+  selectedCustomProviderId: "",
+  customProviderDiscovery: {},
+  customProviderBusy: false,
+  customProviderEditor: null,
+  customProviderShowKey: false,
+  customProviderDeleteConfirm: "",
   csvEdits: new Map(),
   detailSort: { field: null, direction: 1 },
   detailSearch: "",
@@ -267,6 +286,9 @@ const elements = {
   globalSettingsReset: document.querySelector("#global-settings-reset"),
   globalOcrOpen: document.querySelector("#global-ocr-open"),
   globalOcrStatus: document.querySelector("#global-ocr-status"),
+  customProviderNew: document.querySelector("#custom-provider-new"),
+  customProviderList: document.querySelector("#custom-provider-list"),
+  customProviderDetail: document.querySelector("#custom-provider-detail"),
   projectContext: document.querySelector("#project-context"),
   projectDialog: document.querySelector("#project-dialog"),
   projectDialogForm: document.querySelector("#project-dialog-form"),
@@ -281,8 +303,11 @@ const projectOperations = createLatestOperation();
 const projectModelOperations = createLatestOperation();
 const taskOperations = createLatestOperation();
 const taskListOperations = createLatestOperation();
+const customProviderOperations = createLatestOperation();
 const legacyModelPickers = new Map();
+const providerCacheVersions = new Map();
 let allowWindowClose = false;
+let unsubscribeModelProbeProgress = () => {};
 
 const taskAutosave = createTaskAutosave({
   delayMs: 500,
@@ -295,6 +320,20 @@ init();
 
 async function init() {
   bindEvents();
+  unsubscribeModelProbeProgress = onModelProbeProgressApi((event) => {
+    const providerId = event?.providerId;
+    if (!providerId) return;
+    if (!state.customProviders.some((provider) => provider.id === providerId)) return;
+    if (!state.customProviderDiscovery[providerId]?.probing) return;
+    const currentRevision = state.customProviders.find((provider) => provider.id === providerId)?.revision;
+    if (event.revision != null && currentRevision != null && event.revision !== currentRevision) return;
+    state.customProviderDiscovery[providerId] = {
+      ...state.customProviderDiscovery[providerId],
+      probing: true,
+      progress: event,
+    };
+    if (state.selectedCustomProviderId === providerId) renderCustomProviderRegistry();
+  });
   try {
     await loadConfig();
     renderSlateDirectoryConfig();
@@ -309,6 +348,7 @@ async function init() {
     await loadProviderModels();
     renderGlobalProviderOptions();
     await loadGlobalSettings();
+    await loadCustomProviders();
     await refreshLibrary();
     renderRoute();
   } catch {
@@ -414,7 +454,10 @@ function renderRoute() {
 
   if (state.route === "project-settings") renderProjectSettingsForm();
   if (state.route === "global-settings" && !state.globalSettings) void loadGlobalSettings();
-  if (state.route === "global-settings") renderGlobalSettingsForm();
+  if (state.route === "global-settings") {
+    renderGlobalSettingsForm();
+    renderCustomProviderRegistry();
+  }
   updateProjectContextLabel();
 }
 
@@ -813,19 +856,17 @@ function applyNewTaskRecognitionDefaults(project = state.currentProject) {
   const settings = project.settings || defaultRendererProjectSettings();
   const recent = project.lastRecognitionDefaults;
   const providerOptions = [...elements.provider.options].map((option) => option.value);
-  const providerIsUsable = (providerId) => Boolean(providerId) &&
-    providerOptions.includes(providerId) &&
-    state.config?.providers.some(
-      (provider) => provider.id === providerId && provider.configured,
-    );
-  // A removed provider must not leave controls on the previously opened
-  // project. Fall back deterministically to project settings, then any usable
-  // provider currently configured on this machine.
-  const providerId = [recent?.providerId, settings.providerId]
-    .find(providerIsUsable)
-    || state.config?.providers.find((provider) => provider.configured)?.id
-    || providerOptions[0]
-    || "";
+  const requestedProvider = recent?.providerId || settings.providerId || "";
+  let providerId = requestedProvider;
+  if (providerId && !providerOptions.includes(providerId)) {
+    // Preserve a deleted connection as an explicit stale choice; selectedModel
+    // then remains empty and the recognition action stays disabled until the
+    // user remaps it.
+    elements.provider.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(providerId)}">${escapeHtml(providerId)} · 接口已移除</option>`);
+  }
+  if (!providerId) {
+    providerId = state.config?.providers.find((provider) => provider.configured)?.id || providerOptions[0] || "";
+  }
   elements.provider.value = providerId;
   renderModelOptions();
 
@@ -864,13 +905,16 @@ function applyNewTaskRecognitionDefaults(project = state.currentProject) {
 
 function renderGlobalProviderOptions() {
   if (!elements.globalProvider || !state.config) return;
+  // Custom connections have their own list/detail editor below; this select
+  // remains focused on built-in credentials and the legacy compatible slot.
+  const providers = state.config.providers.filter((provider) => !provider.id.startsWith("openai-compatible:"));
   const previous = elements.globalProvider.value;
-  elements.globalProvider.innerHTML = state.config.providers.map((provider) =>
+  elements.globalProvider.innerHTML = providers.map((provider) =>
     `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}${provider.configured ? "" : " · 未配置"}</option>`,
   ).join("");
-  elements.globalProvider.value = state.config.providers.some(
+  elements.globalProvider.value = providers.some(
     (provider) => provider.id === previous,
-  ) ? previous : state.config.providers[0]?.id || "";
+  ) ? previous : providers[0]?.id || "";
   updateGlobalApiKeyFieldState();
 }
 
@@ -919,12 +963,16 @@ async function saveGlobalProviderKey() {
 
 function renderProjectProviderOptions(selectedId = "") {
   if (!elements.projectProvider || !state.config) return;
-  elements.projectProvider.innerHTML = state.config.providers.map((provider) =>
+  const providers = state.config.providers;
+  const options = providers.map((provider) =>
     `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}${provider.configured ? "" : " · 未配置"}</option>`,
   ).join("");
-  elements.projectProvider.value = state.config.providers.some(
-    (provider) => provider.id === selectedId,
-  ) ? selectedId : state.config.providers.find((provider) => provider.configured)?.id || "";
+  const hasSavedProvider = providers.some((provider) => provider.id === selectedId);
+  const staleOption = selectedId && !hasSavedProvider
+    ? `<option value="${escapeHtml(selectedId)}">${escapeHtml(selectedId)} · 接口已移除</option>`
+    : "";
+  elements.projectProvider.innerHTML = staleOption + options;
+  elements.projectProvider.value = selectedId || providers.find((provider) => provider.configured)?.id || "";
 }
 
 function renderProjectModelOptions(
@@ -932,7 +980,7 @@ function renderProjectModelOptions(
   { preserveUnknown = false } = {},
 ) {
   if (!elements.projectModel) return;
-  const compatible = modelsForProvider(elements.projectProvider.value);
+  const compatible = modelsForProvider(elements.projectProvider.value).filter(isSelectableModel);
   const groups = modelOptionGroups(elements.projectProvider.value, compatible);
   const selectedAvailable = compatible.some((model) => model.id === selectedId);
   const rememberedOption = preserveUnknown && selectedId && !selectedAvailable
@@ -1033,6 +1081,87 @@ function bindEvents() {
   elements.globalSettingsSave?.addEventListener("click", () => void saveGlobalSettings());
   elements.globalSettingsReset?.addEventListener("click", () => void saveGlobalSettings(true));
   elements.globalOcrOpen?.addEventListener("click", openOcrSetup);
+  elements.customProviderNew?.addEventListener("click", () => openCustomProviderEditor());
+  elements.customProviderList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-custom-provider-id]");
+    if (!button) return;
+    const previousProviderId = state.selectedCustomProviderId;
+    const nextProviderId = button.dataset.customProviderId || "";
+    if (previousProviderId && previousProviderId !== nextProviderId) {
+      const previousDiscovery = state.customProviderDiscovery[previousProviderId];
+      if (previousDiscovery) {
+        state.customProviderDiscovery[previousProviderId] = clearCustomProviderProbeState(previousDiscovery);
+        if (previousDiscovery.probing) {
+          // Main cancellation is best effort; the operation token below is
+          // authoritative for preventing a late result from repainting this
+          // newly selected provider.
+          void cancelCustomModelProbeApi(previousProviderId).catch(() => {});
+        }
+      }
+    }
+    // Changing the selected provider invalidates any discovery response that
+    // was started for the previous detail panel.
+    customProviderOperations.invalidate();
+    state.selectedCustomProviderId = nextProviderId;
+    state.customProviderDeleteConfirm = "";
+    renderCustomProviderRegistry();
+  });
+  elements.customProviderDetail?.addEventListener("submit", (event) => {
+    if (event.target?.id === "custom-provider-form") void saveCustomProvider(event);
+  });
+  elements.customProviderDetail?.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-custom-provider-action]")?.dataset.customProviderAction;
+    if (action === "new") openCustomProviderEditor();
+    if (action === "edit") openCustomProviderEditor(state.selectedCustomProviderId);
+    if (action === "delete") void deleteCustomProvider();
+    if (action === "discover") void discoverCustomProvider(true);
+    if (action === "probe") void probeSelectedCustomModels();
+    if (action === "retry-probe") void retryCustomProviderModel(event.target.closest("[data-custom-provider-action]")?.dataset.modelId || "");
+    if (action === "cancel-probe") void cancelCustomProviderProbe();
+    if (action === "toggle-key" && state.customProviderEditor) {
+      state.customProviderShowKey = !state.customProviderShowKey;
+      renderCustomProviderRegistry();
+    }
+    if (action === "continue-edit" && state.customProviderEditor) { state.customProviderEditor.confirmDiscard = false; renderCustomProviderRegistry(); }
+    if (action === "discard-edit") { state.customProviderEditor = null; renderCustomProviderRegistry(); }
+    if (action === "clear-search") {
+      const providerId = state.selectedCustomProviderId;
+      // Persist the cleared value in the per-provider view state; merely
+      // blanking the current DOM input would be overwritten on the next render.
+      state.customProviderDiscovery[providerId] = {
+        ...state.customProviderDiscovery[providerId],
+        search: "",
+      };
+      renderCustomProviderRegistry();
+    }
+  });
+  elements.customProviderDetail?.addEventListener("change", (event) => {
+    if (state.customProviderEditor && event.target.closest("#custom-provider-form")) {
+      rememberCustomProviderDraft(event.target.closest("#custom-provider-form"));
+    }
+    if (event.target.matches("[data-custom-pending]")) {
+      const id = event.target.dataset.customPending;
+      const selected = state.customProviderDiscovery[state.selectedCustomProviderId]?.pendingModels || [];
+      const current = new Set(state.customProviderDiscovery[state.selectedCustomProviderId]?.selectedPending || defaultPendingSelection(selected));
+      if (event.target.checked) current.add(id); else current.delete(id);
+      state.customProviderDiscovery[state.selectedCustomProviderId] = { ...state.customProviderDiscovery[state.selectedCustomProviderId], selectedPending: [...current] };
+      renderCustomProviderRegistry();
+    }
+    if (event.target.matches("[data-custom-pending-all]")) {
+      const vendor = event.target.dataset.customPendingAll || "other";
+      const pending = state.customProviderDiscovery[state.selectedCustomProviderId]?.pendingModels || [];
+      const ids = pending
+        .filter((model) => (model.vendor || model.id?.split("/", 1)[0] || "other") === vendor)
+        .map((model) => model.apiId || model.id);
+      const current = new Set(
+        state.customProviderDiscovery[state.selectedCustomProviderId]?.selectedPending
+        || defaultPendingSelection(pending),
+      );
+      ids.forEach((id) => event.target.checked ? current.add(id) : current.delete(id));
+      state.customProviderDiscovery[state.selectedCustomProviderId] = { ...state.customProviderDiscovery[state.selectedCustomProviderId], selectedPending: [...current] };
+      renderCustomProviderRegistry();
+    }
+  });
 
   elements.provider.addEventListener("change", async () => {
     updateApiKeyFieldState();
@@ -1354,20 +1483,24 @@ function bindFileDropzone(dropzone, input, loader) {
 
 function renderProviderOptions() {
   const previous = elements.provider.value;
-  elements.provider.innerHTML = state.config.providers
+  const hasPrevious = state.config.providers.some((provider) => provider.id === previous);
+  // Keep a deleted connection selected as a visible stale reference. This
+  // prevents a global-settings refresh from silently switching the active
+  // workspace to another Provider while its project setting is still saved.
+  const staleOption = previous && !hasPrevious
+    ? `<option value="${escapeHtml(previous)}">${escapeHtml(previous)} · 接口已移除</option>`
+    : "";
+  elements.provider.innerHTML = staleOption + state.config.providers
     .map(
       (provider) =>
         `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}${provider.configured ? "" : " · 未配置"}</option>`,
     )
     .join("");
 
-  if ([...elements.provider.options].some((option) => option.value === previous)) {
-    elements.provider.value = previous;
-  } else {
-    elements.provider.value =
-      state.config.providers.find((provider) => provider.configured)?.id ||
+  elements.provider.value = previous && (hasPrevious || staleOption)
+    ? previous
+    : state.config.providers.find((provider) => provider.configured)?.id ||
       "openrouter";
-  }
   updateApiKeyFieldState();
 }
 
@@ -1381,6 +1514,24 @@ const KEY_CONFIGURABLE_PROVIDERS = [
   "dashscope",
   "openai-compatible",
 ];
+
+// Keep the legacy recovery form aligned with the Modern PaddleOCR editor:
+// PP-OCRv6 offers the same official detector/recognizer size tiers, while v5
+// remains a free-text field for compatibility with existing custom IDs.
+const PADDLE_V6_MODEL_OPTIONS = {
+  PADDLEOCR_DETECTION_MODEL: [
+    ["", "使用当前版本默认模型"],
+    ["PP-OCRv6_medium_det", "PP-OCRv6_medium_det · 性能"],
+    ["PP-OCRv6_small_det", "PP-OCRv6_small_det · 平衡"],
+    ["PP-OCRv6_tiny_det", "PP-OCRv6_tiny_det · 快速"],
+  ],
+  PADDLEOCR_RECOGNITION_MODEL: [
+    ["", "使用当前版本默认模型"],
+    ["PP-OCRv6_medium_rec", "PP-OCRv6_medium_rec · 性能"],
+    ["PP-OCRv6_small_rec", "PP-OCRv6_small_rec · 平衡"],
+    ["PP-OCRv6_tiny_rec", "PP-OCRv6_tiny_rec · 快速"],
+  ],
+};
 
 // Keep the fallback settings form data-driven. The typed Modern Renderer has
 // richer affordances, but this inventory guarantees the recovery page cannot
@@ -1442,8 +1593,8 @@ const GLOBAL_SETTINGS_GROUPS = [
       { key: "PADDLEOCR_PROFILE", label: "性能档", options: [["fast", "快速"], ["balanced", "平衡"], ["accurate", "高精度"]] },
       { key: "PADDLEOCR_LANGUAGE", label: "识别语言" },
       { key: "PADDLEOCR_DEVICE", label: "计算设备" },
-      { key: "PADDLEOCR_DETECTION_MODEL", label: "检测模型", hint: "留空使用性能档默认模型。" },
-      { key: "PADDLEOCR_RECOGNITION_MODEL", label: "识别模型", hint: "留空使用性能档默认模型。" },
+      { key: "PADDLEOCR_DETECTION_MODEL", label: "检测模型", hint: "PP-OCRv6 可选择档位，也可输入自定义模型 ID；留空使用当前版本默认模型。" },
+      { key: "PADDLEOCR_RECOGNITION_MODEL", label: "识别模型", hint: "PP-OCRv6 可选择档位，也可输入自定义模型 ID；留空使用当前版本默认模型。" },
       { key: "PADDLEOCR_RECOGNITION_BATCH_SIZE", label: "识别批量大小", type: "number", min: 1, max: 64, step: 1 },
       { key: "PADDLEOCR_PYTHON", label: "Python 环境路径", hint: "例如 .venv-paddleocr/bin/python；留空使用自动检测。" },
       { key: "PADDLEOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
@@ -1456,9 +1607,23 @@ const GLOBAL_SETTINGS_GROUPS = [
 
 function globalFieldMarkup(field, values) {
   const value = values?.[field.key] || "";
+  // Global values can come from hand-edited .env files, so normalize the
+  // version before choosing the v6-only model lists used by this fallback UI.
+  const isPaddleV6 = String(values?.PADDLEOCR_MODEL_VERSION || "").trim().toLowerCase() === "pp-ocrv6";
+  const v6ModelOptions = isPaddleV6
+    ? PADDLE_V6_MODEL_OPTIONS[field.key]
+    : null;
+  const fieldOptions = v6ModelOptions
+    ? v6ModelOptions.some(([option]) => option === value) || !value
+      ? v6ModelOptions
+      : [[value, `${value}（当前自定义）`], ...v6ModelOptions]
+    : field.options;
+  const isCustomPaddleModel = Boolean(v6ModelOptions && value && !v6ModelOptions.some(([option]) => option === value));
   const common = `data-global-key="${escapeHtml(field.key)}" spellcheck="false"`;
-  const control = field.options
-    ? `<select ${common}>${field.options.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`
+  const control = fieldOptions
+    ? v6ModelOptions
+      ? `<div class="global-settings-model-control"><select ${common}>${fieldOptions.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select><input type="text" ${common} value="${isCustomPaddleModel ? escapeHtml(value) : ""}" placeholder="输入自定义模型 ID（可选）" aria-label="自定义${escapeHtml(field.label)} ID" /></div>`
+      : `<select ${common}>${fieldOptions.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`
     : `<input type="${field.type || "text"}" ${common}${field.min === undefined ? "" : ` min="${field.min}" max="${field.max}" step="${field.step}"`} value="${escapeHtml(value)}" />`;
   return `<label class="field"><span>${escapeHtml(field.label)} <code>${escapeHtml(field.key)}</code></span>${control}${field.hint ? `<small class="global-settings-field-hint">${escapeHtml(field.hint)}</small>` : ""}</label>`;
 }
@@ -1470,13 +1635,23 @@ function renderGlobalSettingsForm() {
     if (elements.globalSettingsCount) elements.globalSettingsCount.textContent = "读取中";
     return;
   }
+  // Re-rendering after a version/model change should not collapse the section
+  // the user is actively editing; only the first render gets the default open
+  // state used by the compact fallback page.
+  const previousDetails = [...elements.globalSettingsFields.querySelectorAll("details.global-settings-group")];
+  const previousOpenGroups = new Set(previousDetails.flatMap((detail, index) => detail.open ? [index] : []));
   const values = state.globalSettingsDraft;
   elements.globalSettingsFields.innerHTML = GLOBAL_SETTINGS_GROUPS.map((group, index) => `
     <details class="global-settings-group"${index === 0 ? " open" : ""}>
       <summary>${escapeHtml(group.title)}</summary>
       <div class="global-settings-group-fields">${group.fields.map((field) => globalFieldMarkup(field, values)).join("")}</div>
     </details>
-  `).join("");
+    `).join("");
+  if (previousDetails.length) {
+    [...elements.globalSettingsFields.querySelectorAll("details.global-settings-group")].forEach((detail, index) => {
+      detail.open = previousOpenGroups.has(index);
+    });
+  }
   if (elements.globalSettingsCount) {
     elements.globalSettingsCount.textContent = `已覆盖 ${state.globalSettings.overrides?.length || 0} 项`;
   }
@@ -1509,11 +1684,346 @@ async function loadGlobalSettings() {
   }
 }
 
+async function loadCustomProviders() {
+  if (!elements.customProviderList) return;
+  try {
+    const providers = await listCustomProvidersApi();
+    state.customProviders = Array.isArray(providers) ? providers : [];
+    state.selectedCustomProviderId = state.customProviders.some((provider) => provider.id === state.selectedCustomProviderId)
+      ? state.selectedCustomProviderId
+      : state.customProviders[0]?.id || "";
+    renderCustomProviderRegistry();
+  } catch (error) {
+    elements.customProviderList.textContent = error.message || "无法读取自定义接口";
+  }
+}
+
+function invalidateCustomProviderCaches(providerId) {
+  customProviderOperations.invalidate();
+  // Editing a provider changes its Main-side revision; remove every legacy
+  // projection so the old model list cannot reappear before a fresh scan.
+  providerCacheVersions.set(providerId, (providerCacheVersions.get(providerId) || 0) + 1);
+  delete state.customProviderDiscovery[providerId];
+  delete state.providerModels[providerId];
+  delete state.modelDiscovery[providerId];
+}
+
+function openCustomProviderEditor(providerId = "") {
+  const provider = state.customProviders.find((candidate) => candidate.id === providerId);
+  const draft = provider
+    ? { ...provider, manualModelIds: [...(provider.manualModelIds || [])], apiKey: "" }
+    : { name: "", baseUrl: "", transport: "chat-completions", jsonMode: "json_schema", imageDetail: "high", manualModelIds: [], apiKey: "" };
+  state.customProviderEditor = provider
+    ? { mode: "edit", providerId, dirty: false, draft }
+    : { mode: "new", providerId: "", dirty: false, draft };
+  state.customProviderShowKey = false;
+  state.customProviderDeleteConfirm = "";
+  renderCustomProviderRegistry();
+}
+
+function closeCustomProviderEditor() {
+  if (state.customProviderEditor?.dirty) {
+    state.customProviderEditor.confirmDiscard = true;
+    renderCustomProviderRegistry();
+    return;
+  }
+  state.customProviderEditor = null;
+  renderCustomProviderRegistry();
+}
+
+function customProviderDraftMarkup(provider) {
+  const editor = state.customProviderEditor;
+  if (editor?.confirmDiscard) {
+    return '<div class="custom-provider-discard"><p class="settings-warning">当前表单仍有未保存内容。</p><div class="settings-actions"><button type="button" class="secondary-button compact" data-custom-provider-action="continue-edit">继续编辑</button><button type="button" class="danger-button compact" data-custom-provider-action="discard-edit">放弃更改</button></div></div>';
+  }
+  const draft = editor?.draft || provider || { name: "", baseUrl: "", transport: "chat-completions", jsonMode: "json_schema", imageDetail: "high", manualModelIds: [] };
+  // The transient key is kept only in this in-memory dialog draft so a
+  // show/hide re-render cannot erase user input; provider summaries never
+  // include the key itself.
+  return `<form id="custom-provider-form" class="custom-provider-form">
+    <label class="field"><span>接口名称</span><input name="name" maxlength="60" required value="${escapeHtml(draft.name || "")}" /></label>
+    <label class="field"><span>Base URL</span><input name="baseUrl" type="url" required spellcheck="false" value="${escapeHtml(draft.baseUrl || "")}" /></label>
+    <div class="format-grid"><label class="field"><span>请求协议</span><select name="transport"><option value="chat-completions"${draft.transport === "chat-completions" ? " selected" : ""}>Chat Completions</option><option value="responses"${draft.transport === "responses" ? " selected" : ""}>Responses</option></select></label><label class="field"><span>JSON 模式</span><select name="jsonMode"><option value="json_schema"${draft.jsonMode === "json_schema" ? " selected" : ""}>JSON Schema</option><option value="json_object"${draft.jsonMode === "json_object" ? " selected" : ""}>JSON Object</option><option value="prompt"${draft.jsonMode === "prompt" ? " selected" : ""}>Prompt 约束</option></select></label></div>
+    <label class="field"><span>图片细节</span><select name="imageDetail"><option value="auto"${draft.imageDetail === "auto" ? " selected" : ""}>自动</option><option value="low"${draft.imageDetail === "low" ? " selected" : ""}>低</option><option value="high"${draft.imageDetail === "high" ? " selected" : ""}>高</option><option value="original"${draft.imageDetail === "original" ? " selected" : ""}>原始</option></select></label>
+    <label class="field"><span>API Key${editor?.mode === "edit" ? "（留空保留）" : "（可选）"}</span><div class="api-key-row"><input name="apiKey" type="${state.customProviderShowKey ? "text" : "password"}" autocomplete="new-password" spellcheck="false" value="${escapeHtml(draft.apiKey || "")}" placeholder="${editor?.mode === "edit" ? "已配置 · 输入新 Key 替换" : "无鉴权可留空"}" /><button type="button" class="secondary-button compact" data-custom-provider-action="toggle-key">${state.customProviderShowKey ? "隐藏" : "显示"}</button></div>${editor?.mode === "edit" ? `<span class="checkbox-row"><input name="clearApiKey" type="checkbox"${draft.clearApiKey ? " checked" : ""} /> 清除现有 Key</span>` : ""}</label>
+    <label class="field"><span>手动模型 ID</span><textarea name="manualModelIds" rows="3" spellcheck="false" placeholder="vendor/vision-model，每行一个">${escapeHtml((draft.manualModelIds || []).join("\n"))}</textarea></label>
+    <div class="settings-actions"><button type="button" class="secondary-button compact" data-custom-provider-action="cancel-edit">取消</button><button type="submit" class="primary-button compact">保存接口</button></div>
+  </form>`;
+}
+
+function rememberCustomProviderDraft(form) {
+  if (!form || !state.customProviderEditor) return;
+  const values = Object.fromEntries(new FormData(form).entries());
+  state.customProviderEditor.draft = {
+    ...state.customProviderEditor.draft,
+    name: values.name || "",
+    baseUrl: values.baseUrl || "",
+    transport: values.transport || "chat-completions",
+    jsonMode: values.jsonMode || "json_schema",
+    imageDetail: values.imageDetail || "high",
+    manualModelIds: String(values.manualModelIds || "").split(/[\n,]/).map((id) => id.trim()).filter(Boolean),
+    // Keep the transient replacement/clear intent in memory until submit.
+    apiKey: values.apiKey || "",
+    // Typing a replacement takes precedence over a checkbox that was checked
+    // earlier; otherwise the Main handler would correctly prioritize clear
+    // semantics and discard the newly entered key.
+    clearApiKey: !String(values.apiKey || "").trim() && Boolean(values.clearApiKey),
+    replaceApiKey: Boolean(String(values.apiKey || "").trim() || values.clearApiKey),
+  };
+  state.customProviderEditor.dirty = true;
+}
+
+function renderCustomProviderRegistry() {
+  if (!elements.customProviderList || !elements.customProviderDetail) return;
+  elements.customProviderList.innerHTML = state.customProviders.length
+    ? state.customProviders.map((provider) => `<button type="button" class="custom-provider-row${provider.id === state.selectedCustomProviderId ? " selected" : ""}" data-custom-provider-id="${escapeHtml(provider.id)}"><strong>${escapeHtml(provider.name || provider.label || provider.id)}</strong><small>${escapeHtml(provider.baseUrl)} · ${provider.keyConfigured ? "已鉴权" : "无鉴权"}</small></button>`).join("")
+    : '<p class="settings-help">还没有自定义接口。</p>';
+  const provider = state.customProviders.find((candidate) => candidate.id === state.selectedCustomProviderId);
+  if (state.customProviderEditor) {
+    elements.customProviderDetail.innerHTML = `<div class="settings-card-heading"><h3>${state.customProviderEditor.mode === "edit" ? "编辑接口" : "新增接口"}</h3></div>${customProviderDraftMarkup(provider)}`;
+    elements.customProviderDetail.querySelector("[data-custom-provider-action=cancel-edit]")?.addEventListener("click", closeCustomProviderEditor);
+    const form = elements.customProviderDetail.querySelector("#custom-provider-form");
+    form?.addEventListener("input", () => rememberCustomProviderDraft(form));
+    form?.addEventListener("change", () => rememberCustomProviderDraft(form));
+    return;
+  }
+  if (!provider) {
+    elements.customProviderDetail.innerHTML = '<p class="settings-help">选择接口查看检测与验证。</p>';
+    return;
+  }
+  const discovery = state.customProviderDiscovery[provider.id] || {};
+  const models = Array.isArray(discovery.models) ? discovery.models : [];
+  const pending = Array.isArray(discovery.pendingModels) ? discovery.pendingModels : [];
+  const failed = Array.isArray(discovery.failedModels) ? discovery.failedModels : [];
+  const unsupported = Array.isArray(discovery.unsupportedModels) ? discovery.unsupportedModels : [];
+  const selectedPending = new Set(discovery.selectedPending || defaultPendingSelection(pending));
+  const search = discovery.search || "";
+  const visibleModels = models.filter((model) => !search || `${model.label} ${model.id} ${model.vendor || ""}`.toLowerCase().includes(search.toLowerCase()));
+  const progress = discovery.progress;
+  elements.customProviderDetail.innerHTML = `<div class="settings-card-heading"><div><h3>${escapeHtml(provider.name)}</h3><small class="settings-help">${escapeHtml(provider.baseUrl)}</small></div><div class="settings-actions"><button type="button" class="secondary-button compact" data-custom-provider-action="edit">编辑</button><button type="button" class="danger-button compact" data-custom-provider-action="delete">删除</button></div></div>${!provider.baseUrl.startsWith("https:") ? '<p class="settings-warning">非 HTTPS 地址仅建议用于本机或可信 LAN。</p>' : ""}<div class="settings-actions"><button type="button" class="secondary-button compact" data-custom-provider-action="discover">检测模型列表</button><button type="button" class="secondary-button compact" data-custom-provider-action="probe"${selectedPending.size ? "" : " disabled"}>验证所选待定模型</button>${discovery.probing ? '<button type="button" class="secondary-button compact" data-custom-provider-action="cancel-probe">取消</button>' : ""}${discovery.probing && progress ? `<span class="settings-help">探针 ${progress.completed}/${progress.total}${progress.model ? ` · ${escapeHtml(progress.model)}` : ""}</span>` : ""}</div><div class="custom-search-row"><label class="field"><span>本地搜索模型</span><input data-custom-search value="${escapeHtml(search)}" placeholder="名称或完整 ID" /></label>${search ? '<button type="button" class="secondary-button compact" data-custom-provider-action="clear-search">清除</button>' : ""}</div><div class="custom-model-list"><h4>可用于识别 · ${models.length}</h4>${customModelGroupsMarkup(visibleModels) || '<p class="settings-help">暂无可用模型。</p>'}<h4>待验证 · ${pending.length}</h4>${customPendingGroupsMarkup(pending, selectedPending) || '<p class="settings-help">没有待验证模型。</p>'}${(failed.length || unsupported.length) ? `<h4>不支持或失败 · ${failed.length + unsupported.length}</h4>${failed.map((model) => { const id = model.apiId || model.id; return `<div class="custom-pending-row custom-failed-row"><span>探针失败：${escapeHtml(model.label || id)} <code>${escapeHtml(id)}</code>${model.capabilityMessage ? ` · ${escapeHtml(model.capabilityMessage)}` : ""}</span><button type="button" class="secondary-button compact" data-custom-provider-action="retry-probe" data-model-id="${escapeHtml(id)}">重试</button></div>`; }).join("")}${unsupported.map((item) => `<p class="settings-help">${escapeHtml(item.id)} · ${escapeHtml(item.reason)}</p>`).join("")}` : ""}</div>`;
+  const searchInput = elements.customProviderDetail.querySelector("[data-custom-search]");
+  searchInput?.addEventListener("input", () => {
+    const nextSearch = searchInput.value;
+    state.customProviderDiscovery[provider.id] = { ...state.customProviderDiscovery[provider.id], search: nextSearch };
+    // Rebuild only the local model list so filtering is immediate; restore the
+    // text-field caret after the delegated Legacy markup refreshes.
+    renderCustomProviderRegistry();
+    const refreshed = elements.customProviderDetail.querySelector("[data-custom-search]");
+    if (refreshed) {
+      refreshed.focus();
+      refreshed.setSelectionRange(nextSearch.length, nextSearch.length);
+    }
+  });
+}
+
+function customModelGroupsMarkup(models) {
+  const groups = new Map();
+  for (const model of models || []) {
+    const vendor = model.vendor || model.id?.split("/", 1)[0] || "other";
+    groups.set(vendor, [...(groups.get(vendor) || []), model]);
+  }
+  return [...groups.entries()].map(([vendor, vendorModels]) => `<details class="custom-model-group" open><summary>${escapeHtml(formatVendorLabel(vendor))} · ${vendorModels.length} 个</summary>${vendorModels.map((model) => `<div class="custom-model-row"><strong>${escapeHtml(model.label || model.id)}</strong><span>${escapeHtml(model.id)}</span><small>${customModelRatingMarkup(model)}</small></div>`).join("")}</details>`).join("");
+}
+
+function customModelRatingMarkup(model) {
+  const capability = model.capabilityStatus === "verified"
+    ? "探针通过"
+    : model.capabilityStatus === "inferred"
+      ? "族谱推断"
+      : "API 声明";
+  const qualityBasis = model.qualitySource || model.qualityUpdatedAt
+    ? `精度依据：${model.qualitySource || "暂无资料"}${model.qualityUpdatedAt ? `（${model.qualityUpdatedAt}）` : ""}`
+    : "精度依据：暂无资料";
+  const valueBasis = model.valueSource || model.valueUpdatedAt
+    ? `性价比依据：${model.valueSource || "暂无资料"}${model.valueUpdatedAt ? `（${model.valueUpdatedAt}）` : ""}`
+    : "性价比依据：暂无资料";
+  return `${escapeHtml(capability)} · ${escapeHtml(model.qualityLabel || "精度暂无数据")} · ${escapeHtml(model.valueLabel || "价格未知")} · ${escapeHtml(qualityBasis)}；${escapeHtml(valueBasis)}`;
+}
+
+// Pending models are grouped with the same vendor precedence as selectable
+// models; the group checkbox only changes local selection and never probes
+// until the user presses the explicit verify action.
+function customPendingGroupsMarkup(models, selectedPending) {
+  const groups = new Map();
+  for (const model of models || []) {
+    const vendor = model.vendor || model.id?.split("/", 1)[0] || "other";
+    groups.set(vendor, [...(groups.get(vendor) || []), model]);
+  }
+  return [...groups.entries()].map(([vendor, vendorModels]) => {
+    const ids = vendorModels.map((model) => model.apiId || model.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedPending.has(id));
+    return `<details class="custom-pending-group" open><summary>${escapeHtml(formatVendorLabel(vendor))} · ${vendorModels.length} 个</summary><label class="custom-pending-select-all"><input type="checkbox" data-custom-pending-all="${escapeHtml(vendor)}"${allSelected ? " checked" : ""} /> ${allSelected ? "取消全选" : "按供应商全选"}</label>${vendorModels.map((model) => { const id = model.apiId || model.id; return `<label class="custom-pending-row"><input type="checkbox" data-custom-pending="${escapeHtml(id)}"${selectedPending.has(id) ? " checked" : ""} /> ${escapeHtml(model.label || id)} <code>${escapeHtml(id)}</code></label>`; }).join("")}</details>`;
+  }).join("");
+}
+
+async function saveCustomProvider(event) {
+  event.preventDefault();
+  const form = event.target;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const editor = state.customProviderEditor;
+  if (!editor) return;
+  state.customProviderBusy = true;
+  try {
+    const payload = { id: editor.providerId || undefined, name: values.name, baseUrl: values.baseUrl, transport: values.transport, jsonMode: values.jsonMode, imageDetail: values.imageDetail, manualModelIds: String(values.manualModelIds || "").split(/[\n,]/).map((id) => id.trim()).filter(Boolean) };
+    if (values.apiKey) payload.apiKey = values.apiKey;
+    if (values.clearApiKey && !String(values.apiKey || "").trim()) { payload.clearApiKey = true; payload.replaceApiKey = true; }
+    const saved = editor.mode === "edit" ? await updateCustomProviderApi(payload) : await createCustomProviderApi(payload);
+    if (editor.mode === "edit") invalidateCustomProviderCaches(saved.id);
+    state.customProviders = editor.mode === "edit" ? state.customProviders.map((provider) => provider.id === saved.id ? saved : provider) : [...state.customProviders, saved];
+    state.selectedCustomProviderId = saved.id;
+    state.customProviderEditor = null;
+    await loadConfig();
+    renderProviderOptions();
+    renderGlobalProviderOptions();
+    renderModelOptions();
+    renderCustomProviderRegistry();
+  } catch (error) { setGlobalSettingsStatus(error.message || "保存自定义接口失败。", true); }
+  finally { state.customProviderBusy = false; }
+}
+
+async function deleteCustomProvider() {
+  const provider = state.customProviders.find((candidate) => candidate.id === state.selectedCustomProviderId);
+  if (!provider) return;
+  if (state.customProviderDeleteConfirm !== provider.id) {
+    state.customProviderDeleteConfirm = provider.id;
+    setGlobalSettingsStatus(`再次点击“删除”确认移除 ${provider.name}（项目引用会保留）。`);
+    renderCustomProviderRegistry();
+    return;
+  }
+  try {
+    invalidateCustomProviderCaches(provider.id);
+    await deleteCustomProviderApi(provider.id);
+    state.customProviders = state.customProviders.filter((candidate) => candidate.id !== provider.id);
+    state.selectedCustomProviderId = state.customProviders[0]?.id || "";
+    state.customProviderDeleteConfirm = "";
+    await loadConfig();
+    renderProviderOptions();
+    renderGlobalProviderOptions();
+    renderModelOptions();
+    renderCustomProviderRegistry();
+  } catch (error) { setGlobalSettingsStatus(error.message || "删除自定义接口失败。", true); }
+}
+
+async function discoverCustomProvider(forceRefresh = true) {
+  const providerId = state.selectedCustomProviderId;
+  if (!providerId) return;
+  const requestId = customProviderOperations.start();
+  const providerRevision = state.customProviders.find((provider) => provider.id === providerId)?.revision;
+  try {
+    const data = await fetchModelsApi(providerId, forceRefresh);
+    const currentProvider = state.customProviders.find((provider) => provider.id === providerId);
+    if (
+      !customProviderOperations.isCurrent(requestId)
+      || !currentProvider
+      || (providerRevision != null && currentProvider.revision !== providerRevision)
+    ) return;
+    state.customProviderDiscovery[providerId] = mergeCustomProviderDiscovery(
+      state.customProviderDiscovery[providerId] || {},
+      data,
+    );
+    renderCustomProviderRegistry();
+  } catch (error) {
+    const currentProvider = state.customProviders.find((provider) => provider.id === providerId);
+    if (
+      customProviderOperations.isCurrent(requestId)
+      && currentProvider
+      && (providerRevision == null || currentProvider.revision === providerRevision)
+    ) {
+      setGlobalSettingsStatus(error.message || "模型列表检测失败。", true);
+    }
+  }
+}
+
+async function probeSelectedCustomModels() {
+  const providerId = state.selectedCustomProviderId;
+  const discovery = state.customProviderDiscovery[providerId] || {};
+  const modelIds = discovery.selectedPending || defaultPendingSelection(discovery.pendingModels || []);
+  if (!modelIds.length) return;
+  const requestId = customProviderOperations.start();
+  state.customProviderDiscovery[providerId] = { ...discovery, probing: true };
+  renderCustomProviderRegistry();
+  try {
+    const data = await probeCustomModelsApi(providerId, modelIds);
+    if (!customProviderOperations.isCurrent(requestId)) return;
+    state.customProviderDiscovery[providerId] = {
+      ...state.customProviderDiscovery[providerId],
+      probing: false,
+      progress: null,
+      lastProbe: data,
+    };
+    await discoverCustomProvider(true);
+    await loadCustomProviders();
+  } catch (error) {
+    if (!customProviderOperations.isCurrent(requestId)) return;
+    state.customProviderDiscovery[providerId] = clearCustomProviderProbeState(state.customProviderDiscovery[providerId]);
+    setGlobalSettingsStatus(error.message || "模型探针失败。", true);
+    renderCustomProviderRegistry();
+  }
+}
+
+async function retryCustomProviderModel(modelId) {
+  const providerId = state.selectedCustomProviderId;
+  const normalizedId = String(modelId || "").trim();
+  if (!providerId || !normalizedId) return;
+  const discovery = state.customProviderDiscovery[providerId] || {};
+  if (discovery.probing) return;
+  const requestId = customProviderOperations.start();
+  state.customProviderDiscovery[providerId] = {
+    ...discovery,
+    probing: true,
+    progress: { model: normalizedId, completed: 0, total: 1 },
+  };
+  renderCustomProviderRegistry();
+  try {
+    const result = await probeCustomModelsApi(providerId, [normalizedId]);
+    if (!customProviderOperations.isCurrent(requestId)) return;
+    state.customProviderDiscovery[providerId] = {
+      ...state.customProviderDiscovery[providerId],
+      probing: false,
+      progress: null,
+      lastProbe: result,
+    };
+    await discoverCustomProvider(true);
+    await loadCustomProviders();
+  } catch (error) {
+    if (!customProviderOperations.isCurrent(requestId)) return;
+    state.customProviderDiscovery[providerId] = clearCustomProviderProbeState(state.customProviderDiscovery[providerId]);
+    setGlobalSettingsStatus(error.message || "模型探针失败。", true);
+    renderCustomProviderRegistry();
+  }
+}
+
+async function cancelCustomProviderProbe() {
+  if (!state.selectedCustomProviderId) return;
+  try { await cancelCustomModelProbeApi(state.selectedCustomProviderId); } catch (error) { setGlobalSettingsStatus(error.message || "取消探针失败。", true); }
+}
+
 function handleGlobalSettingsInput(event) {
   const key = event.target?.dataset?.globalKey;
   if (!key) return;
-  state.globalSettingsDraft[key] = event.target.value;
+  const nextValue = event.target.value;
+  const previousValue = state.globalSettingsDraft[key];
+  state.globalSettingsDraft[key] = nextValue;
+  if (
+    key === "PADDLEOCR_MODEL_VERSION"
+    && previousValue !== nextValue
+    && ["PP-OCRv5", "PP-OCRv6"].includes(nextValue)
+  ) {
+    // A version switch must not leave the other generation's model IDs in the
+    // legacy form; reset both overrides just like the Modern settings page.
+    state.globalSettingsDraft.PADDLEOCR_DETECTION_MODEL = "";
+    state.globalSettingsDraft.PADDLEOCR_RECOGNITION_MODEL = "";
+    state.globalSettingsDirty.add("PADDLEOCR_DETECTION_MODEL");
+    state.globalSettingsDirty.add("PADDLEOCR_RECOGNITION_MODEL");
+    renderGlobalSettingsForm();
+  }
   state.globalSettingsDirty.add(key);
+  // Select changes and committed custom text changes need a small redraw so
+  // the paired control reflects which value is currently active. Input events
+  // stay incremental to avoid moving the caret while the user types an ID.
+  if (event.type === "change" && PADDLE_V6_MODEL_OPTIONS[key]) {
+    renderGlobalSettingsForm();
+  }
   setGlobalSettingsStatus("有未保存修改");
 }
 
@@ -1606,6 +2116,9 @@ function renderModelOptions() {
 
   if (compatible.some((model) => model.id === previous)) {
     elements.model.value = previous;
+  } else if (previous) {
+    elements.model.insertAdjacentHTML("afterbegin", `<option value="${escapeHtml(previous)}">${escapeHtml(previous)} · 已保存（当前不可用）</option>`);
+    elements.model.value = previous;
   } else if (compatible.length) {
     elements.model.value = compatible[0].id;
   }
@@ -1622,13 +2135,18 @@ async function loadProviderModels(forceRefresh = false) {
 
   const providerId = provider.id;
   const requestId = ++state.modelRequestId;
+  const cacheVersion = providerCacheVersions.get(providerId) || 0;
+  const requestIsCurrent = () =>
+    requestId === state.modelRequestId
+    && elements.provider.value === providerId
+    && (providerCacheVersions.get(providerId) || 0) === cacheVersion;
   state.modelDiscovery[providerId] = { loading: true };
   elements.modelRefresh.disabled = true;
   renderModelNote();
 
   try {
     const data = await fetchModelsApi(providerId, forceRefresh);
-    if (requestId !== state.modelRequestId || elements.provider.value !== providerId) {
+    if (!requestIsCurrent()) {
       return state.modelDiscovery[providerId];
     }
     state.providerModels[providerId] = Array.isArray(data.models)
@@ -1638,7 +2156,7 @@ async function loadProviderModels(forceRefresh = false) {
     renderModelOptions();
     return data;
   } catch (error) {
-    if (requestId !== state.modelRequestId || elements.provider.value !== providerId) {
+    if (!requestIsCurrent()) {
       return state.modelDiscovery[providerId];
     }
     state.modelDiscovery[providerId] = {
@@ -1648,7 +2166,7 @@ async function loadProviderModels(forceRefresh = false) {
     renderModelOptions();
     return state.modelDiscovery[providerId];
   } finally {
-    if (requestId === state.modelRequestId) {
+    if (requestId === state.modelRequestId && elements.provider.value === providerId) {
       elements.modelRefresh.disabled = isProjectReadOnly();
       updateRecognizeState();
     }
@@ -1658,6 +2176,16 @@ async function loadProviderModels(forceRefresh = false) {
 // Keep the legacy fallback renderer aligned with the typed Renderer: fixed
 // recommendations remain visible, while discovered vendor buckets can collapse.
 function modelOptionGroups(providerId, models) {
+  models = models.filter(isSelectableModel);
+  const vendors = new Set(models.map((model) => model.vendor || model.id.split("/", 1)[0] || "other"));
+  if (providerId !== "openrouter" && vendors.size > 1) {
+    return [...vendors].map((vendor) => modelOptionGroup(
+      providerId + "-vendor-" + vendor,
+      formatVendorLabel(vendor),
+      models.filter((model) => (model.vendor || model.id.split("/", 1)[0] || "other") === vendor),
+      true,
+    ));
+  }
   if (providerId !== "openrouter") {
     const fixed = models.filter(isRecommendedModel);
     const discovered = models
@@ -1715,9 +2243,11 @@ function formatVendorLabel(vendor) {
     google: "Google",
     meta: "Meta",
     mistralai: "Mistral AI",
+    minimax: "MiniMax",
     openai: "OpenAI",
     qwen: "Qwen",
     xai: "xAI",
+    other: "其他",
   };
   const key = String(vendor || "other").toLowerCase();
   return labels[key] || key
@@ -3728,8 +4258,12 @@ function selectedProvider() {
 
 function selectedModel() {
   return modelsForProvider(elements.provider.value).find(
-    (model) => model.id === elements.model.value,
+    (model) => model.id === elements.model.value && isSelectableModel(model),
   );
+}
+
+function isSelectableModel(model) {
+  return !model?.capabilityStatus || ["declared", "inferred", "verified"].includes(model.capabilityStatus);
 }
 
 async function loadTaskList(projectId = state.currentProjectId) {

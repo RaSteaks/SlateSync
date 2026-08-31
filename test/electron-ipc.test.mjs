@@ -558,6 +558,271 @@ describe("electron IPC handlers", () => {
     assert.ok(refreshCount >= 3);
   });
 
+  it("materializes the legacy Responses contract and removes it on reset", async () => {
+    const runtimeCustomProviders = [];
+    const saves = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      globalConfigStore: {
+        save: async (payload) => {
+          saves.push(payload);
+          return {
+            version: 2,
+            values: payload.values || payload,
+            customProviders: payload.customProviders || [],
+          };
+        },
+      },
+      runtimeEnv: () => ({
+        OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+        OPENAI_COMPATIBLE_BASE_URL: "https://legacy.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "legacy-model",
+        OPENAI_COMPATIBLE_API_MODE: "Responses",
+        OPENAI_COMPATIBLE_JSON_MODE: "json_object",
+        OPENAI_COMPATIBLE_IMAGE_DETAIL: "high",
+      }),
+    }));
+
+    await ipcMain.invoke("save-global-settings", {
+      values: {
+        OPENAI_COMPATIBLE_BASE_URL: "https://saved.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "saved-model",
+      },
+    });
+    assert.equal(runtimeCustomProviders[0].transport, "responses");
+    assert.equal(runtimeCustomProviders[0].jsonMode, "json_schema");
+
+    await ipcMain.invoke("save-global-settings", { reset: true });
+    assert.equal(runtimeCustomProviders.length, 0);
+    assert.deepEqual(saves.at(-1).customProviders, []);
+    const config = await ipcMain.invoke("get-config");
+    assert.equal(config.providers.find((provider) => provider.id === "openai-compatible").type, "builtin");
+  });
+
+  it("does not publish a phantom legacy provider when global persistence fails", async () => {
+    const runtimeCustomProviders = [];
+    let shouldFail = true;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeEnv: () => ({
+        OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+        OPENAI_COMPATIBLE_BASE_URL: "https://legacy.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "legacy-model",
+        OPENAI_COMPATIBLE_API_MODE: "responses",
+        OPENAI_COMPATIBLE_JSON_MODE: "json_object",
+      }),
+      globalConfigStore: {
+        save: async (payload) => {
+          if (shouldFail) {
+            shouldFail = false;
+            throw new Error("disk full");
+          }
+          return {
+            version: 2,
+            values: payload.values || payload,
+            customProviders: payload.customProviders || [],
+          };
+        },
+      },
+    }));
+
+    await assert.rejects(
+      () => ipcMain.invoke("save-global-settings", {
+        values: {
+          OPENAI_COMPATIBLE_BASE_URL: "https://saved.example/v1",
+          OPENAI_COMPATIBLE_MODEL: "saved-model",
+        },
+      }),
+      /disk full/,
+    );
+    assert.equal(runtimeCustomProviders.length, 0);
+
+    await ipcMain.invoke("save-global-settings", {
+      values: {
+        OPENAI_COMPATIBLE_BASE_URL: "https://saved.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "saved-model",
+      },
+    });
+    assert.equal(runtimeCustomProviders.length, 1);
+    assert.equal(runtimeCustomProviders[0].manualModelIds[0], "saved-model");
+  });
+
+  it("keeps an empty custom-provider key unless clearing is explicit", async () => {
+    const providerId = "openai-compatible:22222222-2222-4222-8222-222222222222";
+    const runtimeCustomProviders = [{
+      id: providerId,
+      name: "Credential test",
+      baseUrl: "https://custom.example/v1",
+      transport: "chat-completions",
+      jsonMode: "json_schema",
+      imageDetail: "high",
+      manualModelIds: ["vendor/vision"],
+      revision: 1,
+      capabilityCache: {},
+    }];
+    const runtimeProviderKeys = new Map([[providerId, "old-secret"]]);
+    const savedKeys = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeProviderKeys,
+      keyStore: { save: async (keys) => savedKeys.push(Object.fromEntries(keys)) },
+      globalConfigStore: {
+        save: async (payload) => ({
+          version: 2,
+          values: payload.values,
+          customProviders: payload.customProviders,
+        }),
+      },
+    }));
+
+    await ipcMain.invoke("update-custom-provider", {
+      id: providerId,
+      apiKey: "",
+      replaceApiKey: true,
+    });
+    assert.equal(runtimeProviderKeys.get(providerId), "old-secret");
+    assert.equal(runtimeCustomProviders[0].revision, 1);
+    assert.deepEqual(savedKeys, []);
+
+    await ipcMain.invoke("update-custom-provider", {
+      id: providerId,
+      apiKey: "",
+      replaceApiKey: true,
+      clearApiKey: true,
+    });
+    assert.equal(runtimeProviderKeys.has(providerId), false);
+    assert.deepEqual(savedKeys, [{}]);
+  });
+
+  it("rolls back a provider and key when the key store rejects, allowing same-name retry", async () => {
+    const runtimeCustomProviders = [];
+    const runtimeProviderKeys = new Map();
+    let keySaveCount = 0;
+    const persistedProviders = [];
+    const persistedKeys = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeProviderKeys,
+      keyStore: {
+        save: async (keys) => {
+          keySaveCount += 1;
+          if (keySaveCount === 1) throw new Error("key store unavailable");
+          persistedKeys.push(Object.fromEntries(keys));
+        },
+      },
+      globalConfigStore: {
+        save: async (payload) => {
+          persistedProviders.push(payload.customProviders || []);
+          return { version: 2, values: payload.values, customProviders: payload.customProviders || [] };
+        },
+      },
+    }));
+
+    const request = {
+      name: "Retryable provider",
+      baseUrl: "https://custom.example/v1",
+      transport: "responses",
+      jsonMode: "json_object",
+      imageDetail: "high",
+      manualModelIds: ["vendor/vision"],
+      apiKey: "new-secret",
+    };
+    await assert.rejects(() => ipcMain.invoke("create-custom-provider", request), /key store unavailable/);
+    assert.equal(runtimeCustomProviders.length, 0);
+    assert.equal(runtimeProviderKeys.size, 0);
+    assert.deepEqual(persistedProviders.at(-1), []);
+    assert.deepEqual(persistedKeys.at(-1), {});
+
+    const saved = await ipcMain.invoke("create-custom-provider", request);
+    assert.equal(saved.name, "Retryable provider");
+    assert.equal(runtimeCustomProviders.length, 1);
+    assert.equal(runtimeProviderKeys.get(saved.id), "new-secret");
+  });
+
+  it("stores probe outcomes without changing manual IDs and clears discovery caches", async () => {
+    const providerId = "openai-compatible:33333333-3333-4333-8333-333333333333";
+    const runtimeCustomProviders = [{
+      id: providerId,
+      name: "Probe cache test",
+      baseUrl: "https://custom.example/v1",
+      transport: "chat-completions",
+      jsonMode: "json_schema",
+      imageDetail: "high",
+      manualModelIds: ["manual/model"],
+      revision: 1,
+      capabilityCache: {},
+    }];
+    const runtimeProviderKeys = new Map();
+    const persisted = [];
+    let discoveryRequests = 0;
+    const ipcMain = createMockIpcMain();
+    const globalConfigStore = {
+      save: async (payload) => {
+        persisted.push(payload);
+        return { version: 2, values: payload.values, customProviders: payload.customProviders };
+      },
+    };
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeProviderKeys,
+      globalConfigStore,
+      probeModels: async () => ({
+        canceled: true,
+        results: [
+          { model: "manual/model", supported: true, capabilityStatus: "verified", transport: "chat-completions", status: 200, checkedAt: "2026-08-31T00:00:00.000Z", message: "ok" },
+          { model: "discovered/model", supported: false, capabilityStatus: "failed", transport: "chat-completions", status: 400, checkedAt: "2026-08-31T00:00:00.000Z", message: "no" },
+          { model: "canceled/model", supported: false, capabilityStatus: "canceled", transport: "chat-completions", status: null, checkedAt: "2026-08-31T00:00:00.000Z", message: "canceled" },
+        ],
+        completed: 3,
+        total: 3,
+      }),
+    }));
+
+    const registryBefore = (await import("../lib/provider-registry.mjs")).createProviderRegistry({
+      env: {},
+      customProviders: runtimeCustomProviders,
+    });
+    const { clearModelDiscoveryCache, discoverVisionModels } = await import("../lib/model-discovery.mjs");
+    clearModelDiscoveryCache(providerId);
+    await discoverVisionModels(providerId, {
+      registry: registryBefore,
+      env: {},
+      fetchImpl: async () => {
+        discoveryRequests += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: "manual/model" }] }) };
+      },
+    });
+
+    const result = await ipcMain.invoke("probe-custom-models", {
+      providerId,
+      modelIds: ["manual/model", "discovered/model", "canceled/model"],
+    });
+    assert.equal(result.results.length, 3);
+    assert.deepEqual(runtimeCustomProviders[0].manualModelIds, ["manual/model"]);
+    assert.equal(runtimeCustomProviders[0].capabilityCache["manual/model"].status, "verified");
+    assert.equal(runtimeCustomProviders[0].capabilityCache["discovered/model"].status, "failed");
+    assert.equal(runtimeCustomProviders[0].capabilityCache["canceled/model"].status, "canceled");
+
+    const registryAfter = (await import("../lib/provider-registry.mjs")).createProviderRegistry({
+      env: {},
+      customProviders: runtimeCustomProviders,
+    });
+    await discoverVisionModels(providerId, {
+      registry: registryAfter,
+      env: {},
+      fetchImpl: async () => {
+        discoveryRequests += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: "manual/model" }] }) };
+      },
+    });
+    assert.equal(discoveryRequests, 2);
+    assert.ok(persisted.length >= 1);
+  });
+
   it("global OCR path changes clear a stale first-run completion marker", async () => {
     const runtimeGlobalConfig = { PADDLEOCR_PYTHON: "/old/bin/python" };
     const runtimeSettings = {

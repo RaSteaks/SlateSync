@@ -100,11 +100,12 @@ test("global-config.json is versioned, private, atomic, and resilient to bad inp
       UNKNOWN_SETTING: "should-never-be-stored",
     });
     assert.deepEqual(saved, {
-      version: 1,
+      version: 2,
       values: {
         OPENAI_BASE_URL: "https://api.example.test/v1",
         MAX_BODY_MB: "120",
       },
+      customProviders: [],
     });
     assert.deepEqual(await store.load(), saved);
     assert.equal((await stat(join(root, "global-config.json"))).mode & 0o777, 0o600);
@@ -113,10 +114,10 @@ test("global-config.json is versioned, private, atomic, and resilient to bad inp
       join(root, "global-config.json"),
       JSON.stringify({ version: 1, values: { MAX_BODY_MB: "100", OPENAI_BASE_URL: "file:///bad", PADDLEOCR_PROFILE: "bad" } }),
     );
-    assert.deepEqual(await store.load(), { version: 1, values: { MAX_BODY_MB: "100" } });
+    assert.deepEqual(await store.load(), { version: 2, values: { MAX_BODY_MB: "100" }, customProviders: [] });
 
     await writeFile(join(root, "global-config.json"), "not-json{{{");
-    assert.deepEqual(await store.load(), { version: 1, values: {} });
+    assert.deepEqual(await store.load(), { version: 2, values: {}, customProviders: [] });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

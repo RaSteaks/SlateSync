@@ -10,6 +10,20 @@
     "readLogs": { "channel": "logs-read", "args": ["request"] },
     "openLogsDirectory": { "channel": "logs-open-directory", "args": [] },
     "getGlobalSettings": { "channel": "get-global-settings", "args": [] },
-    "saveGlobalSettings": { "channel": "save-global-settings", "args": ["request"] }
+    "saveGlobalSettings": { "channel": "save-global-settings", "args": ["request"] },
+    "listCustomProviders": { "channel": "list-custom-providers", "args": [] },
+    "createCustomProvider": { "channel": "create-custom-provider", "args": ["request"] },
+    "updateCustomProvider": { "channel": "update-custom-provider", "args": ["request"] },
+    "deleteCustomProvider": { "channel": "delete-custom-provider", "args": ["request"] },
+    "probeCustomModels": { "channel": "probe-custom-models", "args": ["request"] },
+    "cancelCustomModelProbe": { "channel": "cancel-custom-model-probe", "args": ["request"] }
+  },
+  "events": {
+    "modelProbeProgress": {
+      "channel": "model-probe-progress",
+      "subscribeMethod": "onModelProbeProgress",
+      "unsubscribe": "returned callback",
+      "cleanup": "the typed preload returns an idempotent unsubscribe callback"
+    }
   }
 }

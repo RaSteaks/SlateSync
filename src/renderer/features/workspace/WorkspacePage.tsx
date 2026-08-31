@@ -518,13 +518,15 @@ export function WorkspacePage({ registerToolbarExport, hidden = false }: { regis
         const result = await unwrap(await getSlateSync().recognition.getModels({ providerId, forceRefresh: false }));
         if (!active) return;
         setModels(result.models);
-        setModelFallback(result.models[0]?.id || "");
+        // Only seed a genuinely new task. A saved/removed model must remain
+        // visible as a stale reference until the user explicitly remaps it.
+        if (!modelId) setModelFallback(result.models[0]?.id || "");
       } catch {
         if (active) setModels(config?.models.filter((model) => model.providers.includes(providerId)) || []);
       }
     })();
     return () => { active = false; };
-  }, [config?.models, providerId, setModelFallback]);
+  }, [config?.models, modelId, providerId, setModelFallback]);
 
   const applyTask = useCallback(async (taskId: string, task: TaskData) => {
     const csvWorker = getCsvWorkerService();
@@ -1022,9 +1024,14 @@ export function WorkspacePage({ registerToolbarExport, hidden = false }: { regis
   const availableModels = models.length
     ? models
     : config?.models.filter((item) => item.providers.includes(providerId)) || [];
-  const modelGroups = groupModelOptions(providerId, availableModels);
+  const selectableModels = availableModels.filter((model) => !model.capabilityStatus || ["declared", "inferred", "verified"].includes(model.capabilityStatus));
+  const modelGroups = groupModelOptions(providerId, selectableModels);
+  const staleProvider = Boolean(providerId && !config?.providers.some((item) => item.id === providerId));
+  // An empty selectable list is also stale when a project remembers a model:
+  // pending/failed probes must never fall through to an unverified request.
+  const staleModel = Boolean(modelId && !selectableModels.some((model) => model.id === modelId));
   const canMergeLocal = Boolean(!slate.imageDataGroups.length && exportState.slateCsvRecords?.length);
-  const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId)) && !recognition.running && !slate.preparing && !switchingTask);
+  const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId && !staleProvider && !staleModel)) && !recognition.running && !slate.preparing && !switchingTask);
 
   return (
     <div className={styles.page} hidden={hidden}>
@@ -1033,6 +1040,8 @@ export function WorkspacePage({ registerToolbarExport, hidden = false }: { regis
         <div className={styles.pageActions}><Badge tone={provider?.configured ? "success" : "warning"}>{provider?.configured ? `${provider.label} 已就绪` : "Provider 未配置"}</Badge></div>
       </div>
       {error && <div style={{ marginBottom: 16 }}>{useTaskStore.getState().saveState === "error" ? <InlineError message={error} onRetry={() => void autosave.retry()} /> : <InlineError message={error} />}</div>}
+      {staleProvider && <div style={{ marginBottom: 16 }}><InlineError message="已保存的 Provider 已被删除，请前往项目设置重新选择。" /></div>}
+      {staleModel && <div style={{ marginBottom: 16 }}><InlineError message="已保存的模型不可用或探针已失效，请重新选择。" /></div>}
       <div className={styles.workspaceGrid}>
         <div className={styles.workspaceLeft}>
           <Surface className={styles.panel}><TaskRail onSelect={(id) => void loadTask(id)} onRefresh={() => void refreshTasks()} onNew={() => void newTask()} onDelete={setDeleteTaskId} onRetrySave={() => void autosave.retry()} switching={switchingTask} /></Surface>
@@ -1061,7 +1070,7 @@ export function WorkspacePage({ registerToolbarExport, hidden = false }: { regis
           <Surface className={styles.panel}>
             <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / 识别</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
             <div className={styles.grid}>
-              <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
+              <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{staleProvider && <option value={providerId}>{providerId} · 接口已移除</option>}{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
               <Field label="模型"><ModelSelect value={modelId} groups={modelGroups} onChange={(nextModelId) => { patchDraft({ modelId: nextModelId }); markDirtyAfterRender(); }} disabled={recognition.running} placeholder="选择视觉模型" /></Field>
               <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { patchDraft({ accuracyMode: event.target.value as "high" | "standard" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次识别</option></Select></Field>
               <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { patchDraft({ scenarioId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">自动识别</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>

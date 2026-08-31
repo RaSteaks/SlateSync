@@ -713,7 +713,95 @@ Worker 边界、验收证据和最终治理交接。
   调用方超时后仍保持串行占用，已开始的 Worker 超时会清理进程，排队尚未开始的任务不会
   误杀其他识别任务。回退只使用剩余预算，超时不再重新获得一轮完整 timeout。
 - 说明页目录改为渲染当前可见章节；搜索或无匹配结果时不会保留指向已卸载 DOM 的失效锚点，
-  并补充目录目标与筛选联动测试。
+  并补充目录目标与筛选联动测试。说明正文移除额外的“安全提醒”提示，保持内容聚焦配置
+  控件与使用方法。桌面端目录固定在正文左侧并在视口过矮时启用独立滚动；窄窗口回退为
+  正常流式布局，避免遮挡正文。
 - 本轮验证：`node --test test/ocr.test.mjs`（17/17）、说明页定向 Vitest（2/2）、
   `npm run check`、`npm run typecheck`、`npm run test:modern`（21 个文件、90/90）、
   `npm run build:modern` 与 `git diff --check` 均通过。
+
+## 2026-08-30 PP-OCRv6 检测与识别模型下拉
+
+- 当 `PADDLEOCR_MODEL_VERSION` 为 PP-OCRv6 时，Modern 设置页的检测模型和识别模型
+  使用下拉列表提供 `medium`、`small`、`tiny` 三档，并保留“使用当前版本默认模型”选项；
+  下拉旁仍提供可编辑的自定义模型 ID 输入，命名预设仍以只读方式显示其实际模型值。
+- 自定义 PP-OCRv5 继续使用可编辑文本输入，避免破坏已有自定义模型 ID；PP-OCRv6 中
+  已保存但不在内置列表的模型 ID 会作为“当前自定义”选项保留，也可以直接编辑为新的
+  本地 ID。Legacy 回退设置表同步提供同样的下拉与自定义输入，并按规范化的模型版本切换
+  控件；重绘设置组时保留用户当前展开状态。
+- 选择下拉项会保存精确的检测/识别模型名称，Main 与 Python runner 的版本过滤和
+  配置缓存会据此创建匹配的 PP-OCRv6 管线；说明页同步记录三档模型选择含义。
+- 修改模型版本、模型列表或设置页交互时，必须同步更新 Modern、Legacy、说明页和
+  `test/refactor/ip-03-08/global-settings.test.tsx`，并重新执行设置页与构建检查。
+- 最终验证：Modern 全局设置测试 8/8、`npm run check`、`npm run typecheck`、
+  `npm run test:modern`（21 个文件、92/92）、`npm run build:modern` 和
+  `git diff --check` 均通过；Node 定向测试中的 OCR 相关 21/21 通过，另有既有
+  `package.version` 基线漂移与本机 `better-sqlite3` Node ABI 不匹配未处理。
+
+## 2026-08-30 全局设置标题文案
+
+- 移除“全局设置”页标题下的冗长副标题，让标题区域保持简洁；配置说明统一放在
+  左侧“系统 → 说明”页面中，未改变任何设置字段、保存逻辑或运行行为。
+
+## 2026-08-31 多自定义 OpenAI 兼容接口
+
+- 新增 Main 侧 v2 `global-config.json` 自定义 Provider 注册表；记录只包含名称、
+  安全 Base URL、传输/JSON/图片模式、手动模型 ID、修订号和非敏感能力缓存。
+  API Key 仍由 `provider-keys.json` 单独以 0600 原子写入保存，动态连接不会写入
+  环境变量、项目库、日志或 Renderer DTO。
+- 自定义连接使用 `openai-compatible:<uuid>` 稳定 ID，支持可选 Key 与任意数量模型。
+  `/models` 结果分为可用、待验证和失败/不支持；待验证模型只能通过 Main 侧并发 2、
+  30 秒带标记合成图片探针后进入项目选择器。修改连接或 Key 会递增修订并失效旧缓存。
+- Modern 与 Legacy 全局设置均提供新增/编辑/删除、名称/URL 校验、模型发现、供应商
+  分组、搜索、探针进度和取消；删除不改写项目数据库，旧引用保留并阻止识别直到重选。
+- 评级只显示带依据和更新时间的维护模型族/实时价格参考，未知精度显示“暂无数据”、
+  未知价格显示“价格未知”，不使用伪造默认分数。`OPENAI_COMPATIBLE_*` 与
+  `openai-compatible/custom` 继续作为旧连接兼容别名。
+- 最终沙盒验证：`npm run check`、`npm run typecheck`、`npm run test:modern`
+  （21 个文件、92/92）、`npm run build:modern`、`npm run build:storybook`、
+  premium strict audit（0 findings）和 `git diff --check` 均通过；Storybook 仅报告
+  无法写入沙盒外的用户级 `/Users/rasteaks/.storybook/settings.json`，静态产物构建
+  成功，未启动 Electron 前台窗口。
+- `npm run test:node` 共 288 项，287 项通过；唯一失败是既有 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），与本次自定义接口实现无关。
+  自定义模型/能力/识别链路定向回归 55/55 通过；未为通过无关基线回退 v2 契约或
+  新增安全边界。
+
+## 2026-08-31 复审问题修复
+
+- 旧版 `openai-compatible` 配置在物化前统一归一化传输协议和 JSON 模式；Responses
+  与 `json_object` 继续映射为 `json_schema`，运行时注册表也会兼容修复历史快照。
+  “恢复环境默认”会移除该迁移记录并清理对应模型注册，保留 UUID 自定义接口。
+- Modern/Legacy 自定义接口发现使用最新请求令牌；切换、编辑或删除时丢弃旧模型发现、
+  能力缓存和探针进度，晚到 IPC 响应不能覆盖当前 Provider。探针完成或失败后显式清理
+  进度，并要求模型读取合成图片中未出现在提示词里的标记，避免文本接口伪造 Vision
+  能力通过。
+- Field 不再把 ID 克隆到原生布局 wrapper；PP-OCRv6 复合选择器保留唯一 ID 并保持
+  `htmlFor` 指向实际 select。未知精度模型恢复排在已评分模型之后，避免“暂无数据”
+  被误作推荐排序。
+- 新增兼容配置、重置迁移、图像探针、未知评分和 PP-OCRv6 ID 唯一性回归；后续修改
+  Provider 迁移、能力探针或 Field 复合控件时需同步更新上述测试和本节记录。
+
+## 2026-08-31 DeepSeek v4flash Review 修复方案
+
+- Responses 的 `json_object` 请求在 system prompt 中携带完整 `SLATE_SCHEMA`；凭据更新
+  区分非空替换、空值保留和显式清除，Modern/Legacy 设置页清除 Key 时同步清理过期的
+  `replaceApiKey` 状态。
+- 自定义 Provider 和 legacy materialize 使用候选配置、Key 快照和 copy-on-write 提交；
+  配置或 Key 保存失败时回滚磁盘、内存和 Key 状态，不留下 phantom Provider、孤儿 Key，
+  也不阻塞同名重试。
+- `discoveredRevisions` 保留 null 哨兵并严格匹配 revision；探针成功后刷新 discovery
+  与 registered-model 缓存。`manualModelIds` 只保存用户输入，能力缓存保存当前 revision
+  下实际探测过的 verified/failed/canceled 模型；取消项继续待验证但默认不选中。
+- legacy alias 与真实模型按物理 `apiId` 合并并保留 `CUSTOM_MODEL_ID` 兼容引用；已
+  materialize 的 Provider 只使用持久化模型 ID，不再回退过期环境变量。Legacy Renderer
+  探针切换和晚到响应均基于当前 Provider 状态处理，不恢复旧搜索、选择或 probing 状态。
+- 新增请求格式、Key 保留/清除、保存回滚、revision、探针缓存、legacy 去重/持久化和
+  Renderer 状态回归测试；未新增 IPC channel 或凭据字段。修改上述链路时需同步更新
+  `src/shared/contracts/index.ts`、Main/Renderer 测试及本节记录。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（22 个文件、
+  94/94）、`npm run build:modern`、`npm run build:storybook` 和 `git diff --check` 均
+  通过。Storybook 仅报告沙盒无法创建用户级 `/Users/rasteaks/.storybook/settings.json`，
+  静态构建成功。
+- `npm run test:node` 共 302 项，301 项通过；唯一失败是既有 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、基线 `0.1.0`），本轮新增的回归测试均通过。

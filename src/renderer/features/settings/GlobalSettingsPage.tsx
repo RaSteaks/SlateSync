@@ -5,6 +5,7 @@ import { Badge, Button, Field, Icon, InlineError, Input, Select, Stack, StatusIn
 import { appErrorFromUnknown, getSlateSync, requireGlobalSettingsApi, unwrap } from "../../services/api";
 import { useProjectStore, useSettingsStore, useUiStore, type Theme } from "../../state";
 import styles from "../../app/app.module.css";
+import { CustomProviderSettingsPanel } from "./CustomProviderSettingsPanel";
 
 const KEY_PROVIDERS = new Set(["openai", "openrouter", "tokenplan", "dashscope", "openai-compatible"]);
 const PROVIDER_BASE_URL_KEYS: Partial<Record<string, GlobalSettingKey>> = {
@@ -78,6 +79,30 @@ const PADDLE_MODEL_VERSION_OPTIONS: Array<{ value: PaddleModelVersion; label: st
   { value: "PP-OCRv5", label: "PP-OCRv5（兼容）" },
 ];
 
+// PP-OCRv6 exposes the three official size tiers for both pipeline stages.
+// Keep an empty option for the existing profile default and retain an unknown
+// saved value as a labelled option; the adjacent text field also allows new
+// custom/local model IDs without making the recommended tiers harder to find.
+const PADDLE_V6_DETECTION_MODEL_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "使用当前版本默认模型" },
+  { value: "PP-OCRv6_medium_det", label: "PP-OCRv6_medium_det · 性能" },
+  { value: "PP-OCRv6_small_det", label: "PP-OCRv6_small_det · 平衡" },
+  { value: "PP-OCRv6_tiny_det", label: "PP-OCRv6_tiny_det · 快速" },
+];
+const PADDLE_V6_RECOGNITION_MODEL_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "使用当前版本默认模型" },
+  { value: "PP-OCRv6_medium_rec", label: "PP-OCRv6_medium_rec · 性能" },
+  { value: "PP-OCRv6_small_rec", label: "PP-OCRv6_small_rec · 平衡" },
+  { value: "PP-OCRv6_tiny_rec", label: "PP-OCRv6_tiny_rec · 快速" },
+];
+
+function isCustomPaddleModel(
+  options: Array<{ value: string; label: string }>,
+  selectedValue: string,
+) {
+  return Boolean(selectedValue) && !options.some((option) => option.value === selectedValue);
+}
+
 function engineStatus(config: ConfigData | null, id: "vision" | "paddleocr"): OcrEngineStatus | null {
   return config?.ocrEngines.find((engine) => engine.id === id) || null;
 }
@@ -146,6 +171,19 @@ function paddleModelVersionFromValues(values: Partial<GlobalSettingsData["values
   return value === "pp-ocrv5"
     ? "PP-OCRv5"
     : "PP-OCRv6";
+}
+
+function paddleModelOptions(
+  options: Array<{ value: string; label: string }>,
+  selectedValue: string,
+) {
+  if (selectedValue && !options.some((option) => option.value === selectedValue)) {
+    return [
+      { value: selectedValue, label: `${selectedValue}（当前自定义）` },
+      ...options,
+    ];
+  }
+  return options;
 }
 
 function paddleEffectiveValues(
@@ -242,6 +280,23 @@ function OcrStatusPanel({
   const ocrPreference = ocrPreferenceFromValues(values);
   const paddlePreset = paddlePresetFromValues(values);
   const paddleEffective = paddleEffectiveValues(values, paddlePreset);
+  const paddleV6DetectionModels = paddleModelOptions(
+    PADDLE_V6_DETECTION_MODEL_OPTIONS,
+    paddleEffective.detectionModel,
+  );
+  const paddleV6RecognitionModels = paddleModelOptions(
+    PADDLE_V6_RECOGNITION_MODEL_OPTIONS,
+    paddleEffective.recognitionModel,
+  );
+  const paddleV6DetectionIsCustom = isCustomPaddleModel(
+    PADDLE_V6_DETECTION_MODEL_OPTIONS,
+    paddleEffective.detectionModel,
+  );
+  const paddleV6RecognitionIsCustom = isCustomPaddleModel(
+    PADDLE_V6_RECOGNITION_MODEL_OPTIONS,
+    paddleEffective.recognitionModel,
+  );
+  const paddleUsesV6Models = paddleEffective.modelVersion === "PP-OCRv6";
 
   const setOcrPreference = (preference: OcrPreference) => {
     for (const [key, value] of Object.entries(ocrPreferencePatch(preference))) {
@@ -402,8 +457,22 @@ function OcrStatusPanel({
             <Field label="兼容性能档" hint="仅自定义模式使用；用于兼容已有 PP-OCRv5 配置。"><Select value={paddleEffective.profile || "balanced"} onChange={(event) => setPaddleField("PADDLEOCR_PROFILE", event.target.value)} disabled={paddlePreset !== "custom"}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>
             <Field label="识别语言"><Input value={settingValue(values, "PADDLEOCR_LANGUAGE", "ch")} onChange={(event) => setValue("PADDLEOCR_LANGUAGE", event.target.value)} /></Field>
             <Field label="计算设备"><Input value={settingValue(values, "PADDLEOCR_DEVICE", "cpu")} onChange={(event) => setValue("PADDLEOCR_DEVICE", event.target.value)} /></Field>
-            <Field label="检测模型" hint="自定义模式留空使用对应版本默认模型。"><Input value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="使用默认" disabled={paddlePreset !== "custom"} /></Field>
-            <Field label="识别模型" hint="自定义模式留空使用对应版本默认模型。"><Input value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="使用默认" disabled={paddlePreset !== "custom"} /></Field>
+            <Field label="检测模型" htmlFor="paddle-detection-model-select" hint={paddleUsesV6Models ? "PP-OCRv6 可选择 medium、small 或 tiny；也可输入自定义模型 ID。" : "PP-OCRv5 自定义模型可手动填写；留空使用当前版本默认模型。"}>
+              {paddleUsesV6Models
+                ? <div className={styles.paddleModelControl}>
+                  <Select id="paddle-detection-model-select" aria-describedby="paddle-detection-model-select-hint" value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} disabled={paddlePreset !== "custom"}>{paddleV6DetectionModels.map((option) => <option key={option.value || "default"} value={option.value}>{option.label}</option>)}</Select>
+                  <Input aria-describedby="paddle-detection-model-select-hint" value={paddleV6DetectionIsCustom ? paddleEffective.detectionModel : ""} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="输入自定义模型 ID（可选）" aria-label="自定义检测模型 ID" disabled={paddlePreset !== "custom"} />
+                </div>
+                : <Input id="paddle-detection-model-select" value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="使用默认" disabled={paddlePreset !== "custom"} />}
+            </Field>
+            <Field label="识别模型" htmlFor="paddle-recognition-model-select" hint={paddleUsesV6Models ? "PP-OCRv6 可选择 medium、small 或 tiny；也可输入自定义模型 ID。" : "PP-OCRv5 自定义模型可手动填写；留空使用当前版本默认模型。"}>
+              {paddleUsesV6Models
+                ? <div className={styles.paddleModelControl}>
+                  <Select id="paddle-recognition-model-select" aria-describedby="paddle-recognition-model-select-hint" value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} disabled={paddlePreset !== "custom"}>{paddleV6RecognitionModels.map((option) => <option key={option.value || "default"} value={option.value}>{option.label}</option>)}</Select>
+                  <Input aria-describedby="paddle-recognition-model-select-hint" value={paddleV6RecognitionIsCustom ? paddleEffective.recognitionModel : ""} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="输入自定义模型 ID（可选）" aria-label="自定义识别模型 ID" disabled={paddlePreset !== "custom"} />
+                </div>
+                : <Input id="paddle-recognition-model-select" value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="使用默认" disabled={paddlePreset !== "custom"} />}
+            </Field>
             <Field label="识别批量大小"><Input type="number" min="1" max="64" step="1" value={paddleEffective.recognitionBatchSize} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_BATCH_SIZE", event.target.value)} placeholder="使用性能档" disabled={paddlePreset !== "custom"} /></Field>
             <Field label="最低置信度" hint="0–1；低于此值的文字块不会作为证据。"><Input type="number" min="0" max="1" step="0.01" value={paddleEffective.minimumConfidence} onChange={(event) => setPaddleField("PADDLEOCR_MIN_CONFIDENCE", event.target.value)} disabled={paddlePreset !== "custom"} /></Field>
             <Field label="每个视图最多文字块" hint="0 表示不限制；限制时仍均匀覆盖整页。"><Input type="number" min="0" max="10000" step="1" value={paddleEffective.maxBlocksPerView} onChange={(event) => setPaddleField("PADDLEOCR_MAX_BLOCKS_PER_VIEW", event.target.value)} disabled={paddlePreset !== "custom"} /></Field>
@@ -461,7 +530,10 @@ export function GlobalSettingsPage() {
   const [jsonSchemaError, setJsonSchemaError] = useState<string | null>(null);
 
   useEffect(() => {
-    setProviderId((previous) => config?.providers.some((provider) => provider.id === previous) ? previous : config?.providers[0]?.id || "");
+    setProviderId((previous) => {
+      const builtins = config?.providers.filter((provider) => !provider.id.startsWith("openai-compatible:")) || [];
+      return builtins.some((provider) => provider.id === previous) ? previous : builtins[0]?.id || "";
+    });
   }, [config]);
 
   useEffect(() => {
@@ -614,12 +686,12 @@ export function GlobalSettingsPage() {
     }
   };
 
+  // Keep this header concise; the dedicated 说明 page owns the longer setup guide.
   return <div className={styles.page}>
     <div className={styles.pageHeader}>
       <div>
         <p className={styles.eyebrow}>设备设置</p>
         <h1 className={styles.heading}>全局设置</h1>
-        <p className={styles.subtitle}>密钥、服务商、运行参数、OCR 与外观。普通配置保存在本机，不需要寻找 .env。</p>
       </div>
       <div className={styles.pageActions}>
         <Button loading={globalSaveState === "saving"} onClick={() => void saveGlobalSettings()} startIcon={<Save size={15} />}>保存全局配置</Button>
@@ -635,7 +707,7 @@ export function GlobalSettingsPage() {
         <div className={styles.sectionHeader}><div><p className={styles.kicker}>Provider</p><h2 className={styles.sectionTitle}>访问密钥与接口</h2></div><KeyRound size={19} aria-hidden="true" /></div>
         <Text tone="muted" size="sm">密钥保存在独立的本机凭据文件，保存后不会回显；Base URL 等普通参数写入全局配置。</Text>
         <div className={styles.formGrid} style={{ marginTop: 18 }}>
-          <Field label="Provider"><Select value={providerId} onChange={(event) => setProviderId(event.target.value)}>{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field>
+          <Field label="Provider"><Select value={providerId} onChange={(event) => setProviderId(event.target.value)}>{config?.providers.filter((item) => !item.id.startsWith("openai-compatible:")).map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field>
           <Field label="API Key" hint={providerKeyConfigured ? "已保存密钥；输入新值可替换，留空并保存可清除应用覆盖。" : "密钥只在 Main 进程中使用，不会显示在页面或项目数据里。"}>
             <div className={styles.secretInputRow}>
               <Input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" spellCheck={false} disabled={!provider || !KEY_PROVIDERS.has(provider.id)} placeholder={providerKeyConfigured ? "已配置 · 输入新 Key 可替换" : "粘贴 API Key"} />
@@ -673,6 +745,8 @@ export function GlobalSettingsPage() {
         {jsonSchemaResult && <Text tone={jsonSchemaResult.supported ? "success" : "warning"} size="sm" style={{ marginTop: 12 }}><Icon icon={jsonSchemaResult.supported ? CheckCircle2 : Braces} size={15} /> {jsonSchemaResult.message}</Text>}
         {jsonSchemaError && <div style={{ marginTop: 12 }}><InlineError message={jsonSchemaError} /></div>}
       </Surface>}
+
+      <CustomProviderSettingsPanel />
 
       <Surface className={`${styles.panel} ${styles.runtimeSettingsPanel}`}>
         <div className={styles.sectionHeader}><div><p className={styles.kicker}>运行参数</p><h2 className={styles.sectionTitle}>识别与存储</h2></div><Terminal size={19} aria-hidden="true" /></div>

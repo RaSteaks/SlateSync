@@ -69,8 +69,10 @@
 .helpSearchRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ss-space-3); align-items: end; }
 .helpSearchRow > .iconButton { margin-bottom: 25px; }
 .helpLayout { display: grid; grid-template-columns: minmax(190px, .28fr) minmax(0, 1fr); gap: var(--ss-space-5); align-items: start; }
-.helpAside { min-width: 0; }
-.helpToc { position: sticky; top: calc(var(--ss-header-height) + var(--ss-space-5)); padding: var(--ss-space-4); }
+/* Keep the directory pinned beside long-form help while the document moves;
+   its own scrollport preserves access to every anchor in a short viewport. */
+.helpAside { position: sticky; top: calc(var(--ss-header-height) + var(--ss-space-5)); z-index: var(--ss-z-sticky); min-width: 0; max-height: calc(100vh - var(--ss-header-height) - var(--ss-space-10)); }
+.helpToc { max-height: inherit; overflow-y: auto; overscroll-behavior: contain; padding: var(--ss-space-4); box-shadow: var(--ss-shadow-sm); }
 .helpToc > .kicker { margin: 0 0 var(--ss-space-3); }
 .helpTocList { display: grid; gap: var(--ss-space-1); }
 .helpTocLink { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: var(--ss-space-2); align-items: center; min-height: 38px; padding: 5px 8px; border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-muted); font-size: .8rem; text-decoration: none; }
@@ -116,6 +118,9 @@
 .grid { display: grid; gap: var(--ss-layout-gap); }
 .gridThree { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gridTwo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* The provider registry keeps list/detail readable on desktop and collapses
+   into a single flow below the same narrow-window breakpoint as other forms. */
+.customProviderLayout { grid-template-columns: minmax(220px, .7fr) minmax(0, 1.8fr); }
 /* Provider credentials and appearance are the two device-level entry points;
    this explicit row keeps them paired regardless of conditional provider cards. */
 .settingsOverviewGrid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ss-layout-gap); align-items: start; }
@@ -271,6 +276,9 @@
 .settingsDetails > summary:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: 2px; }
 .settingsDetails[open] > summary { margin-bottom: 14px; color: var(--ss-color-ink); }
 .settingsDetails .formGrid { margin-top: 0 !important; }
+/* Pair the fixed PP-OCRv6 recommendations with an editable field so local
+   model IDs remain configurable without giving up the quick size tiers. */
+.paddleModelControl { display: grid; gap: var(--ss-space-2); min-width: 0; }
 .secretInputRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .secretInputRow > .button { min-width: 66px; }
 .runtimeSettingsPanel { grid-column: 1 / -1; }
@@ -336,6 +344,7 @@
 @media (max-width: 720px) {
   .pageHeader { align-items: flex-start; flex-direction: column; }
   .gridThree, .gridTwo, .formGrid, .settingsOverviewGrid, .cardGrid { grid-template-columns: 1fr; }
+  .customProviderLayout { grid-template-columns: 1fr; }
   .formFieldFull { grid-column: auto; }
   .pageActions { width: 100%; }
   .pageActions > * { flex: 1; }
@@ -356,7 +365,8 @@
 
 @media (max-width: 920px) {
   .helpLayout { grid-template-columns: 1fr; }
-  .helpToc { position: static; }
+  .helpAside { position: static; max-height: none; }
+  .helpToc { max-height: none; overflow: visible; box-shadow: none; }
 }
 
 @media (max-width: 720px) {

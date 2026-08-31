@@ -78,6 +78,18 @@ function changeSelect(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function changeInput(input: HTMLInputElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function findField(host: HTMLDivElement, labelText: string) {
+  return [...host.querySelectorAll("label")].find(
+    (label) => label.querySelector("span")?.textContent?.trim() === labelText,
+  );
+}
+
 describe("global settings layout and OCR routing", () => {
   it("keeps credentials and appearance in the same explicit overview row", async () => {
     const save = vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings }));
@@ -221,6 +233,11 @@ describe("global settings layout and OCR routing", () => {
     const modelSelect = modelLabel?.querySelector("select");
     if (!(modelSelect instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR model version select");
 
+    const v5DetectionLabel = findField(host, "检测模型");
+    const v5RecognitionLabel = findField(host, "识别模型");
+    expect(v5DetectionLabel?.querySelector("input")?.value).toBe("PP-OCRv5_mobile_det");
+    expect(v5RecognitionLabel?.querySelector("input")?.value).toBe("PP-OCRv5_server_rec");
+
     act(() => changeSelect(modelSelect, "PP-OCRv6"));
     const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
     if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
@@ -235,6 +252,121 @@ describe("global settings layout and OCR routing", () => {
         PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
         PADDLEOCR_DETECTION_MODEL: "",
         PADDLEOCR_RECOGNITION_MODEL: "",
+      }),
+    });
+
+    const detectionLabel = findField(host, "检测模型");
+    const recognitionLabel = findField(host, "识别模型");
+    expect(detectionLabel?.querySelector("select")).not.toBeNull();
+    expect(recognitionLabel?.querySelector("select")).not.toBeNull();
+  });
+
+  it("offers PP-OCRv6 detector and recognizer model lists", async () => {
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...initialGlobalSettings,
+        values: { ...initialGlobalSettings.values, ...request.values },
+      },
+    }));
+    const settings = {
+      ...initialGlobalSettings,
+      values: {
+        ...initialGlobalSettings.values,
+        PADDLEOCR_PRESET: "custom",
+        PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+        PADDLEOCR_DETECTION_MODEL: "",
+        PADDLEOCR_RECOGNITION_MODEL: "",
+      },
+    };
+    const host = await renderSettings(save, settings);
+    const detectionLabel = findField(host, "检测模型");
+    const recognitionLabel = findField(host, "识别模型");
+    const detection = detectionLabel?.querySelector("select");
+    const recognition = recognitionLabel?.querySelector("select");
+    if (!(detection instanceof HTMLSelectElement) || !(recognition instanceof HTMLSelectElement)) {
+      throw new Error("missing PP-OCRv6 model selects");
+    }
+
+    // Field must keep the explicit target on the nested select instead of
+    // cloning the same ID onto the composite control wrapper.
+    expect(host.querySelectorAll("#paddle-detection-model-select")).toHaveLength(1);
+    expect(host.querySelectorAll("#paddle-recognition-model-select")).toHaveLength(1);
+    expect(detection.closest("label")?.htmlFor).toBe("paddle-detection-model-select");
+    expect(recognition.closest("label")?.htmlFor).toBe("paddle-recognition-model-select");
+
+    expect([...detection.options].map((option) => option.value)).toEqual([
+      "",
+      "PP-OCRv6_medium_det",
+      "PP-OCRv6_small_det",
+      "PP-OCRv6_tiny_det",
+    ]);
+    expect([...recognition.options].map((option) => option.value)).toEqual([
+      "",
+      "PP-OCRv6_medium_rec",
+      "PP-OCRv6_small_rec",
+      "PP-OCRv6_tiny_rec",
+    ]);
+
+    // Choosing a tier must persist the exact detector and recognizer IDs that
+    // Main/Python use to build the matching PP-OCRv6 pipeline.
+    act(() => changeSelect(detection, "PP-OCRv6_medium_det"));
+    act(() => changeSelect(recognition, "PP-OCRv6_tiny_rec"));
+    const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
+    await act(async () => {
+      saveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      values: expect.objectContaining({
+        PADDLEOCR_DETECTION_MODEL: "PP-OCRv6_medium_det",
+        PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv6_tiny_rec",
+      }),
+    });
+  });
+
+  it("keeps custom PP-OCRv6 model IDs editable alongside the recommendations", async () => {
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...initialGlobalSettings,
+        values: { ...initialGlobalSettings.values, ...request.values },
+      },
+    }));
+    const settings = {
+      ...initialGlobalSettings,
+      values: {
+        ...initialGlobalSettings.values,
+        PADDLEOCR_PRESET: "custom",
+        PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+        PADDLEOCR_DETECTION_MODEL: "",
+        PADDLEOCR_RECOGNITION_MODEL: "",
+      },
+    };
+    const host = await renderSettings(save, settings);
+    const detection = findField(host, "检测模型")?.querySelector<HTMLInputElement>("input[aria-label='自定义检测模型 ID']");
+    const recognition = findField(host, "识别模型")?.querySelector<HTMLInputElement>("input[aria-label='自定义识别模型 ID']");
+    if (!(detection instanceof HTMLInputElement) || !(recognition instanceof HTMLInputElement)) {
+      throw new Error("missing custom PP-OCRv6 model inputs");
+    }
+
+    act(() => changeInput(detection, "local_det_v6"));
+    act(() => changeInput(recognition, "local_rec_v6"));
+    const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
+    await act(async () => {
+      saveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      values: expect.objectContaining({
+        PADDLEOCR_DETECTION_MODEL: "local_det_v6",
+        PADDLEOCR_RECOGNITION_MODEL: "local_rec_v6",
       }),
     });
   });

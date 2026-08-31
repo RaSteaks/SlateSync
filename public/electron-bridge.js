@@ -112,6 +112,43 @@ export function fetchModelsApi(providerId, forceRefresh = false) {
   return call((api) => api.recognition.getModels({ providerId, forceRefresh }));
 }
 
+export function listCustomProvidersApi() {
+  return call((api) => api.settings.listCustomProviders());
+}
+
+export function createCustomProviderApi(provider) {
+  return call((api) => api.settings.createCustomProvider(provider));
+}
+
+export function updateCustomProviderApi(provider) {
+  return call((api) => api.settings.updateCustomProvider(provider));
+}
+
+export function deleteCustomProviderApi(id) {
+  return call((api) => api.settings.deleteCustomProvider({ id, confirm: true }));
+}
+
+export function probeCustomModelsApi(providerId, modelIds) {
+  return call((api) => api.settings.probeCustomModels({ providerId, modelIds }));
+}
+
+export function cancelCustomModelProbeApi(providerId) {
+  return call((api) => api.settings.cancelCustomModelProbe({ providerId }));
+}
+
+export function onModelProbeProgressApi(listener) {
+  try {
+    const api = electronApi();
+    return typeof api.settings?.onModelProbeProgress === "function"
+      ? api.settings.onModelProbeProgress(listener)
+      : () => {};
+  } catch {
+    // Legacy pages can be opened with an older preload during a dev reload;
+    // lack of progress subscription must not block the CRUD recovery UI.
+    return () => {};
+  }
+}
+
 export async function recognizeApi(requestBody, onProgress) {
   const api = electronApi();
   const request = JSON.parse(requestBody);
