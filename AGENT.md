@@ -803,5 +803,6 @@ Worker 边界、验收证据和最终治理交接。
   94/94）、`npm run build:modern`、`npm run build:storybook` 和 `git diff --check` 均
   通过。Storybook 仅报告沙盒无法创建用户级 `/Users/rasteaks/.storybook/settings.json`，
   静态构建成功。
-- `npm run test:node` 共 302 项，301 项通过；唯一失败是既有 baseline 的
-  `package.version` 漂移（实时 `0.2.0`、基线 `0.1.0`），本轮新增的回归测试均通过。
+- `npm run test:node` 共 302 项，302 项通过；历史 baseline 继续保留其发布时的
+  `0.1.0`，测试改为校验当前 `package.json` 与 `package-lock.json` 的 `0.2.0` 发布版本
+  一致性，本轮新增的回归测试均通过。

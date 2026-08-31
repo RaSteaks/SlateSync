@@ -168,9 +168,15 @@ test("baseline package and electron-builder inventories match live configuration
   const ci = await readFile(new URL(".github/workflows/ci.yml", repo), "utf8");
   const release = await readFile(new URL(".github/workflows/release.yml", repo), "utf8");
 
-  for (const key of ["name", "version", "private", "type", "main", "engines"]) {
+  // The historical fixture intentionally retains the release version from its
+  // baseline commit; normal releases may bump package.json without rewriting
+  // frozen compatibility evidence. The lockfile remains the current-version
+  // consistency check for the live package metadata.
+  for (const key of ["name", "private", "type", "main", "engines"]) {
     assert.deepEqual(packageJson[key], build.package[key], `package.${key} drift`);
   }
+  assert.equal(lockfile.version, packageJson.version, "package-lock root version drift");
+  assert.equal(lockfile.packages[""].version, packageJson.version, "package-lock package version drift");
   const transitionScriptNames = new Set(Object.keys(build.transition.scripts));
   for (const [name, command] of Object.entries(build.package.scripts)) {
     if (transitionScriptNames.has(name)) continue;
