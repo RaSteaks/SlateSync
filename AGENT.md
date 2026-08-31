@@ -806,3 +806,17 @@ Worker 边界、验收证据和最终治理交接。
 - `npm run test:node` 共 302 项，302 项通过；历史 baseline 继续保留其发布时的
   `0.1.0`，测试改为校验当前 `package.json` 与 `package-lock.json` 的 `0.2.0` 发布版本
   一致性，本轮新增的回归测试均通过。
+
+## 2026-08-31 按宿主系统选择打包目标
+
+- 本地 `electron:build` 与 `electron:build:dir` 统一经过
+  `scripts/electron-build-host.mjs`：macOS 主机显式传入 `--mac`，Windows 主机显式
+  传入 `--win --x64`；Linux 主机和跨平台目标参数立即失败。
+- `electron-builder.yml` 保留 macOS arm64/x64 的 DMG 与 ZIP，并新增 Windows NSIS x64
+  目标；macOS 的 `bin/vision-ocr` 资源只进入 macOS 包，不进入 Windows 包。
+- Windows ia32/x86/armv7l 不属于支持目标；GitHub Release 工作流仍使用 macOS runner，
+  因而继续只发布 macOS。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm test`（Node 302/302，Modern
+  23 个文件、97/97）、`npm run build:modern`、baseline 打包契约和 `git diff --check`
+  均通过；宿主目标选择、Windows x64 固定和跨平台参数拒绝均有回归覆盖，未启动
+  Electron 前台窗口，也未访问本地 `data/`。
