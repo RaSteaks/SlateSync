@@ -2538,6 +2538,41 @@ body {
   overflow: auto;
 }
 
+/* 项目包结果属于跨路由状态，放在共享内容区避免完成后写入隐藏页面。 */
+.project-transfer-notice {
+  width: min(1180px, calc(100% - 64px));
+  margin: 18px auto -4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tape);
+  border-radius: var(--r-box);
+  color: var(--ink-soft);
+  background: var(--paper);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.project-transfer-notice[data-tone="success"] {
+  border-color: rgba(37, 122, 71, 0.22);
+  border-left-color: var(--success);
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.project-transfer-notice[data-tone="warning"] {
+  border-color: rgba(143, 99, 7, 0.24);
+  border-left-color: var(--warning);
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.project-transfer-notice[data-tone="error"] {
+  border-color: rgba(191, 68, 48, 0.22);
+  border-left-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
 #recognition-settings-group {
   display: none;
 }
@@ -2612,6 +2647,98 @@ body {
 
 .settings-note.is-ready {
   color: var(--success);
+}
+
+/* The Legacy fallback keeps the one-click PaddleOCR action beside the Local
+   OCR status, while the feedback panel reserves a stable footprint for the
+   long-running install/cancel/retry states. */
+.global-ocr-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.global-ocr-heading-actions .secondary-button {
+  min-width: 132px;
+}
+
+.paddleocr-install-feedback {
+  display: grid;
+  min-height: 68px;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  color: var(--ink-soft);
+  background: var(--sunken);
+}
+
+.paddleocr-install-feedback[data-tone="accent"] {
+  border-color: color-mix(in srgb, var(--tape) 34%, var(--line));
+  background: var(--tape-soft);
+}
+
+.paddleocr-install-feedback[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.paddleocr-install-feedback[data-tone="warning"] {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--line));
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.paddleocr-install-feedback[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.paddleocr-install-feedback-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paddleocr-install-feedback-status {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.paddleocr-install-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 55%, transparent);
+}
+
+.paddleocr-install-progress > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tape);
+  transition: width 180ms ease;
+}
+
+.paddleocr-install-feedback[data-tone="success"] .paddleocr-install-progress > span {
+  background: var(--success);
+}
+
+.paddleocr-install-feedback[data-tone="warning"] .paddleocr-install-progress > span {
+  background: var(--warning);
+}
+
+.paddleocr-install-feedback[data-tone="danger"] .paddleocr-install-progress > span {
+  background: var(--danger);
 }
 
 .project-grid {
@@ -2743,6 +2870,11 @@ body {
   box-shadow: 0 8px 24px rgba(38, 50, 61, 0.05);
 }
 
+/* 项目包入口与设置表单分离，但继续复用同一张 Legacy 设置卡片。 */
+.project-package-card {
+  margin-top: 16px;
+}
+
 .settings-card:nth-child(3),
 .settings-layout > .settings-actions {
   grid-column: 1 / -1;
@@ -2830,6 +2962,10 @@ body {
   margin-right: auto;
   color: var(--success);
   font-size: 12px;
+}
+
+.settings-save-status.error {
+  color: var(--danger);
 }
 
 .global-api-key-row {
@@ -3065,7 +3201,8 @@ body {
   }
 
   .project-page,
-  .settings-page {
+  .settings-page,
+  .project-transfer-notice {
     width: min(100% - 32px, 720px);
   }
 
@@ -3088,6 +3225,9 @@ body {
 
   .global-settings-card { grid-column: auto; }
   .global-settings-group-fields { grid-template-columns: 1fr; }
+  .global-ocr-heading-actions { align-items: flex-start; flex-direction: column; }
+  .global-ocr-heading-actions .secondary-button { width: 100%; }
+  .paddleocr-install-feedback-header { align-items: stretch; flex-direction: column; }
 
   .page-shell,
   footer {

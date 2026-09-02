@@ -258,6 +258,16 @@ export type LibraryExportResult =
   | { readonly canceled: true }
   | { readonly canceled: false; readonly library: ValidatedLibraryInfo };
 
+/** 项目包操作取消时不改变索引；成功导入返回已经生成新 ID 的完整项目。 */
+export type ProjectImportResult =
+  | { readonly canceled: true }
+  | { readonly canceled: false; readonly project: ProjectData };
+
+/** 导出结果携带规范化后的目录路径，方便两套 Renderer 给出一致反馈。 */
+export type ProjectExportResult =
+  | { readonly canceled: true }
+  | { readonly canceled: false; readonly project: ProjectSummary; readonly path: string };
+
 export type LibraryLocationResult = LibraryImportResult;
 
 export interface LibraryRenameRequest {
@@ -430,6 +440,25 @@ export interface OcrSettings {
   readonly pythonPath: string;
   readonly setupCompleted: boolean;
   readonly setupSkipped: boolean;
+}
+
+export type PaddleOcrInstallStage =
+  | "detect-python"
+  | "create-environment"
+  | "install-dependencies"
+  | "verify"
+  | "completed";
+
+/** Main-owned installation progress; percentages represent completed stages. */
+export interface PaddleOcrInstallProgress {
+  readonly stage: PaddleOcrInstallStage;
+  readonly percent: number;
+  readonly message: string;
+}
+
+export interface PaddleOcrInstallResult extends OcrSettings {
+  readonly paddleVersion: string;
+  readonly paddleOcrVersion: string;
 }
 
 export type OcrCheckResult =
@@ -892,6 +921,8 @@ export interface SlateSyncApi {
     getLibraryInfo(): Promise<Result<LibraryInfo | null>>;
     importLibrary(): Promise<Result<LibraryImportResult>>;
     exportLibrary(): Promise<Result<LibraryExportResult>>;
+    importProject(): Promise<Result<ProjectImportResult>>;
+    exportProject(request: ProjectIdRequest): Promise<Result<ProjectExportResult>>;
     changeLibraryLocation(): Promise<Result<LibraryLocationResult>>;
     renameLibrary(request: LibraryRenameRequest): Promise<Result<LibraryRenameResult>>;
     create(request: ProjectRequest): Promise<Result<ProjectData>>;
@@ -931,6 +962,9 @@ export interface SlateSyncApi {
     getOcrSettings(): Promise<Result<OcrSettings>>;
     saveOcrSettings(request: OcrSettingsRequest): Promise<Result<OcrSettings>>;
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;
+    installPaddleOcr(): Promise<Result<PaddleOcrInstallResult>>;
+    cancelPaddleOcrInstall(): Promise<Result<{ readonly canceled: boolean }>>;
+    onPaddleOcrInstallProgress(listener: (event: PaddleOcrInstallProgress) => void): () => void;
     checkVisionOcr(): Promise<Result<VisionOcrCheckResult>>;
     checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
     listCustomProviders(): Promise<Result<CustomProviderSummary[]>>;

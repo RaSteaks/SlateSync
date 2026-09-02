@@ -49,6 +49,16 @@ afterEach(() => {
 async function renderSettings(
   saveGlobalSettings: ReturnType<typeof vi.fn>,
   settings = initialGlobalSettings,
+  installPaddleOcr = vi.fn(async () => ({
+    ok: true as const,
+    data: {
+      pythonPath: "/user-data/paddleocr-venv/bin/python",
+      setupCompleted: true,
+      setupSkipped: false,
+      paddleVersion: "3.3.1",
+      paddleOcrVersion: "3.7.0",
+    },
+  })),
 ) {
   const api = {
     app: { getConfig: vi.fn(async () => ({ ok: true as const, data: config })) },
@@ -56,6 +66,9 @@ async function renderSettings(
       getGlobalSettings: vi.fn(async () => ({ ok: true as const, data: settings })),
       getOcrSettings: vi.fn(async () => ({ ok: true as const, data: { pythonPath: "", setupCompleted: false, setupSkipped: false } })),
       saveGlobalSettings,
+      installPaddleOcr,
+      cancelPaddleOcrInstall: vi.fn(async () => ({ ok: true as const, data: { canceled: true } })),
+      onPaddleOcrInstallProgress: vi.fn(() => () => {}),
     },
   } as unknown as SlateSyncApi;
   Object.defineProperty(window, "slateSync", { configurable: true, value: api });
@@ -131,6 +144,33 @@ describe("global settings layout and OCR routing", () => {
         PADDLEOCR_ENABLED: "true",
       },
     });
+  });
+
+  it("offers one-click PaddleOCR installation beside the Local OCR heading", async () => {
+    const save = vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings }));
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        pythonPath: "/user-data/paddleocr-venv/bin/python",
+        setupCompleted: true,
+        setupSkipped: false,
+        paddleVersion: "3.3.1",
+        paddleOcrVersion: "3.7.0",
+      },
+    }));
+    const host = await renderSettings(save, initialGlobalSettings, install);
+    const button = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "安装 PaddleOCR");
+    if (!(button instanceof HTMLButtonElement)) throw new Error("missing one-click PaddleOCR button");
+
+    await act(async () => {
+      button.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("PaddleOCR 已安装并验证通过");
+    expect(host.querySelector<HTMLInputElement>('input[placeholder="python3 或绝对路径"]')?.value).toBe("/user-data/paddleocr-venv/bin/python");
   });
 
   it("treats the PaddleOCR card enable control as a routing choice", async () => {
@@ -259,6 +299,42 @@ describe("global settings layout and OCR routing", () => {
     const recognitionLabel = findField(host, "识别模型");
     expect(detectionLabel?.querySelector("select")).not.toBeNull();
     expect(recognitionLabel?.querySelector("select")).not.toBeNull();
+  });
+
+  it("restores custom model IDs after an unsaved version round trip", async () => {
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...initialGlobalSettings,
+        values: { ...initialGlobalSettings.values, ...request.values },
+      },
+    }));
+    const settings = {
+      ...initialGlobalSettings,
+      values: {
+        ...initialGlobalSettings.values,
+        PADDLEOCR_PRESET: "custom",
+        PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+        PADDLEOCR_DETECTION_MODEL: "local_det_v6",
+        PADDLEOCR_RECOGNITION_MODEL: "local_rec_v6",
+      },
+    };
+    const host = await renderSettings(save, settings);
+    const modelLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("模型版本"));
+    const modelSelect = modelLabel?.querySelector("select");
+    if (!(modelSelect instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR model version select");
+
+    act(() => changeSelect(modelSelect, "PP-OCRv5"));
+    expect(findField(host, "检测模型")?.querySelector<HTMLInputElement>("input")?.value).toBe("");
+    expect(findField(host, "识别模型")?.querySelector<HTMLInputElement>("input")?.value).toBe("");
+
+    const v5ModelSelect = [...host.querySelectorAll("label")]
+      .find((label) => label.textContent?.includes("模型版本"))
+      ?.querySelector("select");
+    if (!(v5ModelSelect instanceof HTMLSelectElement)) throw new Error("missing v5 model version select");
+    act(() => changeSelect(v5ModelSelect, "PP-OCRv6"));
+    expect(findField(host, "检测模型")?.querySelector<HTMLInputElement>("input")?.value).toBe("local_det_v6");
+    expect(findField(host, "识别模型")?.querySelector<HTMLInputElement>("input")?.value).toBe("local_rec_v6");
   });
 
   it("offers PP-OCRv6 detector and recognizer model lists", async () => {

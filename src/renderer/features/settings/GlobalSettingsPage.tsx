@@ -1,7 +1,7 @@
-import { Braces, CheckCircle2, Eye, EyeOff, KeyRound, Monitor, Moon, RotateCcw, Save, Sun, Terminal, Wrench } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { ConfigData, GlobalSettingKey, GlobalSettingsData, GlobalSettingsPatch, JsonSchemaCapabilityResult, OcrCheckResult, OcrEngineStatus, OcrSelection, OcrSettings, VisionOcrCheckResult } from "../../../shared/contracts/index.js";
-import { Badge, Button, Field, Icon, InlineError, Input, Select, Stack, StatusIndicator, Surface, Text } from "../../design-system";
+import { Braces, CheckCircle2, Download, Eye, EyeOff, KeyRound, Monitor, Moon, RotateCcw, Save, Sun, Terminal, Wrench } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { ConfigData, GlobalSettingKey, GlobalSettingsData, GlobalSettingsPatch, JsonSchemaCapabilityResult, OcrCheckResult, OcrEngineStatus, OcrSelection, OcrSettings, PaddleOcrInstallProgress, VisionOcrCheckResult } from "../../../shared/contracts/index.js";
+import { Badge, Button, Field, Icon, InlineError, Input, Progress, Select, Stack, StatusIndicator, Surface, Text } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, requireGlobalSettingsApi, unwrap } from "../../services/api";
 import { useProjectStore, useSettingsStore, useUiStore, type Theme } from "../../state";
 import styles from "../../app/app.module.css";
@@ -18,6 +18,7 @@ const PROVIDER_BASE_URL_KEYS: Partial<Record<string, GlobalSettingKey>> = {
 
 type StatusTone = "neutral" | "success" | "warning" | "danger";
 type GlobalSaveState = "idle" | "saving" | "saved" | "error";
+type PaddleOcrInstallState = "idle" | "installing" | "installed" | "canceled" | "error";
 type OcrPreference = "auto" | "vision" | "paddleocr" | "disabled";
 type PaddlePreset = "custom" | "performance" | "balanced" | "fast";
 type PaddleModelVersion = "PP-OCRv5" | "PP-OCRv6";
@@ -34,6 +35,7 @@ type PaddlePresetValues = {
   // The legacy profile is only used when a named preset is copied to custom.
   profile: "fast" | "balanced" | "accurate";
 };
+type PaddleModelDraft = Pick<PaddlePresetValues, "detectionModel" | "recognitionModel">;
 
 // Keep this display table aligned with the Main-side preset resolver. The
 // actual OCR request never trusts Renderer values; this only previews the
@@ -218,6 +220,13 @@ function paddlePresetCopyPatch(preset: PaddlePreset, values: PaddlePresetValues)
   };
 }
 
+function paddleModelDraftFromValues(values: Partial<GlobalSettingsData["values"]>): PaddleModelDraft {
+  return {
+    detectionModel: settingValue(values, "PADDLEOCR_DETECTION_MODEL"),
+    recognitionModel: settingValue(values, "PADDLEOCR_RECOGNITION_MODEL"),
+  };
+}
+
 function ocrPreferenceFromValues(values: Partial<GlobalSettingsData["values"]>): OcrPreference {
   const visionMode = settingValue(values, "VISIONOCR_ENABLED", "auto");
   const paddleMode = settingValue(values, "PADDLEOCR_ENABLED", "auto");
@@ -247,6 +256,7 @@ interface OcrStatusPanelProps {
   config: ConfigData | null;
   ocr: OcrSettings | null;
   values: Partial<GlobalSettingsData["values"]>;
+  savedValues: GlobalSettingsData["values"] | null;
   setValue: (key: GlobalSettingKey, value: string) => void;
   paddleCheck: OcrCheckResult | null;
   ocrState: "idle" | "checking" | "saving" | "saved";
@@ -256,12 +266,18 @@ interface OcrStatusPanelProps {
   checkVision: () => Promise<void>;
   saveGlobalSettings: () => Promise<void>;
   globalSaveState: GlobalSaveState;
+  paddleInstallState: PaddleOcrInstallState;
+  paddleInstallProgress: PaddleOcrInstallProgress | null;
+  paddleInstallError: string | null;
+  installPaddleOcr: () => void;
+  cancelPaddleOcrInstall: () => void;
 }
 
 function OcrStatusPanel({
   config,
   ocr,
   values,
+  savedValues,
   setValue,
   paddleCheck,
   ocrState,
@@ -271,7 +287,25 @@ function OcrStatusPanel({
   checkVision,
   saveGlobalSettings,
   globalSaveState,
+  paddleInstallState,
+  paddleInstallProgress,
+  paddleInstallError,
+  installPaddleOcr,
+  cancelPaddleOcrInstall,
 }: OcrStatusPanelProps) {
+  const paddleModelDraftsRef = useRef<Partial<Record<PaddleModelVersion, PaddleModelDraft>>>({});
+  const seededSavedValuesRef = useRef<GlobalSettingsData["values"] | null>(null);
+  useEffect(() => {
+    if (!savedValues || savedValues === seededSavedValuesRef.current) return;
+    // A reset or successful save is a new server snapshot; discard only the
+    // old per-version cache and seed the version that the snapshot owns.
+    seededSavedValuesRef.current = savedValues;
+    paddleModelDraftsRef.current = {};
+    if (paddlePresetFromValues(savedValues) === "custom") {
+      const version = paddleModelVersionFromValues(savedValues);
+      paddleModelDraftsRef.current[version] = paddleModelDraftFromValues(savedValues);
+    }
+  }, [savedValues]);
   const selection = config?.ocrSelection;
   const vision = engineStatus(config, "vision");
   const paddle = engineStatus(config, "paddleocr");
@@ -319,6 +353,10 @@ function OcrStatusPanel({
     if (nextPreset === "custom" && paddlePreset !== "custom") {
       // Materialize the visible preset before entering custom mode so the
       // editor never jumps back to unrelated stale values from the last save.
+      paddleModelDraftsRef.current[paddleEffective.modelVersion] = {
+        detectionModel: paddleEffective.detectionModel,
+        recognitionModel: paddleEffective.recognitionModel,
+      };
       for (const [key, value] of Object.entries(paddlePresetCopyPatch("custom", paddleEffective))) {
         if (key === "PADDLEOCR_PRESET") continue;
         setValue(key as GlobalSettingKey, value || "");
@@ -330,18 +368,32 @@ function OcrStatusPanel({
   const setPaddleModelVersion = (nextVersion: PaddleModelVersion) => {
     if (paddlePreset !== "custom") return;
     const currentVersion = paddleModelVersionFromValues(values);
+    paddleModelDraftsRef.current[currentVersion] = paddleModelDraftFromValues(values);
+    const restored = paddleModelDraftsRef.current[nextVersion] || { detectionModel: "", recognitionModel: "" };
     setValue("PADDLEOCR_MODEL_VERSION", nextVersion);
     if (currentVersion !== nextVersion) {
-      // Detection/recognition model names are version-specific. Clear the
-      // previous version's overrides so Main can select the new version's
-      // profile defaults instead of constructing a mixed v5/v6 pipeline.
-      setValue("PADDLEOCR_DETECTION_MODEL", "");
-      setValue("PADDLEOCR_RECOGNITION_MODEL", "");
+      // Detection/recognition model names are version-specific. Isolate the
+      // drafts to avoid mixed pipelines, then restore them on a round trip so
+      // an unsaved custom ID is not silently discarded.
+      setValue("PADDLEOCR_DETECTION_MODEL", restored.detectionModel);
+      setValue("PADDLEOCR_RECOGNITION_MODEL", restored.recognitionModel);
     }
   };
 
   const setPaddleField = (key: Exclude<GlobalSettingKey, "PADDLEOCR_PRESET">, value: string) => {
     if (paddlePreset === "custom") {
+      const modelKey = key === "PADDLEOCR_DETECTION_MODEL"
+        ? "detectionModel"
+        : key === "PADDLEOCR_RECOGNITION_MODEL"
+          ? "recognitionModel"
+          : null;
+      if (modelKey) {
+        const version = paddleModelVersionFromValues(values);
+        paddleModelDraftsRef.current[version] = {
+          ...(paddleModelDraftsRef.current[version] || paddleModelDraftFromValues(values)),
+          [modelKey]: value,
+        };
+      }
       setValue(key, value);
       return;
     }
@@ -360,13 +412,51 @@ function OcrStatusPanel({
 
   return <Surface className={`${styles.panel} ${styles.ocrPanel}`} aria-labelledby="local-ocr-title">
     <div className={styles.sectionHeader}>
-      <div>
+      <div className={styles.ocrHeaderCopy}>
         <p className={styles.kicker}>执行路由</p>
-        <h2 className={styles.sectionTitle} id="local-ocr-title">本地 OCR</h2>
+        <div className={styles.ocrHeaderLine}>
+          <h2 className={styles.sectionTitle} id="local-ocr-title">本地 OCR</h2>
+          <Button
+            className={styles.ocrInstallButton}
+            size="sm"
+            variant="secondary"
+            loading={paddleInstallState === "installing"}
+            onClick={installPaddleOcr}
+            startIcon={<Download size={15} />}
+          >
+            {paddleInstallState === "installed" ? "重新安装 PaddleOCR" : "安装 PaddleOCR"}
+          </Button>
+        </div>
       </div>
       <Terminal size={19} aria-hidden="true" />
     </div>
     <Text tone="muted" size="sm">状态来自 Main 进程；这里的参数会写入本机全局配置，不需要再编辑 .env。</Text>
+
+    {paddleInstallState === "installing" && <div className={styles.ocrInstallFeedback} data-tone="accent" role="status" aria-live="polite">
+      <div className={styles.ocrInstallFeedbackHeader}>
+        <div className={styles.ocrInstallFeedbackCopy}>
+          <Text tone="accent" size="sm" weight="bold">正在安装 PaddleOCR</Text>
+          <Text tone="muted" size="xs">{paddleInstallProgress?.message || "正在准备安装环境…"}</Text>
+        </div>
+        <Button size="sm" variant="ghost" onClick={cancelPaddleOcrInstall}>取消安装</Button>
+      </div>
+      <Progress
+        value={paddleInstallProgress?.percent ?? 0}
+        label={`PaddleOCR 安装进度 ${Math.round(paddleInstallProgress?.percent ?? 0)}%`}
+      />
+    </div>}
+    {paddleInstallState === "installed" && <div className={styles.ocrInstallFeedback} data-tone="success" role="status">
+      <Text tone="success" size="sm"><Icon icon={CheckCircle2} size={15} /> PaddleOCR 已安装并验证通过，后续识别可以直接使用。</Text>
+    </div>}
+    {paddleInstallState === "canceled" && <div className={styles.ocrInstallFeedback} data-tone="warning" role="status">
+      <Stack direction="row" justify="between" align="center" gap={3} wrap>
+        <Text tone="warning" size="sm">安装已取消；已创建的运行环境会在下次安装时复用。</Text>
+        <Button size="sm" variant="ghost" onClick={installPaddleOcr}>重试安装</Button>
+      </Stack>
+    </div>}
+    {paddleInstallState === "error" && paddleInstallError && <div className={styles.ocrInstallFeedback} data-tone="danger">
+      <InlineError message={paddleInstallError} onRetry={installPaddleOcr} />
+    </div>}
 
     <div className={styles.ocrDecision} aria-live="polite">
       <div>
@@ -414,7 +504,7 @@ function OcrStatusPanel({
             <Field label="最低置信度" hint="0–1，低于此值的文字块不会作为证据。"><Input type="number" min="0" max="1" step="0.01" value={settingValue(values, "VISIONOCR_MIN_CONFIDENCE", "0.10")} onChange={(event) => setValue("VISIONOCR_MIN_CONFIDENCE", event.target.value)} /></Field>
             <Field label="每个视图最多文字块" hint="0 表示不限制。"><Input type="number" min="0" max="10000" step="1" value={settingValue(values, "VISIONOCR_MAX_BLOCKS_PER_VIEW", "0")} onChange={(event) => setValue("VISIONOCR_MAX_BLOCKS_PER_VIEW", event.target.value)} /></Field>
             <Field label="超时" hint="auto 按视图数量计算，也可填 10000–1800000 毫秒。"><Input value={settingValue(values, "VISIONOCR_TIMEOUT_MS", "auto")} onChange={(event) => setValue("VISIONOCR_TIMEOUT_MS", event.target.value)} /></Field>
-            <Field label="Vision bridge 路径" hint="留空则自动编译或查找。"><Input value={settingValue(values, "VISIONOCR_BINARY")} onChange={(event) => setValue("VISIONOCR_BINARY", event.target.value)} placeholder="自动" spellCheck={false} /></Field>
+            <Field label="Vision bridge 路径" hint="留空则优先使用打包内置 bridge；开发环境会自动编译。"><Input value={settingValue(values, "VISIONOCR_BINARY")} onChange={(event) => setValue("VISIONOCR_BINARY", event.target.value)} placeholder="自动" spellCheck={false} /></Field>
           </div>
           <Stack direction="row" justify="end" gap={2} wrap>
             <Button size="sm" variant="secondary" loading={globalSaveState === "saving"} onClick={() => void saveGlobalSettings()} startIcon={<Save size={15} />}>保存 Vision 参数</Button>
@@ -453,7 +543,7 @@ function OcrStatusPanel({
             <Field label="启用模式" hint="自动会在检测到 Python 环境时启用。开启后将优先使用 PaddleOCR。"><Select value={settingValue(values, "PADDLEOCR_ENABLED", "auto")} onChange={(event) => setOcrEngineMode("paddleocr", event.target.value)}><option value="auto">自动</option><option value="true">开启</option><option value="false">关闭</option></Select></Field>
             <Field label="必需模式" hint="开启后 PaddleOCR 不可用会阻止识别。"><Select value={settingValue(values, "PADDLEOCR_REQUIRED", "false")} onChange={(event) => setValue("PADDLEOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
             <Field label="参数预设" hint="命名预设会同时切换 PP-OCRv6 模型、批量、检测边长和输出过滤；自定义保留手动参数。"><Select value={paddlePreset} onChange={(event) => setPaddlePreset(event.target.value as PaddlePreset)}><option value="custom">自定义</option><option value="performance">性能（质量优先）</option><option value="balanced">平衡（推荐）</option><option value="fast">快速（低延迟）</option></Select></Field>
-            <Field label="模型版本" hint="切换版本会清理另一版本的检测/识别模型覆盖，批量和过滤参数保持不变。"><Select value={paddleEffective.modelVersion} onChange={(event) => setPaddleModelVersion(event.target.value as PaddleModelVersion)} disabled={paddlePreset !== "custom"}>{PADDLE_MODEL_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
+            <Field label="模型版本" hint="切换版本会隔离检测/识别模型覆盖；切回时恢复本次未保存的版本草稿。"><Select value={paddleEffective.modelVersion} onChange={(event) => setPaddleModelVersion(event.target.value as PaddleModelVersion)} disabled={paddlePreset !== "custom"}>{PADDLE_MODEL_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
             <Field label="兼容性能档" hint="仅自定义模式使用；用于兼容已有 PP-OCRv5 配置。"><Select value={paddleEffective.profile || "balanced"} onChange={(event) => setPaddleField("PADDLEOCR_PROFILE", event.target.value)} disabled={paddlePreset !== "custom"}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>
             <Field label="识别语言"><Input value={settingValue(values, "PADDLEOCR_LANGUAGE", "ch")} onChange={(event) => setValue("PADDLEOCR_LANGUAGE", event.target.value)} /></Field>
             <Field label="计算设备"><Input value={settingValue(values, "PADDLEOCR_DEVICE", "cpu")} onChange={(event) => setValue("PADDLEOCR_DEVICE", event.target.value)} /></Field>
@@ -478,7 +568,7 @@ function OcrStatusPanel({
             <Field label="每个视图最多文字块" hint="0 表示不限制；限制时仍均匀覆盖整页。"><Input type="number" min="0" max="10000" step="1" value={paddleEffective.maxBlocksPerView} onChange={(event) => setPaddleField("PADDLEOCR_MAX_BLOCKS_PER_VIEW", event.target.value)} disabled={paddlePreset !== "custom"} /></Field>
             <Field label="检测最长边" hint="320–4096；越小通常越快，但小字细节可能减少。"><Input type="number" min="320" max="4096" step="1" value={paddleEffective.textDetLimitSideLen} onChange={(event) => setPaddleField("PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN", event.target.value)} placeholder="Paddle 默认" disabled={paddlePreset !== "custom"} /></Field>
             <Field label="OCR 超时" hint="auto 按视图数量计算，也可填 10000–3600000 毫秒。"><Input value={settingValue(values, "PADDLEOCR_TIMEOUT_MS", "auto")} onChange={(event) => setValue("PADDLEOCR_TIMEOUT_MS", event.target.value)} /></Field>
-            <Field label="Python 环境路径" hint="例如 .venv-paddleocr/bin/python；Vision OCR 不需要填写。"><Input value={settingValue(values, "PADDLEOCR_PYTHON")} onChange={(event) => setValue("PADDLEOCR_PYTHON", event.target.value)} placeholder="python3 或绝对路径" spellCheck={false} /></Field>
+            <Field label="Python 环境路径" hint="开发环境可填 .venv-paddleocr/bin/python；打包版请填写已安装 PaddleOCR 的 Python 路径。"><Input value={settingValue(values, "PADDLEOCR_PYTHON")} onChange={(event) => setValue("PADDLEOCR_PYTHON", event.target.value)} placeholder="python3 或绝对路径" spellCheck={false} /></Field>
           </div>
           {paddlePreset === "fast" && <Text tone="warning" size="sm">快速预设使用 tiny 模型和更高置信度门槛；复杂手写、低置信度文字可能减少。</Text>}
           <Stack direction="row" justify="between" align="center" wrap>
@@ -525,6 +615,9 @@ export function GlobalSettingsPage() {
   const [visionCheckState, setVisionCheckState] = useState<"idle" | "checking" | "checked">("idle");
   const [keyState, setKeyState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [ocrState, setOcrState] = useState<"idle" | "checking" | "saving" | "saved">("idle");
+  const [paddleInstallState, setPaddleInstallState] = useState<PaddleOcrInstallState>("idle");
+  const [paddleInstallProgress, setPaddleInstallProgress] = useState<PaddleOcrInstallProgress | null>(null);
+  const [paddleInstallError, setPaddleInstallError] = useState<string | null>(null);
   const [jsonSchemaState, setJsonSchemaState] = useState<"idle" | "checking">("idle");
   const [jsonSchemaResult, setJsonSchemaResult] = useState<JsonSchemaCapabilityResult | null>(null);
   const [jsonSchemaError, setJsonSchemaError] = useState<string | null>(null);
@@ -561,6 +654,28 @@ export function GlobalSettingsPage() {
     })();
     return () => { active = false; };
   }, [setOcr]);
+
+  useEffect(() => {
+    let active = true;
+    try {
+      const api = requireGlobalSettingsApi();
+      if (typeof api.settings?.onPaddleOcrInstallProgress !== "function") return undefined;
+      const unsubscribe = api.settings.onPaddleOcrInstallProgress((progress) => {
+        if (!active) return;
+        setPaddleInstallState("installing");
+        setPaddleInstallError(null);
+        setPaddleInstallProgress(progress);
+      });
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    } catch {
+      // The settings page remains usable when HMR leaves an older Preload in
+      // the window; the install action will show its own recovery error.
+      return () => { active = false; };
+    }
+  }, []);
 
   const provider = config?.providers.find((item) => item.id === providerId);
   const providerBaseUrlKey = provider ? PROVIDER_BASE_URL_KEYS[provider.id] : undefined;
@@ -671,6 +786,58 @@ export function GlobalSettingsPage() {
     }
   };
 
+  const installPaddleOcr = async () => {
+    if (paddleInstallState === "installing") return;
+    setPaddleInstallState("installing");
+    setPaddleInstallProgress({ stage: "detect-python", percent: 0, message: "正在准备 PaddleOCR 安装…" });
+    setPaddleInstallError(null);
+    try {
+      const api = requireGlobalSettingsApi();
+      if (typeof api.settings?.installPaddleOcr !== "function") {
+        throw new Error("当前 Renderer 与 Preload 版本不一致，无法安装 PaddleOCR。请完全退出 SlateSync 后重新启动；不要只刷新窗口。");
+      }
+      const installed = await unwrap(await api.settings.installPaddleOcr());
+      setOcr(installed);
+      // A one-click install intentionally owns this path: leaving an old
+      // manual path dirty would make the successful installation unreachable.
+      setGlobalValues((previous) => ({ ...previous, PADDLEOCR_PYTHON: installed.pythonPath }));
+      setGlobalSettings((previous) => previous ? {
+        ...previous,
+        values: { ...previous.values, PADDLEOCR_PYTHON: installed.pythonPath },
+        overrides: previous.overrides.includes("PADDLEOCR_PYTHON")
+          ? previous.overrides
+          : [...previous.overrides, "PADDLEOCR_PYTHON"],
+      } : previous);
+      setDirtyGlobalKeys((previous) => {
+        const next = new Set(previous);
+        next.delete("PADDLEOCR_PYTHON");
+        return next;
+      });
+      setConfig(await unwrap(await api.app.getConfig()));
+      setPaddleInstallProgress({ stage: "completed", percent: 100, message: "PaddleOCR 已安装并验证通过。" });
+      setPaddleInstallState("installed");
+      setToast({ tone: "success", message: "PaddleOCR 已安装并验证通过" });
+    } catch (error) {
+      const appError = appErrorFromUnknown(error);
+      setPaddleInstallError(appError.message);
+      setPaddleInstallState(appError.code === "PADDLEOCR_INSTALL_CANCELED" ? "canceled" : "error");
+    }
+  };
+
+  const cancelPaddleOcrInstall = async () => {
+    if (paddleInstallState !== "installing") return;
+    try {
+      const api = requireGlobalSettingsApi();
+      if (typeof api.settings?.cancelPaddleOcrInstall !== "function") {
+        throw new Error("当前 Renderer 与 Preload 版本不一致，无法取消 PaddleOCR 安装。请完全退出 SlateSync 后重新启动；不要只刷新窗口。");
+      }
+      await unwrap(await api.settings.cancelPaddleOcrInstall());
+    } catch (error) {
+      setPaddleInstallError(appErrorFromUnknown(error).message);
+      setPaddleInstallState("error");
+    }
+  };
+
   // The capability probe stays in Main so endpoint details, API keys and
   // project images never enter a Renderer request body.
   const checkCompatibleJsonSchema = async () => {
@@ -766,7 +933,7 @@ export function GlobalSettingsPage() {
         </div>
       </Surface>
 
-      <OcrStatusPanel config={config} ocr={ocr} values={globalValues} setValue={setValue} paddleCheck={paddleCheck} ocrState={ocrState} checkAndSaveOcr={checkAndSaveOcr} visionCheck={visionCheck} visionCheckState={visionCheckState} checkVision={checkVision} saveGlobalSettings={() => saveGlobalSettings()} globalSaveState={globalSaveState} />
+      <OcrStatusPanel config={config} ocr={ocr} values={globalValues} savedValues={globalSettings?.values || null} setValue={setValue} paddleCheck={paddleCheck} ocrState={ocrState} checkAndSaveOcr={checkAndSaveOcr} visionCheck={visionCheck} visionCheckState={visionCheckState} checkVision={checkVision} saveGlobalSettings={() => saveGlobalSettings()} globalSaveState={globalSaveState} paddleInstallState={paddleInstallState} paddleInstallProgress={paddleInstallProgress} paddleInstallError={paddleInstallError} installPaddleOcr={() => void installPaddleOcr()} cancelPaddleOcrInstall={() => void cancelPaddleOcrInstall()} />
     </div>
   </div>;
 }

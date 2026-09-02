@@ -60,6 +60,15 @@ export function exportProjectLibraryApi() {
   return call((api) => api.projects.exportLibrary());
 }
 
+// Legacy Renderer 通过同一 bridge 调用项目包导入/导出，保持与 Modern 的 API 语义一致。
+export function importProjectApi() {
+  return call((api) => api.projects.importProject());
+}
+
+export function exportProjectApi(id) {
+  return call((api) => api.projects.exportProject({ id }));
+}
+
 export function changeLibraryLocationApi() {
   return call((api) => api.projects.changeLibraryLocation());
 }
@@ -208,6 +217,37 @@ export function saveOcrSettingsApi(settings) {
 
 export function checkOcrApi(pythonPath) {
   return call((api) => api.settings.checkOcr({ pythonPath }));
+}
+
+export function installPaddleOcrApi() {
+  return callGlobalSettings((api) => {
+    if (typeof api.settings?.installPaddleOcr !== "function") {
+      throw new Error("当前 Renderer 与 Preload 版本不一致，无法安装 PaddleOCR。请完全退出 SlateSync 后重新启动；不要只刷新窗口。");
+    }
+    return api.settings.installPaddleOcr();
+  });
+}
+
+export function cancelPaddleOcrInstallApi() {
+  return callGlobalSettings((api) => {
+    if (typeof api.settings?.cancelPaddleOcrInstall !== "function") {
+      throw new Error("当前 Renderer 与 Preload 版本不一致，无法取消 PaddleOCR 安装。请完全退出 SlateSync 后重新启动；不要只刷新窗口。");
+    }
+    return api.settings.cancelPaddleOcrInstall();
+  });
+}
+
+export function onPaddleOcrInstallProgressApi(listener) {
+  try {
+    const api = electronApi();
+    return typeof api.settings?.onPaddleOcrInstallProgress === "function"
+      ? api.settings.onPaddleOcrInstallProgress(listener)
+      : () => {};
+  } catch {
+    // A stale Legacy preload can still render the settings page; absence of
+    // progress events must not turn the install button into a dead control.
+    return () => {};
+  }
 }
 
 // Keep the legacy adapter able to exercise the same typed capability probe as

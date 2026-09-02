@@ -64,6 +64,7 @@ export function registerIpcHandlers(ipcMain, context) {
     runtimeGlobalConfig = {},
     runtimeCustomProviders = [],
     refreshRuntimeSettings,
+    paddleOcrInstaller,
     libraryActions,
     logger,
     openLogDirectory,
@@ -292,6 +293,20 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("export-project-library", async () => {
     if (!libraryActions?.exportLibrary) throw new Error("项目库导出不可用");
     return withLibraryTransfer(() => libraryActions.exportLibrary());
+  });
+
+  ipcMain.handle("import-project", async () => {
+    if (!libraryActions?.importProject) throw new Error("项目导入不可用");
+    // 单项目导入会写入当前 Library 索引，因此与整体项目库传输共享独占锁。
+    const result = await withLibraryTransfer(() => libraryActions.importProject());
+    return sanitizeProjectTransfer(result);
+  });
+
+  ipcMain.handle("export-project", async (_event, body = {}) => {
+    if (!libraryActions?.exportProject) throw new Error("项目导出不可用");
+    // 导出虽然不改索引，也必须与写入/识别互斥，避免复制到半完成快照。
+    const result = await withLibraryTransfer(() => libraryActions.exportProject(body?.id));
+    return sanitizeProjectTransfer(result);
   });
 
   ipcMain.handle("change-library-location", async () => {
@@ -951,6 +966,46 @@ export function registerIpcHandlers(ipcMain, context) {
     });
   });
 
+  async function persistOcrSettings(pythonPath, verification = null) {
+    if (!settingsStore) throw new Error("设置存储不可用");
+    const normalizedPythonPath = String(pythonPath || "").trim();
+    if (!normalizedPythonPath) throw new Error("请先填写 PaddleOCR Python 环境路径。");
+
+    // Installation performs its own check, but the verification is passed only
+    // from the Main-owned installer. Manual saves still run the regular check
+    // immediately before anything is written to memory or disk.
+    const checkResult = verification || await checkOcr({
+      pythonPath: normalizedPythonPath,
+      env: effectiveRuntimeEnv(),
+    });
+    if (!checkResult?.ok) {
+      throw new Error(
+        checkResult?.error?.message || "PaddleOCR 检测失败，未保存设置。",
+      );
+    }
+
+    const nextSettings = {
+      ...runtimeSettings,
+      ocrPythonPath: normalizedPythonPath,
+      ocrSetupCompleted: true,
+      ocrSetupSkipped: false,
+    };
+    const savedSettings = await settingsStore.save(nextSettings);
+    Object.assign(runtimeSettings, savedSettings || nextSettings);
+    if (globalConfigStore) {
+      const nextGlobalConfig = { ...runtimeGlobalConfig, PADDLEOCR_PYTHON: normalizedPythonPath };
+      const savedGlobalConfig = await globalConfigStore.save(nextGlobalConfig);
+      for (const key of Object.keys(runtimeGlobalConfig)) delete runtimeGlobalConfig[key];
+      Object.assign(runtimeGlobalConfig, savedGlobalConfig?.values || nextGlobalConfig);
+    }
+    refreshRuntimeSettings?.();
+    return {
+      pythonPath: runtimeSettings.ocrPythonPath,
+      setupCompleted: runtimeSettings.ocrSetupCompleted,
+      setupSkipped: runtimeSettings.ocrSetupSkipped,
+    };
+  }
+
   ipcMain.handle("get-ocr-settings", async () => {
     const envPythonPath = effectiveRuntimeEnv().PADDLEOCR_PYTHON;
     return {
@@ -978,21 +1033,7 @@ export function registerIpcHandlers(ipcMain, context) {
 
       // Validate before changing memory or disk, so a failed check cannot make
       // an unusable interpreter look like a completed OCR setup.
-      const checkResult = await checkOcr({
-        pythonPath,
-        env: effectiveRuntimeEnv(),
-      });
-      if (!checkResult?.ok) {
-        throw new Error(
-          checkResult?.error?.message || "PaddleOCR 检测失败，未保存设置。",
-        );
-      }
-      nextSettings = {
-        ...runtimeSettings,
-        ocrPythonPath: pythonPath,
-        ocrSetupCompleted: true,
-        ocrSetupSkipped: false,
-      };
+      return persistOcrSettings(pythonPath);
     }
     const savedSettings = await settingsStore.save(nextSettings);
     Object.assign(runtimeSettings, savedSettings || nextSettings);
@@ -1010,6 +1051,34 @@ export function registerIpcHandlers(ipcMain, context) {
       setupCompleted: runtimeSettings.ocrSetupCompleted,
       setupSkipped: runtimeSettings.ocrSetupSkipped,
     };
+  });
+
+  ipcMain.handle("install-paddleocr", async (event) => {
+    if (!paddleOcrInstaller?.install) {
+      throw new Error("PaddleOCR 一键安装不可用，请完全退出 SlateSync 后重试。");
+    }
+    const result = await paddleOcrInstaller.install({
+      env: effectiveRuntimeEnv(),
+      onProgress: (progress) => {
+        if (typeof event?.sender?.send !== "function" || event.sender.isDestroyed?.()) return;
+        try {
+          event.sender.send("paddleocr-install-progress", progress);
+        } catch {
+          // Progress is advisory; a closed Renderer must not fail installation.
+        }
+      },
+    });
+    const saved = await persistOcrSettings(result.pythonPath, {
+      ok: true,
+      paddleVersion: result.paddleVersion,
+      paddleOcrVersion: result.paddleOcrVersion,
+    });
+    return { ...saved, ...result };
+  });
+
+  ipcMain.handle("cancel-paddleocr-install", async () => {
+    if (typeof paddleOcrInstaller?.cancel !== "function") return { canceled: false };
+    return paddleOcrInstaller.cancel();
   });
 
   ipcMain.handle("check-ocr", async (_event, body) =>
@@ -1136,9 +1205,13 @@ export function registerIpcHandlers(ipcMain, context) {
   }
 
   async function withLibraryTransfer(operation) {
+    // 项目包和整体项目库共用一把锁，防止数据库备份与项目写入交错。
     assertLibraryWritable();
-    if (activeLibraryWrites || activeProjectWrites.size || archivingProjects.size || deletingProjects.size) {
-      const error = new Error("项目库仍有任务正在写入，完成后才能继续");
+    if (activeLibraryWrites || activeProjectWrites.size || activeRecognitions.size || archivingProjects.size || deletingProjects.size) {
+      // 识别可能还在等待并发额度，仍属于项目库传输期间不可打断的活动。
+      const error = new Error(activeRecognitions.size
+        ? "项目库仍有识别任务正在运行，完成后才能继续"
+        : "项目库仍有任务正在写入，完成后才能继续");
       error.code = "LIBRARY_BUSY";
       throw error;
     }
@@ -1226,6 +1299,14 @@ function recognitionInput(body, workflowConfig, projectSettings) {
 
 function sanitizeProjects(projects) {
   return projects.map(sanitizeProject);
+}
+
+function sanitizeProjectTransfer(result) {
+  if (!result || result.canceled) return result;
+  return {
+    ...result,
+    project: sanitizeProject(result.project),
+  };
 }
 
 function sanitizeProject(project) {

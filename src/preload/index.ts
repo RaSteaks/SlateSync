@@ -11,9 +11,13 @@ import type {
   LogsReadRequest,
   ModelsRequest,
   OcrCheckRequest,
+  PaddleOcrInstallProgress,
+  PaddleOcrInstallResult,
   VisionOcrCheckResult,
   OcrSettingsRequest,
   ProjectIdRequest,
+  ProjectExportResult,
+  ProjectImportResult,
   ProjectRequest,
   ProjectScopedRequest,
   ProjectTaskIdRequest,
@@ -38,6 +42,7 @@ export const PRELOAD_BUILD_TARGET = "preload" as const;
 
 type ProgressListener = (event: ProgressData) => void;
 type ModelProbeProgressListener = (event: ModelProbeProgress) => void;
+type PaddleOcrInstallProgressListener = (event: PaddleOcrInstallProgress) => void;
 
 interface PreloadTransport {
   invoke(channel: string): Promise<unknown>;
@@ -97,6 +102,16 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       transport.removeListener("model-probe-progress", wrapped);
     };
   };
+  const onPaddleOcrInstallProgress = (listener: PaddleOcrInstallProgressListener): (() => void) => {
+    const wrapped = (_event: unknown, payload: PaddleOcrInstallProgress) => listener(payload);
+    let active = true;
+    transport.on("paddleocr-install-progress", wrapped);
+    return () => {
+      if (!active) return;
+      active = false;
+      transport.removeListener("paddleocr-install-progress", wrapped);
+    };
+  };
 
   return {
     app: {
@@ -107,6 +122,9 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       getLibraryInfo: () => request("get-library-info"),
       importLibrary: () => request("import-project-library"),
       exportLibrary: () => request("export-project-library"),
+      // 项目包操作保持 typed gateway 边界，Renderer 不直接接触 Electron IPC。
+      importProject: () => request<ProjectImportResult>("import-project"),
+      exportProject: (body: ProjectIdRequest) => request<ProjectExportResult>("export-project", body),
       changeLibraryLocation: () => request("change-library-location"),
       renameLibrary: (body: LibraryRenameRequest) => request("rename-library", body),
       create: (body: ProjectRequest) => request("create-project", body),
@@ -146,6 +164,9 @@ export function createSlateSyncApi(transport: PreloadTransport): SlateSyncApi {
       getOcrSettings: () => request("get-ocr-settings"),
       saveOcrSettings: (body: OcrSettingsRequest) => request("save-ocr-settings", body),
       checkOcr: (body: OcrCheckRequest) => request("check-ocr", body),
+      installPaddleOcr: () => request<PaddleOcrInstallResult>("install-paddleocr"),
+      cancelPaddleOcrInstall: () => request<{ canceled: boolean }>("cancel-paddleocr-install"),
+      onPaddleOcrInstallProgress,
       checkVisionOcr: () => request<VisionOcrCheckResult>("check-vision-ocr"),
       checkCompatibleJsonSchema: () => request("check-compatible-json-schema"),
       listCustomProviders: () => request<CustomProviderSummary[]>("list-custom-providers"),

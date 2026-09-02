@@ -37,8 +37,10 @@ describe("HelpPage", () => {
 
     expect(host.querySelector("h1")?.textContent).toBe("说明");
     expect(host.querySelector('[aria-label="说明目录"]')).not.toBeNull();
-    expect(host.querySelectorAll('[aria-label="说明目录"] a')).toHaveLength(5);
+    expect(host.querySelectorAll('[aria-label="说明目录"] a')).toHaveLength(6);
     expect(host.textContent).toContain("软件使用方法");
+    expect(host.textContent).toContain("项目独立导入与导出");
+    expect(host.textContent).toContain("slatesync-project");
     expect(host.textContent).toContain("大模型如何配置");
     expect(host.textContent).toContain("OCR 如何配置");
     expect(host.textContent).toContain("PaddleOCR 参数具体含义");
@@ -69,6 +71,6 @@ describe("HelpPage", () => {
     const clear = host.querySelector<HTMLButtonElement>('[aria-label="清空搜索"]');
     expect(clear).not.toBeNull();
     act(() => clear?.click());
-    expect(host.querySelectorAll('section[id^="help-"]')).toHaveLength(5);
+    expect(host.querySelectorAll('section[id^="help-"]')).toHaveLength(6);
   });
 });

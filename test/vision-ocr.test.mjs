@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { resolveOcrEngine } from "../lib/ai-client.mjs";
 import { summarizeOcrResult } from "../lib/ocr/paddleocr.mjs";
 import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
@@ -199,6 +202,46 @@ test("Vision config honours explicit enable and disable flags", () => {
     { autoEnable: false },
   );
   assert.equal(required.required, true);
+});
+
+test("Vision config resolves the packaged bridge from the runtime project root", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "slatesync-vision-path-"));
+  const binaryPath = join(projectDir, "bin", "vision-ocr");
+  try {
+    await mkdir(dirname(binaryPath), { recursive: true });
+    await writeFile(binaryPath, "packaged bridge", "utf8");
+    const status = visionOcrPublicConfig(
+      {
+        SLATESYNC_PACKAGED: "true",
+        SLATESYNC_PROJECT_DIR: projectDir,
+        VISIONOCR_ENABLED: "auto",
+      },
+      { autoEnable: true },
+    );
+    assert.equal(status.binaryPath, binaryPath);
+    assert.equal(status.available, true);
+    assert.equal(status.enabled, true);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("packaged Vision config does not claim a missing bridge can be compiled", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "slatesync-vision-missing-"));
+  try {
+    const status = visionOcrPublicConfig(
+      {
+        SLATESYNC_PACKAGED: "true",
+        SLATESYNC_PROJECT_DIR: projectDir,
+        VISIONOCR_ENABLED: "auto",
+      },
+      { autoEnable: true },
+    );
+    assert.equal(status.available, false);
+    assert.equal(status.enabled, false);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
 });
 
 test("optional Vision failure degrades to multimodal-only recognition", async () => {

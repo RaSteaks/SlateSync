@@ -1,4 +1,4 @@
-import { BookOpen, CheckCircle2, CircleHelp, FileImage, FolderKanban, Gauge, KeyRound, Search, Settings2, Terminal, Workflow, X, type LucideIcon } from "lucide-react";
+import { BookOpen, CheckCircle2, CircleHelp, FileImage, FolderKanban, Gauge, KeyRound, PackageOpen, Search, Settings2, Terminal, Workflow, X, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Badge, Field, Icon, IconButton, Input, Surface, Text } from "../../design-system";
 import styles from "../../app/app.module.css";
@@ -60,8 +60,51 @@ const HELP_SECTIONS: readonly HelpSection[] = [
     </>,
   },
   {
+    // 项目包入口位于项目设置，说明与 Modern/Legacy 的按钮文案保持一致。
+    id: "help-project-transfer",
+    kicker: "02 / 项目库",
+    title: "项目独立导入与导出",
+    summary: "项目库可以单独保存一个项目，也可以把目录包导入为新的项目副本。",
+    keywords: "项目独立导入项目导出 slatesync-project 项目包 目录包 同名 新 ID 新项目 归档 默认项目 下载 Downloads 任务 诊断 场记结构 设置 图片 CSV API Key 密钥 日志 OCR",
+    icon: FolderKanban,
+    content: <>
+      <div className={styles.helpStepGrid}>
+        <article className={styles.helpStep}>
+          <div className={styles.helpStepTop}><span className={styles.helpStepNumber}>01</span><Icon icon={PackageOpen} size={19} /></div>
+          <Text as="h3" size="md" weight="bold">导出单个项目</Text>
+          <Text tone="muted" size="sm">打开项目卡片的“项目设置”，在“项目包”区域点击“导出项目”。默认位置是 Downloads，文件名会清理为“项目名.slatesync-project”；选择已有目标时不会覆盖。</Text>
+        </article>
+        <article className={styles.helpStep}>
+          <div className={styles.helpStepTop}><span className={styles.helpStepNumber}>02</span><Icon icon={FolderKanban} size={19} /></div>
+          <Text as="h3" size="md" weight="bold">在项目设置导入</Text>
+          <Text tone="muted" size="sm">在任意项目的“项目设置”中点击“导入项目”，选择一个 `.slatesync-project` 目录包。导入会始终创建新的 `project-*` ID，同名项目也可以并存，不会覆盖原项目。</Text>
+        </article>
+        <article className={styles.helpStep}>
+          <div className={styles.helpStepTop}><span className={styles.helpStepNumber}>03</span><CheckCircle2 size={19} aria-hidden="true" /></div>
+          <Text as="h3" size="md" weight="bold">确认导入结果</Text>
+          <Text tone="muted" size="sm">成功后仍停留在项目库，列表会刷新并显示提示。原项目的活动/归档状态会保留；归档副本继续位于“已归档项目”，不会自动打开。</Text>
+        </article>
+      </div>
+      <div className={styles.helpTableFrame}>
+        <table className={styles.helpTable}>
+          <caption className={styles.srOnly}>SlateSync 项目包内容</caption>
+          <thead><tr><th>包内内容</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>slatesync-project.json</code></td><td>包版本、项目名称/描述、原项目 ID、创建/更新时间和归档时间。</td></tr>
+            <tr><td><code>project.json</code>、<code>project.sqlite</code></td><td>保留现有项目格式、设置和 SQLite 权威数据；导入时会重绑定新的项目 ID 与当前项目库 ID。</td></tr>
+            <tr><td><code>tasks/*.json</code>、<code>diagnostics/*.json</code></td><td>任务、识别结果、诊断证据和兼容快照；项目内保存的图片、CSV 数据随任务一起保留。</td></tr>
+            <tr><td>不包含的内容</td><td>全局配置、API Key、OCR 环境/路径、日志和项目库索引不会进入项目包。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className={styles.helpCallout} data-tone="accent">
+        <strong>操作边界：</strong>项目库正在保存任务、识别或进行其他写入时，导入/导出会提示稍候；工作台会先等待自动保存。原生文件选择器取消不会改变项目或列表状态，项目包 v1 是目录格式，不是 ZIP。
+      </div>
+    </>,
+  },
+  {
     id: "help-model",
-    kicker: "02 / Provider",
+    kicker: "03 / Provider",
     title: "大模型如何配置",
     summary: "密钥属于设备级设置，Provider、模型和识别偏好可以在项目或任务级别选择。",
     keywords: "大模型 Provider API Key 密钥 Base URL OpenAI OpenRouter Token Plan DashScope 阿里云 百炼 兼容模型 模型 ID Chat Completions Responses JSON Schema JSON Object 图片细节 识别模式 精确 快速 场记结构 提示",
@@ -102,7 +145,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-ocr",
-    kicker: "03 / Local OCR",
+    kicker: "04 / Local OCR",
     title: "OCR 如何配置",
     summary: "本地 OCR 只提取文字和坐标作为证据，最终字段仍由视觉模型结合页面图片确认。",
     keywords: "OCR 本地 Apple Vision Vision bridge macOS Swift PaddleOCR Python venv 启用 必需 自动选择 回退 文字块 证据",
@@ -138,7 +181,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-paddle-parameters",
-    kicker: "04 / PaddleOCR",
+    kicker: "05 / PaddleOCR",
     title: "PaddleOCR 参数具体含义",
     summary: "预设控制主要速度参数；自定义模式保留现有 v5/v6 配置，适合逐项调优。",
     keywords: "PaddleOCR PP-OCRv5 PP-OCRv6 模型版本 参数预设 性能 平衡 快速 自定义 medium small tiny detection recognition batch 批量 置信度 检测边长 文字块上限 profile device language timeout Python cache",
@@ -180,7 +223,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-runtime",
-    kicker: "05 / 调优",
+    kicker: "06 / 调优",
     title: "速度、运行参数与排查",
     summary: "冷启动慢通常来自模型下载和初始化；热启动会复用缓存与后台 Worker。",
     keywords: "速度 性能 冷启动 热启动 预加载 Worker 缓存 请求体 超时 重试 并行 页面 并行识别任务 排查 日志 失败",

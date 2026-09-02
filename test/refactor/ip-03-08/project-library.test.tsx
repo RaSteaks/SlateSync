@@ -62,7 +62,11 @@ describe("project library cards", () => {
     const openButton = host.querySelector<HTMLButtonElement>('button[aria-label="打开项目 整卡交互测试"]');
     const settingsButton = host.querySelector<HTMLButtonElement>('button[aria-label="项目设置"]');
     const archiveButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("归档"));
+    const importButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("导入项目"));
+    const exportButton = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("导出项目"));
     expect(openButton).not.toBeNull();
+    expect(importButton).toBeUndefined();
+    expect(exportButton).toBeUndefined();
     expect(openButton?.contains(host.querySelector("h3"))).toBe(false);
     expect(host.textContent).toContain("在线项目");
     expect(host.textContent).toContain("项目列表");

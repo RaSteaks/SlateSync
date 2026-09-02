@@ -820,3 +820,146 @@ Worker 边界、验收证据和最终治理交接。
   23 个文件、97/97）、`npm run build:modern`、baseline 打包契约和 `git diff --check`
   均通过；宿主目标选择、Windows x64 固定和跨平台参数拒绝均有回归覆盖，未启动
   Electron 前台窗口，也未访问本地 `data/`。
+
+## 2026-08-31 项目独立导出与项目库导入
+
+- 项目包采用固定的 `.slatesync-project` 目录格式，包含
+  `slatesync-project.json`、原格式 `project.json`、在线备份生成的 `project.sqlite`、
+  `tasks/*.json` 和 `diagnostics/*.json`；v1 不生成 ZIP，不提升现有项目格式版本。
+- `slatesync-project.json` 记录包版本、项目名称/描述、原项目 ID、创建/更新时间和
+  `archivedAt`。导出允许活动、归档和默认项目；默认保存路径为 Downloads 下清理后的
+  `<项目名>.slatesync-project`，目标已存在、同路径、嵌套路径或符号链接均拒绝。
+- `lib/project-library-transfer.mjs` 负责包根目录、未来版本、JSON 快照、SQLite 完整性、
+  所有权字段和符号链接校验，使用临时目录 + SQLite online backup + 原子重命名。在线备份
+  副本切换为 DELETE journal，避免开放源连接产生的 WAL/SHM 临时文件进入固定包结构；导入
+  在临时副本中重绑定新 `project-*` ID、当前 `libraryId`、项目元数据、任务/诊断数据库行和
+  快照，保留设置、场记结构、时间戳、诊断与归档状态。
+- 导入始终插入新项目库索引行，允许同名项目，不覆盖源数据；全局配置、Provider API Key、
+  OCR 环境/路径、日志和项目库索引不进入包。索引写入失败时清理未登记目录，无法立即删除
+  的目录改为启动时重试的 tombstone。
+- 新增 `import-project` / `export-project` IPC、Shared Contract 的
+  `ProjectImportResult` / `ProjectExportResult`、Preload typed gateway 与 Legacy bridge。
+  两个操作与项目库整体传输共用独占锁，识别、自动保存、创建、归档、删除或其他项目写入
+  期间返回 `LIBRARY_BUSY`。
+- Modern 与 Legacy 项目库页面均提供顶部“导入项目”及活动/归档/默认卡片“导出项目”；
+  成功后留在项目库刷新并 Toast，归档导入副本继续显示在归档区。离开工作台或开始项目库
+  传输前等待 autosave flush；保存失败或识别进行中不会进入文件选择器，取消不改变状态。
+- 更新 `UX-CONTRACT.md`、Modern Help、README 和本方案记录；新增 Node 传输、IPC、Preload/
+  bridge、Modern 项目库回归，并补充 Legacy HTML/脚本静态契约。GUI Electron E2E 仍按既有
+  约定仅在 Owner 明确要求时运行。
+- 最终验证：`npm run typecheck`、`npm run test:modern`（24 个文件、102/102）、
+  `npm run test:node`（305/305）、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook` 与 `git diff --check` 均通过。Storybook 仅报告沙盒无法写入
+  用户级 `/Users/rasteaks/.storybook/settings.json`，静态产物构建成功；未启动 Electron
+  GUI E2E，按既有 Owner 明确要求约定保留为后续验证。
+
+## 2026-09-01 自定义接口注册表 UI 优化
+
+- Modern Renderer 的自定义接口设置改为稳定的“注册列表 + 详情工作区”组合：左侧只负责
+  选择接口，右侧按接口身份、连接能力、检测/探针动作、可用模型、待验证模型和失败项
+  的顺序展示，继续复用 `Surface`、`Button`、`Badge`、`Field`、`EmptyState`、`Progress`
+  和 `Spinner`，不新增业务状态或 IPC 通道。
+- 移除该组件的内联布局样式，所有间距、选中态、键盘焦点态、警告提示、模型分组、搜索
+  和窄窗口堆叠规则集中到 `src/renderer/app/app.module.css`，仅使用现有 `--ss-*` 语义
+  令牌；加载态、无接口态、未选择态和探针进行态均有明确的可读反馈。
+- 详情区新增协议/JSON/图片细节摘要、HTTPS 警告、能力状态 Badge、模型搜索清除动作、
+  分供应商全选以及失败项独立重试；保存表单改为真实 `<form>`，API Key 显示切换补齐
+  accessible label。共享 `EmptyState` 支持 feature-level className，但保留统一图标、标题、
+  描述和 action 语义。
+- 补充自定义接口注册表结构与 `aria-pressed` 状态回归断言；附带的图片仅作为视觉参考，
+  不作为实现指令。Legacy Renderer 保持原有实现，Modern 仍是默认入口。
+- 本轮验证：定向组件测试 2/2、`npm run typecheck`、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook`、premium strict audit（0 findings）和 `git diff --check` 通过。
+  Storybook 仅因沙盒无法写入用户级 `/Users/rasteaks/.storybook/settings.json` 发出提示，
+  静态产物构建成功。`npm run test:modern` 共 24 个文件、98/99 通过；唯一失败为工作区已有
+  的 `legacy-project-library.test.ts` 静态契约仍查找不存在的 `import-project-button`，与本次
+  Modern 自定义接口改动无关。
+
+## 2026-09-01 项目包入口调整
+
+- Modern 与 Legacy 的项目库首页不再直接显示项目包“导入项目”或卡片“导出项目”；卡片仍保留
+  项目设置入口以及活动/归档状态操作。项目包操作统一收纳到当前项目的“项目设置”区域，继续
+  复用现有 Button、Surface、Toast/状态文本和自动保存闸门。
+- 从项目设置导入后刷新项目索引并返回项目库，不自动打开新副本；导出仍可用于活动、归档和
+  默认项目，取消选择不改变状态。Legacy 同步移除项目库头部与卡片导出入口，并加入设置页
+  的项目包状态反馈。
+- 更新 Modern 组件测试、Legacy 静态契约、README、Help 与 UX-CONTRACT；项目包 Main/IPC/
+  Preload 能力和目录格式保持不变。GUI Electron E2E 仍按 Owner 明确要求约定不自动启动。
+- 最终验证：`npm run typecheck`、`npm run test:modern`（24 个文件、102/102）、
+  `npm run test:node`（305/305）、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook`、premium `audit_project.py --mode strict --no-write`（0 findings）
+  与 `git diff --check` 均通过。Storybook 仅报告沙盒无法写入用户级
+  `/Users/rasteaks/.storybook/settings.json`，静态产物构建成功；未启动 Electron GUI E2E，
+  按既有 Owner 明确要求约定保留为后续验证。
+
+## 2026-09-01 DeepSeek Review comments 修复
+
+- Modern/Legacy 的项目库导航和项目加载都加入递增意图令牌；异步 autosave、项目加载或导入
+  完成后，只能提交仍属于当前路由/项目的结果。识别进行中、保存失败和跨路由完成的项目包结果
+  统一写入可见共享提示区，不再把反馈写到隐藏页面。
+- 项目包导入在索引刷新失败时保留 Main 已提交的项目行并提示稍后刷新，避免用户因看不到成功
+  结果而重复导入；Modern/Legacy 的传输按钮、项目设置保存和整体项目库传输均正确释放忙碌态。
+  Modern 项目设置检测未保存表单并阻止项目包操作，要求先保存，避免设置随成功跳转静默丢失。
+- 传输层允许旧版损坏 JSON 快照作为不透明证据继续导出/导入，忽略中断留下的 `.tmp` 文件，
+  同时继续拒绝符号链接和数据库行级损坏；导出只在暂存目录校验后原子提交，不再在提交后校验
+  失败时删除用户目标，并复用已完成的导入校验结果。项目包扩展名比较改为不区分大小写，
+  Windows 保留设备名改为安全前缀。
+- 新增导航、刷新回退、未保存设置、旧快照/.tmp、混合大小写扩展名和 Windows 保留名回归；
+  遵循项目注释约定补充了相关实现注释。最终验证：`npm test`（Node 306/306、Modern
+  104/104）、`npm run typecheck`、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook`、premium strict audit（0 findings）和 `git diff --check` 均通过；
+  Storybook 仍仅报告沙盒无法写入用户级 `/Users/rasteaks/.storybook/settings.json`，未启动
+  Electron GUI E2E。
+
+## 2026-09-01 打包版本地 OCR 引擎路径修复
+
+- Vision OCR 与 PaddleOCR 都改为在实际调用时解析 Main 注入的 `SLATESYNC_PROJECT_DIR`，
+  解决 Electron 静态 import 早于运行时环境初始化导致的路径失效；打包后分别对应
+  `Resources/app/bin/vision-ocr` 与 `Resources/app/scripts/paddleocr_runner.py`。
+- Vision 在打包环境只使用 `extraResources` 中的预编译 bridge，缺失时给出安装/重新打包提示，
+  不会尝试向只读 App bundle 编译；PaddleOCR 仍可通过设置中的外部 Python/虚拟环境启用，
+  不再被误认为只能使用 Vision OCR。OCR 选路、证据格式和 Renderer IPC 协议保持不变。
+- 新增 Vision 打包 bridge 存在/缺失回归测试，以及 PaddleOCR 打包 runner 路径回归测试；
+  增加 `SLATESYNC_PACKAGED` 生命周期标记，并同步更新设置页的 bridge 路径说明。
+
+## 2026-09-01 打包版 PaddleOCR 一键安装
+
+- 打包资源包含 `scripts/paddleocr_runner.py` 与 `requirements-ocr.txt`，不包含 Python
+  解释器、PaddlePaddle 或 PaddleOCR wheel；用户只需准备 Python 3.10+，不需要手动创建
+  虚拟环境。全局设置“本地 OCR”标题旁的安装按钮由 Main 进程完成环境创建、依赖安装和
+  runner 验证，安装结果自动写入 OCR 设置与全局 `PADDLEOCR_PYTHON`。
+- 安装目录固定为 Electron `<userData>/paddleocr-venv`，不写入只读/签名的
+  `Resources/app`。安装器复用运行时资源路径，固定读取打包随附的依赖清单；支持 Python
+  探测、venv 创建、pip 安装、验证、进度事件、取消（SIGTERM 后强制终止）、超时和失败重试。
+- 新增 `install-paddleocr`、`cancel-paddleocr-install` 及 typed progress 事件，Modern 与
+  Legacy 均复用同一 Preload gateway。安装未验证成功前不持久化路径，避免半成品环境把 OCR
+  路由标记为可用；两套设置页都保留忙碌、成功、取消和错误重试反馈。
+- 更新 `UX-CONTRACT.md`、README、打包清单和安装器/IPC/bridge/Modern 组件测试；不改变
+  Vision/PaddleOCR 识别算法或 OCR 选路语义。验证需覆盖不下载依赖的安装器状态机、IPC
+  持久化、双 Renderer 入口、类型检查、静态语法和 Modern 构建。
+
+## 2026-09-02 Review comment 修复
+
+- PaddleOCR 安装器与验证器的 Python 子进程只接收显式白名单环境变量；provider API Key
+  等 Main 进程凭据不会再传入 venv、pip 或 `--check` 子进程，必要的 pip index/proxy
+  与运行时路径仍会保留。
+- 安装目录使用 `lstat` 并拒绝符号链接，继续把 venv/pip 写入范围限制在 Electron
+  `userData`；验证阶段同时支持 AbortSignal 和外层取消兜底，取消不会被 120 秒健康检查
+  超时拖住。
+- Legacy 项目设置表单增加未保存脏状态：所有输入/选择和默认值重置都会标记草稿，项目
+  包与项目库传输在保存前被阻止，传输收尾渲染不会覆盖未保存的 DOM 值；成功保存后才
+  清除标记。
+- 为环境隔离、符号链接边界、验证取消和 Legacy 脏表单契约补充回归覆盖；未提交、提交、
+  推送、重置、清理或切换分支。
+
+## 2026-09-02 修复 PaddleOCR 设置草稿与退出生命周期 Review comments
+
+- Legacy 与 Modern 设置页都以 Main 的命名预设生效值渲染，并锁定预设拥有的模型版本、模型
+  ID、批量和过滤参数；切换到自定义时物化当前预设，避免界面显示值与实际 OCR 管道不一致。
+- PP-OCRv5/v6 的检测、识别模型覆盖按版本保存未提交草稿；切换版本时隔离不同代模型，切回
+  时恢复原自定义 ID。两端均覆盖预设切换、版本往返和 Legacy 静态契约回归。
+- PaddleOCR Worker 增加生命周期代数和应用关闭标记。强制关闭会立即终止当前 Python Worker、
+  使排队 preload 失效，并在有限期限内等待队列收敛；Electron `before-quit` 先完成这次清理，
+  `will-quit` 保留幂等兜底，避免退出后重新拉起孤儿进程。
+- 最终验证：`npm test`（Node 316/316、Modern 109/109）、`npm run typecheck`、
+  `npm run check`、`npm run build:modern` 与 `git diff --check` 均通过；未启动 Electron GUI E2E。

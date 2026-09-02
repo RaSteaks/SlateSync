@@ -63,6 +63,8 @@
       </aside>
 
       <div class="app-content">
+      <!-- 项目包结果跨路由保留在共享内容区，避免异步完成时写入隐藏页面。 -->
+      <div id="project-transfer-notice" class="project-transfer-notice" role="status" aria-live="polite" hidden></div>
       <main id="workspace-page" class="page-shell app-page">
       <section class="hero">
         <div class="hero-copy">
@@ -476,7 +478,7 @@
         </div>
         <button id="project-settings-back" class="secondary-button" type="button">返回工作台</button>
       </div>
-      <form id="project-settings-form" class="settings-layout">
+      <form id="project-settings-form" class="settings-layout" novalidate>
         <section class="settings-card">
           <div class="settings-card-heading">
             <div>
@@ -553,6 +555,21 @@
           <button id="project-settings-save" class="primary-button compact" type="submit">保存项目设置</button>
         </div>
       </form>
+      <section class="settings-card project-package-card">
+        <div class="settings-card-heading">
+          <div>
+            <span class="preview-kicker">PROJECT PACKAGE</span>
+            <h2>项目导入与导出</h2>
+          </div>
+          <span class="settings-note">目录包</span>
+        </div>
+        <p class="settings-help">将当前项目保存为目录包，或从目录包创建新的项目副本。导入不会覆盖当前项目。</p>
+        <div class="settings-actions">
+          <span id="project-package-status" class="settings-save-status" aria-live="polite"></span>
+          <button id="project-settings-import-button" class="secondary-button compact" type="button">导入项目</button>
+          <button id="project-settings-export-button" class="secondary-button compact" type="button">导出项目</button>
+        </div>
+      </section>
     </section>
 
     <section id="global-settings-page" class="app-page settings-page" hidden>
@@ -619,9 +636,21 @@
               <span class="preview-kicker">LOCAL OCR</span>
               <h2>本地 OCR</h2>
             </div>
-            <span id="global-ocr-status" class="settings-note">未检测</span>
+            <div class="global-ocr-heading-actions">
+              <span id="global-ocr-status" class="settings-note">未检测</span>
+              <button id="global-paddleocr-install" class="secondary-button compact" type="button">安装 PaddleOCR</button>
+            </div>
           </div>
           <p class="settings-help">PaddleOCR 会在识别前提取文字和坐标，作为模型识别的证据层。</p>
+          <div id="global-paddleocr-install-feedback" class="paddleocr-install-feedback" data-tone="accent" hidden role="status" aria-live="polite">
+            <div class="paddleocr-install-feedback-header">
+              <span id="global-paddleocr-install-status" class="paddleocr-install-feedback-status">正在准备安装环境…</span>
+              <button id="global-paddleocr-install-cancel" class="secondary-button compact" type="button" hidden>取消安装</button>
+            </div>
+            <div class="paddleocr-install-progress" role="progressbar" aria-label="PaddleOCR 安装进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span id="global-paddleocr-install-progress"></span>
+            </div>
+          </div>
           <button id="global-ocr-open" class="secondary-button" type="button">配置本地 OCR</button>
         </section>
       </div>

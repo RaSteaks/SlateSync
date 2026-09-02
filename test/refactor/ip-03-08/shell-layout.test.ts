@@ -142,7 +142,7 @@ describe("application shell layout", () => {
 
     // Help is a shell-level route so users can reach configuration guidance
     // from any project state without coupling the page to project data.
-    expect(source).toContain('title="说明" onClick={() => setRoute("help")}');
+    expect(source).toContain('title="说明" onClick={() => navigateTo("help")}');
     expect(source).toContain('data-active={route === "help"}');
     expect(source).toContain('{route === "help" && <HelpPage />}');
     expect(source).toContain(': route === "help"');

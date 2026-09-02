@@ -4,6 +4,8 @@
   "requestMethods": {
     "cancelRecognition": { "channel": "cancel-recognition", "args": ["projectId"] },
     "deleteProject": { "channel": "delete-project", "args": ["id"] },
+    "importProject": { "channel": "import-project", "args": [] },
+    "exportProject": { "channel": "export-project", "args": ["id"] },
     "renameLibrary": { "channel": "rename-library", "args": ["name"] },
     "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
     "checkVisionOcr": { "channel": "check-vision-ocr", "args": [] },
@@ -11,6 +13,8 @@
     "openLogsDirectory": { "channel": "logs-open-directory", "args": [] },
     "getGlobalSettings": { "channel": "get-global-settings", "args": [] },
     "saveGlobalSettings": { "channel": "save-global-settings", "args": ["request"] },
+    "installPaddleOcr": { "channel": "install-paddleocr", "args": [] },
+    "cancelPaddleOcrInstall": { "channel": "cancel-paddleocr-install", "args": [] },
     "listCustomProviders": { "channel": "list-custom-providers", "args": [] },
     "createCustomProvider": { "channel": "create-custom-provider", "args": ["request"] },
     "updateCustomProvider": { "channel": "update-custom-provider", "args": ["request"] },
@@ -22,6 +26,12 @@
     "modelProbeProgress": {
       "channel": "model-probe-progress",
       "subscribeMethod": "onModelProbeProgress",
+      "unsubscribe": "returned callback",
+      "cleanup": "the typed preload returns an idempotent unsubscribe callback"
+    },
+    "paddleOcrInstallProgress": {
+      "channel": "paddleocr-install-progress",
+      "subscribeMethod": "onPaddleOcrInstallProgress",
       "unsubscribe": "returned callback",
       "cleanup": "the typed preload returns an idempotent unsubscribe callback"
     }

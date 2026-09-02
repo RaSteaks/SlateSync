@@ -47,6 +47,8 @@ import {
   fetchConfig,
   listProjectsApi,
   getLibraryInfoApi,
+  importProjectApi,
+  exportProjectApi,
   importProjectLibraryApi,
   exportProjectLibraryApi,
   changeLibraryLocationApi,
@@ -71,6 +73,9 @@ import {
   saveGlobalSettingsApi,
   saveOcrSettingsApi,
   checkOcrApi,
+  installPaddleOcrApi,
+  cancelPaddleOcrInstallApi,
+  onPaddleOcrInstallProgressApi,
   listCustomProvidersApi,
   createCustomProviderApi,
   updateCustomProviderApi,
@@ -123,9 +128,15 @@ const state = {
   slateCsvRecords: null,
   slateCsvFileName: null,
   ocrSettings: null,
+  paddleOcrInstallState: "idle",
+  paddleOcrInstallProgress: null,
+  paddleOcrInstallError: "",
   globalSettings: null,
   globalSettingsDraft: {},
   globalSettingsDirty: new Set(),
+  // Keep unsaved detector/recognizer overrides separately for each supported
+  // model generation so a round trip between v5 and v6 is reversible.
+  paddleModelDrafts: {},
   globalSettingsLoading: false,
   customProviders: [],
   selectedCustomProviderId: "",
@@ -140,11 +151,19 @@ const state = {
   missingMetadataKeys: new Set(),
   currentProjectId: null,
   currentProject: null,
+  projectSettingsDirty: false,
+  projectSettingsSaving: false,
   projects: [],
   libraryInfo: null,
   route: "projects",
   activeTaskSettings: null,
+  projectTransferBusy: null,
+  libraryActionBusy: false,
 };
+
+// Navigation intents are independent from operation tokens because a route
+// click must also cancel a pending autosave continuation.
+let navigationIntent = 0;
 
 const elements = {
   apiStatus: document.querySelector("#api-status"),
@@ -253,6 +272,7 @@ const elements = {
   archivedProjectCount: document.querySelector("#archived-project-count"),
   projectHomeError: document.querySelector("#project-home-error"),
   libraryActionStatus: document.querySelector("#library-action-status"),
+  projectTransferNotice: document.querySelector("#project-transfer-notice"),
   importLibraryButton: document.querySelector("#import-library-button"),
   exportLibraryButton: document.querySelector("#export-library-button"),
   changeLibraryLocationButton: document.querySelector("#change-library-location-button"),
@@ -275,6 +295,9 @@ const elements = {
   projectHoldComment: document.querySelector("#project-hold-comment"),
   projectSettingsReset: document.querySelector("#project-settings-reset"),
   projectSettingsStatus: document.querySelector("#project-settings-status"),
+  projectPackageStatus: document.querySelector("#project-package-status"),
+  projectSettingsImportButton: document.querySelector("#project-settings-import-button"),
+  projectSettingsExportButton: document.querySelector("#project-settings-export-button"),
   globalProvider: document.querySelector("#global-provider-select"),
   globalApiKeyInput: document.querySelector("#global-api-key-input"),
   globalSaveKeyButton: document.querySelector("#global-save-key-button"),
@@ -286,6 +309,11 @@ const elements = {
   globalSettingsReset: document.querySelector("#global-settings-reset"),
   globalOcrOpen: document.querySelector("#global-ocr-open"),
   globalOcrStatus: document.querySelector("#global-ocr-status"),
+  globalPaddleOcrInstall: document.querySelector("#global-paddleocr-install"),
+  globalPaddleOcrInstallFeedback: document.querySelector("#global-paddleocr-install-feedback"),
+  globalPaddleOcrInstallStatus: document.querySelector("#global-paddleocr-install-status"),
+  globalPaddleOcrInstallProgress: document.querySelector("#global-paddleocr-install-progress"),
+  globalPaddleOcrInstallCancel: document.querySelector("#global-paddleocr-install-cancel"),
   customProviderNew: document.querySelector("#custom-provider-new"),
   customProviderList: document.querySelector("#custom-provider-list"),
   customProviderDetail: document.querySelector("#custom-provider-detail"),
@@ -308,6 +336,7 @@ const legacyModelPickers = new Map();
 const providerCacheVersions = new Map();
 let allowWindowClose = false;
 let unsubscribeModelProbeProgress = () => {};
+let unsubscribePaddleOcrInstallProgress = () => {};
 
 const taskAutosave = createTaskAutosave({
   delayMs: 500,
@@ -333,6 +362,12 @@ async function init() {
       progress: event,
     };
     if (state.selectedCustomProviderId === providerId) renderCustomProviderRegistry();
+  });
+  unsubscribePaddleOcrInstallProgress = onPaddleOcrInstallProgressApi((event) => {
+    state.paddleOcrInstallState = "installing";
+    state.paddleOcrInstallError = "";
+    state.paddleOcrInstallProgress = event;
+    renderPaddleOcrInstall();
   });
   try {
     await loadConfig();
@@ -409,10 +444,19 @@ async function refreshRuntimeConfig() {
   }
 }
 
-function navigate(route) {
+async function navigate(route) {
+  const intent = ++navigationIntent;
+  if (route === "projects" && state.route !== "projects") {
+    // Legacy 没有 React 卸载钩子，隐藏工作台前先 flush，项目包才能拿到最新任务。
+    if (!(await prepareLibraryTransfer({ clearStatus: false }))) return false;
+    // A later route click owns the navigation outcome; the older flush must
+    // not unexpectedly take the user back to the Library.
+    if (intent !== navigationIntent) return false;
+  }
   state.route = route;
   renderRoute();
   if (route === "projects") void refreshLibrary();
+  return true;
 }
 
 async function refreshLibrary() {
@@ -457,11 +501,13 @@ function renderRoute() {
   if (state.route === "global-settings") {
     renderGlobalSettingsForm();
     renderCustomProviderRegistry();
+    renderPaddleOcrInstall();
   }
   updateProjectContextLabel();
 }
 
 async function openProject(projectId, nextRoute = "workspace") {
+  const navigationToken = ++navigationIntent;
   const token = projectOperations.start();
   projectModelOperations.invalidate();
   taskOperations.invalidate();
@@ -471,18 +517,22 @@ async function openProject(projectId, nextRoute = "workspace") {
     showProjectHomeError("识别进行中，完成后才能切换项目。");
     return;
   }
+  if (state.projectSettingsSaving && projectId !== state.currentProjectId) {
+    showProjectHomeError("项目设置正在保存，完成后才能切换项目。");
+    return;
+  }
   try {
     if (projectId !== state.currentProjectId) {
       const saved = await flushPendingTaskSave();
-      if (!projectOperations.isCurrent(token) || !saved) return;
+      if (!projectOperations.isCurrent(token) || navigationToken !== navigationIntent || !saved) return;
     }
     const project = await loadProjectApi(projectId);
-    if (!projectOperations.isCurrent(token)) return;
+    if (!projectOperations.isCurrent(token) || navigationToken !== navigationIntent) return;
     const [scenarioProfiles, taskData] = await Promise.all([
       listScenariosApi(project.id),
       listTasksApi(project.id),
     ]);
-    if (!projectOperations.isCurrent(token)) return;
+    if (!projectOperations.isCurrent(token) || navigationToken !== navigationIntent) return;
     const switched = state.currentProjectId !== project.id;
     if (switched) resetProjectWorkspace();
     state.currentProjectId = project.id;
@@ -496,7 +546,7 @@ async function openProject(projectId, nextRoute = "workspace") {
     state.route = nextRoute;
     renderRoute();
   } catch (error) {
-    if (!projectOperations.isCurrent(token)) return;
+    if (!projectOperations.isCurrent(token) || navigationToken !== navigationIntent) return;
     showProjectHomeError(error.message || "无法打开项目。");
     state.route = "projects";
     renderRoute();
@@ -505,6 +555,9 @@ async function openProject(projectId, nextRoute = "workspace") {
 
 function resetProjectWorkspace() {
   if (state.recognizing) return;
+  // Project settings live in the legacy DOM, so clear their draft marker when
+  // the active project changes instead of carrying edits into another project.
+  state.projectSettingsDirty = false;
   state.currentTaskId = null;
   clearReportFile();
   clearResolveCsv();
@@ -542,12 +595,15 @@ function renderProjectLibrary() {
 }
 
 function projectCard(project) {
+  // 传输锁覆盖整张卡片，避免项目包备份与打开、归档等写入同时发生。
   const archived = Boolean(project.archivedAt);
   const current = project.id === state.currentProjectId;
   const latest = project.latestTaskAt ? formatTaskDate(project.latestTaskAt) : "暂无任务";
+  const transferBusy = Boolean(state.projectTransferBusy);
+  const disabled = transferBusy ? " disabled" : "";
   return `
     <article class="project-card${current ? " is-current" : ""}${archived ? " is-archived" : ""}" data-project-id="${escapeHtml(project.id)}">
-      <button class="project-card-main" type="button" data-project-action="open" data-project-id="${escapeHtml(project.id)}">
+      <button class="project-card-main" type="button" data-project-action="open" data-project-id="${escapeHtml(project.id)}"${disabled}>
         <span class="project-card-mark" aria-hidden="true">${archived ? "□" : "S"}</span>
         <span class="project-card-copy">
           <strong>${escapeHtml(project.name)}</strong>
@@ -556,11 +612,11 @@ function projectCard(project) {
         </span>
       </button>
       <div class="project-card-actions">
-        <button class="icon-button" type="button" title="${archived ? "查看项目设置" : "项目设置"}" aria-label="${archived ? "查看项目设置" : "项目设置"}" data-project-action="settings" data-project-id="${escapeHtml(project.id)}">⚙</button>
+        <button class="icon-button" type="button" title="${archived ? "查看项目设置" : "项目设置"}" aria-label="${archived ? "查看项目设置" : "项目设置"}" data-project-action="settings" data-project-id="${escapeHtml(project.id)}"${disabled}>⚙</button>
         ${archived
-          ? `<button class="secondary-button compact" type="button" data-project-action="restore" data-project-id="${escapeHtml(project.id)}">恢复</button>`
+          ? `<button class="secondary-button compact" type="button" data-project-action="restore" data-project-id="${escapeHtml(project.id)}"${disabled}>恢复</button>`
           : project.canArchive
-            ? `<button class="secondary-button compact" type="button" data-project-action="archive" data-project-id="${escapeHtml(project.id)}">归档</button>`
+            ? `<button class="secondary-button compact" type="button" data-project-action="archive" data-project-id="${escapeHtml(project.id)}"${disabled}>归档</button>`
             : ""}
       </div>
     </article>
@@ -638,9 +694,9 @@ async function createProjectFromDialog(event) {
 }
 
 async function exportCurrentLibrary() {
-  if (!(await prepareLibraryTransfer())) return;
   setLibraryActionBusy(true);
   try {
+    if (!(await prepareLibraryTransfer())) return;
     const result = await exportProjectLibraryApi();
     if (!result?.canceled) {
       showLibraryActionStatus(`项目库已导出到 ${result.library.path}`);
@@ -652,18 +708,99 @@ async function exportCurrentLibrary() {
   }
 }
 
+async function importProject() {
+  if (state.projectTransferBusy) return;
+  // 项目包入口位于项目设置；成功后回到项目库刷新列表，但不自动打开新副本。
+  const startedRoute = state.route;
+  const startedNavigationIntent = navigationIntent;
+  state.projectTransferBusy = "import";
+  renderProjectLibrary();
+  renderProjectPackageActions();
+  setLibraryActionBusy(true);
+  try {
+    if (!(await prepareLibraryTransfer({ statusTarget: "project" }))) return;
+    const result = await importProjectApi();
+    if (result?.canceled) return;
+    const message = `项目已导入：${result.project?.name || "新项目"}`;
+    if (!(await refreshLibrary())) {
+      // The import is committed before the index refresh. Keep the returned
+      // row visible locally so a transient refresh error cannot invite a
+      // second click that creates another project.
+      state.projects = [
+        ...state.projects.filter((item) => item.id !== result.project?.id),
+        result.project,
+      ];
+      hideProjectHomeError();
+      renderProjectLibrary();
+      showProjectPackageStatus(`${message}；列表刷新失败，请稍后刷新项目库。`, true);
+      showProjectTransferNotice(`${message}；列表刷新失败，请稍后刷新项目库。`, "warning");
+    } else {
+      showProjectTransferNotice(message, "success");
+    }
+    if (
+      state.route === startedRoute
+      && navigationIntent === startedNavigationIntent
+      && startedRoute === "project-settings"
+    ) {
+      state.route = "projects";
+      renderRoute();
+    }
+    if (state.route === "projects") showLibraryActionStatus(message);
+  } catch (error) {
+    const message = error.message || "项目导入失败。";
+    showProjectTransferNotice(message, "error");
+    if (state.route === "project-settings") showProjectPackageStatus(message, true);
+    else if (state.route === "projects") showProjectHomeError(message);
+  } finally {
+    setLibraryActionBusy(false);
+    state.projectTransferBusy = null;
+    renderProjectLibrary();
+    renderProjectSettingsForm();
+  }
+}
+
+async function exportProject(projectId) {
+  if (!projectId || state.projectTransferBusy) return;
+  // 导出只读当前项目；取消原生选择器不能改变项目库或项目设置状态。
+  state.projectTransferBusy = projectId;
+  renderProjectLibrary();
+  renderProjectPackageActions();
+  setLibraryActionBusy(true);
+  try {
+    if (!(await prepareLibraryTransfer({ statusTarget: "project" }))) return;
+    const result = await exportProjectApi(projectId);
+    if (result?.canceled) return;
+    const message = `项目已导出到 ${result.path}`;
+    showProjectTransferNotice(message, "success");
+    if (state.route === "project-settings") showProjectPackageStatus(message);
+    else if (state.route === "projects") showLibraryActionStatus(message);
+  } catch (error) {
+    const message = error.message || "项目导出失败。";
+    showProjectTransferNotice(message, "error");
+    if (state.route === "project-settings") showProjectPackageStatus(message, true);
+    else if (state.route === "projects") showProjectHomeError(message);
+  } finally {
+    setLibraryActionBusy(false);
+    state.projectTransferBusy = null;
+    renderProjectLibrary();
+    renderProjectSettingsForm();
+  }
+}
+
 async function importProjectLibrary() {
   if (!confirm("导入后将切换到所选 Project Library，并自动重启 SlateSync。是否继续？")) {
     return;
   }
-  if (!(await prepareLibraryTransfer())) return;
   setLibraryActionBusy(true);
   try {
+    if (!(await prepareLibraryTransfer())) return;
     const result = await importProjectLibraryApi();
-    if (result?.canceled) setLibraryActionBusy(false);
-    else showLibraryActionStatus("正在切换项目库并重启…");
+    if (!result?.canceled) showLibraryActionStatus("正在切换项目库并重启…");
   } catch (error) {
     showProjectHomeError(error.message || "项目库导入失败。");
+  } finally {
+    // The app may restart after success; otherwise every early return must
+    // release the form lock when recognition or autosave blocks the action.
     setLibraryActionBusy(false);
   }
 }
@@ -672,39 +809,101 @@ async function changeLibraryLocation() {
   if (!confirm("当前 Project Library 将复制到新位置，原位置会保留。切换后 SlateSync 将自动重启。是否继续？")) {
     return;
   }
-  if (!(await prepareLibraryTransfer())) return;
   setLibraryActionBusy(true);
   try {
+    if (!(await prepareLibraryTransfer())) return;
     const result = await changeLibraryLocationApi();
-    if (result?.canceled) setLibraryActionBusy(false);
-    else showLibraryActionStatus("正在切换存储位置并重启…");
+    if (!result?.canceled) showLibraryActionStatus("正在切换存储位置并重启…");
   } catch (error) {
     showProjectHomeError(error.message || "项目库存储位置修改失败。");
+  } finally {
+    // Keep the legacy form usable after a canceled picker or blocked flush.
     setLibraryActionBusy(false);
   }
 }
 
-async function prepareLibraryTransfer() {
-  hideProjectHomeError();
-  showLibraryActionStatus("");
+async function prepareLibraryTransfer({ clearStatus = true, statusTarget = "library" } = {}) {
+  clearProjectTransferNotice();
+  if (statusTarget === "library") {
+    hideProjectHomeError();
+    if (clearStatus) showLibraryActionStatus("");
+  } else if (clearStatus) {
+    showProjectPackageStatus("");
+  }
   if (state.recognizing) {
-    showProjectHomeError("识别进行中，完成后才能操作项目库。");
+    const message = "识别进行中，完成后才能操作项目库。";
+    // The current route may still be the workspace, so a project-home error
+    // would be hidden. Keep the refusal visible in a shared status region.
+    showProjectTransferNotice(message, "warning");
+    if (statusTarget === "project") showProjectPackageStatus(message, true);
+    else showProjectHomeError(message);
     return false;
   }
-  // Library copies must include the newest manual edits. The autosave flush
-  // also keeps a failed local edit visible instead of silently switching away.
-  return flushPendingTaskSave();
+  if (state.projectSettingsSaving) {
+    const message = "项目设置正在保存，完成后才能操作项目库。";
+    // Do not let a route change race the settings response and repaint another
+    // project with the row returned by the previous save request.
+    showProjectTransferNotice(message, "warning");
+    if (statusTarget === "project") showProjectPackageStatus(message, true);
+    else showLibraryActionStatus(message);
+    return false;
+  }
+  if (state.projectSettingsDirty) {
+    const message = "项目设置有未保存的修改，请先保存后再传输项目包或项目库。";
+    // Main exports the persisted project row; blocking here prevents a stale
+    // row from silently omitting values that are still only in the form DOM.
+    showProjectTransferNotice(message, "warning");
+    if (statusTarget === "project") showProjectPackageStatus(message, true);
+    else showLibraryActionStatus(message);
+    return false;
+  }
+  // 项目库复制必须包含最新手工编辑；保存失败时保留当前页面并提示用户重试。
+  const saved = await flushPendingTaskSave();
+  if (!saved) {
+    const message = "当前任务保存失败，请重试保存后再操作项目库。";
+    showProjectTransferNotice(message, "error");
+    if (statusTarget === "project") showProjectPackageStatus(message, true);
+  }
+  return saved;
 }
 
 function setLibraryActionBusy(busy) {
+  // 项目库级按钮与项目设置中的项目包按钮共用忙碌态，选择器返回后统一恢复。
+  state.libraryActionBusy = busy;
   for (const button of [
     elements.importLibraryButton,
     elements.exportLibraryButton,
     elements.changeLibraryLocationButton,
     elements.newProjectButton,
+    elements.projectSettingsImportButton,
+    elements.projectSettingsExportButton,
   ]) {
     if (button) button.disabled = busy;
   }
+  const readOnly = isProjectReadOnly();
+  for (const control of elements.projectSettingsForm?.elements || []) {
+    control.disabled = busy
+      || readOnly
+      || state.projectSettingsSaving
+      || Boolean(state.projectTransferBusy);
+  }
+  // Re-apply the draft guard after a blocked library action; the shared busy
+  // loop above intentionally only knows about the transfer lock.
+  renderProjectPackageActions();
+}
+
+function showProjectTransferNotice(message, tone = "info") {
+  if (!elements.projectTransferNotice) return;
+  elements.projectTransferNotice.textContent = message;
+  elements.projectTransferNotice.dataset.tone = tone;
+  elements.projectTransferNotice.hidden = !message;
+}
+
+function clearProjectTransferNotice() {
+  if (!elements.projectTransferNotice) return;
+  elements.projectTransferNotice.textContent = "";
+  delete elements.projectTransferNotice.dataset.tone;
+  elements.projectTransferNotice.hidden = true;
 }
 
 function showLibraryActionStatus(message) {
@@ -723,44 +922,82 @@ function hideProjectHomeError() {
   elements.projectHomeError.textContent = "";
 }
 
+function showProjectPackageStatus(message, isError = false) {
+  if (!elements.projectPackageStatus) return;
+  elements.projectPackageStatus.textContent = message;
+  elements.projectPackageStatus.classList.toggle("error", isError && Boolean(message));
+}
+
+function renderProjectPackageActions() {
+  const project = state.currentProject;
+  if (!project || !elements.projectSettingsImportButton || !elements.projectSettingsExportButton) return;
+  const busy = Boolean(state.projectTransferBusy || state.libraryActionBusy);
+  const dirty = Boolean(state.projectSettingsDirty);
+  const saving = Boolean(state.projectSettingsSaving);
+  const importing = state.projectTransferBusy === "import";
+  const exporting = state.projectTransferBusy === project.id;
+  elements.projectSettingsImportButton.disabled = busy || dirty || saving;
+  elements.projectSettingsImportButton.textContent = importing ? "导入中…" : "导入项目";
+  elements.projectSettingsImportButton.toggleAttribute("aria-busy", importing);
+  elements.projectSettingsExportButton.disabled = busy || dirty || saving;
+  elements.projectSettingsExportButton.textContent = exporting ? "导出中…" : "导出项目";
+  elements.projectSettingsExportButton.toggleAttribute("aria-busy", exporting);
+}
+
 function renderProjectSettingsForm() {
   const project = state.currentProject;
   if (!project || !elements.projectSettingsForm) return;
   const settings = project.settings || defaultRendererProjectSettings();
+  const preserveDraft = Boolean(state.projectSettingsDirty);
   elements.projectSettingsHeading.textContent = `${project.name} · 项目设置`;
-  elements.projectNameInput.value = project.name || "";
-  elements.projectDescriptionInput.value = project.description || "";
-  renderProjectProviderOptions(settings.providerId);
-  const preserveSavedModel = elements.projectProvider.value === settings.providerId;
-  renderProjectModelOptions(settings.modelId, {
-    preserveUnknown: preserveSavedModel,
-  });
-  // Runtime discovery may be the only source for a configured model. Keep the
-  // persisted ID visible until the latest request for this project confirms
-  // the available options, so unrelated saves cannot replace it silently.
-  void loadProviderModelsForSelect(elements.projectProvider, elements.projectModel, {
-    selectedModelId: settings.modelId,
-    preserveUnknown: preserveSavedModel,
-  });
-  elements.projectAccuracy.value = settings.accuracyMode || "high";
-  renderScenarioOptions(settings.scenarioId || "", true, false);
-  elements.projectScenario.value = settings.scenarioId || "";
-  elements.projectCustomPrompt.value = settings.customPrompt || "";
-  elements.projectSceneFormat.value = settings.resolve.fieldFormats.scene;
-  elements.projectShotFormat.value = settings.resolve.fieldFormats.shot;
-  elements.projectTakeFormat.value = settings.resolve.fieldFormats.take;
-  elements.projectGoodComment.value = settings.resolve.comments.goodTake;
-  elements.projectHoldComment.value = settings.resolve.comments.holdTake;
+  if (!preserveDraft) {
+    elements.projectNameInput.value = project.name || "";
+    elements.projectDescriptionInput.value = project.description || "";
+    renderProjectProviderOptions(settings.providerId);
+    const preserveSavedModel = elements.projectProvider.value === settings.providerId;
+    renderProjectModelOptions(settings.modelId, {
+      preserveUnknown: preserveSavedModel,
+    });
+    // Runtime discovery may be the only source for a configured model. Keep the
+    // persisted ID visible until the latest request for this project confirms
+    // the available options, so unrelated saves cannot replace it silently.
+    void loadProviderModelsForSelect(elements.projectProvider, elements.projectModel, {
+      selectedModelId: settings.modelId,
+      preserveUnknown: preserveSavedModel,
+    });
+    elements.projectAccuracy.value = settings.accuracyMode || "high";
+    renderScenarioOptions(settings.scenarioId || "", true, false);
+    elements.projectScenario.value = settings.scenarioId || "";
+    elements.projectCustomPrompt.value = settings.customPrompt || "";
+    elements.projectSceneFormat.value = settings.resolve.fieldFormats.scene;
+    elements.projectShotFormat.value = settings.resolve.fieldFormats.shot;
+    elements.projectTakeFormat.value = settings.resolve.fieldFormats.take;
+    elements.projectGoodComment.value = settings.resolve.comments.goodTake;
+    elements.projectHoldComment.value = settings.resolve.comments.holdTake;
+  }
   const readOnly = Boolean(project.archivedAt);
   // Archived projects remain inspectable, but every control is disabled until
   // the user explicitly restores the project from the library.
   for (const control of elements.projectSettingsForm.elements) {
-    control.disabled = readOnly;
+    control.disabled = readOnly
+      || state.libraryActionBusy
+      || state.projectSettingsSaving
+      || Boolean(state.projectTransferBusy);
   }
   syncLegacyModelPicker(elements.projectModel);
   elements.projectSettingsStatus.textContent = readOnly
     ? "项目已归档，恢复后才能修改"
-    : "";
+    : preserveDraft
+      ? "有未保存的项目设置，请先保存后再进行项目包传输"
+      : "";
+  renderProjectPackageActions();
+}
+
+function markProjectSettingsDirty() {
+  if (!state.currentProject || isProjectReadOnly()) return;
+  state.projectSettingsDirty = true;
+  elements.projectSettingsStatus.textContent = "有未保存的项目设置";
+  renderProjectPackageActions();
 }
 
 function buildProjectSettingsFromForm() {
@@ -792,6 +1029,11 @@ function buildProjectSettingsFromForm() {
 async function saveProjectSettings(event) {
   event.preventDefault();
   if (!state.currentProjectId) return;
+  if (state.projectSettingsSaving) return;
+  if (state.libraryActionBusy) {
+    elements.projectSettingsStatus.textContent = "项目库传输进行中，请等待完成后再保存。";
+    return;
+  }
   if (isProjectReadOnly()) {
     elements.projectSettingsStatus.textContent = "项目已归档，恢复后才能修改";
     return;
@@ -800,8 +1042,12 @@ async function saveProjectSettings(event) {
     elements.projectSettingsStatus.textContent = "识别进行中，完成后才能修改项目设置";
     return;
   }
+  let saved = false;
+  let saveError = "";
   try {
     const settings = buildProjectSettingsFromForm();
+    state.projectSettingsSaving = true;
+    renderProjectSettingsForm();
     const project = await updateProjectApi({
       id: state.currentProjectId,
       name: elements.projectNameInput.value,
@@ -809,14 +1055,20 @@ async function saveProjectSettings(event) {
       settings,
     });
     state.currentProject = project;
+    // The Main row now contains the exact form values, so future renders may
+    // safely replace the legacy DOM draft with the persisted project settings.
+    state.projectSettingsDirty = false;
     state.projects = state.projects.map((item) => item.id === project.id ? project : item);
     if (!state.currentTaskId) state.activeTaskSettings = project.settings;
     if (!state.currentTaskId) applyNewTaskRecognitionDefaults(project);
     renderProjectLibrary();
-    elements.projectSettingsStatus.textContent = "已保存";
-    renderRoute();
+    saved = true;
   } catch (error) {
-    elements.projectSettingsStatus.textContent = error.message || "保存失败";
+    saveError = error.message || "保存失败";
+  } finally {
+    state.projectSettingsSaving = false;
+    renderRoute();
+    elements.projectSettingsStatus.textContent = saved ? "已保存" : saveError;
   }
 }
 
@@ -827,6 +1079,7 @@ function resetProjectOutputSettings() {
   elements.projectTakeFormat.value = defaults.fieldFormats.take;
   elements.projectGoodComment.value = defaults.comments.goodTake;
   elements.projectHoldComment.value = defaults.comments.holdTake;
+  markProjectSettingsDirty();
   elements.projectSettingsStatus.textContent = "默认值已填入，保存后生效";
 }
 
@@ -1061,7 +1314,14 @@ function bindEvents() {
   elements.projectDialogForm?.addEventListener("submit", createProjectFromDialog);
   elements.projectSettingsBack?.addEventListener("click", () => navigate("workspace"));
   elements.projectSettingsForm?.addEventListener("submit", saveProjectSettings);
+  // Keep every text/select edit in the legacy form visible to transfer guards;
+  // otherwise Main would export the last persisted row instead of this draft.
+  elements.projectSettingsForm?.addEventListener("input", markProjectSettingsDirty);
+  elements.projectSettingsForm?.addEventListener("change", markProjectSettingsDirty);
   elements.projectSettingsReset?.addEventListener("click", resetProjectOutputSettings);
+  // 项目包操作只从项目设置触发；项目库首页保留项目库整体传输入口。
+  elements.projectSettingsImportButton?.addEventListener("click", importProject);
+  elements.projectSettingsExportButton?.addEventListener("click", () => void exportProject(state.currentProjectId));
   elements.projectProvider?.addEventListener("change", async () => {
     renderProjectModelOptions();
     await loadProviderModelsForSelect(
@@ -1081,6 +1341,8 @@ function bindEvents() {
   elements.globalSettingsSave?.addEventListener("click", () => void saveGlobalSettings());
   elements.globalSettingsReset?.addEventListener("click", () => void saveGlobalSettings(true));
   elements.globalOcrOpen?.addEventListener("click", openOcrSetup);
+  elements.globalPaddleOcrInstall?.addEventListener("click", () => void installPaddleOcr());
+  elements.globalPaddleOcrInstallCancel?.addEventListener("click", () => void cancelPaddleOcrInstall());
   elements.customProviderNew?.addEventListener("click", () => openCustomProviderEditor());
   elements.customProviderList?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-custom-provider-id]");
@@ -1533,6 +1795,88 @@ const PADDLE_V6_MODEL_OPTIONS = {
   ],
 };
 
+// Named presets are resolved in Main, so the recovery form must display the
+// same effective values and make every preset-owned field read-only. The
+// profile value for performance uses the legacy high-accuracy label because
+// the visible profile selector has no separate "performance" option.
+const PADDLE_PRESET_VALUES = {
+  performance: {
+    PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+    PADDLEOCR_PROFILE: "accurate",
+    PADDLEOCR_DETECTION_MODEL: "PP-OCRv6_medium_det",
+    PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv6_medium_rec",
+    PADDLEOCR_RECOGNITION_BATCH_SIZE: "4",
+    PADDLEOCR_MIN_CONFIDENCE: "0.05",
+    PADDLEOCR_MAX_BLOCKS_PER_VIEW: "0",
+    PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "1280",
+  },
+  balanced: {
+    PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+    PADDLEOCR_PROFILE: "balanced",
+    PADDLEOCR_DETECTION_MODEL: "PP-OCRv6_small_det",
+    PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv6_small_rec",
+    PADDLEOCR_RECOGNITION_BATCH_SIZE: "8",
+    PADDLEOCR_MIN_CONFIDENCE: "0.10",
+    PADDLEOCR_MAX_BLOCKS_PER_VIEW: "256",
+    PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "960",
+  },
+  fast: {
+    PADDLEOCR_MODEL_VERSION: "PP-OCRv6",
+    PADDLEOCR_PROFILE: "fast",
+    PADDLEOCR_DETECTION_MODEL: "PP-OCRv6_tiny_det",
+    PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv6_tiny_rec",
+    PADDLEOCR_RECOGNITION_BATCH_SIZE: "16",
+    PADDLEOCR_MIN_CONFIDENCE: "0.25",
+    PADDLEOCR_MAX_BLOCKS_PER_VIEW: "64",
+    PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "736",
+  },
+};
+const PADDLE_PRESET_OWNED_KEYS = new Set(Object.keys(PADDLE_PRESET_VALUES.performance));
+
+function legacyPaddlePreset(values) {
+  const preset = String(values?.PADDLEOCR_PRESET || "custom").trim().toLowerCase();
+  return Object.hasOwn(PADDLE_PRESET_VALUES, preset) ? preset : "custom";
+}
+
+function legacyPaddleEffectiveValue(key, values) {
+  const presetValues = PADDLE_PRESET_VALUES[legacyPaddlePreset(values)];
+  return presetValues?.[key] ?? values?.[key] ?? "";
+}
+
+function legacyPaddlePresetOwns(key, values) {
+  return legacyPaddlePreset(values) !== "custom" && PADDLE_PRESET_OWNED_KEYS.has(key);
+}
+
+function legacyPaddleModelVersion(values) {
+  return String(legacyPaddleEffectiveValue("PADDLEOCR_MODEL_VERSION", values)).trim().toLowerCase() === "pp-ocrv5"
+    ? "PP-OCRv5"
+    : "PP-OCRv6";
+}
+
+function legacyPaddleModelDraft(values) {
+  return {
+    detectionModel: values?.PADDLEOCR_DETECTION_MODEL || "",
+    recognitionModel: values?.PADDLEOCR_RECOGNITION_MODEL || "",
+  };
+}
+
+function rememberLegacyPaddleModelDraft(values, version = legacyPaddleModelVersion(values)) {
+  state.paddleModelDrafts[version] = legacyPaddleModelDraft(values);
+}
+
+function legacyPaddlePresetPatch(values) {
+  return {
+    PADDLEOCR_MODEL_VERSION: values.PADDLEOCR_MODEL_VERSION,
+    PADDLEOCR_PROFILE: values.PADDLEOCR_PROFILE,
+    PADDLEOCR_DETECTION_MODEL: values.PADDLEOCR_DETECTION_MODEL,
+    PADDLEOCR_RECOGNITION_MODEL: values.PADDLEOCR_RECOGNITION_MODEL,
+    PADDLEOCR_RECOGNITION_BATCH_SIZE: values.PADDLEOCR_RECOGNITION_BATCH_SIZE,
+    PADDLEOCR_MIN_CONFIDENCE: values.PADDLEOCR_MIN_CONFIDENCE,
+    PADDLEOCR_MAX_BLOCKS_PER_VIEW: values.PADDLEOCR_MAX_BLOCKS_PER_VIEW,
+    PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: values.PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN,
+  };
+}
+
 // Keep the fallback settings form data-driven. The typed Modern Renderer has
 // richer affordances, but this inventory guarantees the recovery page cannot
 // silently lose a newly supported .env.example option.
@@ -1580,7 +1924,7 @@ const GLOBAL_SETTINGS_GROUPS = [
       { key: "VISIONOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
       { key: "VISIONOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
       { key: "VISIONOCR_TIMEOUT_MS", label: "超时", hint: "填写 auto 或 10000–1800000 毫秒。" },
-      { key: "VISIONOCR_BINARY", label: "Vision bridge 路径", hint: "留空则自动查找。" },
+      { key: "VISIONOCR_BINARY", label: "Vision bridge 路径", hint: "留空则优先使用打包内置 bridge；开发环境会自动编译。" },
     ],
   },
   {
@@ -1596,7 +1940,7 @@ const GLOBAL_SETTINGS_GROUPS = [
       { key: "PADDLEOCR_DETECTION_MODEL", label: "检测模型", hint: "PP-OCRv6 可选择档位，也可输入自定义模型 ID；留空使用当前版本默认模型。" },
       { key: "PADDLEOCR_RECOGNITION_MODEL", label: "识别模型", hint: "PP-OCRv6 可选择档位，也可输入自定义模型 ID；留空使用当前版本默认模型。" },
       { key: "PADDLEOCR_RECOGNITION_BATCH_SIZE", label: "识别批量大小", type: "number", min: 1, max: 64, step: 1 },
-      { key: "PADDLEOCR_PYTHON", label: "Python 环境路径", hint: "例如 .venv-paddleocr/bin/python；留空使用自动检测。" },
+      { key: "PADDLEOCR_PYTHON", label: "Python 环境路径", hint: "开发环境可填 .venv-paddleocr/bin/python；打包版请填写已安装 PaddleOCR 的 Python 路径。" },
       { key: "PADDLEOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
       { key: "PADDLEOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
       { key: "PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN", label: "检测最长边", type: "number", min: 320, max: 4096, step: 1, hint: "320–4096；留空使用 PaddleOCR 默认值。" },
@@ -1606,10 +1950,10 @@ const GLOBAL_SETTINGS_GROUPS = [
 ];
 
 function globalFieldMarkup(field, values) {
-  const value = values?.[field.key] || "";
+  const value = legacyPaddleEffectiveValue(field.key, values);
   // Global values can come from hand-edited .env files, so normalize the
   // version before choosing the v6-only model lists used by this fallback UI.
-  const isPaddleV6 = String(values?.PADDLEOCR_MODEL_VERSION || "").trim().toLowerCase() === "pp-ocrv6";
+  const isPaddleV6 = String(legacyPaddleEffectiveValue("PADDLEOCR_MODEL_VERSION", values)).trim().toLowerCase() === "pp-ocrv6";
   const v6ModelOptions = isPaddleV6
     ? PADDLE_V6_MODEL_OPTIONS[field.key]
     : null;
@@ -1619,12 +1963,13 @@ function globalFieldMarkup(field, values) {
       : [[value, `${value}（当前自定义）`], ...v6ModelOptions]
     : field.options;
   const isCustomPaddleModel = Boolean(v6ModelOptions && value && !v6ModelOptions.some(([option]) => option === value));
+  const presetLockAttribute = legacyPaddlePresetOwns(field.key, values) ? " disabled" : "";
   const common = `data-global-key="${escapeHtml(field.key)}" spellcheck="false"`;
   const control = fieldOptions
     ? v6ModelOptions
-      ? `<div class="global-settings-model-control"><select ${common}>${fieldOptions.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select><input type="text" ${common} value="${isCustomPaddleModel ? escapeHtml(value) : ""}" placeholder="输入自定义模型 ID（可选）" aria-label="自定义${escapeHtml(field.label)} ID" /></div>`
-      : `<select ${common}>${fieldOptions.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`
-    : `<input type="${field.type || "text"}" ${common}${field.min === undefined ? "" : ` min="${field.min}" max="${field.max}" step="${field.step}"`} value="${escapeHtml(value)}" />`;
+      ? `<div class="global-settings-model-control"><select ${common}${presetLockAttribute}>${fieldOptions.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select><input type="text" ${common}${presetLockAttribute} value="${isCustomPaddleModel ? escapeHtml(value) : ""}" placeholder="输入自定义模型 ID（可选）" aria-label="自定义${escapeHtml(field.label)} ID" /></div>`
+      : `<select ${common}${presetLockAttribute}>${fieldOptions.map(([option, label]) => `<option value="${escapeHtml(option)}"${value === option ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`
+    : `<input type="${field.type || "text"}" ${common}${presetLockAttribute}${field.min === undefined ? "" : ` min="${field.min}" max="${field.max}" step="${field.step}"`} value="${escapeHtml(value)}" />`;
   return `<label class="field"><span>${escapeHtml(field.label)} <code>${escapeHtml(field.key)}</code></span>${control}${field.hint ? `<small class="global-settings-field-hint">${escapeHtml(field.hint)}</small>` : ""}</label>`;
 }
 
@@ -1674,6 +2019,10 @@ async function loadGlobalSettings() {
     state.globalSettings = data;
     state.globalSettingsDraft = { ...(data.values || {}) };
     state.globalSettingsDirty = new Set();
+    state.paddleModelDrafts = {};
+    if (legacyPaddlePreset(state.globalSettingsDraft) === "custom") {
+      rememberLegacyPaddleModelDraft(state.globalSettingsDraft);
+    }
     setGlobalSettingsStatus("");
     renderGlobalSettingsForm();
   } catch (error) {
@@ -2002,26 +2351,50 @@ function handleGlobalSettingsInput(event) {
   const key = event.target?.dataset?.globalKey;
   if (!key) return;
   const nextValue = event.target.value;
+  const previousDraft = { ...state.globalSettingsDraft };
   const previousValue = state.globalSettingsDraft[key];
   state.globalSettingsDraft[key] = nextValue;
+  if (key === "PADDLEOCR_PRESET") {
+    const previousPreset = legacyPaddlePreset(previousDraft);
+    if (nextValue.trim().toLowerCase() === "custom" && previousPreset !== "custom") {
+      // Match Modern's behavior: entering custom mode starts from the values
+      // the named preset was showing, rather than reviving stale hidden data.
+      const patch = legacyPaddlePresetPatch(PADDLE_PRESET_VALUES[previousPreset]);
+      Object.assign(state.globalSettingsDraft, patch);
+      rememberLegacyPaddleModelDraft(state.globalSettingsDraft);
+      for (const patchKey of Object.keys(patch)) state.globalSettingsDirty.add(patchKey);
+    }
+    renderGlobalSettingsForm();
+  }
   if (
     key === "PADDLEOCR_MODEL_VERSION"
     && previousValue !== nextValue
     && ["PP-OCRv5", "PP-OCRv6"].includes(nextValue)
   ) {
-    // A version switch must not leave the other generation's model IDs in the
-    // legacy form; reset both overrides just like the Modern settings page.
-    state.globalSettingsDraft.PADDLEOCR_DETECTION_MODEL = "";
-    state.globalSettingsDraft.PADDLEOCR_RECOGNITION_MODEL = "";
+    // Keep each generation's draft isolated to avoid mixed pipelines, but
+    // restore it when the user switches back before saving.
+    if (legacyPaddlePreset(previousDraft) === "custom") {
+      rememberLegacyPaddleModelDraft(previousDraft, legacyPaddleModelVersion(previousDraft));
+    }
+    const nextVersion = nextValue === "PP-OCRv5" ? "PP-OCRv5" : "PP-OCRv6";
+    const restored = state.paddleModelDrafts[nextVersion] || { detectionModel: "", recognitionModel: "" };
+    state.globalSettingsDraft.PADDLEOCR_DETECTION_MODEL = restored.detectionModel;
+    state.globalSettingsDraft.PADDLEOCR_RECOGNITION_MODEL = restored.recognitionModel;
     state.globalSettingsDirty.add("PADDLEOCR_DETECTION_MODEL");
     state.globalSettingsDirty.add("PADDLEOCR_RECOGNITION_MODEL");
     renderGlobalSettingsForm();
+  }
+  if (
+    legacyPaddlePreset(state.globalSettingsDraft) === "custom"
+    && ["PADDLEOCR_DETECTION_MODEL", "PADDLEOCR_RECOGNITION_MODEL"].includes(key)
+  ) {
+    rememberLegacyPaddleModelDraft(state.globalSettingsDraft);
   }
   state.globalSettingsDirty.add(key);
   // Select changes and committed custom text changes need a small redraw so
   // the paired control reflects which value is currently active. Input events
   // stay incremental to avoid moving the caret while the user types an ID.
-  if (event.type === "change" && PADDLE_V6_MODEL_OPTIONS[key]) {
+  if (event.type === "change" && (PADDLE_V6_MODEL_OPTIONS[key] || key === "PADDLEOCR_PRESET")) {
     renderGlobalSettingsForm();
   }
   setGlobalSettingsStatus("有未保存修改");
@@ -2557,6 +2930,104 @@ function renderGlobalOcrStatus() {
       ? "已跳过"
       : "未配置";
   elements.globalOcrStatus.classList.toggle("is-ready", Boolean(ready));
+}
+
+function renderPaddleOcrInstall() {
+  const button = elements.globalPaddleOcrInstall;
+  const feedback = elements.globalPaddleOcrInstallFeedback;
+  if (!button || !feedback) return;
+  const installing = state.paddleOcrInstallState === "installing";
+  const hasFeedback = installing
+    || state.paddleOcrInstallState === "installed"
+    || state.paddleOcrInstallState === "canceled"
+    || state.paddleOcrInstallState === "error";
+  const percent = Math.min(100, Math.max(0, Math.round(Number(state.paddleOcrInstallProgress?.percent) || 0)));
+
+  button.disabled = installing;
+  button.setAttribute("aria-busy", installing ? "true" : "false");
+  button.textContent = state.paddleOcrInstallState === "installed"
+    ? "重新安装 PaddleOCR"
+    : installing
+      ? "安装中…"
+      : "安装 PaddleOCR";
+  feedback.hidden = !hasFeedback;
+  feedback.dataset.tone = state.paddleOcrInstallState === "installed"
+    ? "success"
+    : state.paddleOcrInstallState === "canceled"
+      ? "warning"
+      : state.paddleOcrInstallState === "error"
+        ? "danger"
+        : "accent";
+  if (elements.globalPaddleOcrInstallStatus) {
+    elements.globalPaddleOcrInstallStatus.textContent = installing
+      ? (state.paddleOcrInstallProgress?.message || "正在准备安装环境…")
+      : state.paddleOcrInstallState === "installed"
+        ? "PaddleOCR 已安装并验证通过，后续识别可以直接使用。"
+        : state.paddleOcrInstallState === "canceled"
+          ? "安装已取消；已创建的运行环境会在下次安装时复用。"
+          : state.paddleOcrInstallError || "安装 PaddleOCR 失败。";
+  }
+  if (elements.globalPaddleOcrInstallProgress) {
+    elements.globalPaddleOcrInstallProgress.style.width = `${percent}%`;
+    elements.globalPaddleOcrInstallProgress.setAttribute("aria-valuenow", String(percent));
+    elements.globalPaddleOcrInstallProgress.setAttribute("aria-valuetext", `PaddleOCR 安装进度 ${percent}%`);
+  }
+  if (elements.globalPaddleOcrInstallCancel) {
+    elements.globalPaddleOcrInstallCancel.hidden = !installing;
+    elements.globalPaddleOcrInstallCancel.disabled = !installing;
+  }
+  feedback.setAttribute("aria-live", "polite");
+}
+
+async function installPaddleOcr() {
+  if (state.paddleOcrInstallState === "installing") return;
+  state.paddleOcrInstallState = "installing";
+  state.paddleOcrInstallError = "";
+  state.paddleOcrInstallProgress = { stage: "detect-python", percent: 0, message: "正在准备 PaddleOCR 安装…" };
+  renderPaddleOcrInstall();
+  try {
+    const installed = await installPaddleOcrApi();
+    state.ocrSettings = installed;
+    // A one-click install owns the generated interpreter path so a stale
+    // manual value cannot make the verified environment unreachable.
+    if (state.globalSettings) {
+      state.globalSettings = {
+        ...state.globalSettings,
+        values: { ...state.globalSettings.values, PADDLEOCR_PYTHON: installed.pythonPath },
+        overrides: state.globalSettings.overrides.includes("PADDLEOCR_PYTHON")
+          ? state.globalSettings.overrides
+          : [...state.globalSettings.overrides, "PADDLEOCR_PYTHON"],
+      };
+      state.globalSettingsDraft.PADDLEOCR_PYTHON = installed.pythonPath;
+      state.globalSettingsDirty.delete("PADDLEOCR_PYTHON");
+    }
+    await loadConfig();
+    renderProviderOptions();
+    renderGlobalProviderOptions();
+    renderModelOptions();
+    renderApiStatus();
+    state.paddleOcrInstallProgress = { stage: "completed", percent: 100, message: "PaddleOCR 已安装并验证通过。" };
+    state.paddleOcrInstallState = "installed";
+    renderGlobalOcrStatus();
+    renderGlobalSettingsForm();
+    renderPaddleOcrInstall();
+    setGlobalSettingsStatus("PaddleOCR 已安装并验证通过。", false);
+  } catch (error) {
+    state.paddleOcrInstallError = error.message || "PaddleOCR 安装失败。";
+    state.paddleOcrInstallState = error.code === "PADDLEOCR_INSTALL_CANCELED" ? "canceled" : "error";
+    renderPaddleOcrInstall();
+  }
+}
+
+async function cancelPaddleOcrInstall() {
+  if (state.paddleOcrInstallState !== "installing") return;
+  try {
+    await cancelPaddleOcrInstallApi();
+  } catch (error) {
+    state.paddleOcrInstallError = error.message || "取消 PaddleOCR 安装失败。";
+    state.paddleOcrInstallState = "error";
+    renderPaddleOcrInstall();
+  }
 }
 
 async function maybeShowOcrSetup() {

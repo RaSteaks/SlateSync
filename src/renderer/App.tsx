@@ -14,7 +14,7 @@ import { HelpPage } from "./features/help/HelpPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
 import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
-import { WorkspacePage, type RegisterWorkspaceToolbarExport } from "./features/workspace/WorkspacePage";
+import { WorkspacePage, type RegisterWorkspaceToolbarExport, type RegisterWorkspaceTransferPreparation } from "./features/workspace/WorkspacePage";
 import styles from "./app/app.module.css";
 
 function routeTitle(route: ReturnType<typeof useUiStore.getState>["route"]) {
@@ -67,8 +67,18 @@ export function App() {
   const appliedThemeRef = useRef<"dark" | "light" | null>(null);
   const themeHydratedRef = useRef(false);
   const projectLoadGuard = useMemo(() => createOperationGuard(), []);
+  const navigationIntentRef = useRef(0);
+  const libraryActionRef = useRef<"import" | "export" | "change" | null>(null);
   const workspaceExportRef = useRef<(() => void) | null>(null);
+  const workspaceTransferRef = useRef<(() => Promise<boolean>) | null>(null);
   const [workspaceExportState, setWorkspaceExportState] = useState({ canExport: false, processing: false });
+
+  const navigateTo = useCallback((nextRoute: Parameters<typeof setRoute>[0]) => {
+    // An intent token prevents a slower autosave continuation from replacing a
+    // route the user selected while the previous navigation was still flushing.
+    navigationIntentRef.current += 1;
+    setRoute(nextRoute);
+  }, [setRoute]);
 
   // The workspace owns export semantics; the shell only hosts its stable
   // trigger in the sticky toolbar and mirrors the current busy/disabled state.
@@ -78,6 +88,10 @@ export function App() {
       const next = nextState || { canExport: false, processing: false };
       return current.canExport === next.canExport && current.processing === next.processing ? current : next;
     });
+  }, []);
+
+  const registerWorkspaceTransferPreparation = useCallback<RegisterWorkspaceTransferPreparation>((handler) => {
+    workspaceTransferRef.current = handler;
   }, []);
 
   const resolvedTheme = resolveTheme(theme, systemPrefersDark);
@@ -184,7 +198,7 @@ export function App() {
       if (event.key === ",") {
         event.preventDefault();
         useUiStore.getState().setDialog(null);
-        setRoute("global-settings");
+        navigateTo("global-settings");
         return;
       }
       if (event.key !== "Enter" || route !== "workspace" || isEditableShortcutTarget(event.target) || document.querySelector('[role="dialog"]')) return;
@@ -193,7 +207,7 @@ export function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [route, setRoute]);
+  }, [navigateTo, route]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -222,8 +236,13 @@ export function App() {
 
   // 项目库设置动作：导入 / 导出 / 更换位置，结果统一经 Toast 反馈。
   const runLibraryAction = async (action: "import" | "export" | "change") => {
+    if (libraryActionRef.current) return;
+    // Reserve the action before the async save gate so repeated clicks cannot
+    // open multiple pickers while the current workspace is being flushed.
+    libraryActionRef.current = action;
     setLibraryBusy(action);
     try {
+      if (!(await prepareWorkspaceForTransfer())) return;
       const api = getSlateSync();
       const result = action === "import"
         ? await unwrap(await api.projects.importLibrary())
@@ -236,9 +255,27 @@ export function App() {
     } catch (nextError) {
       setToast({ tone: "danger", message: appErrorFromUnknown(nextError).message });
     } finally {
-      setLibraryBusy(null);
-      setLibraryMenu((current) => ({ ...current, open: false }));
+      if (libraryActionRef.current === action) {
+        libraryActionRef.current = null;
+        setLibraryBusy(null);
+        setLibraryMenu((current) => ({ ...current, open: false }));
+      }
     }
+  };
+
+  const prepareWorkspaceForTransfer = async () => {
+    // 所有项目库传输都先经过同一条识别/自动保存闸门，避免导出旧草稿。
+    if (useRecognitionStore.getState().running) {
+      setToast({ tone: "warning", message: "识别进行中，完成后才能操作项目库" });
+      return false;
+    }
+    const prepare = workspaceTransferRef.current;
+    if (!prepare) return true;
+    const saved = await prepare();
+    if (!saved) {
+      setToast({ tone: "danger", message: "当前任务保存失败，请重试保存后再操作项目库" });
+    }
+    return saved;
   };
 
   // 点击菜单中的路径行时复制完整路径到剪贴板。
@@ -278,6 +315,7 @@ export function App() {
   };
 
   const openProject = async (id: string, nextRoute: "workspace" | "project-settings" = "workspace") => {
+    const navigationIntent = ++navigationIntentRef.current;
     const operationId = projectLoadGuard.start();
     useProjectStore.getState().setError(null);
     try {
@@ -289,7 +327,7 @@ export function App() {
         unwrap(await api.projects.listScenarios({ projectId: id })),
         unwrap(await api.tasks.list({ projectId: id })),
       ]);
-      if (!projectLoadGuard.isCurrent(operationId)) return;
+      if (!projectLoadGuard.isCurrent(operationId) || navigationIntentRef.current !== navigationIntent) return;
       // Project identity and its route are one visible projection boundary;
       // publish both subscriptions in one commit so no intermediate frame can
       // show the new project on the old Library route (or vice versa).
@@ -301,11 +339,23 @@ export function App() {
         useTaskStore.getState().setItems(tasks, id);
         useUiStore.getState().setRoute(nextRoute);
       });
-    } catch (error) { if (projectLoadGuard.isCurrent(operationId)) useProjectStore.getState().setError(appErrorFromUnknown(error)); }
+    } catch (error) {
+      if (projectLoadGuard.isCurrent(operationId) && navigationIntentRef.current === navigationIntent) {
+        useProjectStore.getState().setError(appErrorFromUnknown(error));
+      }
+    }
   };
 
-  const leaveProject = () => {
-    if (useRecognitionStore.getState().running) { setToast({ tone: "warning", message: "识别进行中，完成后才能切换项目" }); return; }
+  const releaseWorkspaceForLibrary = (sourceProjectId?: string) => {
+    const currentProject = useProjectStore.getState().current;
+    const currentRoute = useUiStore.getState().route;
+    // Import completion is allowed to release the workspace only if the user
+    // is still on the importing project's settings route. Returning to the
+    // workspace (or another project) must win over the late completion.
+    if (
+      sourceProjectId !== undefined
+      && (currentRoute !== "project-settings" || currentProject?.id !== sourceProjectId)
+    ) return false;
     projectLoadGuard.invalidate();
     useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
@@ -315,7 +365,22 @@ export function App() {
     // Match the retained compatibility route: the Library may show which
     // project was current, while workspace-owned data is already released.
     // Reopening still reloads full project authority from Main.
-    setRoute("projects");
+    navigateTo("projects");
+    return true;
+  };
+
+  const leaveProject = async () => {
+    const navigationIntent = ++navigationIntentRef.current;
+    if (useUiStore.getState().route === "projects") return;
+    // 离开工作台也走同一保存闸门，确保随后进入项目库时数据已经落盘。
+    if (!(await prepareWorkspaceForTransfer())) return;
+    // A later workspace/settings/logs click cancels this continuation; do not
+    // clear the newly selected route or its workspace-owned stores.
+    if (
+      navigationIntentRef.current !== navigationIntent
+      || useUiStore.getState().route === "projects"
+    ) return;
+    releaseWorkspaceForLibrary();
   };
 
   const leaveDeletedProject = (projectId: string) => {
@@ -329,15 +394,15 @@ export function App() {
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     useTaskStore.getState().clear();
-    setRoute("projects");
+    navigateTo("projects");
   };
 
   const navigation = <>
     <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>项目</div>
     <button type="button" className={styles.navItem} data-active={route === "projects"} data-collapsed={sidebarCollapsed || undefined} title="项目库" onClick={leaveProject} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setLibraryMenu({ open: true, x: event.clientX, y: event.clientY }); }}><Icon icon={FolderKanban} size={18} /><span>项目库</span></button>
-    {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => setRoute("workspace")}><Icon icon={LayoutDashboard} size={18} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => setRoute("project-settings")}><Icon icon={SlidersHorizontal} size={18} /><span>项目设置</span></button></>}
+    {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => navigateTo("workspace")}><Icon icon={LayoutDashboard} size={18} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => navigateTo("project-settings")}><Icon icon={SlidersHorizontal} size={18} /><span>项目设置</span></button></>}
     <div style={{ flex: 1 }} />
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => setRoute("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button><button type="button" className={styles.navItem} data-active={route === "help"} data-collapsed={sidebarCollapsed || undefined} title="说明" onClick={() => setRoute("help")}><Icon icon={BookOpen} size={18} /><span>说明</span></button>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => navigateTo("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => navigateTo("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button><button type="button" className={styles.navItem} data-active={route === "help"} data-collapsed={sidebarCollapsed || undefined} title="说明" onClick={() => navigateTo("help")}><Icon icon={BookOpen} size={18} /><span>说明</span></button>
   </>;
 
   // The App Icon is the shell-level home action. Reusing leaveProject keeps
@@ -386,5 +451,5 @@ export function App() {
   // Keep one Workspace instance mounted while Logs, Help, or either settings page is
   // visible. Its draft, image inputs, CSV Worker and in-flight recognition
   // stay intact; the hidden page is excluded from the accessibility tree.
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}{route === "help" && <HelpPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} registerTransferPreparation={registerWorkspaceTransferPreparation} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => navigateTo("workspace")} onDeleted={leaveDeletedProject} onPrepareTransfer={prepareWorkspaceForTransfer} onProjectImported={releaseWorkspaceForLibrary} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}{route === "help" && <HelpPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

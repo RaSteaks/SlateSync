@@ -4,6 +4,7 @@ import { registerIpcHandlers } from "../electron/ipc-handlers.mjs";
 
 function createMockIpcMain() {
   const handlers = new Map();
+  const messages = [];
   return {
     handle(channel, handler) {
       handlers.set(channel, handler);
@@ -14,12 +15,13 @@ function createMockIpcMain() {
       const mockEvent = {
         sender: {
           isDestroyed: () => false,
-          send: () => {},
+          send: (channel, payload) => messages.push({ channel, payload }),
         },
       };
       return handler(mockEvent, ...args);
     },
     handlers,
+    messages,
   };
 }
 
@@ -60,6 +62,8 @@ describe("electron IPC handlers", () => {
       "get-library-info",
       "import-project-library",
       "export-project-library",
+      "import-project",
+      "export-project",
       "change-library-location",
       "rename-library",
       "create-project",
@@ -86,6 +90,8 @@ describe("electron IPC handlers", () => {
       "get-ocr-settings",
       "save-ocr-settings",
       "check-ocr",
+      "install-paddleocr",
+      "cancel-paddleocr-install",
       "check-vision-ocr",
       "logs-read",
       "logs-open-directory",
@@ -218,6 +224,14 @@ describe("electron IPC handlers", () => {
           calls.push("export");
           return { canceled: false, library: { path: "/export" } };
         },
+        importProject: async () => {
+          calls.push("project-import");
+          return { canceled: false, project: { id: "project-imported", name: "导入项目", directoryPath: "/private" } };
+        },
+        exportProject: async (id) => {
+          calls.push(`project-export:${id}`);
+          return { canceled: false, path: "/export/project.slatesync-project", project: { id, name: "导出项目", directoryPath: "/private" } };
+        },
         changeLocation: async () => {
           calls.push("location");
           return { canceled: true };
@@ -236,6 +250,15 @@ describe("electron IPC handlers", () => {
       (await ipcMain.invoke("export-project-library")).library.path,
       "/export",
     );
+    assert.deepEqual(await ipcMain.invoke("import-project"), {
+      canceled: false,
+      project: { id: "project-imported", name: "导入项目" },
+    });
+    assert.deepEqual(await ipcMain.invoke("export-project", { id: "project-1" }), {
+      canceled: false,
+      path: "/export/project.slatesync-project",
+      project: { id: "project-1", name: "导出项目" },
+    });
     assert.deepEqual(await ipcMain.invoke("change-library-location"), {
       canceled: true,
     });
@@ -244,7 +267,7 @@ describe("electron IPC handlers", () => {
       restartRequired: true,
       library: { path: "/renamed" },
     });
-    assert.deepEqual(calls, ["import", "export", "location", "rename:新名称"]);
+    assert.deepEqual(calls, ["import", "export", "project-import", "project-export:project-1", "location", "rename:新名称"]);
   });
 
   it("does not export while a project is being created", async () => {
@@ -271,6 +294,10 @@ describe("electron IPC handlers", () => {
           exportCalls += 1;
           return { canceled: false };
         },
+        exportProject: async () => {
+          exportCalls += 1;
+          return { canceled: false };
+        },
       },
     }));
 
@@ -281,8 +308,81 @@ describe("electron IPC handlers", () => {
       /仍有任务正在写入/,
     );
     assert.equal(exportCalls, 0);
+    await assert.rejects(
+      () => ipcMain.invoke("export-project", { id: "project-new" }),
+      /仍有任务正在写入/,
+    );
     releaseCreate();
     assert.equal((await creating).id, "project-new");
+  });
+
+  it("returns LIBRARY_BUSY while recognition is still active", async () => {
+    let signalStarted;
+    const started = new Promise((resolve) => {
+      signalStarted = resolve;
+    });
+    let releaseRecognition;
+    const recognitionGate = new Promise((resolve) => {
+      releaseRecognition = resolve;
+    });
+    let exportCalls = 0;
+    const projectId = "project-recognizing";
+    const settings = {
+      version: 1,
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+      accuracyMode: "standard",
+      scenarioId: null,
+      customPrompt: "",
+      resolve: {
+        fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+        comments: { goodTake: "_OK", holdTake: "_KP" },
+      },
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectRuntime: {
+        get: async () => ({ project: { id: projectId, settings }, scenarioStore: null, taskStore: null, diagnostics: null }),
+      },
+      libraryActions: {
+        exportProject: async () => {
+          exportCalls += 1;
+          return { canceled: false };
+        },
+      },
+      recognize: async () => {
+        signalStarted();
+        await recognitionGate;
+        return {
+          pageCount: 1,
+          provider: "openai",
+          model: "gpt-4o-mini",
+          accuracyMode: "standard",
+          result: { records: [] },
+          usage: null,
+          durationMs: 1,
+          ocr: null,
+          scenario: null,
+        };
+      },
+    }));
+
+    const recognizing = ipcMain.invoke("recognize", {
+      projectId,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      filename: "slate.png",
+      pageCount: 1,
+      imageDataUrl: "data:image/png;base64,synthetic",
+    });
+    await started;
+    await assert.rejects(
+      () => ipcMain.invoke("export-project", { id: projectId }),
+      (error) => error.code === "LIBRARY_BUSY" && /识别任务/.test(error.message),
+    );
+    assert.equal(exportCalls, 0);
+    releaseRecognition();
+    await recognizing;
   });
 
   it("dispatches scenario Profile operations through IPC", async () => {
@@ -1363,6 +1463,82 @@ describe("electron IPC handlers", () => {
     assert.equal(result.setupSkipped, false);
     assert.equal(runtimeSettings.ocrPythonPath, "/venv/bin/python");
     assert.equal(saved.length, 1);
+  });
+
+  it("installs PaddleOCR, forwards progress, and persists the verified interpreter", async () => {
+    const savedSettings = [];
+    const savedGlobalConfigs = [];
+    const runtimeSettings = {
+      ocrPythonPath: "",
+      ocrSetupCompleted: false,
+      ocrSetupSkipped: false,
+    };
+    const runtimeGlobalConfig = { MAX_BODY_MB: "80" };
+    let refreshCount = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(
+      ipcMain,
+      createMockContext({
+        runtimeSettings,
+        runtimeGlobalConfig,
+        settingsStore: {
+          save: async (settings) => {
+            savedSettings.push(settings);
+          },
+        },
+        globalConfigStore: {
+          save: async (values) => {
+            savedGlobalConfigs.push(values);
+            return { version: 1, values: { ...values } };
+          },
+        },
+        refreshRuntimeSettings: () => { refreshCount += 1; },
+        paddleOcrInstaller: {
+          install: async ({ onProgress }) => {
+            onProgress({
+              stage: "install-dependencies",
+              percent: 35,
+              message: "正在安装依赖…",
+            });
+            return {
+              pythonPath: "/user-data/paddleocr-venv/bin/python",
+              paddleVersion: "3.3.1",
+              paddleOcrVersion: "3.7.0",
+            };
+          },
+          cancel: () => ({ canceled: true }),
+        },
+      }),
+    );
+
+    const result = await ipcMain.invoke("install-paddleocr");
+    assert.deepEqual(result, {
+      pythonPath: "/user-data/paddleocr-venv/bin/python",
+      setupCompleted: true,
+      setupSkipped: false,
+      paddleVersion: "3.3.1",
+      paddleOcrVersion: "3.7.0",
+    });
+    assert.equal(runtimeSettings.ocrPythonPath, "/user-data/paddleocr-venv/bin/python");
+    assert.equal(runtimeSettings.ocrSetupCompleted, true);
+    assert.deepEqual(savedSettings[0], {
+      ocrPythonPath: "/user-data/paddleocr-venv/bin/python",
+      ocrSetupCompleted: true,
+      ocrSetupSkipped: false,
+    });
+    assert.deepEqual(savedGlobalConfigs[0], {
+      MAX_BODY_MB: "80",
+      PADDLEOCR_PYTHON: "/user-data/paddleocr-venv/bin/python",
+    });
+    assert.deepEqual(ipcMain.messages, [{
+      channel: "paddleocr-install-progress",
+      payload: {
+        stage: "install-dependencies",
+        percent: 35,
+        message: "正在安装依赖…",
+      },
+    }]);
+    assert.equal(refreshCount, 1);
   });
 
   it("rejects an OCR path when validation fails without persisting it", async () => {

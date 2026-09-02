@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import styles from "./components.module.css";
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
-type ClassProps = { className?: string };
+type ClassProps = { className?: string | undefined };
 type ControlState = "error" | "success";
 
 function classes(...values: Array<string | false | null | undefined>) {
@@ -149,8 +149,10 @@ export function InlineError({ message, onRetry }: { message: string; onRetry?: (
   return <div className={styles.inlineError} role="alert"><AlertTriangle size={17} aria-hidden="true" /><span>{message}</span>{onRetry && <Button size="sm" variant="ghost" onClick={onRetry}>重试</Button>}</div>;
 }
 
-export function EmptyState({ icon: IconComponent = CircleHelp, title, description, action }: { icon?: LucideIcon; title: string; description?: string; action?: ReactNode }) {
-  return <div className={styles.emptyState}><div><div className={styles.emptyIcon}><Icon icon={IconComponent} /></div><Text as="h2" size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}{action && <div style={{ marginTop: "var(--ss-space-4)" }}>{action}</div>}</div></div>;
+export function EmptyState({ icon: IconComponent = CircleHelp, title, description, action, className }: { icon?: LucideIcon; title: string; description?: string; action?: ReactNode; className?: string | undefined }) {
+  // Feature surfaces can tune the footprint of the canonical empty state
+  // without replacing its icon, heading, and action semantics.
+  return <div className={classes(styles.emptyState, className)}><div><div className={styles.emptyIcon}><Icon icon={IconComponent} /></div><Text as="h2" size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}{action && <div style={{ marginTop: "var(--ss-space-4)" }}>{action}</div>}</div></div>;
 }
 
 export function Toast({ message, tone = "neutral", onDismiss }: { message: string; tone?: Tone; onDismiss?: () => void }) {

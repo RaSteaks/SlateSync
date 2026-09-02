@@ -51,8 +51,16 @@ describe("custom provider discovery lifecycle", () => {
     });
 
     expect(requests.map((request) => request.providerId)).toEqual(["provider-a"]);
+    // The registry/detail split is part of the renderer contract, not just a
+    // visual arrangement: the selected provider must expose its state to
+    // keyboard and assistive-technology users before discovery resolves.
+    expect(host.querySelector('[role="list"][aria-label="已注册接口列表"]')).not.toBeNull();
     const providerBButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Provider B"));
     if (!(providerBButton instanceof HTMLButtonElement)) throw new Error("missing Provider B selector");
+    const providerAButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Provider A"));
+    if (!(providerAButton instanceof HTMLButtonElement)) throw new Error("missing Provider A selector");
+    expect(providerAButton.getAttribute("aria-pressed")).toBe("true");
+    expect(host.textContent).toContain("检测模型列表");
     await act(async () => {
       providerBButton.click();
       await Promise.resolve();

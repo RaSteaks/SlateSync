@@ -83,13 +83,17 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   // historical inventory.
   assert.deepEqual(Object.keys(additions.requestMethods).sort(), [
     "cancelCustomModelProbe",
+    "cancelPaddleOcrInstall",
     "cancelRecognition",
     "checkCompatibleJsonSchema",
     "checkVisionOcr",
     "createCustomProvider",
     "deleteCustomProvider",
     "deleteProject",
+    "exportProject",
     "getGlobalSettings",
+    "importProject",
+    "installPaddleOcr",
     "listCustomProviders",
     "openLogsDirectory",
     "probeCustomModels",
@@ -102,13 +106,17 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
     Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
     [
       "cancel-custom-model-probe",
+      "cancel-paddleocr-install",
       "cancel-recognition",
       "check-compatible-json-schema",
       "check-vision-ocr",
       "create-custom-provider",
       "delete-custom-provider",
       "delete-project",
+      "export-project",
       "get-global-settings",
+      "import-project",
+      "install-paddleocr",
       "list-custom-providers",
       "logs-open-directory",
       "logs-read",
@@ -145,6 +153,8 @@ test("baseline and additive IPC contracts expose the exact reviewed Main surface
   assert.deepEqual([...new Set(handlerChannels)].sort(), [...expectedChannels].sort());
   assert.ok(typedPreload.includes(`on("${ipc.events.recognitionProgress.channel}",`));
   assert.ok(typedPreload.includes(`removeListener("${ipc.events.recognitionProgress.channel}",`));
+  assert.ok(typedPreload.includes(`on("${additions.events.paddleOcrInstallProgress.channel}",`));
+  assert.ok(typedPreload.includes(`removeListener("${additions.events.paddleOcrInstallProgress.channel}",`));
 
   for (const source of contracts) {
     for (const [method, contract] of Object.entries(source.requestMethods)) {

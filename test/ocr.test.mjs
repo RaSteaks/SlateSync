@@ -243,6 +243,44 @@ test("empty custom detector limit keeps the documented default", () => {
   assert.equal(status.textDetLimitSideLen, 960);
 });
 
+test("packaged PaddleOCR resolves its runner from the runtime project root", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "slatesync-paddle-path-"));
+  let capturedOptions;
+  try {
+    const result = await runPaddleOcrForPages([[imageDataUrl]], {
+      env: {
+        SLATESYNC_PACKAGED: "true",
+        SLATESYNC_PROJECT_DIR: projectDir,
+        PADDLEOCR_ENABLED: "true",
+        PADDLEOCR_PYTHON: "python3",
+      },
+      cache: false,
+      // Inject the runner boundary so this regression test only verifies
+      // packaged path resolution and never starts a native Paddle process.
+      execute: async (payload, options) => {
+        capturedOptions = options;
+        return {
+          ok: true,
+          modelVersion: payload.modelVersion,
+          pages: payload.pages.map((page) => ({
+            pageNumber: page.pageNumber,
+            views: [],
+          })),
+        };
+      },
+    });
+
+    assert.equal(result.used, true);
+    assert.equal(
+      capturedOptions.runnerPath,
+      join(projectDir, "scripts", "paddleocr_runner.py"),
+    );
+  } finally {
+    await closePaddleOcrWorker({ force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("custom model version switches keep effective model IDs compatible", () => {
   const v5 = paddleOcrPublicConfig(
     {
@@ -320,6 +358,34 @@ test("resident PaddleOCR Worker warms once and switches configuration cleanly", 
       cache: false,
     });
     assert.equal(await readFile(counterPath, "utf8"), "2");
+  } finally {
+    await closePaddleOcrWorker({ force: true });
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("force-closing PaddleOCR invalidates queued preload operations", async () => {
+  clearPaddleOcrCache();
+  const root = await mkdtemp(join(tmpdir(), "slatesync-paddle-force-close-"));
+  const counterPath = join(root, "warmups.txt");
+  const runnerPath = fileURLToPath(new URL("./fixtures/fake-paddleocr-runner.py", import.meta.url));
+  const env = {
+    PADDLEOCR_ENABLED: "true",
+    PADDLEOCR_PYTHON: "python3",
+    PADDLEOCR_PRESET: "balanced",
+    FAKE_PADDLE_COUNTER: counterPath,
+    PADDLE_PDX_CACHE_HOME: root,
+  };
+  try {
+    const firstPreload = preloadPaddleOcr(env, { runnerPath });
+    const queuedPreload = preloadPaddleOcr({ ...env, PADDLEOCR_PRESET: "fast" }, { runnerPath });
+    await closePaddleOcrWorker({ force: true, deadlineAt: Date.now() + 1_000 });
+
+    await assert.rejects(firstPreload, (error) => error.code === "PADDLEOCR_WORKER_CLOSED");
+    await assert.rejects(queuedPreload, (error) => error.code === "PADDLEOCR_WORKER_CLOSED");
+    // Neither operation reached ensurePaddleWorker, so force close must not
+    // leave a warmup side effect or a newly spawned native process behind.
+    await assert.rejects(readFile(counterPath), { code: "ENOENT" });
   } finally {
     await closePaddleOcrWorker({ force: true });
     await rm(root, { recursive: true, force: true });

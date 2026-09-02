@@ -98,7 +98,12 @@ export type RegisterWorkspaceToolbarExport = (
   state?: WorkspaceToolbarExportState,
 ) => void;
 
-export function WorkspacePage({ registerToolbarExport, hidden = false }: { registerToolbarExport?: RegisterWorkspaceToolbarExport; hidden?: boolean } = {}) {
+/** 项目库传输前由 Workspace 先把当前草稿推进 SQLite。 */
+export type RegisterWorkspaceTransferPreparation = (
+  handler: (() => Promise<boolean>) | null,
+) => void;
+
+export function WorkspacePage({ registerToolbarExport, registerTransferPreparation, hidden = false }: { registerToolbarExport?: RegisterWorkspaceToolbarExport; registerTransferPreparation?: RegisterWorkspaceTransferPreparation; hidden?: boolean } = {}) {
   const project = useProjectStore((state) => state.current);
   const config = useProjectStore((state) => state.config);
   const scenarios = useProjectStore((state) => state.scenarios);
@@ -402,6 +407,18 @@ export function WorkspacePage({ registerToolbarExport, hidden = false }: { regis
   const markDirtyAfterRender = useCallback(() => {
     setTimeout(() => autosave.markDirty(latestCapture.current()), 0);
   }, [autosave]);
+
+  const prepareForProjectTransfer = useCallback(async () => {
+    // 项目库按钮可能赶在延迟 markDirty 回调之前触发，先发布最新草稿再 flush。
+    if (draftDirty) autosave.markDirty(latestCapture.current());
+    return autosave.flush();
+  }, [autosave, draftDirty]);
+
+  useEffect(() => {
+    if (!registerTransferPreparation) return undefined;
+    registerTransferPreparation(prepareForProjectTransfer);
+    return () => registerTransferPreparation(null);
+  }, [prepareForProjectTransfer, registerTransferPreparation]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
