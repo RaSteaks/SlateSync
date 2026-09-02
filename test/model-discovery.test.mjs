@@ -352,6 +352,21 @@ test("model discovery rejects missing configuration and unsafe base URLs", async
     /尚未配置 OPENAI_API_KEY/,
   );
   await assert.rejects(
+    discoverVisionModels("openai", {
+      env: { OPENAI_API_KEY: "key" },
+      cache: false,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new DOMException("body timeout", "TimeoutError");
+        },
+      }),
+    }),
+    (error) =>
+      error?.status === 504 && /读取模型列表超时/.test(error.message),
+  );
+  await assert.rejects(
     discoverVisionModels("openai-compatible", {
       env: {
         OPENAI_COMPATIBLE_API_KEY: "key",

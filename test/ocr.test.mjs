@@ -337,7 +337,6 @@ test("resident PaddleOCR Worker warms once and switches configuration cleanly", 
     PADDLEOCR_ENABLED: "true",
     PADDLEOCR_PYTHON: "python3",
     PADDLEOCR_PRESET: "balanced",
-    FAKE_PADDLE_COUNTER: counterPath,
     PADDLE_PDX_CACHE_HOME: root,
   };
   try {
@@ -373,7 +372,6 @@ test("force-closing PaddleOCR invalidates queued preload operations", async () =
     PADDLEOCR_ENABLED: "true",
     PADDLEOCR_PYTHON: "python3",
     PADDLEOCR_PRESET: "balanced",
-    FAKE_PADDLE_COUNTER: counterPath,
     PADDLE_PDX_CACHE_HOME: root,
   };
   try {
@@ -401,7 +399,7 @@ test("resident PaddleOCR Worker cancellation does not fall back to one-shot", as
     PADDLEOCR_ENABLED: "true",
     PADDLEOCR_PYTHON: "python3",
     PADDLEOCR_PRESET: "balanced",
-    FAKE_PADDLE_DELAY_SECONDS: "1",
+    PADDLEOCR_LANGUAGE: "test-delay",
     PADDLE_PDX_CACHE_HOME: root,
   };
   try {

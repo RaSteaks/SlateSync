@@ -208,6 +208,45 @@ describe("global settings layout and OCR routing", () => {
     });
   });
 
+  it("clears a stale PaddleOCR required flag when the card is disabled", async () => {
+    const settings = {
+      ...initialGlobalSettings,
+      values: {
+        ...initialGlobalSettings.values,
+        PADDLEOCR_ENABLED: "true",
+        PADDLEOCR_REQUIRED: "true",
+      },
+    };
+    const save = vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        ...settings,
+        values: { ...settings.values, ...request.values },
+      },
+    }));
+    const host = await renderSettings(save, settings);
+    const enableFields = [...host.querySelectorAll("label")].filter((label) => label.textContent?.includes("启用模式"));
+    const paddleEnable = enableFields.at(-1)?.querySelector("select");
+    if (!(paddleEnable instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR enable select");
+
+    act(() => changeSelect(paddleEnable, "false"));
+
+    const saveButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "保存全局配置");
+    if (!(saveButton instanceof HTMLButtonElement)) throw new Error("missing global save button");
+    await act(async () => {
+      saveButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      values: {
+        PADDLEOCR_ENABLED: "false",
+        PADDLEOCR_REQUIRED: "false",
+      },
+    });
+  });
+
   it("shows named preset values read-only and materializes them on custom", async () => {
     const save = vi.fn(async (request) => ({
       ok: true as const,

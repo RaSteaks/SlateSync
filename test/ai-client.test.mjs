@@ -1542,6 +1542,69 @@ test("a final AbortError timeout is normalized into a readable page error", asyn
   assert.equal(calls, 1);
 });
 
+test("a response body timeout retries the page request and then succeeds", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new DOMException("body timeout", "TimeoutError");
+        },
+      };
+    }
+    return jsonResponse({ output_text: JSON.stringify(modelResult) });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.result.records[0].videoCode, "C001");
+});
+
+test("a final response body timeout is normalized into a readable page error", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new DOMException("body timeout", "TimeoutError");
+      },
+    };
+  };
+
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "openai",
+        modelId: "openai/gpt-4o-mini",
+        imageDataUrl,
+      },
+      {
+        env: {
+          OPENAI_API_KEY: "test-key",
+          MODEL_REQUEST_MAX_RETRIES: "0",
+        },
+        fetchImpl,
+      },
+    ),
+    (error) =>
+      error?.status === 504 && /第 1\/1 页识别失败：模型请求超时/.test(error.message),
+  );
+  assert.equal(calls, 1);
+});
+
 function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), {
     status,

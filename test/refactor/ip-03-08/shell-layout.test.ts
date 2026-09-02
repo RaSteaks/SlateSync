@@ -145,6 +145,33 @@ describe("application shell layout", () => {
     expect(source).toContain('title="说明" onClick={() => navigateTo("help")}');
     expect(source).toContain('data-active={route === "help"}');
     expect(source).toContain('{route === "help" && <HelpPage />}');
-    expect(source).toContain(': route === "help"');
+    // Route labels now live in the shared mapping so the toolbar and native
+    // document title cannot drift apart as new localized routes are added.
+    expect(source).toContain('import { documentTitle, routeTitle } from "./app/route-title"');
+  });
+
+  it("keeps the native window title synchronized with the localized route", async () => {
+    const [source, html] = await Promise.all([
+      readFile(appSource, "utf8"),
+      readFile(new URL("../../../src/renderer/index.html", import.meta.url), "utf8"),
+    ]);
+
+    // The shell owns the side effect while the static HTML title covers the
+    // short boot interval before React hydrates the current route.
+    expect(source).toContain('import { documentTitle, routeTitle } from "./app/route-title"');
+    expect(source).toContain("document.title = documentTitle(route);");
+    expect(html).toContain("<title>项目库 · SlateSync</title>");
+  });
+
+  it("routes Project Library rename through the workspace save barrier", async () => {
+    const source = await readFile(appSource, "utf8");
+
+    // Rename closes/relaunches the active library, so it must share the same
+    // recognition and autosave preparation path as transfer actions.
+    expect(source).toMatch(
+      /const renameLibrary = async \(\) => \{[\s\S]*?setRenameBusy\(true\);[\s\S]*?if \(!\(await prepareWorkspaceForTransfer\(\)\)\) return;/,
+    );
+    expect(source).toContain('libraryActionRef.current = "rename"');
+    expect(source).toContain('disabled={libraryBusy !== null} loading={libraryBusy === "rename"}');
   });
 });

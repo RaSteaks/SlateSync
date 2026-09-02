@@ -7,6 +7,7 @@
 import { spawn as defaultSpawn } from "node:child_process";
 import { lstat, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createOcrChildEnvironment } from "../lib/ocr/child-environment.mjs";
 import { runtimeProjectDir } from "../lib/ocr/runtime-paths.mjs";
 
 export const PADDLEOCR_INSTALL_CANCEL_CODE = "PADDLEOCR_INSTALL_CANCELED";
@@ -301,58 +302,13 @@ export function createPaddleOcrInstaller({
   };
 }
 
-const CHILD_BASE_ENV_KEYS = Object.freeze([
-  "PATH",
-  "Path",
-  "HOME",
-  "USERPROFILE",
-  "APPDATA",
-  "LOCALAPPDATA",
-  "TMPDIR",
-  "TEMP",
-  "TMP",
-  "SYSTEMROOT",
-  "WINDIR",
-  "LANG",
-  "LC_ALL",
-  "LANGUAGE",
-]);
-const CHILD_RUNTIME_ENV_KEYS = Object.freeze([
-  "SLATESYNC_PROJECT_DIR",
-  "SLATESYNC_PACKAGED",
-  "PADDLE_PDX_CACHE_HOME",
-]);
-const CHILD_NETWORK_ENV_KEYS = Object.freeze([
-  "PIP_INDEX_URL",
-  "PIP_EXTRA_INDEX_URL",
-  "PIP_TRUSTED_HOST",
-  "HTTPS_PROXY",
-  "HTTP_PROXY",
-  "NO_PROXY",
-  "REQUESTS_CA_BUNDLE",
-  "SSL_CERT_FILE",
-  "PIP_CERT",
-]);
 
 function childEnvironment(source) {
   // Keep Python/pip children independent from Main's provider-key environment;
   // only runtime, locale, and explicitly needed package-network settings cross
   // this boundary.
-  const childEnv = {};
-  for (const key of CHILD_BASE_ENV_KEYS) {
-    const value = source?.[key] ?? process.env[key];
-    if (value !== undefined) childEnv[key] = value;
-  }
-  for (const key of [...CHILD_RUNTIME_ENV_KEYS, ...CHILD_NETWORK_ENV_KEYS]) {
-    const value = source?.[key] ?? process.env[key];
-    if (value !== undefined) childEnv[key] = value;
-  }
-  // Windows commonly exposes PATH as `Path`; keeping both spellings lets
-  // Python resolve helper commands without copying arbitrary environment keys.
-  if (childEnv.PATH && !childEnv.Path) childEnv.Path = childEnv.PATH;
-  if (childEnv.Path && !childEnv.PATH) childEnv.PATH = childEnv.Path;
   return {
-    ...childEnv,
+    ...createOcrChildEnvironment(source, { includePackageNetwork: true }),
     PIP_DISABLE_PIP_VERSION_CHECK: "1",
     PYTHONUNBUFFERED: "1",
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True",

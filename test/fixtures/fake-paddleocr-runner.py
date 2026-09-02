@@ -17,7 +17,8 @@ def write(prefix, value):
 
 
 def bump_counter():
-    path = os.environ.get("FAKE_PADDLE_COUNTER")
+    cache_home = os.environ.get("PADDLE_PDX_CACHE_HOME")
+    path = os.path.join(cache_home, "warmups.txt") if cache_home else None
     if not path:
         return
     try:
@@ -49,7 +50,9 @@ def main():
             write(SENTINEL, {"requestId": request_id, "ok": True, "type": "warmup"})
             continue
         payload = request.get("payload", {})
-        delay = float(os.environ.get("FAKE_PADDLE_DELAY_SECONDS", "0") or "0")
+        # The fixture uses the protocol's language field as an explicit test
+        # marker; production PaddleOCR never relies on arbitrary child env keys.
+        delay = 1.0 if payload.get("language") == "test-delay" else 0.0
         if delay > 0:
             time.sleep(delay)
         pages = [

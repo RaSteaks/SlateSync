@@ -89,6 +89,23 @@ test("explicit OCR enablement clears the competing engine route", () => {
   );
 });
 
+test("disabling an OCR engine clears its required route", () => {
+  assert.deepEqual(
+    normalizeOcrRoutingPatch({
+      VISIONOCR_ENABLED: "false",
+      VISIONOCR_REQUIRED: "true",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "true",
+    }),
+    {
+      VISIONOCR_ENABLED: "false",
+      VISIONOCR_REQUIRED: "false",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "false",
+    },
+  );
+});
+
 test("global-config.json is versioned, private, atomic, and resilient to bad input", async () => {
   const root = await mkdtemp(join(tmpdir(), "slatesync-global-config-"));
   try {

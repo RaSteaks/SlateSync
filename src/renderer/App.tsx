@@ -9,6 +9,7 @@ import { isEditableShortcutTarget, RECOGNITION_SHORTCUT_EVENT } from "./services
 import { APPEARANCE_PREFERENCE_KEY, cycleTheme, parseAppearancePreference, resolveTheme, themePreferenceLabel, watchSystemTheme } from "./services/appearance-preference";
 import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
 import { validateLibraryName } from "./validation/input-validation";
+import { documentTitle, routeTitle } from "./app/route-title";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
 import { HelpPage } from "./features/help/HelpPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
@@ -16,20 +17,6 @@ import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
 import { WorkspacePage, type RegisterWorkspaceToolbarExport, type RegisterWorkspaceTransferPreparation } from "./features/workspace/WorkspacePage";
 import styles from "./app/app.module.css";
-
-function routeTitle(route: ReturnType<typeof useUiStore.getState>["route"]) {
-  return route === "projects"
-    ? "项目库"
-    : route === "workspace"
-      ? "工作台"
-      : route === "project-settings"
-        ? "项目设置"
-        : route === "logs"
-          ? "日志查看器"
-          : route === "help"
-            ? "说明"
-            : "全局设置";
-}
 
 // 项目库路径展示简化：去掉末尾的项目库目录（默认名称或便携包名称），只显示
 // 所在位置，并把 macOS 用户主目录缩写为 ~，便于右键菜单内阅读。
@@ -58,7 +45,7 @@ export function App() {
   const [appearanceHydrated, setAppearanceHydrated] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const [libraryMenu, setLibraryMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
-  const [libraryBusy, setLibraryBusy] = useState<"import" | "export" | "change" | null>(null);
+  const [libraryBusy, setLibraryBusy] = useState<"import" | "export" | "change" | "rename" | null>(null);
   const [libraryDialog, setLibraryDialog] = useState<"settings" | "rename" | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
@@ -68,7 +55,7 @@ export function App() {
   const themeHydratedRef = useRef(false);
   const projectLoadGuard = useMemo(() => createOperationGuard(), []);
   const navigationIntentRef = useRef(0);
-  const libraryActionRef = useRef<"import" | "export" | "change" | null>(null);
+  const libraryActionRef = useRef<"import" | "export" | "change" | "rename" | null>(null);
   const workspaceExportRef = useRef<(() => void) | null>(null);
   const workspaceTransferRef = useRef<(() => Promise<boolean>) | null>(null);
   const [workspaceExportState, setWorkspaceExportState] = useState({ canExport: false, processing: false });
@@ -108,6 +95,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.density = density;
   }, [density]);
+
+  useEffect(() => {
+    document.title = documentTitle(route);
+  }, [route]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -301,9 +292,15 @@ export function App() {
   const renameLibrary = async () => {
     const validation = validateLibraryName(renameName);
     if (!validation.ok) { setRenameError(validation.message); return; }
+    // Renaming closes the active library just like transfer actions, so it
+    // must reserve the shared action slot before flushing the workspace.
+    if (libraryActionRef.current) return;
+    libraryActionRef.current = "rename";
+    setLibraryBusy("rename");
     setRenameBusy(true);
     setRenameError(null);
     try {
+      if (!(await prepareWorkspaceForTransfer())) return;
       const result = await unwrap(await getSlateSync().projects.renameLibrary({ name: renameName.trim() }));
       if (result.canceled) return;
       setToast({ tone: "success", message: "项目库已改名，应用将重新启动" });
@@ -311,6 +308,10 @@ export function App() {
       setRenameError(appErrorFromUnknown(nextError).message);
     } finally {
       setRenameBusy(false);
+      if (libraryActionRef.current === "rename") {
+        libraryActionRef.current = null;
+        setLibraryBusy(null);
+      }
     }
   };
 
@@ -418,10 +419,10 @@ export function App() {
   // The same visible actions serve the expert context menu and the accessible
   // settings dialog, keeping labels, pending states, and outcomes identical.
   const renderLibraryActions = () => <>
-    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("import")} loading={libraryBusy === "import"} startIcon={<Import size={14} />}>导入项目库</Button>
-    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("export")} loading={libraryBusy === "export"} startIcon={<PackageOpen size={14} />}>导出项目库</Button>
-    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("change")} loading={libraryBusy === "change"} startIcon={<MapPin size={14} />}>更换位置</Button>
-    <Button variant="ghost" size="sm" onClick={openRenameDialog} startIcon={<PencilLine size={14} />}>改名项目库</Button>
+    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("import")} disabled={libraryBusy !== null} loading={libraryBusy === "import"} startIcon={<Import size={14} />}>导入项目库</Button>
+    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("export")} disabled={libraryBusy !== null} loading={libraryBusy === "export"} startIcon={<PackageOpen size={14} />}>导出项目库</Button>
+    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("change")} disabled={libraryBusy !== null} loading={libraryBusy === "change"} startIcon={<MapPin size={14} />}>更换位置</Button>
+    <Button variant="ghost" size="sm" onClick={openRenameDialog} disabled={libraryBusy !== null} loading={libraryBusy === "rename"} startIcon={<PencilLine size={14} />}>改名项目库</Button>
   </>;
   // 项目库右键菜单：展示项目库名称与路径，并提供导入 / 导出 / 更换位置入口。
   const libraryMenuNode = libraryMenu.open && <ContextMenu open={libraryMenu.open} style={{ left: libraryMenu.x, top: libraryMenu.y }}>

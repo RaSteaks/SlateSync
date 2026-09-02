@@ -85,6 +85,8 @@ export function registerIpcHandlers(ipcMain, context) {
   const activeRecognitions = new Map();
   const activeModelProbes = new Map();
   let activeLibraryWrites = 0;
+  let activeLibraryReads = 0;
+  const libraryReadDrains = [];
   let libraryTransferInProgress = false;
 
   function effectiveRuntimeEnv() {
@@ -277,13 +279,13 @@ export function registerIpcHandlers(ipcMain, context) {
     );
   });
 
-  ipcMain.handle("list-projects", async () =>
+  ipcMain.handle("list-projects", async () => withLibraryRead(async () =>
     projectLibrary ? sanitizeProjects(await projectLibrary.listProjects({ includeArchived: true })) : [],
-  );
+  ));
 
-  ipcMain.handle("get-library-info", async () =>
+  ipcMain.handle("get-library-info", async () => withLibraryRead(async () =>
     projectLibrary ? sanitizeLibrary(await projectLibrary.getLibraryInfo()) : null,
-  );
+  ));
 
   ipcMain.handle("import-project-library", async () => {
     if (!libraryActions?.importLibrary) throw new Error("项目库导入不可用");
@@ -1152,11 +1154,19 @@ export function registerIpcHandlers(ipcMain, context) {
   }
 
   async function withProjectRead(projectId, operation) {
-    beginProjectRead(projectId);
+    // Project reads also hold a library-wide shared lease. A transfer can
+    // therefore drain every SQLite reader before closing or replacing the
+    // active library runtime, not only readers for one project.
+    beginLibraryRead();
     try {
-      return await operation();
+      beginProjectRead(projectId);
+      try {
+        return await operation();
+      } finally {
+        endProjectRead(projectId);
+      }
     } finally {
-      endProjectRead(projectId);
+      endLibraryRead();
     }
   }
 
@@ -1196,11 +1206,44 @@ export function registerIpcHandlers(ipcMain, context) {
     }
   }
 
+  function beginLibraryRead() {
+    if (libraryTransferInProgress) {
+      throw libraryBusyError("项目库正在导入、导出或切换位置，请稍候");
+    }
+    activeLibraryReads += 1;
+  }
+
+  function endLibraryRead() {
+    activeLibraryReads -= 1;
+    if (activeLibraryReads > 0) return;
+    activeLibraryReads = 0;
+    const drains = libraryReadDrains.splice(0);
+    drains.forEach((resolve) => resolve());
+  }
+
+  async function withLibraryRead(operation) {
+    beginLibraryRead();
+    try {
+      return await operation();
+    } finally {
+      endLibraryRead();
+    }
+  }
+
+  async function waitForLibraryReads() {
+    if (!activeLibraryReads) return;
+    await new Promise((resolve) => libraryReadDrains.push(resolve));
+  }
+
+  function libraryBusyError(message) {
+    const error = new Error(message);
+    error.code = "LIBRARY_BUSY";
+    return error;
+  }
+
   function assertLibraryWritable() {
     if (libraryTransferInProgress) {
-      const error = new Error("项目库正在导入、导出或切换位置，请稍候");
-      error.code = "LIBRARY_BUSY";
-      throw error;
+      throw libraryBusyError("项目库正在导入、导出或切换位置，请稍候");
     }
   }
 
@@ -1218,6 +1261,9 @@ export function registerIpcHandlers(ipcMain, context) {
     libraryTransferInProgress = true;
     let restartRequired = false;
     try {
+      // Set the exclusive marker before yielding so no new reader can enter
+      // while existing readers drain before the transfer closes SQLite.
+      await waitForLibraryReads();
       const result = await operation();
       restartRequired = Boolean(result?.restartRequired);
       return result;

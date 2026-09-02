@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildVisionOcr } from "./build-vision-ocr.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -77,12 +78,34 @@ export function buildHostArguments(platform, args = []) {
   return [target.builderFlag, ...architecture, ...args];
 }
 
+export function visionBridgeArchitecture(platform, args = []) {
+  if (platform !== "darwin") return null;
+  const universal = args.includes("--universal");
+  const arm64 = args.includes("--arm64");
+  const x64 = args.includes("--x64");
+  // When both thin package targets are requested, one bridge must serve both
+  // slices; compiling only the first flag would leave the second app unusable.
+  if (universal || (arm64 && x64)) return "universal";
+  if (arm64) return "arm64";
+  if (x64) return "x64";
+  // The builder's macOS default contains both architectures, so the bridge
+  // must be universal when no explicit target narrows the package.
+  return "universal";
+}
+
 export function runHostPackaging({
   platform = process.platform,
   args = process.argv.slice(2),
   spawn = spawnSync,
+  buildBridge = buildVisionOcr,
 } = {}) {
   const builderArgs = buildHostArguments(platform, args);
+  if (platform === "darwin") {
+    buildBridge({
+      platform,
+      architecture: visionBridgeArchitecture(platform, args),
+    });
+  }
   const electronBuilderCli = require.resolve("electron-builder/cli.js");
   const result = spawn(process.execPath, [electronBuilderCli, ...builderArgs], {
     stdio: "inherit",

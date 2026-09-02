@@ -963,3 +963,38 @@ Worker 边界、验收证据和最终治理交接。
   `will-quit` 保留幂等兜底，避免退出后重新拉起孤儿进程。
 - 最终验证：`npm test`（Node 316/316、Modern 109/109）、`npm run typecheck`、
   `npm run check`、`npm run build:modern` 与 `git diff --check` 均通过；未启动 Electron GUI E2E。
+
+## 2026-09-02 分支审查问题修复
+
+- 项目库改名现在与导入、导出和切换位置共用 Renderer 的识别拦截、autosave
+  准备闸门和 busy 锁；Main 为项目库索引、信息和项目/任务/Profile 读取增加
+  共享读租约。传输先禁止新读写，再等待已有读取排空；异常路径统一释放租约，
+  保留项目删除既有的项目级读写排空。
+- 新增 OCR 子进程环境白名单。PaddleOCR 检查、常驻 Worker、单次 Worker、
+  安装器和 Vision bridge 均不再继承 Provider API Key 或任意 Main 环境变量；
+  运行时只保留系统路径、临时目录、语言/locale、项目/缓存路径与必要代理，
+  pip 安装才额外保留包源配置。关闭引擎会清除对应 `*_REQUIRED`，显式启用
+  仍会互斥清除另一引擎路由，Renderer 与 Main 行为一致。
+- AI 请求与模型发现将响应体读取纳入同一 AbortController deadline；响应体超时
+  复用现有重试策略，最终统一为可读的 HTTP 504，并保留外部取消语义。新增
+  路由标题映射、`document.title` 同步和中文初始 HTML 标题，项目名继续由顶部
+  栏显示，避免项目库页面残留过期名称。
+- 新增 `scripts/build-vision-ocr.mjs`，支持 `--arch arm64|x64|universal`，
+  macOS 默认构建 universal，thin 构建后检查文件权限、架构和
+  `vision-ocr --check` JSON 响应；electron-build-host、macOS release 脚本和
+  GitHub Actions 均接入，Windows 保持 Swift 编译 no-op。同步更新 check 与
+  build contract inventory。
+- 回归覆盖读锁排空/异常释放、改名保存闸门、OCR 环境隔离与路由互斥、响应体
+  超时重试/504、路由标题以及 Windows no-op/universal 构建验证。Node 测试
+  323/323、Modern Vitest 118/118、`npm run check`、`npm run typecheck`、
+  `npm run build:modern`、`npm run build:storybook`、`npm run test:native:abi`
+  和 premium strict audit 均通过；Storybook 仅提示沙盒不能写入用户级
+  `/Users/rasteaks/.storybook/settings.json`，静态构建成功。
+- 本机真实 `node scripts/build-vision-ocr.mjs --arch universal` 已执行，但当前
+  CommandLineTools 的 SwiftBridging module map 重复定义导致 Foundation/Vision
+  编译失败；这是本机 SDK/toolchain 环境问题，不是源码检查失败。仓库已有
+  arm64 bridge 的 `lipo -archs` 和 `--check` 均通过。安装完整匹配的 Xcode/
+  CommandLineTools 后应重跑 universal 构建，脚本会在打包前阻断未验证产物。
+- Windows 项目库改名的 SQLite 关闭顺序和 POSIX 目录改名假设按本次范围继续
+  保留，作为后续专项遗留风险；本轮未执行 Windows 实机验证、Electron 前台 GUI
+  或发布上传，也未提交、推送、重置、清理或切换分支。

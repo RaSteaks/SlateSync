@@ -347,6 +347,11 @@ function OcrStatusPanel({
       return;
     }
     setValue(id === "vision" ? "VISIONOCR_ENABLED" : "PADDLEOCR_ENABLED", value);
+    // The required mode only makes sense while this engine is enabled; clear
+    // a stale advanced flag immediately so the visible draft matches Main.
+    if (value === "false") {
+      setValue(id === "vision" ? "VISIONOCR_REQUIRED" : "PADDLEOCR_REQUIRED", "false");
+    }
   };
 
   const setPaddlePreset = (nextPreset: PaddlePreset) => {

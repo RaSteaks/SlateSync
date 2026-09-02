@@ -270,6 +270,81 @@ describe("electron IPC handlers", () => {
     assert.deepEqual(calls, ["import", "export", "project-import", "project-export:project-1", "location", "rename:新名称"]);
   });
 
+  it("drains active library reads and rejects new reads during a transfer", async () => {
+    let releaseRead;
+    let signalReadStarted;
+    const readStarted = new Promise((resolve) => {
+      signalReadStarted = resolve;
+    });
+    const readGate = new Promise((resolve) => {
+      releaseRead = resolve;
+    });
+    let transferCalls = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        listProjects: async () => {
+          signalReadStarted();
+          await readGate;
+          return [];
+        },
+        getLibraryInfo: async () => ({ id: "library", name: "测试库", formatVersion: 1, path: "/tmp/library" }),
+      },
+      libraryActions: {
+        exportLibrary: async () => {
+          transferCalls += 1;
+          return { canceled: false };
+        },
+      },
+    }));
+
+    const activeRead = ipcMain.invoke("list-projects");
+    await readStarted;
+    const transfer = ipcMain.invoke("export-project-library");
+    await Promise.resolve();
+
+    await assert.rejects(
+      () => ipcMain.invoke("get-library-info"),
+      (error) => error.code === "LIBRARY_BUSY",
+    );
+    assert.equal(transferCalls, 0);
+
+    releaseRead();
+    await activeRead;
+    await transfer;
+    assert.equal(transferCalls, 1);
+  });
+
+  it("releases the library read barrier after a failed transfer", async () => {
+    let shouldFail = true;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        getLibraryInfo: async () => ({ id: "library", name: "测试库", formatVersion: 1, path: "/tmp/library" }),
+      },
+      libraryActions: {
+        exportLibrary: async () => {
+          if (shouldFail) {
+            shouldFail = false;
+            throw new Error("synthetic transfer failure");
+          }
+          return { canceled: false };
+        },
+      },
+    }));
+
+    await assert.rejects(
+      () => ipcMain.invoke("export-project-library"),
+      /synthetic transfer failure/,
+    );
+    assert.deepEqual(await ipcMain.invoke("get-library-info"), {
+      id: "library",
+      name: "测试库",
+      formatVersion: 1,
+      path: "/tmp/library",
+    });
+  });
+
   it("does not export while a project is being created", async () => {
     let releaseCreate;
     let signalCreateStarted;

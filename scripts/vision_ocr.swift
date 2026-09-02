@@ -6,9 +6,10 @@
 // can reuse the same parse strategy. Text recognition runs entirely on-device
 // through the Apple Vision framework (VNRecognizeTextRequest).
 //
-// Build once with:
-//   swiftc -O -o bin/vision-ocr scripts/vision_ocr.swift
-// The Node wrapper auto-builds the binary when the toolchain is available.
+// Release builds use the checked wrapper:
+//   node scripts/build-vision-ocr.mjs --arch universal
+// A direct swiftc command can still produce a local thin binary; the Node
+// wrapper is responsible for architecture selection and the --check gate.
 
 import Foundation
 import Vision

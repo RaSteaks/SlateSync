@@ -147,6 +147,14 @@ export function normalizeGlobalSettingsPatch(value = {}) {
 // cannot leave a stale Vision preference masking a newly enabled PaddleOCR.
 export function normalizeOcrRoutingPatch(patch = {}) {
   const normalized = { ...patch };
+  // A disabled engine cannot remain required. Clearing this paired flag at
+  // the Main boundary keeps legacy and Modern Renderer saves consistent.
+  if (normalized.PADDLEOCR_ENABLED === "false") {
+    normalized.PADDLEOCR_REQUIRED = "false";
+  }
+  if (normalized.VISIONOCR_ENABLED === "false") {
+    normalized.VISIONOCR_REQUIRED = "false";
+  }
   if (normalized.PADDLEOCR_ENABLED === "true") {
     normalized.VISIONOCR_ENABLED = "false";
     normalized.VISIONOCR_REQUIRED = "false";
