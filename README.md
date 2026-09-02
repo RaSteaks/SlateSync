@@ -16,7 +16,7 @@
 
 <br />
 
-[快速开始](#快速开始) · [工作流](#工作流) · [架构](#架构) · [开发与验证](#开发与验证)
+[快速开始](#快速开始) · [项目包](#项目包导入与导出) · [工作流](#工作流) · [架构](#架构) · [开发与验证](#开发与验证)
 
 </div>
 
@@ -38,7 +38,7 @@
 | --- | --- | --- |
 | 支持 macOS Vision OCR、PaddleOCR，以及 OpenAI、OpenRouter、Token Plan、DashScope 和 OpenAI 兼容视觉模型。 | 导入 Resolve CSV，校验条号、场镜次序和识别完整性，确认后再导出。 | Project Library 使用 SQLite 保存项目、任务、诊断和场记结构 Profile。 |
 | 根据 OCR 表头、坐标和页面版式学习并复用场记结构 Profile。 | 读取素材目录中的 `slate.txt`，补充 `Camera FPS` 和 `Shoot Day`。 | API Key 只由 Main 进程读取；Renderer 不直接访问密钥或 Node.js 能力。 |
-| 单个 PDF 最多 20 页，支持逐页准备和识别。 | 保留原 CSV 的编码、换行和未匹配字段，仅更新匹配到的字段。 | Project Library 可导入、导出或更换存储位置。 |
+| 单个 PDF 最多 20 页，支持逐页准备和识别。 | 保留原 CSV 的编码、换行和未匹配字段，仅更新匹配到的字段。 | Project Library 可导入、导出或更换存储位置；项目也可独立导入/导出。 |
 
 ## 快速开始
 
@@ -65,12 +65,20 @@ cp .env.example .env
 
 API Key 也可以直接在“全局设置”中保存；保存后不会回显。
 
-如果需要 PaddleOCR，再执行：
+开发环境如果需要 PaddleOCR，可手动创建环境并检查：
 
 ```bash
 npm run ocr:setup
 npm run ocr:check
 ```
+
+打包版会把 PaddleOCR runner 和固定依赖清单放入 App 资源，但不会把 Python 解释器、PaddlePaddle
+或 PaddleOCR wheel 预先塞进 App。用户不需要自己创建虚拟环境：打开“全局设置 → 本地 OCR”，
+点击“安装 PaddleOCR”，App 会检查本机 Python 3.10+，在用户目录创建独立环境并在线安装
+`paddlepaddle==3.3.1` 与 `paddleocr==3.7.0`，验证通过后自动保存路径。首次安装需要网络；如果
+电脑没有 Python，仍需先由用户安装 Python，安装 PaddleOCR 本身不需要管理员权限。
+安装过程支持进度、取消和失败重试；也可以继续填写已有环境的 Python 路径后点击“验证并保存环境”。
+若选择“自动”，macOS 会在 Vision bridge 不可用时转用已配置的 PaddleOCR。
 
 ### 3. 启动应用
 
@@ -87,6 +95,32 @@ npm run electron:dev:modern
 修改 Main 或 Preload 后必须完全退出旧 Electron 进程再重启；Renderer HMR 只作用于
 `src/renderer`，仅刷新窗口不会重新加载 Preload。遇到“版本不一致”提示时，重新执行
 `npm run electron:dev:modern` 即可让启动钩子重新构建 Main/Preload。
+
+## 项目包导入与导出
+
+在 Modern 或 Legacy 的项目卡片上打开“项目设置”，即可在“项目包”区域点击“导入项目”或
+“导出项目”。导出允许活动项目、已归档项目和默认项目，默认写入 Downloads 下经过文件名清理的
+`<项目名>.slatesync-project`；选择器取消不会改变项目或列表状态，已有目标也不会被覆盖。
+
+导入永远创建新的 `project-*` ID，因此同名项目可以并存，原项目不会被覆盖。项目的任务、
+诊断证据、场记结构 Profile、设置、时间戳、归档状态，以及任务中已保存的图片和 CSV 数据
+都会保留；归档副本仍显示在“已归档项目”，导入成功后留在项目库并刷新列表，不会自动打开。
+
+v1 使用目录包而不是 ZIP，结构固定为：
+
+```text
+<项目名>.slatesync-project/
+├── slatesync-project.json
+├── project.json
+├── project.sqlite
+├── tasks/*.json
+└── diagnostics/*.json
+```
+
+项目库导入/导出不包含全局配置、API Key、OCR 环境与路径、日志或项目库索引。操作开始前
+工作台会等待自动保存；识别、保存或其他项目写入进行时会提示稍候。项目数据通过临时目录、
+SQLite online backup 和原子重命名完成传输，包校验会拒绝符号链接、非法未来版本、同路径、
+嵌套路径和已存在目标。
 
 ## 工作流
 
@@ -185,6 +219,19 @@ Legacy Renderer（受限回退路径）
 
 全局配置按机器用户保存，不随 Project Library 导入/导出；因此同一台机器的多个项目共享它，而项目包仍可独立迁移。若未来需要更高等级的凭据保护，可将现有独立密钥文件迁移到 macOS Keychain/系统安全存储，普通配置文件无需改变。
 
+#### 多自定义 OpenAI 兼容接口
+
+全局设置的“自定义模型接口”支持任意数量的连接，每条记录使用
+`openai-compatible:<uuid>` 稳定 ID，可自定义名称、Base URL、Chat Completions/Responses、
+JSON 模式、图片细节和多个手动模型 ID。`global-config.json` 已升级为 v2；v1 或早期
+direct-object 文件会兼容读取并在下一次保存时写入 v2。删除接口只清理该接口的 Key、
+发现和能力缓存，不改写项目数据库，旧项目引用会提示重新选择。
+
+模型检测先读取 `/models`。明确声明图像输入+文本输出、维护模型族推断或已验证的模型
+进入“可用于识别”；未声明 modality 的模型进入“待验证”，由用户选择后使用不含项目数据
+的合成图片与最小 JSON 探针验证。探针并发上限为 2、单模型超时 30 秒，支持进度、取消和
+逐项重试。精度/性价比只展示带来源和日期的参考评级；未知模型显示“精度暂无数据”“价格未知”。
+
 ## 数据与安全
 
 - 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library`。
@@ -212,19 +259,27 @@ npm run build:storybook      # Storybook 构建
 
 ## 构建与打包
 
+本地源码打包会根据宿主系统选择目标：macOS 只生成 macOS DMG/ZIP（arm64 与 x64），
+Windows 只生成 Windows NSIS x64 包；不会生成 Windows ia32/x86 包。Linux 主机以及
+跨平台打包参数会被直接拒绝。GitHub Release 工作流目前仍只发布 macOS。
+
 构建 Modern 产物：
 
 ```bash
 npm run build:modern
 ```
 
-生成未签名的 macOS 应用目录：
+生成当前宿主平台的未签名应用目录：
 
 ```bash
+# macOS
 CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:build:dir
+
+# Windows
+npm run electron:build:dir
 ```
 
-生成 DMG 和 ZIP：
+生成当前宿主平台的安装包：
 
 ```bash
 npm run electron:build

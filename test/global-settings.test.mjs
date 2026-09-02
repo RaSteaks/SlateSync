@@ -8,6 +8,7 @@ import {
   GLOBAL_SETTING_KEYS,
   applyGlobalConfig,
   normalizeGlobalSettingsPatch,
+  normalizeOcrRoutingPatch,
   resolveGlobalSettingValues,
   sanitizeGlobalConfig,
 } from "../electron/global-settings.mjs";
@@ -33,6 +34,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
       OPENAI_COMPATIBLE_API_MODE: "RESPONSES",
       MAX_BODY_MB: "120",
       PADDLEOCR_MIN_CONFIDENCE: "0.25",
+      PADDLEOCR_PRESET: "FAST",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "736",
       PADDLEOCR_PYTHON: null,
     }),
     {
@@ -40,6 +43,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
       OPENAI_COMPATIBLE_API_MODE: "responses",
       MAX_BODY_MB: "120",
       PADDLEOCR_MIN_CONFIDENCE: "0.25",
+      PADDLEOCR_PRESET: "fast",
+      PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "736",
       PADDLEOCR_PYTHON: "",
     },
   );
@@ -47,6 +52,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
   assert.throws(() => normalizeGlobalSettingsPatch({ OPENAI_BASE_URL: "file:///tmp/provider" }), /http|https/);
   assert.throws(() => normalizeGlobalSettingsPatch({ MAX_BODY_MB: "201" }), /20–200/);
   assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_PROFILE: "turbo" }), /fast、balanced、accurate/);
+  assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_PRESET: "turbo" }), /custom、performance、balanced、fast/);
+  assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "319" }), /320–4096/);
   assert.equal(normalizeGlobalSettingsPatch({ VISIONOCR_TIMEOUT_MS: "1800000" }).VISIONOCR_TIMEOUT_MS, "1800000");
   assert.throws(() => normalizeGlobalSettingsPatch({ VISIONOCR_TIMEOUT_MS: "1800001" }), /10000–1800000/);
   assert.throws(() => normalizeGlobalSettingsPatch({ MAX_BODY_MB: 120 }), /必须是文本值/);
@@ -63,6 +70,42 @@ test("Global Settings validates patches and only overlays approved keys", () => 
   assert.equal(sanitizeGlobalConfig({ MAX_BODY_MB: "999", OPENAI_BASE_URL: "file:///tmp/no" }).MAX_BODY_MB, undefined);
 });
 
+test("explicit OCR enablement clears the competing engine route", () => {
+  assert.deepEqual(
+    normalizeOcrRoutingPatch({ PADDLEOCR_ENABLED: "true" }),
+    {
+      PADDLEOCR_ENABLED: "true",
+      VISIONOCR_ENABLED: "false",
+      VISIONOCR_REQUIRED: "false",
+    },
+  );
+  assert.deepEqual(
+    normalizeOcrRoutingPatch({ VISIONOCR_ENABLED: "true" }),
+    {
+      VISIONOCR_ENABLED: "true",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "false",
+    },
+  );
+});
+
+test("disabling an OCR engine clears its required route", () => {
+  assert.deepEqual(
+    normalizeOcrRoutingPatch({
+      VISIONOCR_ENABLED: "false",
+      VISIONOCR_REQUIRED: "true",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "true",
+    }),
+    {
+      VISIONOCR_ENABLED: "false",
+      VISIONOCR_REQUIRED: "false",
+      PADDLEOCR_ENABLED: "false",
+      PADDLEOCR_REQUIRED: "false",
+    },
+  );
+});
+
 test("global-config.json is versioned, private, atomic, and resilient to bad input", async () => {
   const root = await mkdtemp(join(tmpdir(), "slatesync-global-config-"));
   try {
@@ -74,11 +117,12 @@ test("global-config.json is versioned, private, atomic, and resilient to bad inp
       UNKNOWN_SETTING: "should-never-be-stored",
     });
     assert.deepEqual(saved, {
-      version: 1,
+      version: 2,
       values: {
         OPENAI_BASE_URL: "https://api.example.test/v1",
         MAX_BODY_MB: "120",
       },
+      customProviders: [],
     });
     assert.deepEqual(await store.load(), saved);
     assert.equal((await stat(join(root, "global-config.json"))).mode & 0o777, 0o600);
@@ -87,10 +131,10 @@ test("global-config.json is versioned, private, atomic, and resilient to bad inp
       join(root, "global-config.json"),
       JSON.stringify({ version: 1, values: { MAX_BODY_MB: "100", OPENAI_BASE_URL: "file:///bad", PADDLEOCR_PROFILE: "bad" } }),
     );
-    assert.deepEqual(await store.load(), { version: 1, values: { MAX_BODY_MB: "100" } });
+    assert.deepEqual(await store.load(), { version: 2, values: { MAX_BODY_MB: "100" }, customProviders: [] });
 
     await writeFile(join(root, "global-config.json"), "not-json{{{");
-    assert.deepEqual(await store.load(), { version: 1, values: {} });
+    assert.deepEqual(await store.load(), { version: 2, values: {}, customProviders: [] });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

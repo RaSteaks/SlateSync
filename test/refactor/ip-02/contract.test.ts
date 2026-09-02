@@ -6,6 +6,7 @@ import type {
   FileSaveResult,
   GlobalSettingsData,
   JsonSchemaCapabilityResult,
+  LogsOpenDirectoryResult,
   LogsReadResult,
   LibraryExportResult,
   LibraryImportResult,
@@ -17,8 +18,12 @@ import type {
   OcrEngineStatus,
   OcrSelection,
   OcrSettings,
+  PaddleOcrInstallProgress,
+  PaddleOcrInstallResult,
   ProgressData,
   ProjectData,
+  ProjectExportResult,
+  ProjectImportResult,
   ProjectSummary,
   RecognitionData,
   Result,
@@ -32,7 +37,7 @@ import type {
 } from "../../../src/shared/contracts/index";
 
 interface Listener {
-  (event: unknown, payload: ProgressData): void;
+  (event: unknown, payload: unknown): void;
 }
 
 function makeTransport(responses: Readonly<Record<string, unknown>> = {}) {
@@ -51,7 +56,7 @@ function makeTransport(responses: Readonly<Record<string, unknown>> = {}) {
     removeListener(_channel: string, listener: Listener): void {
       listeners.delete(listener);
     },
-    emit(payload: ProgressData): void {
+    emit(payload: unknown): void {
       for (const listener of listeners) listener({}, payload);
     },
     setFailure(next: unknown): void {
@@ -150,6 +155,15 @@ const exportedLibrary = {
   canceled: false,
   library: validatedLibrary,
 } satisfies LibraryExportResult;
+const importedProject = {
+  canceled: false,
+  project,
+} satisfies ProjectImportResult;
+const exportedProject = {
+  canceled: false,
+  project: projectSummary,
+  path: "/synthetic/Demo.slatesync-project",
+} satisfies ProjectExportResult;
 const changedLibrary = importedLibrary satisfies LibraryLocationResult;
 const renamedLibrary = {
   canceled: false,
@@ -376,6 +390,18 @@ const scan = {
 const saveResult = { saved: true, filePath: "/synthetic/demo.csv" } satisfies FileSaveResult;
 const ocrSettings = { pythonPath: "python3", setupCompleted: true, setupSkipped: false } satisfies OcrSettings;
 const ocrCheck = { ok: true, paddleVersion: "3", paddleOcrVersion: "3" } satisfies OcrCheckResult;
+const paddleOcrInstall = {
+  pythonPath: "/user-data/paddleocr-venv/bin/python",
+  setupCompleted: true,
+  setupSkipped: false,
+  paddleVersion: "3.3.1",
+  paddleOcrVersion: "3.7.0",
+} satisfies PaddleOcrInstallResult;
+const paddleOcrInstallProgress = {
+  stage: "install-dependencies",
+  percent: 35,
+  message: "正在安装依赖…",
+} satisfies PaddleOcrInstallProgress;
 const visionOcrCheck = { ok: true, engine: "Vision", modelVersion: "macOS-Vision", systemVersion: "15.0" } satisfies VisionOcrCheckResult;
 const globalSettings = {
   values: {} as GlobalSettingsData["values"],
@@ -392,11 +418,14 @@ const jsonSchemaCheck = {
   message: "接口支持 JSON Schema，且模型返回符合探针结构。",
 } satisfies JsonSchemaCapabilityResult;
 const logsRead = { entries: [], hasMore: false } satisfies LogsReadResult;
+const logsOpenDirectory = { opened: true } satisfies LogsOpenDirectoryResult;
 
 const responses: Readonly<Record<string, unknown>> = {
   "get-config": config,
   "list-projects": [projectSummary],
   "get-library-info": library,
+  "import-project": importedProject,
+  "export-project": exportedProject,
   "import-project-library": importedLibrary,
   "export-project-library": exportedLibrary,
   "change-library-location": changedLibrary,
@@ -426,9 +455,12 @@ const responses: Readonly<Record<string, unknown>> = {
   "get-ocr-settings": ocrSettings,
   "save-ocr-settings": ocrSettings,
   "check-ocr": ocrCheck,
+  "install-paddleocr": paddleOcrInstall,
+  "cancel-paddleocr-install": { canceled: true },
   "check-vision-ocr": visionOcrCheck,
   "check-compatible-json-schema": jsonSchemaCheck,
   "logs-read": logsRead,
+  "logs-open-directory": logsOpenDirectory,
 };
 
 function expectSuccess<T>(result: Result<T>, expected: T): void {
@@ -436,7 +468,7 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly seven namespaces and exact success DTOs for all 35 operations", async () => {
+  it("exposes exactly seven namespaces and exact success DTOs for all 40 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
     expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings", "logs"]);
@@ -446,6 +478,8 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.app.getConfig(), config);
     expectSuccess(await api.projects.list(), [projectSummary]);
     expectSuccess(await api.projects.getLibraryInfo(), library);
+    expectSuccess(await api.projects.importProject(), importedProject);
+    expectSuccess(await api.projects.exportProject({ id: project.id }), exportedProject);
     expectSuccess(await api.projects.importLibrary(), importedLibrary);
     expectSuccess(await api.projects.exportLibrary(), exportedLibrary);
     expectSuccess(await api.projects.changeLibraryLocation(), changedLibrary);
@@ -475,15 +509,18 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.settings.getOcrSettings(), ocrSettings);
     expectSuccess(await api.settings.saveOcrSettings({ pythonPath: "python3" }), ocrSettings);
     expectSuccess(await api.settings.checkOcr({ pythonPath: "python3" }), ocrCheck);
+    expectSuccess(await api.settings.installPaddleOcr(), paddleOcrInstall);
+    expectSuccess(await api.settings.cancelPaddleOcrInstall(), { canceled: true });
     expectSuccess(await api.settings.checkVisionOcr(), visionOcrCheck);
     expectSuccess(await api.settings.checkCompatibleJsonSchema(), jsonSchemaCheck);
     expectSuccess(await api.logs.read({ limit: 10 }), logsRead);
+    expectSuccess(await api.logs.openDirectory(), logsOpenDirectory);
 
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
-    expect(transport.calls[7]?.payload).toEqual({ name: "Demo" });
-    expect(transport.calls[13]?.payload).toEqual({ projectId: project.id });
-    expect(transport.calls[21]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
-    expect(transport.calls[22]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[9]?.payload).toEqual({ name: "Demo" });
+    expect(transport.calls[15]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[23]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[24]?.payload).toEqual({ projectId: project.id });
   });
 
   it("maps the complete failure matrix without transport boilerplate, paths, or retry changes", async () => {
@@ -528,6 +565,21 @@ describe("IP-02 Shared Contract and typed Preload", () => {
       { phase: "recognition", percent: 25 },
       { phase: "complete", percent: 100 },
     ]);
+    expect(transport.listeners.size).toBe(0);
+  });
+
+  it("maps PaddleOCR install progress through an idempotent typed subscription", () => {
+    const transport = makeTransport();
+    const api = createSlateSyncApi(transport);
+    const events: PaddleOcrInstallProgress[] = [];
+    const unsubscribe = api.settings.onPaddleOcrInstallProgress((event) => events.push(event));
+
+    transport.emit(paddleOcrInstallProgress);
+    unsubscribe();
+    unsubscribe();
+    transport.emit({ stage: "completed", percent: 100, message: "late" });
+
+    expect(events).toEqual([paddleOcrInstallProgress]);
     expect(transport.listeners.size).toBe(0);
   });
 

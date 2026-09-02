@@ -8,7 +8,13 @@ import {
   resolveModel,
   resolveProvider,
 } from "../lib/config.mjs";
-import { normalizeSlateResult, normalizeTakeStatus } from "../lib/schema.mjs";
+import { createProviderRegistry } from "../lib/provider-registry.mjs";
+import {
+  normalizeCardNumber,
+  normalizeSlateResult,
+  normalizeTakeStatus,
+  normalizeVideoCode,
+} from "../lib/schema.mjs";
 import {
   materialKey,
   syntheticProductionDayGroundTruth,
@@ -86,6 +92,23 @@ test("slate symbols normalize into Resolve Comments status values", () => {
   assert.equal(normalizeTakeStatus("X"), "废条");
   assert.equal(normalizeTakeStatus("×"), "废条");
   assert.equal(normalizeTakeStatus(""), null);
+});
+
+test("OCR/model identifier variants normalize without guessing malformed values", () => {
+  assert.equal(normalizeCardNumber(" a-10 "), "A010");
+  assert.equal(normalizeVideoCode(" c 15 "), "C015");
+  assert.equal(normalizeVideoCode("C0015"), "C015");
+  assert.equal(normalizeVideoCode("C115"), null);
+  assert.equal(normalizeVideoCode("C0115"), null);
+  assert.equal(normalizeVideoCode("C011-18"), "C011-18");
+  assert.equal(normalizeCardNumber("camera-A"), "CAMERA-A");
+  const result = normalizeSlateResult({
+    sheetTitle: null,
+    records: [{ ...modelResult.records[0], cardNumber: "A10", videoCode: "15" }],
+    warnings: [],
+  });
+  assert.equal(result.records[0].cardNumber, "A010");
+  assert.equal(result.records[0].videoCode, "C015");
 });
 
 test("recognition preserves every scene in a multi-scene value", () => {
@@ -539,6 +562,52 @@ test("OpenAI-compatible Responses mode targets the custom /responses endpoint", 
   assert.equal(captured.body.input[1].content[1].type, "input_image");
   assert.equal(captured.body.text.format.type, "json_schema");
   assert.equal(result.result.records[0].scene, "012");
+});
+
+test("custom Responses JSON Object requests include the full Slate schema prompt", async () => {
+  const providerId = "openai-compatible:11111111-1111-4111-8111-111111111111";
+  let captured;
+  const registry = createProviderRegistry({
+    env: {},
+    customProviders: [{
+      id: providerId,
+      name: "Responses JSON Object",
+      baseUrl: "https://vision.example/v1",
+      transport: "responses",
+      jsonMode: "json_object",
+      manualModelIds: ["vendor/vision-json-object"],
+      revision: 1,
+      capabilityCache: {
+        "vendor/vision-json-object": {
+          status: "verified",
+          revision: 1,
+          checkedAt: "2026-08-26T00:00:00.000Z",
+        },
+      },
+    }],
+    providerKeys: new Map([[providerId, "custom-key"]]),
+  });
+
+  await recognizeSlate(
+    {
+      providerId,
+      modelId: "vendor/vision-json-object",
+      imageDataUrl,
+    },
+    {
+      env: {},
+      providerRegistry: registry,
+      fetchImpl: async (url, request) => {
+        captured = { url, body: JSON.parse(request.body) };
+        return jsonResponse({ output_text: JSON.stringify(modelResult) });
+      },
+    },
+  );
+
+  assert.equal(captured.url, "https://vision.example/v1/responses");
+  assert.equal(captured.body.text.format.type, "json_object");
+  assert.match(captured.body.input[0].content, /严格遵守以下 Schema/);
+  assert.match(captured.body.input[0].content, /sheetTitle/);
 });
 
 test("OpenAI-compatible Chat Completions can use prompt-only JSON mode", async () => {
@@ -1469,6 +1538,69 @@ test("a final AbortError timeout is normalized into a readable page error", asyn
       },
     ),
     /第 1\/2 页识别失败：模型请求超时（单次等待上限 180 秒）/,
+  );
+  assert.equal(calls, 1);
+});
+
+test("a response body timeout retries the page request and then succeeds", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new DOMException("body timeout", "TimeoutError");
+        },
+      };
+    }
+    return jsonResponse({ output_text: JSON.stringify(modelResult) });
+  };
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(result.result.records[0].videoCode, "C001");
+});
+
+test("a final response body timeout is normalized into a readable page error", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new DOMException("body timeout", "TimeoutError");
+      },
+    };
+  };
+
+  await assert.rejects(
+    recognizeSlate(
+      {
+        providerId: "openai",
+        modelId: "openai/gpt-4o-mini",
+        imageDataUrl,
+      },
+      {
+        env: {
+          OPENAI_API_KEY: "test-key",
+          MODEL_REQUEST_MAX_RETRIES: "0",
+        },
+        fetchImpl,
+      },
+    ),
+    (error) =>
+      error?.status === 504 && /第 1\/1 页识别失败：模型请求超时/.test(error.message),
   );
   assert.equal(calls, 1);
 });

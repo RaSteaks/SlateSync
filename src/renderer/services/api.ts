@@ -20,6 +20,16 @@ export function requireGlobalSettingsApi(): SlateSyncApi {
   return api;
 }
 
+/** Keep the log viewer's newly added folder action diagnosable across HMR. */
+export function requireLocalLogDirectoryApi(): SlateSyncApi {
+  const api = getSlateSync();
+  const logs = api.logs as Partial<SlateSyncApi["logs"]> | undefined;
+  if (typeof logs?.openDirectory !== "function") {
+    throw new Error("当前 Renderer 与 Preload 版本不一致，无法打开本地日志文件夹。请完全退出 SlateSync 后重新启动；开发环境请运行 npm run electron:dev:modern。不要只刷新窗口。");
+  }
+  return api;
+}
+
 export class RendererAppError extends Error {
   readonly code: string;
   readonly retryable: boolean;

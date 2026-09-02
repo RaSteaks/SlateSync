@@ -5,9 +5,11 @@ import {
   changeLibraryLocationApi,
   checkCompatibleJsonSchemaApi,
   checkOcrApi,
+  cancelPaddleOcrInstallApi,
   createProjectApi,
   deleteTaskApi,
   downloadFileApi,
+  exportProjectApi,
   exportProjectLibraryApi,
   fetchConfig,
   fetchModelsApi,
@@ -15,13 +17,16 @@ import {
   getLibraryInfoApi,
   getOcrSettingsApi,
   importProjectLibraryApi,
+  importProjectApi,
   importScenarioApi,
+  installPaddleOcrApi,
   listProjectsApi,
   listScenariosApi,
   listTasksApi,
   loadProjectApi,
   loadScenarioApi,
   loadTaskApi,
+  onPaddleOcrInstallProgressApi,
   pickDirectoryApi,
   recognizeApi,
   restoreProjectApi,
@@ -48,6 +53,8 @@ function makeGateway(calls, progress) {
     projects: {
       list: operation("projects.list"),
       getLibraryInfo: operation("projects.getLibraryInfo"),
+      importProject: operation("projects.importProject"),
+      exportProject: operation("projects.exportProject"),
       importLibrary: operation("projects.importLibrary"),
       exportLibrary: operation("projects.exportLibrary"),
       changeLibraryLocation: operation("projects.changeLibraryLocation"),
@@ -93,6 +100,19 @@ function makeGateway(calls, progress) {
       getOcrSettings: operation("settings.getOcrSettings"),
       saveOcrSettings: operation("settings.saveOcrSettings"),
       checkOcr: operation("settings.checkOcr"),
+      installPaddleOcr: operation("settings.installPaddleOcr"),
+      cancelPaddleOcrInstall: operation("settings.cancelPaddleOcrInstall"),
+      onPaddleOcrInstallProgress(listener) {
+        progress.installListener = listener;
+        progress.installSubscriptions += 1;
+        let active = true;
+        return () => {
+          if (!active) return;
+          active = false;
+          progress.installUnsubscriptions += 1;
+          if (progress.installListener === listener) progress.installListener = null;
+        };
+      },
       checkCompatibleJsonSchema: operation("settings.checkCompatibleJsonSchema"),
     },
   };
@@ -123,7 +143,7 @@ describe("electron renderer bridge", () => {
     );
   });
 
-  it("maps all 30 legacy operations to exact typed requests and raw results", async () => {
+  it("maps all 34 legacy operations to exact typed requests and raw results", async () => {
     const calls = [];
     const progress = { listener: null, subscriptions: 0, unsubscriptions: 0 };
     globalThis.slateSync = makeGateway(calls, progress);
@@ -135,6 +155,8 @@ describe("electron renderer bridge", () => {
       [fetchConfig, [], "app.getConfig", []],
       [listProjectsApi, [], "projects.list", []],
       [getLibraryInfoApi, [], "projects.getLibraryInfo", []],
+      [importProjectApi, [], "projects.importProject", []],
+      [exportProjectApi, ["project-1"], "projects.exportProject", [{ id: "project-1" }]],
       [importProjectLibraryApi, [], "projects.importLibrary", []],
       [exportProjectLibraryApi, [], "projects.exportLibrary", []],
       [changeLibraryLocationApi, [], "projects.changeLibraryLocation", []],
@@ -159,6 +181,8 @@ describe("electron renderer bridge", () => {
       [getOcrSettingsApi, [], "settings.getOcrSettings", []],
       [saveOcrSettingsApi, [{ skip: true }], "settings.saveOcrSettings", [{ skip: true }]],
       [checkOcrApi, ["python3"], "settings.checkOcr", [{ pythonPath: "python3" }]],
+      [installPaddleOcrApi, [], "settings.installPaddleOcr", []],
+      [cancelPaddleOcrInstallApi, [], "settings.cancelPaddleOcrInstall", []],
       [checkCompatibleJsonSchemaApi, [], "settings.checkCompatibleJsonSchema", []],
     ];
 
@@ -181,7 +205,7 @@ describe("electron renderer bridge", () => {
     assert.equal(saved.name, "files.save");
     assert.equal(saved.args[0].defaultFilename, "demo.csv");
     assert.equal(saved.args[0].data, binary);
-    assert.equal(calls.length, 30);
+    assert.equal(calls.length, 34);
   });
 
   it("preserves the full-buffer identity and copies only an exact subview", async () => {
@@ -207,6 +231,30 @@ describe("electron renderer bridge", () => {
     await downloadFileApi(backing.subarray(1, 4), "subview.csv");
     assert.notEqual(received[2], backing.buffer);
     assert.deepEqual([...new Uint8Array(received[2])], [8, 7, 6]);
+  });
+
+  it("keeps the Legacy PaddleOCR progress subscription idempotent", () => {
+    const calls = [];
+    const progress = {
+      listener: null,
+      subscriptions: 0,
+      unsubscriptions: 0,
+      installListener: null,
+      installSubscriptions: 0,
+      installUnsubscriptions: 0,
+    };
+    globalThis.slateSync = makeGateway(calls, progress);
+    const received = [];
+    const unsubscribe = onPaddleOcrInstallProgressApi((event) => received.push(event));
+
+    progress.installListener({ stage: "verify", percent: 90, message: "验证中" });
+    unsubscribe();
+    unsubscribe();
+    progress.installListener?.({ stage: "completed", percent: 100, message: "late" });
+
+    assert.deepEqual(received, [{ stage: "verify", percent: 90, message: "验证中" }]);
+    assert.equal(progress.installSubscriptions, 1);
+    assert.equal(progress.installUnsubscriptions, 1);
   });
 
   it("always removes progress listeners after success and failure", async () => {

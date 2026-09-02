@@ -1,4 +1,4 @@
-import { Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import appIconUrl from "../../build/icon.png";
@@ -9,24 +9,14 @@ import { isEditableShortcutTarget, RECOGNITION_SHORTCUT_EVENT } from "./services
 import { APPEARANCE_PREFERENCE_KEY, cycleTheme, parseAppearancePreference, resolveTheme, themePreferenceLabel, watchSystemTheme } from "./services/appearance-preference";
 import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
 import { validateLibraryName } from "./validation/input-validation";
+import { documentTitle, routeTitle } from "./app/route-title";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
+import { HelpPage } from "./features/help/HelpPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
 import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
-import { WorkspacePage, type RegisterWorkspaceToolbarExport } from "./features/workspace/WorkspacePage";
+import { WorkspacePage, type RegisterWorkspaceToolbarExport, type RegisterWorkspaceTransferPreparation } from "./features/workspace/WorkspacePage";
 import styles from "./app/app.module.css";
-
-function routeTitle(route: ReturnType<typeof useUiStore.getState>["route"]) {
-  return route === "projects"
-    ? "项目库"
-    : route === "workspace"
-      ? "工作台"
-      : route === "project-settings"
-        ? "项目设置"
-        : route === "logs"
-          ? "日志查看器"
-          : "全局设置";
-}
 
 // 项目库路径展示简化：去掉末尾的项目库目录（默认名称或便携包名称），只显示
 // 所在位置，并把 macOS 用户主目录缩写为 ~，便于右键菜单内阅读。
@@ -55,7 +45,7 @@ export function App() {
   const [appearanceHydrated, setAppearanceHydrated] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const [libraryMenu, setLibraryMenu] = useState<{ open: boolean; x: number; y: number }>({ open: false, x: 0, y: 0 });
-  const [libraryBusy, setLibraryBusy] = useState<"import" | "export" | "change" | null>(null);
+  const [libraryBusy, setLibraryBusy] = useState<"import" | "export" | "change" | "rename" | null>(null);
   const [libraryDialog, setLibraryDialog] = useState<"settings" | "rename" | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
@@ -64,8 +54,18 @@ export function App() {
   const appliedThemeRef = useRef<"dark" | "light" | null>(null);
   const themeHydratedRef = useRef(false);
   const projectLoadGuard = useMemo(() => createOperationGuard(), []);
+  const navigationIntentRef = useRef(0);
+  const libraryActionRef = useRef<"import" | "export" | "change" | "rename" | null>(null);
   const workspaceExportRef = useRef<(() => void) | null>(null);
+  const workspaceTransferRef = useRef<(() => Promise<boolean>) | null>(null);
   const [workspaceExportState, setWorkspaceExportState] = useState({ canExport: false, processing: false });
+
+  const navigateTo = useCallback((nextRoute: Parameters<typeof setRoute>[0]) => {
+    // An intent token prevents a slower autosave continuation from replacing a
+    // route the user selected while the previous navigation was still flushing.
+    navigationIntentRef.current += 1;
+    setRoute(nextRoute);
+  }, [setRoute]);
 
   // The workspace owns export semantics; the shell only hosts its stable
   // trigger in the sticky toolbar and mirrors the current busy/disabled state.
@@ -75,6 +75,10 @@ export function App() {
       const next = nextState || { canExport: false, processing: false };
       return current.canExport === next.canExport && current.processing === next.processing ? current : next;
     });
+  }, []);
+
+  const registerWorkspaceTransferPreparation = useCallback<RegisterWorkspaceTransferPreparation>((handler) => {
+    workspaceTransferRef.current = handler;
   }, []);
 
   const resolvedTheme = resolveTheme(theme, systemPrefersDark);
@@ -91,6 +95,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.density = density;
   }, [density]);
+
+  useEffect(() => {
+    document.title = documentTitle(route);
+  }, [route]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -148,6 +156,23 @@ export function App() {
   }, [setError]);
 
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      // Recognition belongs to the app session rather than the Workspace
+      // route. Keeping one listener here means Logs and Workspace observe the
+      // same operation without competing subscriptions during route changes.
+      unsubscribe = getSlateSync().recognition.onProgress((event) => {
+        const recognition = useRecognitionStore.getState();
+        if (recognition.running) recognition.progress(recognition.operationId, event);
+      });
+    } catch {
+      // Renderer-only tests can mount without the Electron preload bridge;
+      // the real desktop window always installs the bridge before this effect.
+    }
+    return () => unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
     if (!appearanceHydrated) return;
     // Appearance is renderer-only UI state. A versioned key persists it without
     // expanding Shared Contract v1 or mixing it into project data.
@@ -164,7 +189,7 @@ export function App() {
       if (event.key === ",") {
         event.preventDefault();
         useUiStore.getState().setDialog(null);
-        setRoute("global-settings");
+        navigateTo("global-settings");
         return;
       }
       if (event.key !== "Enter" || route !== "workspace" || isEditableShortcutTarget(event.target) || document.querySelector('[role="dialog"]')) return;
@@ -173,7 +198,7 @@ export function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [route, setRoute]);
+  }, [navigateTo, route]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -202,8 +227,13 @@ export function App() {
 
   // 项目库设置动作：导入 / 导出 / 更换位置，结果统一经 Toast 反馈。
   const runLibraryAction = async (action: "import" | "export" | "change") => {
+    if (libraryActionRef.current) return;
+    // Reserve the action before the async save gate so repeated clicks cannot
+    // open multiple pickers while the current workspace is being flushed.
+    libraryActionRef.current = action;
     setLibraryBusy(action);
     try {
+      if (!(await prepareWorkspaceForTransfer())) return;
       const api = getSlateSync();
       const result = action === "import"
         ? await unwrap(await api.projects.importLibrary())
@@ -216,9 +246,27 @@ export function App() {
     } catch (nextError) {
       setToast({ tone: "danger", message: appErrorFromUnknown(nextError).message });
     } finally {
-      setLibraryBusy(null);
-      setLibraryMenu((current) => ({ ...current, open: false }));
+      if (libraryActionRef.current === action) {
+        libraryActionRef.current = null;
+        setLibraryBusy(null);
+        setLibraryMenu((current) => ({ ...current, open: false }));
+      }
     }
+  };
+
+  const prepareWorkspaceForTransfer = async () => {
+    // 所有项目库传输都先经过同一条识别/自动保存闸门，避免导出旧草稿。
+    if (useRecognitionStore.getState().running) {
+      setToast({ tone: "warning", message: "识别进行中，完成后才能操作项目库" });
+      return false;
+    }
+    const prepare = workspaceTransferRef.current;
+    if (!prepare) return true;
+    const saved = await prepare();
+    if (!saved) {
+      setToast({ tone: "danger", message: "当前任务保存失败，请重试保存后再操作项目库" });
+    }
+    return saved;
   };
 
   // 点击菜单中的路径行时复制完整路径到剪贴板。
@@ -244,9 +292,15 @@ export function App() {
   const renameLibrary = async () => {
     const validation = validateLibraryName(renameName);
     if (!validation.ok) { setRenameError(validation.message); return; }
+    // Renaming closes the active library just like transfer actions, so it
+    // must reserve the shared action slot before flushing the workspace.
+    if (libraryActionRef.current) return;
+    libraryActionRef.current = "rename";
+    setLibraryBusy("rename");
     setRenameBusy(true);
     setRenameError(null);
     try {
+      if (!(await prepareWorkspaceForTransfer())) return;
       const result = await unwrap(await getSlateSync().projects.renameLibrary({ name: renameName.trim() }));
       if (result.canceled) return;
       setToast({ tone: "success", message: "项目库已改名，应用将重新启动" });
@@ -254,10 +308,15 @@ export function App() {
       setRenameError(appErrorFromUnknown(nextError).message);
     } finally {
       setRenameBusy(false);
+      if (libraryActionRef.current === "rename") {
+        libraryActionRef.current = null;
+        setLibraryBusy(null);
+      }
     }
   };
 
   const openProject = async (id: string, nextRoute: "workspace" | "project-settings" = "workspace") => {
+    const navigationIntent = ++navigationIntentRef.current;
     const operationId = projectLoadGuard.start();
     useProjectStore.getState().setError(null);
     try {
@@ -269,21 +328,35 @@ export function App() {
         unwrap(await api.projects.listScenarios({ projectId: id })),
         unwrap(await api.tasks.list({ projectId: id })),
       ]);
-      if (!projectLoadGuard.isCurrent(operationId)) return;
+      if (!projectLoadGuard.isCurrent(operationId) || navigationIntentRef.current !== navigationIntent) return;
       // Project identity and its route are one visible projection boundary;
       // publish both subscriptions in one commit so no intermediate frame can
       // show the new project on the old Library route (or vice versa).
       flushSync(() => {
         useProjectStore.getState().setCurrent(loaded);
         useProjectStore.getState().setScenarios(scenarios);
-        useTaskStore.getState().setItems(tasks);
+        // Mark the project represented by the opening read so Workspace does
+        // not immediately issue the same history request again on mount.
+        useTaskStore.getState().setItems(tasks, id);
         useUiStore.getState().setRoute(nextRoute);
       });
-    } catch (error) { if (projectLoadGuard.isCurrent(operationId)) useProjectStore.getState().setError(appErrorFromUnknown(error)); }
+    } catch (error) {
+      if (projectLoadGuard.isCurrent(operationId) && navigationIntentRef.current === navigationIntent) {
+        useProjectStore.getState().setError(appErrorFromUnknown(error));
+      }
+    }
   };
 
-  const leaveProject = () => {
-    if (useRecognitionStore.getState().running) { setToast({ tone: "warning", message: "识别进行中，完成后才能切换项目" }); return; }
+  const releaseWorkspaceForLibrary = (sourceProjectId?: string) => {
+    const currentProject = useProjectStore.getState().current;
+    const currentRoute = useUiStore.getState().route;
+    // Import completion is allowed to release the workspace only if the user
+    // is still on the importing project's settings route. Returning to the
+    // workspace (or another project) must win over the late completion.
+    if (
+      sourceProjectId !== undefined
+      && (currentRoute !== "project-settings" || currentProject?.id !== sourceProjectId)
+    ) return false;
     projectLoadGuard.invalidate();
     useRecognitionStore.getState().reset();
     useSlateStore.getState().clearInput();
@@ -293,7 +366,22 @@ export function App() {
     // Match the retained compatibility route: the Library may show which
     // project was current, while workspace-owned data is already released.
     // Reopening still reloads full project authority from Main.
-    setRoute("projects");
+    navigateTo("projects");
+    return true;
+  };
+
+  const leaveProject = async () => {
+    const navigationIntent = ++navigationIntentRef.current;
+    if (useUiStore.getState().route === "projects") return;
+    // 离开工作台也走同一保存闸门，确保随后进入项目库时数据已经落盘。
+    if (!(await prepareWorkspaceForTransfer())) return;
+    // A later workspace/settings/logs click cancels this continuation; do not
+    // clear the newly selected route or its workspace-owned stores.
+    if (
+      navigationIntentRef.current !== navigationIntent
+      || useUiStore.getState().route === "projects"
+    ) return;
+    releaseWorkspaceForLibrary();
   };
 
   const leaveDeletedProject = (projectId: string) => {
@@ -307,15 +395,15 @@ export function App() {
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     useTaskStore.getState().clear();
-    setRoute("projects");
+    navigateTo("projects");
   };
 
   const navigation = <>
     <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>项目</div>
     <button type="button" className={styles.navItem} data-active={route === "projects"} data-collapsed={sidebarCollapsed || undefined} title="项目库" onClick={leaveProject} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setLibraryMenu({ open: true, x: event.clientX, y: event.clientY }); }}><Icon icon={FolderKanban} size={18} /><span>项目库</span></button>
-    {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => setRoute("workspace")}><Icon icon={LayoutDashboard} size={18} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => setRoute("project-settings")}><Icon icon={SlidersHorizontal} size={18} /><span>项目设置</span></button></>}
+    {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => navigateTo("workspace")}><Icon icon={LayoutDashboard} size={18} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => navigateTo("project-settings")}><Icon icon={SlidersHorizontal} size={18} /><span>项目设置</span></button></>}
     <div style={{ flex: 1 }} />
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => setRoute("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => setRoute("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => navigateTo("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => navigateTo("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button><button type="button" className={styles.navItem} data-active={route === "help"} data-collapsed={sidebarCollapsed || undefined} title="说明" onClick={() => navigateTo("help")}><Icon icon={BookOpen} size={18} /><span>说明</span></button>
   </>;
 
   // The App Icon is the shell-level home action. Reusing leaveProject keeps
@@ -331,10 +419,10 @@ export function App() {
   // The same visible actions serve the expert context menu and the accessible
   // settings dialog, keeping labels, pending states, and outcomes identical.
   const renderLibraryActions = () => <>
-    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("import")} loading={libraryBusy === "import"} startIcon={<Import size={14} />}>导入项目库</Button>
-    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("export")} loading={libraryBusy === "export"} startIcon={<PackageOpen size={14} />}>导出项目库</Button>
-    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("change")} loading={libraryBusy === "change"} startIcon={<MapPin size={14} />}>更换位置</Button>
-    <Button variant="ghost" size="sm" onClick={openRenameDialog} startIcon={<PencilLine size={14} />}>改名项目库</Button>
+    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("import")} disabled={libraryBusy !== null} loading={libraryBusy === "import"} startIcon={<Import size={14} />}>导入项目库</Button>
+    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("export")} disabled={libraryBusy !== null} loading={libraryBusy === "export"} startIcon={<PackageOpen size={14} />}>导出项目库</Button>
+    <Button variant="ghost" size="sm" onClick={() => void runLibraryAction("change")} disabled={libraryBusy !== null} loading={libraryBusy === "change"} startIcon={<MapPin size={14} />}>更换位置</Button>
+    <Button variant="ghost" size="sm" onClick={openRenameDialog} disabled={libraryBusy !== null} loading={libraryBusy === "rename"} startIcon={<PencilLine size={14} />}>改名项目库</Button>
   </>;
   // 项目库右键菜单：展示项目库名称与路径，并提供导入 / 导出 / 更换位置入口。
   const libraryMenuNode = libraryMenu.open && <ContextMenu open={libraryMenu.open} style={{ left: libraryMenu.x, top: libraryMenu.y }}>
@@ -361,5 +449,8 @@ export function App() {
       </Dialog>;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "workspace" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => setRoute("workspace")} onDeleted={leaveDeletedProject} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  // Keep one Workspace instance mounted while Logs, Help, or either settings page is
+  // visible. Its draft, image inputs, CSV Worker and in-flight recognition
+  // stay intact; the hidden page is excluded from the accessibility tree.
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} registerTransferPreparation={registerWorkspaceTransferPreparation} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => navigateTo("workspace")} onDeleted={leaveDeletedProject} onPrepareTransfer={prepareWorkspaceForTransfer} onProjectImported={releaseWorkspaceForLibrary} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}{route === "help" && <HelpPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

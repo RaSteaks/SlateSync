@@ -53,7 +53,10 @@ async function rasterizeImage(data: ArrayBuffer, fileType: string) {
     const height = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = new OffscreenCanvas(width, height);
     drawWhite(canvas).drawImage(bitmap, 0, 0, width, height);
-    return blobToDataUrl(await canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 }));
+    // Keep the full page plus two header-repeated core crops for raster images,
+    // matching the PDF path so high-accuracy mode can inspect small C0XX and
+    // scene/shot/take cells without asking the model to upscale one JPEG.
+    return preparePageViews(canvas, 0.92, 0.93);
   } finally {
     bitmap.close();
   }
@@ -124,6 +127,25 @@ function detailComposite(source: OffscreenCanvas, header: { top: number; bottom:
   return output;
 }
 
+async function encodeCanvas(source: OffscreenCanvas, maxDimension: number, quality: number, allowUpscale = false) {
+  const resized = resizeCanvas(source, maxDimension, allowUpscale);
+  return blobToDataUrl(await resized.convertToBlob({ type: "image/jpeg", quality }));
+}
+
+async function preparePageViews(source: OffscreenCanvas, fullQuality: number, detailQuality: number) {
+  const cropped = cropVerticalWhitespace(source);
+  const layout = calculateDetailSegments(cropped.height);
+  const output = [await encodeCanvas(cropped, 2600, fullQuality)];
+  for (const segment of layout.segments) {
+    const detail = detailComposite(cropped, layout.header, segment);
+    output.push(await encodeCanvas(detail, 3000, detailQuality, true));
+    // Yield between view encodes so a large still image does not monopolize
+    // the preparation worker's event loop while progress UI remains responsive.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  return output;
+}
+
 async function preparePdfPage(document: Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>, pageNumber: number) {
   const page = await document.getPage(pageNumber);
   try {
@@ -133,15 +155,7 @@ async function preparePdfPage(document: Awaited<ReturnType<typeof pdfjs.getDocum
     const canvas = new OffscreenCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
     const context = drawWhite(canvas);
     await page.render({ canvas: canvas as unknown as HTMLCanvasElement, canvasContext: context as unknown as CanvasRenderingContext2D, viewport, background: "#ffffff" }).promise;
-    const cropped = cropVerticalWhitespace(canvas);
-    const layout = calculateDetailSegments(cropped.height);
-    const output = [await blobToDataUrl(await resizeCanvas(cropped, 2600).convertToBlob({ type: "image/jpeg", quality: 0.92 }))];
-    for (const segment of layout.segments) {
-      const detail = resizeCanvas(detailComposite(cropped, layout.header, segment), 3000, true);
-      output.push(await blobToDataUrl(await detail.convertToBlob({ type: "image/jpeg", quality: 0.93 })));
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-    return output;
+    return preparePageViews(canvas, 0.92, 0.93);
   } finally {
     page.cleanup();
   }
@@ -179,7 +193,7 @@ scope.onmessage = (event) => {
       const { data, fileType, filename } = message;
       scope.postMessage({ id, type: "progress", progress: 5, message: `正在读取 ${filename}` });
       const isPdf = fileType === "application/pdf";
-      const imageDataGroups = isPdf ? await rasterizePdf(data, id) : [[await rasterizeImage(data, fileType)]];
+      const imageDataGroups = isPdf ? await rasterizePdf(data, id) : [await rasterizeImage(data, fileType)];
       // The original PDF is only an input to local rasterization. Returning it
       // would reintroduce a model-side path that bypasses local OCR evidence.
       scope.postMessage({ id, type: "result", pageCount: imageDataGroups.length, imageDataGroups });

@@ -47,6 +47,20 @@ test("blank or weakly marked pages keep their full height", () => {
   assert.equal(findDenseRowBand(blank).cropped, false);
 });
 
+test("separated header and table bands remain inside the crop bounds", () => {
+  const image = whiteImage(512, 1000);
+  for (let y = 140; y <= 220; y += 12) drawDarkRow(image, y, 30, 480);
+  for (let y = 560; y <= 820; y += 12) drawDarkRow(image, y, 30, 480);
+
+  const bounds = findDenseRowBand(image);
+
+  // A large blank gap is legitimate structure on a slate, not disposable
+  // margin; both bands must survive the shared crop used by every input path.
+  assert.equal(bounds.cropped, true);
+  assert.ok(bounds.top < 140);
+  assert.ok(bounds.bottom > 820);
+});
+
 test("detail segments repeat one header and cover the entire table body with overlap", () => {
   const layout = calculateDetailSegments(1000);
 

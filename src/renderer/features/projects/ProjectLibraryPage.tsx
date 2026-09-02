@@ -37,11 +37,13 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
     try {
       const api = getSlateSync();
       const [libraryInfo, projectList] = await Promise.all([unwrap(await api.projects.getLibraryInfo()), unwrap(await api.projects.list())]);
-      if (!refreshGuard.isCurrent(operationId)) return;
+      if (!refreshGuard.isCurrent(operationId)) return false;
       setLibrary(libraryInfo);
       setProjects(projectList);
+      return true;
     } catch (nextError) {
       if (refreshGuard.isCurrent(operationId)) setError(appErrorFromUnknown(nextError));
+      return false;
     } finally {
       if (refreshGuard.isCurrent(operationId)) setLoading(false);
     }
@@ -73,7 +75,8 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
   };
 
   const archive = async (projectId: string, archived: boolean) => {
-    setActionBusy(projectId);
+    if (actionBusy) return;
+    setActionBusy(`archive:${projectId}`);
     try {
       const result = archived
         ? await unwrap(await getSlateSync().projects.restore({ id: projectId }))
@@ -92,10 +95,8 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
 
   return <div className={styles.page}>
     <div className={styles.pageHeader}>
-      <div><p className={styles.eyebrow}>本地项目</p><h1 className={styles.heading}>项目库</h1><p className={styles.subtitle}>管理本地项目，并按需导入或导出项目库。</p></div>
-      {/* Visible text keeps Library management available to keyboard and touch;
-          the sidebar context menu remains an optional expert shortcut. */}
-      <div className={styles.pageActions}><Button variant="ghost" size="sm" onClick={onOpenLibrarySettings} startIcon={<Settings2 size={15} />}>项目库设置</Button><Button variant="ghost" size="sm" onClick={() => void refresh()} loading={loading} startIcon={<RefreshCw size={15} />}>刷新</Button><Button size="lg" onClick={() => setDialog("new-project")} startIcon={<Plus size={17} />}>新建项目</Button></div>
+      <div><p className={styles.eyebrow}>本地项目</p><h1 className={styles.heading}>项目库</h1><p className={styles.subtitle}>管理本地项目和项目库；项目包操作位于项目设置。</p></div>
+      <div className={styles.pageActions}><Button variant="ghost" size="sm" onClick={onOpenLibrarySettings} disabled={Boolean(actionBusy)} startIcon={<Settings2 size={15} />}>项目库设置</Button><Button variant="ghost" size="sm" onClick={() => void refresh()} loading={loading} disabled={Boolean(actionBusy)} startIcon={<RefreshCw size={15} />}>刷新</Button><Button size="lg" onClick={() => setDialog("new-project")} disabled={Boolean(actionBusy)} startIcon={<Plus size={17} />}>新建项目</Button></div>
     </div>
     {error && <div style={{ marginBottom: 16 }}><InlineError message={error.message} onRetry={() => void refresh()} /></div>}
     <div className={`${styles.grid} ${styles.gridTwo}`} style={{ marginBottom: 20 }}>
@@ -104,9 +105,9 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
     </div>
     <Surface className={styles.panel}>
       <div className={styles.sectionHeader}><div><p className={styles.kicker}>项目</p><h2 className={styles.sectionTitle}>项目列表</h2></div></div>
-      {active.length === 0 ? <EmptyState icon={FolderKanban} title="还没有项目" description="创建项目后即可开始识别场记。" action={<Button onClick={() => setDialog("new-project")} startIcon={<Plus size={16} />}>创建第一个项目</Button>} /> : <div className={styles.cardGrid}>{active.map((project) => <ProjectCard key={project.id} project={project} current={project.id === current?.id} busy={actionBusy === project.id} onOpen={() => onOpenProject(project.id, "workspace")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, false)} />)}</div>}
+      {active.length === 0 ? <EmptyState icon={FolderKanban} title="还没有项目" description="创建项目后即可开始识别场记。" action={<Button onClick={() => setDialog("new-project")} disabled={Boolean(actionBusy)} startIcon={<Plus size={16} />}>创建第一个项目</Button>} /> : <div className={styles.cardGrid}>{active.map((project) => <ProjectCard key={project.id} project={project} current={project.id === current?.id} busy={actionBusy === `archive:${project.id}`} disabled={Boolean(actionBusy)} onOpen={() => onOpenProject(project.id, "workspace")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, false)} />)}</div>}
     </Surface>
-    {archived.length > 0 && <Surface className={styles.panel} style={{ marginTop: 16 }}><div className={styles.sectionHeader}><div><p className={styles.kicker}>归档</p><h2 className={styles.sectionTitle}>已归档项目</h2></div><Text tone="muted" size="sm">恢复后可继续编辑。</Text></div><div className={styles.cardGrid}>{archived.map((project) => <ProjectCard key={project.id} project={project} current={false} busy={actionBusy === project.id} onOpen={() => onOpenProject(project.id, "project-settings")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, true)} />)}</div></Surface>}
+    {archived.length > 0 && <Surface className={styles.panel} style={{ marginTop: 16 }}><div className={styles.sectionHeader}><div><p className={styles.kicker}>归档</p><h2 className={styles.sectionTitle}>已归档项目</h2></div><Text tone="muted" size="sm">恢复后可继续编辑。</Text></div><div className={styles.cardGrid}>{archived.map((project) => <ProjectCard key={project.id} project={project} current={false} busy={actionBusy === `archive:${project.id}`} disabled={Boolean(actionBusy)} onOpen={() => onOpenProject(project.id, "project-settings")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, true)} />)}</div></Surface>}
     <Dialog open={dialog === "new-project"} title="新建项目" description="输入名称即可创建。" onClose={() => { setDialog(null); setNameError(null); }} footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" onClick={() => { setDialog(null); setNameError(null); }}>取消</Button><Button type="submit" form="new-project-form" loading={actionBusy === "create"}>创建项目</Button></Stack>}>
       <form id="new-project-form" noValidate onSubmit={createProject} className={styles.grid}>
         <div className={styles.formField}><Field label="项目名称" error={nameError || undefined}><Input autoFocus required value={name} onChange={(event) => { setName(event.target.value); if (nameError) setNameError(null); }} onBlur={() => { if (name) { const validation = validateProjectName(name); setNameError(validation.ok ? null : validation.message); } }} placeholder="例如：纪录片 · 第 01 集" /></Field></div>
@@ -116,16 +117,15 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
   </div>;
 }
 
-function ProjectCard({ project, current, busy, onOpen, onSettings, onArchive }: { project: import("../../../shared/contracts/index.js").ProjectSummary; current: boolean; busy: boolean; onOpen: () => void; onSettings: () => void; onArchive: () => void }) {
+function ProjectCard({ project, current, busy, disabled, onOpen, onSettings, onArchive }: { project: import("../../../shared/contracts/index.js").ProjectSummary; current: boolean; busy: boolean; disabled: boolean; onOpen: () => void; onSettings: () => void; onArchive: () => void }) {
   const archived = Boolean(project.archivedAt);
   return <Surface compact className={styles.projectCard} data-current={current || undefined} data-archived={archived || undefined}>
-    {/* A native button owns the full card hit area; the higher action layer
-        keeps settings and archive as independent controls without nested buttons. */}
-    <button type="button" className={styles.projectCardOpen} onClick={onOpen} aria-label={`打开项目 ${project.name}`} />
+    {/* 原生按钮负责整卡点击区域，项目包操作统一收纳到项目设置。 */}
+    <button type="button" className={styles.projectCardOpen} onClick={onOpen} disabled={disabled} aria-label={`打开项目 ${project.name}`} />
     <div className={styles.projectCardContent}>
       <div className={styles.projectTop}><span className={styles.projectMark}><FolderKanban size={19} /></span><div style={{ flex: 1, minWidth: 0 }}><h3 className={styles.projectName}>{project.name}</h3>{project.description && <p className={styles.projectDescription}>{project.description}</p>}</div></div>
       <p className={styles.projectMeta}>{project.taskCount || 0} 个任务 · 最近 {formatDate(project.latestTaskAt)}</p>
     </div>
-    <div className={styles.projectCardActions}><span /><Stack direction="row" gap={1} align="center"><IconButton label="项目设置" size="sm" onClick={onSettings}><Settings2 size={15} /></IconButton>{project.canArchive && <Button variant="ghost" size="sm" onClick={onArchive} loading={busy} startIcon={archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}>{archived ? "恢复" : "归档"}</Button>}</Stack></div>
+    <div className={styles.projectCardActions}><span /><Stack direction="row" gap={1} align="center"><IconButton label="项目设置" size="sm" onClick={onSettings} disabled={disabled}><Settings2 size={15} /></IconButton>{project.canArchive && <Button variant="ghost" size="sm" onClick={onArchive} loading={busy} disabled={disabled} startIcon={archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}>{archived ? "恢复" : "归档"}</Button>}</Stack></div>
   </Surface>;
 }

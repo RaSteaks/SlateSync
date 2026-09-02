@@ -13,6 +13,8 @@ directories:
   output: dist
   buildResources: build
 
+# Local source builds select the host platform explicitly. macOS release builds
+# retain both supported architectures; Windows builds are intentionally x64-only.
 mac:
   category: public.app-category.productivity
   # Use the layered Icon Composer asset for macOS and keep the PNG as a fallback.
@@ -26,6 +28,15 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Vision OCR is a macOS binary and must not be copied into Windows packages.
+  extraResources:
+    - from: bin/
+      to: app/bin/
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
 
 dmg:
   title: SlateSync
@@ -43,8 +54,8 @@ files:
 extraResources:
   - from: scripts/
     to: app/scripts/
-  - from: bin/
-    to: app/bin/
+  - from: requirements-ocr.txt
+    to: app/requirements-ocr.txt
   - from: slatesync.config.json
     to: app/slatesync.config.json
 

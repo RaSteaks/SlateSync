@@ -43,6 +43,35 @@ describe("preparation service lifecycle", () => {
     expect(worker.terminated).toBe(true);
   });
 
+  it("keeps active work alive but releases the worker once a hidden Workspace is idle", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    const service = new PreparationService();
+    const promise = service.recompress([["data:image/jpeg;base64,AA=="]], { maxDimension: 1500, quality: 0.68 }, vi.fn());
+    const worker = FakeWorker.latest!;
+
+    service.terminateWhenIdle();
+    // Hiding Workspace cannot cancel a request whose result is still needed.
+    expect(worker.terminated).toBe(false);
+    worker.emit("message", { id: 1, type: "recompressed", imageDataGroups: [["done"]] });
+    await expect(promise).resolves.toEqual([["done"]]);
+    // Once the request settles, no idle preparation Worker remains attached.
+    expect(worker.terminated).toBe(true);
+  });
+
+  it("cancels deferred idle cleanup when the Workspace returns", async () => {
+    vi.stubGlobal("Worker", FakeWorker);
+    const service = new PreparationService();
+    const promise = service.recompress([["data:image/jpeg;base64,AA=="]], { maxDimension: 1500, quality: 0.68 }, vi.fn());
+    const worker = FakeWorker.latest!;
+
+    service.terminateWhenIdle();
+    service.keepAlive();
+    worker.emit("message", { id: 1, type: "recompressed", imageDataGroups: [["done"]] });
+    await expect(promise).resolves.toEqual([["done"]]);
+    expect(worker.terminated).toBe(false);
+    service.terminate();
+  });
+
   it("rejects pending work and clears deferred progress on termination", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("Worker", FakeWorker);

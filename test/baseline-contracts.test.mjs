@@ -82,26 +82,48 @@ test("historical IPC inventory remains separate from post-baseline methods", asy
   // machine-level settings belong to their feature packages rather than the
   // historical inventory.
   assert.deepEqual(Object.keys(additions.requestMethods).sort(), [
+    "cancelCustomModelProbe",
+    "cancelPaddleOcrInstall",
     "cancelRecognition",
     "checkCompatibleJsonSchema",
     "checkVisionOcr",
+    "createCustomProvider",
+    "deleteCustomProvider",
     "deleteProject",
+    "exportProject",
     "getGlobalSettings",
+    "importProject",
+    "installPaddleOcr",
+    "listCustomProviders",
+    "openLogsDirectory",
+    "probeCustomModels",
     "readLogs",
     "renameLibrary",
     "saveGlobalSettings",
+    "updateCustomProvider",
   ]);
   assert.deepEqual(
     Object.values(additions.requestMethods).map((contract) => contract.channel).sort(),
     [
+      "cancel-custom-model-probe",
+      "cancel-paddleocr-install",
       "cancel-recognition",
       "check-compatible-json-schema",
       "check-vision-ocr",
+      "create-custom-provider",
+      "delete-custom-provider",
       "delete-project",
+      "export-project",
       "get-global-settings",
+      "import-project",
+      "install-paddleocr",
+      "list-custom-providers",
+      "logs-open-directory",
       "logs-read",
+      "probe-custom-models",
       "rename-library",
       "save-global-settings",
+      "update-custom-provider",
     ],
   );
 });
@@ -131,6 +153,8 @@ test("baseline and additive IPC contracts expose the exact reviewed Main surface
   assert.deepEqual([...new Set(handlerChannels)].sort(), [...expectedChannels].sort());
   assert.ok(typedPreload.includes(`on("${ipc.events.recognitionProgress.channel}",`));
   assert.ok(typedPreload.includes(`removeListener("${ipc.events.recognitionProgress.channel}",`));
+  assert.ok(typedPreload.includes(`on("${additions.events.paddleOcrInstallProgress.channel}",`));
+  assert.ok(typedPreload.includes(`removeListener("${additions.events.paddleOcrInstallProgress.channel}",`));
 
   for (const source of contracts) {
     for (const [method, contract] of Object.entries(source.requestMethods)) {
@@ -154,9 +178,15 @@ test("baseline package and electron-builder inventories match live configuration
   const ci = await readFile(new URL(".github/workflows/ci.yml", repo), "utf8");
   const release = await readFile(new URL(".github/workflows/release.yml", repo), "utf8");
 
-  for (const key of ["name", "version", "private", "type", "main", "engines"]) {
+  // The historical fixture intentionally retains the release version from its
+  // baseline commit; normal releases may bump package.json without rewriting
+  // frozen compatibility evidence. The lockfile remains the current-version
+  // consistency check for the live package metadata.
+  for (const key of ["name", "private", "type", "main", "engines"]) {
     assert.deepEqual(packageJson[key], build.package[key], `package.${key} drift`);
   }
+  assert.equal(lockfile.version, packageJson.version, "package-lock root version drift");
+  assert.equal(lockfile.packages[""].version, packageJson.version, "package-lock package version drift");
   const transitionScriptNames = new Set(Object.keys(build.transition.scripts));
   for (const [name, command] of Object.entries(build.package.scripts)) {
     if (transitionScriptNames.has(name)) continue;

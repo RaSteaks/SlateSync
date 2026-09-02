@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkOpenAiCompatibleJsonSchema } from "../lib/model-capabilities.mjs";
+import {
+  checkOpenAiCompatibleJsonSchema,
+  probeCustomModel,
+} from "../lib/model-capabilities.mjs";
 
 test("JSON Schema capability probe accepts a valid Chat Completions response", async () => {
   let request;
@@ -72,6 +75,34 @@ test("JSON Schema capability probe validates local endpoint configuration", asyn
     checkOpenAiCompatibleJsonSchema({ env: {} }),
     /尚未配置 OPENAI_COMPATIBLE_API_KEY、OPENAI_COMPATIBLE_BASE_URL、OPENAI_COMPATIBLE_MODEL/,
   );
+});
+
+test("Vision capability probe does not trust a text-only JSON echo", async () => {
+  let requestBody;
+  let requestUrl;
+  const result = await probeCustomModel({
+    provider: {
+      label: "测试接口",
+      baseUrl: "https://vision.example/v1",
+      transport: "Responses",
+      jsonMode: "prompt",
+      imageDetail: "low",
+    },
+    model: "text-only",
+    fetchImpl: async (url, options) => {
+      requestUrl = url;
+      requestBody = JSON.parse(options.body);
+      return jsonResponse({
+        choices: [{ message: { content: '{"ok":true,"marker":"slatesync"}' } }],
+      });
+    },
+  });
+
+  assert.equal(result.supported, false);
+  assert.equal(result.capabilityStatus, "failed");
+  assert.equal(requestUrl, "https://vision.example/v1/responses");
+  assert.equal(requestBody.input[0].content[1].type, "input_image");
+  assert.equal(JSON.stringify(requestBody).includes("slatesync"), false);
 });
 
 function jsonResponse(value, status = 200) {

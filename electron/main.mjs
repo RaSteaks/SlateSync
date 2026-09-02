@@ -12,8 +12,8 @@
 // preserve recovery without creating a second BrowserWindow or gateway. The
 // window blocks external navigation and only allows the active dev origin or
 // file:// URLs under the selected legacy or modern shell root.
-import { app, BrowserWindow, ipcMain, nativeImage } from "electron";
-import { access } from "node:fs/promises";
+import { app, BrowserWindow, ipcMain, nativeImage, shell } from "electron";
+import { access, mkdir } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -46,10 +46,18 @@ import {
 import {
   exportProjectLibrary,
   libraryExportPath,
+  projectExportPath,
   validateProjectLibrary,
 } from "../lib/project-library-transfer.mjs";
 import { createProjectRuntime } from "../lib/project-runtime.mjs";
 import { projectSettingsFromWorkflow } from "../lib/project-settings.mjs";
+import {
+  closePaddleOcrWorker,
+  checkPaddleOcr,
+  preloadPaddleOcr,
+} from "../lib/ocr/paddleocr.mjs";
+import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
+import { createPaddleOcrInstaller } from "./paddleocr-installer.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -62,8 +70,14 @@ const ICON_COMPOSER_PATH = join(
 // APIs need a raster image. This PNG is the artwork inside that same bundle,
 // so development and packaged builds use one source of truth.
 const DEV_ICON_PATH = join(ICON_COMPOSER_PATH, "Assets", "icon.png");
+// Keep app teardown bounded while allowing the OCR queue to observe its
+// invalidation and let the native Worker receive SIGTERM before Electron exits.
+const PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS = 2_000;
 
 // Set project root for OCR subprocess path resolution
+// This flag lets packaged OCR code distinguish an installed App bundle from a
+// development checkout before it decides whether Swift compilation is safe.
+process.env.SLATESYNC_PACKAGED = app.isPackaged ? "true" : "false";
 if (isDev) {
   process.env.SLATESYNC_PROJECT_DIR = resolve(__dirname, "..");
 } else {
@@ -74,6 +88,9 @@ let mainWindow = null;
 let projectLibrary = null;
 let projectRuntime = null;
 let appLogger = null;
+let paddleOcrInstaller = null;
+let paddleOcrExitCleanupPromise = null;
+let paddleOcrExitCleanupComplete = false;
 
 async function initialize() {
   // Start logging before any configuration or library work so startup failures
@@ -94,6 +111,10 @@ async function initialize() {
   const globalConfigStore = createGlobalConfigStore(userDataPath);
   const storedGlobalConfig = await globalConfigStore.load();
   const runtimeGlobalConfig = { ...(storedGlobalConfig?.values || {}) };
+  // Custom endpoint records are kept in a mutable Main-owned array so CRUD
+  // handlers can refresh the registry without putting connection details in
+  // environment variables or exposing a private key to the Renderer.
+  const runtimeCustomProviders = [...(storedGlobalConfig?.customProviders || [])];
 
   // Load .env from project root (dev) or userData (packaged)
   const envPath = isDev
@@ -105,6 +126,12 @@ async function initialize() {
   // is applied separately below so credentials never enter global-config.json.
   const keyStore = createKeyStore(userDataPath);
   const runtimeProviderKeys = await keyStore.load();
+  // The install target lives in userData, not Resources/app: packaged App
+  // bundles are read-only on macOS and may be protected by code signing.
+  paddleOcrInstaller = createPaddleOcrInstaller({
+    userDataPath,
+    checkOcr: checkPaddleOcr,
+  });
   function runtimeEnv() {
     const env = { ...process.env };
     // Resolve the cache default after .env is loaded so a user-provided
@@ -147,6 +174,24 @@ async function initialize() {
     Object.assign(settings, electronSettings(env));
     recognitionLimiter.setLimit?.(settings.maxConcurrentRecognitions);
     configureModelHttpAgent(env);
+    refreshPaddleOcrPreload(env, "settings-saved");
+  }
+
+  function refreshPaddleOcrPreload(env, reason) {
+    const selection = resolveOcrSelection(env, { autoEnable: true });
+    if (selection.id !== "paddleocr") {
+      // Vision/disabled routing does not need a resident Paddle pipeline; the
+      // close operation still drains an active OCR request before releasing it.
+      void closePaddleOcrWorker().catch((error) => {
+        appLogger?.warn("ocr", "PaddleOCR Worker 释放失败", { reason, error });
+      });
+      return;
+    }
+    // Preload is deliberately fire-and-forget: saving settings must not wait
+    // for model downloads, while recognition later awaits this same Worker.
+    void preloadPaddleOcr(env, { autoEnable: true }).catch((error) => {
+      appLogger?.warn("ocr", "PaddleOCR 后台预加载失败", { reason, error });
+    });
   }
 
   const fileDialogs = createFileDialogs(() => mainWindow);
@@ -174,6 +219,25 @@ async function initialize() {
   });
 
   const libraryActions = {
+    // 单项目导入/导出只改变当前项目库，成功后无需重启即可由 Renderer 刷新索引。
+    async importProject() {
+      const selected = await fileDialogs.selectProjectPackage(dirname(libraryRoot));
+      if (!selected) return { canceled: true };
+      const project = await projectLibrary.importProjectPackage(selected);
+      return { canceled: false, project };
+    },
+
+    async exportProject(id) {
+      const project = await projectLibrary.getProject(id);
+      const selected = await fileDialogs.selectProjectPackageExportPath(
+        projectExportPath(app.getPath("downloads"), project.name),
+      );
+      if (!selected) return { canceled: true };
+      const target = projectExportPath(dirname(selected), basename(selected));
+      const exported = await projectLibrary.exportProjectPackage(id, target);
+      return { canceled: false, project: exported, path: target };
+    },
+
     async importLibrary() {
       const selected = await fileDialogs.selectProjectLibrary(
         dirname(libraryRoot),
@@ -244,10 +308,25 @@ async function initialize() {
     runtimeSettings,
     globalConfigStore,
     runtimeGlobalConfig,
+    runtimeCustomProviders,
     refreshRuntimeSettings,
+    paddleOcrInstaller,
     libraryActions,
     logger: appLogger,
+    openLogDirectory,
   });
+
+  // Return a closure so startup preload runs after the window is ready while
+  // retaining the initialized runtime environment and global-config stores.
+  return () => refreshPaddleOcrPreload(runtimeEnv(), "startup");
+}
+
+/** Create the log directory on demand, then reveal it in the native file manager. */
+async function openLogDirectory(logsDir) {
+  await mkdir(logsDir, { recursive: true, mode: 0o700 });
+  const openError = await shell.openPath(logsDir);
+  if (openError) throw new Error(openError);
+  return { opened: true };
 }
 
 async function initialLibraryPath(configuredPath = "") {
@@ -439,8 +518,9 @@ function configureDevelopmentIcon() {
 
 app.whenReady().then(async () => {
   configureDevelopmentIcon();
+  let startPaddleOcrPreload;
   try {
-    await initialize();
+    startPaddleOcrPreload = await initialize();
   } catch (error) {
     console.error("SlateSync initialization failed:", error);
     appLogger?.error("app", "SlateSync 初始化失败", { error });
@@ -448,6 +528,9 @@ app.whenReady().then(async () => {
     return;
   }
   await createWindow();
+  // Warm the selected local OCR route after the window is usable so cold model
+  // download/initialization is outside the first recognition interaction.
+  startPaddleOcrPreload?.();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -461,12 +544,44 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
+app.on("before-quit", (event) => {
+  if (paddleOcrExitCleanupComplete) return;
+  // Electron does not await async event listeners. Prevent the first quit
+  // request, close the queue with a hard deadline, then re-issue the quit so
+  // will-quit can finish the remaining non-OCR resources.
+  event.preventDefault();
+  if (paddleOcrExitCleanupPromise) return;
+  paddleOcrInstaller?.cancel();
+  paddleOcrExitCleanupPromise = closePaddleOcrWorker({
+    force: true,
+    shutdown: true,
+    deadlineAt: Date.now() + PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS,
+  })
+    .catch((error) => {
+      appLogger?.warn("ocr", "应用退出时关闭 PaddleOCR Worker 失败", { error });
+    })
+    .finally(() => {
+      paddleOcrExitCleanupComplete = true;
+      app.quit();
+    });
+});
+
 app.on("will-quit", () => {
   appLogger?.info("app", "应用即将退出");
   // Close cached project connections before Electron tears down the main
   // process. The library remains a portable folder that can be backed up.
   void projectRuntime?.close();
   void projectLibrary?.close();
+  // Keep this idempotent fallback for direct/native quits that bypass the
+  // before-quit gate; force mode also invalidates any late preload operation.
+  paddleOcrInstaller?.cancel();
+  void closePaddleOcrWorker({
+    force: true,
+    shutdown: true,
+    deadlineAt: Date.now() + PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS,
+  }).catch((error) => {
+    appLogger?.warn("ocr", "退出阶段 PaddleOCR Worker 兜底关闭失败", { error });
+  });
   // Awaiting the queue here preserves the final lifecycle line without making
   // logging part of the recognition or window error paths.
   void appLogger?.close();

@@ -4,6 +4,7 @@ import { registerIpcHandlers } from "../electron/ipc-handlers.mjs";
 
 function createMockIpcMain() {
   const handlers = new Map();
+  const messages = [];
   return {
     handle(channel, handler) {
       handlers.set(channel, handler);
@@ -14,12 +15,13 @@ function createMockIpcMain() {
       const mockEvent = {
         sender: {
           isDestroyed: () => false,
-          send: () => {},
+          send: (channel, payload) => messages.push({ channel, payload }),
         },
       };
       return handler(mockEvent, ...args);
     },
     handlers,
+    messages,
   };
 }
 
@@ -60,6 +62,8 @@ describe("electron IPC handlers", () => {
       "get-library-info",
       "import-project-library",
       "export-project-library",
+      "import-project",
+      "export-project",
       "change-library-location",
       "rename-library",
       "create-project",
@@ -86,8 +90,11 @@ describe("electron IPC handlers", () => {
       "get-ocr-settings",
       "save-ocr-settings",
       "check-ocr",
+      "install-paddleocr",
+      "cancel-paddleocr-install",
       "check-vision-ocr",
       "logs-read",
+      "logs-open-directory",
     ];
     for (const channel of expectedChannels) {
       assert.ok(
@@ -189,6 +196,21 @@ describe("electron IPC handlers", () => {
     assert.deepEqual(calls, [{ limit: 25, level: "warn", category: "recognition" }]);
   });
 
+  it("opens the Main-owned local log directory through the injected OS action", async () => {
+    const calls = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      logger: { logsDir: "/synthetic/user-data/logs" },
+      openLogDirectory: async (logsDir) => {
+        calls.push(logsDir);
+        return { opened: true };
+      },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("logs-open-directory"), { opened: true });
+    assert.deepEqual(calls, ["/synthetic/user-data/logs"]);
+  });
+
   it("dispatches Project Library transfer actions", async () => {
     const calls = [];
     const ipcMain = createMockIpcMain();
@@ -201,6 +223,14 @@ describe("electron IPC handlers", () => {
         exportLibrary: async () => {
           calls.push("export");
           return { canceled: false, library: { path: "/export" } };
+        },
+        importProject: async () => {
+          calls.push("project-import");
+          return { canceled: false, project: { id: "project-imported", name: "导入项目", directoryPath: "/private" } };
+        },
+        exportProject: async (id) => {
+          calls.push(`project-export:${id}`);
+          return { canceled: false, path: "/export/project.slatesync-project", project: { id, name: "导出项目", directoryPath: "/private" } };
         },
         changeLocation: async () => {
           calls.push("location");
@@ -220,6 +250,15 @@ describe("electron IPC handlers", () => {
       (await ipcMain.invoke("export-project-library")).library.path,
       "/export",
     );
+    assert.deepEqual(await ipcMain.invoke("import-project"), {
+      canceled: false,
+      project: { id: "project-imported", name: "导入项目" },
+    });
+    assert.deepEqual(await ipcMain.invoke("export-project", { id: "project-1" }), {
+      canceled: false,
+      path: "/export/project.slatesync-project",
+      project: { id: "project-1", name: "导出项目" },
+    });
     assert.deepEqual(await ipcMain.invoke("change-library-location"), {
       canceled: true,
     });
@@ -228,7 +267,82 @@ describe("electron IPC handlers", () => {
       restartRequired: true,
       library: { path: "/renamed" },
     });
-    assert.deepEqual(calls, ["import", "export", "location", "rename:新名称"]);
+    assert.deepEqual(calls, ["import", "export", "project-import", "project-export:project-1", "location", "rename:新名称"]);
+  });
+
+  it("drains active library reads and rejects new reads during a transfer", async () => {
+    let releaseRead;
+    let signalReadStarted;
+    const readStarted = new Promise((resolve) => {
+      signalReadStarted = resolve;
+    });
+    const readGate = new Promise((resolve) => {
+      releaseRead = resolve;
+    });
+    let transferCalls = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        listProjects: async () => {
+          signalReadStarted();
+          await readGate;
+          return [];
+        },
+        getLibraryInfo: async () => ({ id: "library", name: "测试库", formatVersion: 1, path: "/tmp/library" }),
+      },
+      libraryActions: {
+        exportLibrary: async () => {
+          transferCalls += 1;
+          return { canceled: false };
+        },
+      },
+    }));
+
+    const activeRead = ipcMain.invoke("list-projects");
+    await readStarted;
+    const transfer = ipcMain.invoke("export-project-library");
+    await Promise.resolve();
+
+    await assert.rejects(
+      () => ipcMain.invoke("get-library-info"),
+      (error) => error.code === "LIBRARY_BUSY",
+    );
+    assert.equal(transferCalls, 0);
+
+    releaseRead();
+    await activeRead;
+    await transfer;
+    assert.equal(transferCalls, 1);
+  });
+
+  it("releases the library read barrier after a failed transfer", async () => {
+    let shouldFail = true;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        getLibraryInfo: async () => ({ id: "library", name: "测试库", formatVersion: 1, path: "/tmp/library" }),
+      },
+      libraryActions: {
+        exportLibrary: async () => {
+          if (shouldFail) {
+            shouldFail = false;
+            throw new Error("synthetic transfer failure");
+          }
+          return { canceled: false };
+        },
+      },
+    }));
+
+    await assert.rejects(
+      () => ipcMain.invoke("export-project-library"),
+      /synthetic transfer failure/,
+    );
+    assert.deepEqual(await ipcMain.invoke("get-library-info"), {
+      id: "library",
+      name: "测试库",
+      formatVersion: 1,
+      path: "/tmp/library",
+    });
   });
 
   it("does not export while a project is being created", async () => {
@@ -255,6 +369,10 @@ describe("electron IPC handlers", () => {
           exportCalls += 1;
           return { canceled: false };
         },
+        exportProject: async () => {
+          exportCalls += 1;
+          return { canceled: false };
+        },
       },
     }));
 
@@ -265,8 +383,81 @@ describe("electron IPC handlers", () => {
       /仍有任务正在写入/,
     );
     assert.equal(exportCalls, 0);
+    await assert.rejects(
+      () => ipcMain.invoke("export-project", { id: "project-new" }),
+      /仍有任务正在写入/,
+    );
     releaseCreate();
     assert.equal((await creating).id, "project-new");
+  });
+
+  it("returns LIBRARY_BUSY while recognition is still active", async () => {
+    let signalStarted;
+    const started = new Promise((resolve) => {
+      signalStarted = resolve;
+    });
+    let releaseRecognition;
+    const recognitionGate = new Promise((resolve) => {
+      releaseRecognition = resolve;
+    });
+    let exportCalls = 0;
+    const projectId = "project-recognizing";
+    const settings = {
+      version: 1,
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+      accuracyMode: "standard",
+      scenarioId: null,
+      customPrompt: "",
+      resolve: {
+        fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+        comments: { goodTake: "_OK", holdTake: "_KP" },
+      },
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectRuntime: {
+        get: async () => ({ project: { id: projectId, settings }, scenarioStore: null, taskStore: null, diagnostics: null }),
+      },
+      libraryActions: {
+        exportProject: async () => {
+          exportCalls += 1;
+          return { canceled: false };
+        },
+      },
+      recognize: async () => {
+        signalStarted();
+        await recognitionGate;
+        return {
+          pageCount: 1,
+          provider: "openai",
+          model: "gpt-4o-mini",
+          accuracyMode: "standard",
+          result: { records: [] },
+          usage: null,
+          durationMs: 1,
+          ocr: null,
+          scenario: null,
+        };
+      },
+    }));
+
+    const recognizing = ipcMain.invoke("recognize", {
+      projectId,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      filename: "slate.png",
+      pageCount: 1,
+      imageDataUrl: "data:image/png;base64,synthetic",
+    });
+    await started;
+    await assert.rejects(
+      () => ipcMain.invoke("export-project", { id: projectId }),
+      (error) => error.code === "LIBRARY_BUSY" && /识别任务/.test(error.message),
+    );
+    assert.equal(exportCalls, 0);
+    releaseRecognition();
+    await recognizing;
   });
 
   it("dispatches scenario Profile operations through IPC", async () => {
@@ -542,6 +733,271 @@ describe("electron IPC handlers", () => {
     assert.ok(refreshCount >= 3);
   });
 
+  it("materializes the legacy Responses contract and removes it on reset", async () => {
+    const runtimeCustomProviders = [];
+    const saves = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      globalConfigStore: {
+        save: async (payload) => {
+          saves.push(payload);
+          return {
+            version: 2,
+            values: payload.values || payload,
+            customProviders: payload.customProviders || [],
+          };
+        },
+      },
+      runtimeEnv: () => ({
+        OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+        OPENAI_COMPATIBLE_BASE_URL: "https://legacy.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "legacy-model",
+        OPENAI_COMPATIBLE_API_MODE: "Responses",
+        OPENAI_COMPATIBLE_JSON_MODE: "json_object",
+        OPENAI_COMPATIBLE_IMAGE_DETAIL: "high",
+      }),
+    }));
+
+    await ipcMain.invoke("save-global-settings", {
+      values: {
+        OPENAI_COMPATIBLE_BASE_URL: "https://saved.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "saved-model",
+      },
+    });
+    assert.equal(runtimeCustomProviders[0].transport, "responses");
+    assert.equal(runtimeCustomProviders[0].jsonMode, "json_schema");
+
+    await ipcMain.invoke("save-global-settings", { reset: true });
+    assert.equal(runtimeCustomProviders.length, 0);
+    assert.deepEqual(saves.at(-1).customProviders, []);
+    const config = await ipcMain.invoke("get-config");
+    assert.equal(config.providers.find((provider) => provider.id === "openai-compatible").type, "builtin");
+  });
+
+  it("does not publish a phantom legacy provider when global persistence fails", async () => {
+    const runtimeCustomProviders = [];
+    let shouldFail = true;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeEnv: () => ({
+        OPENAI_COMPATIBLE_API_KEY: "legacy-key",
+        OPENAI_COMPATIBLE_BASE_URL: "https://legacy.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "legacy-model",
+        OPENAI_COMPATIBLE_API_MODE: "responses",
+        OPENAI_COMPATIBLE_JSON_MODE: "json_object",
+      }),
+      globalConfigStore: {
+        save: async (payload) => {
+          if (shouldFail) {
+            shouldFail = false;
+            throw new Error("disk full");
+          }
+          return {
+            version: 2,
+            values: payload.values || payload,
+            customProviders: payload.customProviders || [],
+          };
+        },
+      },
+    }));
+
+    await assert.rejects(
+      () => ipcMain.invoke("save-global-settings", {
+        values: {
+          OPENAI_COMPATIBLE_BASE_URL: "https://saved.example/v1",
+          OPENAI_COMPATIBLE_MODEL: "saved-model",
+        },
+      }),
+      /disk full/,
+    );
+    assert.equal(runtimeCustomProviders.length, 0);
+
+    await ipcMain.invoke("save-global-settings", {
+      values: {
+        OPENAI_COMPATIBLE_BASE_URL: "https://saved.example/v1",
+        OPENAI_COMPATIBLE_MODEL: "saved-model",
+      },
+    });
+    assert.equal(runtimeCustomProviders.length, 1);
+    assert.equal(runtimeCustomProviders[0].manualModelIds[0], "saved-model");
+  });
+
+  it("keeps an empty custom-provider key unless clearing is explicit", async () => {
+    const providerId = "openai-compatible:22222222-2222-4222-8222-222222222222";
+    const runtimeCustomProviders = [{
+      id: providerId,
+      name: "Credential test",
+      baseUrl: "https://custom.example/v1",
+      transport: "chat-completions",
+      jsonMode: "json_schema",
+      imageDetail: "high",
+      manualModelIds: ["vendor/vision"],
+      revision: 1,
+      capabilityCache: {},
+    }];
+    const runtimeProviderKeys = new Map([[providerId, "old-secret"]]);
+    const savedKeys = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeProviderKeys,
+      keyStore: { save: async (keys) => savedKeys.push(Object.fromEntries(keys)) },
+      globalConfigStore: {
+        save: async (payload) => ({
+          version: 2,
+          values: payload.values,
+          customProviders: payload.customProviders,
+        }),
+      },
+    }));
+
+    await ipcMain.invoke("update-custom-provider", {
+      id: providerId,
+      apiKey: "",
+      replaceApiKey: true,
+    });
+    assert.equal(runtimeProviderKeys.get(providerId), "old-secret");
+    assert.equal(runtimeCustomProviders[0].revision, 1);
+    assert.deepEqual(savedKeys, []);
+
+    await ipcMain.invoke("update-custom-provider", {
+      id: providerId,
+      apiKey: "",
+      replaceApiKey: true,
+      clearApiKey: true,
+    });
+    assert.equal(runtimeProviderKeys.has(providerId), false);
+    assert.deepEqual(savedKeys, [{}]);
+  });
+
+  it("rolls back a provider and key when the key store rejects, allowing same-name retry", async () => {
+    const runtimeCustomProviders = [];
+    const runtimeProviderKeys = new Map();
+    let keySaveCount = 0;
+    const persistedProviders = [];
+    const persistedKeys = [];
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeProviderKeys,
+      keyStore: {
+        save: async (keys) => {
+          keySaveCount += 1;
+          if (keySaveCount === 1) throw new Error("key store unavailable");
+          persistedKeys.push(Object.fromEntries(keys));
+        },
+      },
+      globalConfigStore: {
+        save: async (payload) => {
+          persistedProviders.push(payload.customProviders || []);
+          return { version: 2, values: payload.values, customProviders: payload.customProviders || [] };
+        },
+      },
+    }));
+
+    const request = {
+      name: "Retryable provider",
+      baseUrl: "https://custom.example/v1",
+      transport: "responses",
+      jsonMode: "json_object",
+      imageDetail: "high",
+      manualModelIds: ["vendor/vision"],
+      apiKey: "new-secret",
+    };
+    await assert.rejects(() => ipcMain.invoke("create-custom-provider", request), /key store unavailable/);
+    assert.equal(runtimeCustomProviders.length, 0);
+    assert.equal(runtimeProviderKeys.size, 0);
+    assert.deepEqual(persistedProviders.at(-1), []);
+    assert.deepEqual(persistedKeys.at(-1), {});
+
+    const saved = await ipcMain.invoke("create-custom-provider", request);
+    assert.equal(saved.name, "Retryable provider");
+    assert.equal(runtimeCustomProviders.length, 1);
+    assert.equal(runtimeProviderKeys.get(saved.id), "new-secret");
+  });
+
+  it("stores probe outcomes without changing manual IDs and clears discovery caches", async () => {
+    const providerId = "openai-compatible:33333333-3333-4333-8333-333333333333";
+    const runtimeCustomProviders = [{
+      id: providerId,
+      name: "Probe cache test",
+      baseUrl: "https://custom.example/v1",
+      transport: "chat-completions",
+      jsonMode: "json_schema",
+      imageDetail: "high",
+      manualModelIds: ["manual/model"],
+      revision: 1,
+      capabilityCache: {},
+    }];
+    const runtimeProviderKeys = new Map();
+    const persisted = [];
+    let discoveryRequests = 0;
+    const ipcMain = createMockIpcMain();
+    const globalConfigStore = {
+      save: async (payload) => {
+        persisted.push(payload);
+        return { version: 2, values: payload.values, customProviders: payload.customProviders };
+      },
+    };
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeCustomProviders,
+      runtimeProviderKeys,
+      globalConfigStore,
+      probeModels: async () => ({
+        canceled: true,
+        results: [
+          { model: "manual/model", supported: true, capabilityStatus: "verified", transport: "chat-completions", status: 200, checkedAt: "2026-08-31T00:00:00.000Z", message: "ok" },
+          { model: "discovered/model", supported: false, capabilityStatus: "failed", transport: "chat-completions", status: 400, checkedAt: "2026-08-31T00:00:00.000Z", message: "no" },
+          { model: "canceled/model", supported: false, capabilityStatus: "canceled", transport: "chat-completions", status: null, checkedAt: "2026-08-31T00:00:00.000Z", message: "canceled" },
+        ],
+        completed: 3,
+        total: 3,
+      }),
+    }));
+
+    const registryBefore = (await import("../lib/provider-registry.mjs")).createProviderRegistry({
+      env: {},
+      customProviders: runtimeCustomProviders,
+    });
+    const { clearModelDiscoveryCache, discoverVisionModels } = await import("../lib/model-discovery.mjs");
+    clearModelDiscoveryCache(providerId);
+    await discoverVisionModels(providerId, {
+      registry: registryBefore,
+      env: {},
+      fetchImpl: async () => {
+        discoveryRequests += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: "manual/model" }] }) };
+      },
+    });
+
+    const result = await ipcMain.invoke("probe-custom-models", {
+      providerId,
+      modelIds: ["manual/model", "discovered/model", "canceled/model"],
+    });
+    assert.equal(result.results.length, 3);
+    assert.deepEqual(runtimeCustomProviders[0].manualModelIds, ["manual/model"]);
+    assert.equal(runtimeCustomProviders[0].capabilityCache["manual/model"].status, "verified");
+    assert.equal(runtimeCustomProviders[0].capabilityCache["discovered/model"].status, "failed");
+    assert.equal(runtimeCustomProviders[0].capabilityCache["canceled/model"].status, "canceled");
+
+    const registryAfter = (await import("../lib/provider-registry.mjs")).createProviderRegistry({
+      env: {},
+      customProviders: runtimeCustomProviders,
+    });
+    await discoverVisionModels(providerId, {
+      registry: registryAfter,
+      env: {},
+      fetchImpl: async () => {
+        discoveryRequests += 1;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: "manual/model" }] }) };
+      },
+    });
+    assert.equal(discoveryRequests, 2);
+    assert.ok(persisted.length >= 1);
+  });
+
   it("global OCR path changes clear a stale first-run completion marker", async () => {
     const runtimeGlobalConfig = { PADDLEOCR_PYTHON: "/old/bin/python" };
     const runtimeSettings = {
@@ -567,6 +1023,33 @@ describe("electron IPC handlers", () => {
     assert.equal(runtimeSettings.ocrPythonPath, "");
     assert.equal(runtimeSettings.ocrSetupCompleted, false);
     assert.equal(runtimeSettings.ocrSetupSkipped, false);
+  });
+
+  it("saving PaddleOCR enablement clears a stale Vision route", async () => {
+    const runtimeGlobalConfig = {
+      VISIONOCR_ENABLED: "true",
+      VISIONOCR_REQUIRED: "true",
+      PADDLEOCR_ENABLED: "auto",
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      runtimeGlobalConfig,
+      runtimeEnv: () => ({ ...runtimeGlobalConfig }),
+      globalConfigStore: {
+        save: async (values) => ({ version: 1, values: { ...values } }),
+      },
+    }));
+
+    const saved = await ipcMain.invoke("save-global-settings", {
+      values: { PADDLEOCR_ENABLED: "true" },
+    });
+
+    assert.equal(runtimeGlobalConfig.PADDLEOCR_ENABLED, "true");
+    assert.equal(runtimeGlobalConfig.VISIONOCR_ENABLED, "false");
+    assert.equal(runtimeGlobalConfig.VISIONOCR_REQUIRED, "false");
+    assert.equal(saved.values.PADDLEOCR_ENABLED, "true");
+    assert.equal(saved.values.VISIONOCR_ENABLED, "false");
+    assert.equal(saved.values.VISIONOCR_REQUIRED, "false");
   });
 
   it("save-provider-key stores and clears keys", async () => {
@@ -1055,6 +1538,82 @@ describe("electron IPC handlers", () => {
     assert.equal(result.setupSkipped, false);
     assert.equal(runtimeSettings.ocrPythonPath, "/venv/bin/python");
     assert.equal(saved.length, 1);
+  });
+
+  it("installs PaddleOCR, forwards progress, and persists the verified interpreter", async () => {
+    const savedSettings = [];
+    const savedGlobalConfigs = [];
+    const runtimeSettings = {
+      ocrPythonPath: "",
+      ocrSetupCompleted: false,
+      ocrSetupSkipped: false,
+    };
+    const runtimeGlobalConfig = { MAX_BODY_MB: "80" };
+    let refreshCount = 0;
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(
+      ipcMain,
+      createMockContext({
+        runtimeSettings,
+        runtimeGlobalConfig,
+        settingsStore: {
+          save: async (settings) => {
+            savedSettings.push(settings);
+          },
+        },
+        globalConfigStore: {
+          save: async (values) => {
+            savedGlobalConfigs.push(values);
+            return { version: 1, values: { ...values } };
+          },
+        },
+        refreshRuntimeSettings: () => { refreshCount += 1; },
+        paddleOcrInstaller: {
+          install: async ({ onProgress }) => {
+            onProgress({
+              stage: "install-dependencies",
+              percent: 35,
+              message: "正在安装依赖…",
+            });
+            return {
+              pythonPath: "/user-data/paddleocr-venv/bin/python",
+              paddleVersion: "3.3.1",
+              paddleOcrVersion: "3.7.0",
+            };
+          },
+          cancel: () => ({ canceled: true }),
+        },
+      }),
+    );
+
+    const result = await ipcMain.invoke("install-paddleocr");
+    assert.deepEqual(result, {
+      pythonPath: "/user-data/paddleocr-venv/bin/python",
+      setupCompleted: true,
+      setupSkipped: false,
+      paddleVersion: "3.3.1",
+      paddleOcrVersion: "3.7.0",
+    });
+    assert.equal(runtimeSettings.ocrPythonPath, "/user-data/paddleocr-venv/bin/python");
+    assert.equal(runtimeSettings.ocrSetupCompleted, true);
+    assert.deepEqual(savedSettings[0], {
+      ocrPythonPath: "/user-data/paddleocr-venv/bin/python",
+      ocrSetupCompleted: true,
+      ocrSetupSkipped: false,
+    });
+    assert.deepEqual(savedGlobalConfigs[0], {
+      MAX_BODY_MB: "80",
+      PADDLEOCR_PYTHON: "/user-data/paddleocr-venv/bin/python",
+    });
+    assert.deepEqual(ipcMain.messages, [{
+      channel: "paddleocr-install-progress",
+      payload: {
+        stage: "install-dependencies",
+        percent: 35,
+        message: "正在安装依赖…",
+      },
+    }]);
+    assert.equal(refreshCount, 1);
   });
 
   it("rejects an OCR path when validation fails without persisting it", async () => {

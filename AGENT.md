@@ -548,3 +548,453 @@ Worker 边界、验收证据和最终治理交接。
 - `global-settings.test.tsx` 显式引用 Node 类型，使 jsdom/Renderer 推断项目能够识别
   `node:fs/promises`，无需把 Node 全局类型引入 Renderer 生产配置；单文件 TypeScript
   检查与 Vitest 3/3 通过。
+
+## 2026-08-29 识别任务跨日志页恢复与场记 OCR 增强
+
+- 识别会话状态增加 `taskId` 与一次性 `resumeOnWorkspace` 交接标记；进度监听提升到
+  `App` 生命周期，避免 Workspace 卸载后停止接收 Main 的进度事件。Workspace 离开到
+  日志页时保留正在运行的识别、任务快照、图片输入、CSV Worker 和元数据；回到工作台后
+  运行中的任务直接显示原进度，任务结束后按任务 ID 从 Main 重新载入权威结果并刷新任务列表。
+  非日志路由仍释放大体积工作区数据；自动保存 / 请求准备的短暂 in-flight 窗口也纳入交接保护。
+- 图片上传与 PDF 统一使用整页图 + 两张重复表头的核心字段局部放大图；快速模式仍只提交
+  整页，精确模式复用全部视图进行 OCR、主识别和核心查漏。标识归一化只对无歧义的卡号/视频码
+  补齐固定数字位宽，范围或畸形值保留原样；序列校正结果降级为需人工复核，避免静默猜测。
+- 已新增状态交接、全局进度监听、图片多视图准备及标识归一化回归断言。
+- 验证结果：`npm run typecheck`、`npm run check`、`npm run test:modern`（19 个文件、70/70）、
+  `npm run build:modern`、定向 OCR/识别测试（58/58）和 `git diff --check` 通过；完整
+  `npm run test:node` 为 279 项通过 278 项，唯一失败是既有 baseline 清单的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），本次未改动该配置。
+
+## 2026-08-29 场记单预览放大查看与多页触控板切换
+
+- 工作台场记单预览的每一页改为原生 `<button>`，点击、Enter 和 Space 均打开同一张大图；
+  按钮名称包含文件名和页码，保留页码角标、可见 hover/pressed/focus 状态，并在预览标题下
+  提示“点击页面可放大查看”。
+- 大图复用共享 `Dialog`，新增 `wide` 尺寸以给文档保留更大的阅读宽度；关闭按钮、点击遮罩
+  和 Escape 均可返回，Dialog 原有的焦点陷阱与关闭后恢复到触发缩略图的行为保持不变。
+- 大图底部提供上一页/下一页按钮，Dialog 接收左右方向键；预览区域消费触控板的水平
+  `wheel.deltaX`，以“整段 wheel burst 锁定 + 320ms 空闲解锁”合并一次连续手势，避免惯性
+  尾部再次触发而跳过多页。垂直滚动与 Ctrl + wheel 的捏合缩放不拦截。
+- 预览选中项同时记录页码和图片来源；任务切换、替换或清空场记单时若来源不再匹配，自动
+  关闭放大层，避免显示已离开当前任务的旧图片。大图使用窗口高度上限和 `object-fit: contain`，
+  并沿用现有浅色/深色语义 token 与 reduced-motion 规则。
+- 已新增工作台预览静态回归与共享 Dialog `wide` / 局部键盘处理测试。`npm run typecheck`、
+  `npm run test:modern`（19 个文件、73/73）、`npm run build:modern`、`npm run build:storybook`、
+  `npm run check` 与 `git diff --check` 通过；未启动前台 Electron。
+
+## 2026-08-29 项目进入自动加载历史任务与任务搜索
+
+- 工作台在项目 ID 进入或切换时自动刷新任务摘要；首屏已有任务时保留旧列表并以
+  `aria-busy` 表示同步中，首屏为空时显示“正在加载历史任务”，避免用户必须点击刷新才能
+  看见历史记录。刷新开始时清理任务列表错误，失败时保留旧列表并提供重试入口。
+- 任务栏增加原生搜索框，按文件名、任务 ID 或本地化状态实时过滤历史任务；筛选后重新计算
+  TanStack Virtual 的行数并回到首行，零结果显示明确说明和“清除搜索”操作。搜索字段保留
+  Escape 清除、可见焦点和键盘可操作性，沿用现有设计系统控件与页面 token。
+- 新增 TaskRail jsdom 交互回归及工作台/任务生命周期静态断言，后续验证记录在本节。
+- 验证结果：`npm run typecheck`、`npm run test:modern`（20 个文件、76/76）、
+  `npm run build:modern`、`npm run build:storybook`、`npm run check` 与
+  `git diff --check` 通过；Storybook 仅报告沙盒无法写入用户目录的既有提示，未启动
+  Electron 前台窗口。
+
+## 2026-08-29 四项任务生命周期审查修复
+
+- 自动保存回传 Main 分配的任务 ID，并由识别请求优先使用；工作台即使在日志页交接期间卸载，
+  也会继续更新同一草稿，不再因 `activeId` 尚未回写而创建重复完成任务。
+- 任务状态记录 `loadedProjectId`：项目打开时的首个历史列表读取会被工作台复用，日志页或其他
+  路由返回时仍会触发权威刷新；日志交接恢复完成后再次刷新任务栏摘要，避免停留在草稿/零进度。
+- `normalizeVideoCode` 与 Resolve 的 `C0XX` 约束保持一致，`C115`、`C0115` 等超出范围的
+  数字编号不再进入可匹配素材键；新增自动保存 ID、项目列表归属和编号边界回归测试。
+- 验证结果：`npm run typecheck`、`npm run test:modern`（20 个文件、79/79）、`npm run check`、
+  定向 Node 回归（83/83）、`npm run build:modern` 与 `git diff --check` 均通过；未启动
+  Electron 前台窗口。
+
+## 2026-08-29 PaddleOCR 全局路由一致性修复
+
+- 修复全局设置中直接开启 PaddleOCR 时，旧的 Vision `enabled/required` 配置仍可能抢占
+  识别路由的问题。Main 保存全局配置时把显式开启某个 OCR 引擎归一化为互斥路由，同时
+  清除另一引擎的必需标记；Modern Renderer 的引擎卡片开关复用顶部首选引擎逻辑，保存前
+  即同步两套开关。自动模式仍保留 macOS 上优先 Vision OCR 的原有行为。
+- 新增全局配置、IPC 保存和 Modern 设置组件回归测试，覆盖“Paddle 开启后下一次识别不再
+  选择 Vision”的配置链路；未修改 OCR 推理算法、模型请求或 Project Library 数据格式。
+- 验证结果：`npm run check`、`npm run typecheck`、`npm run build:modern`、`npm run test:modern`
+  （20 个文件、80/80）与定向 OCR/全局设置回归均通过。`npm run test:node` 为 281 项中
+  280 项通过，唯一失败是既有 baseline `package.version` 漂移（实时 `0.2.0`、基线
+  `0.1.0`），本次未改动该配置。
+
+## 2026-08-29 日志目录快捷打开与工作台路由驻留
+
+- 日志查看器的“本地日志”卡片新增文件夹图标；Renderer 只通过
+  logs-open-directory 类型化 IPC 请求，Main 按需创建 0700 日志目录并交给系统
+  文件管理器打开，不向沙盒 Renderer 暴露本地路径。
+- 工作台实例在日志、项目设置和全局设置路由间保持挂载并隐藏，保留草稿、图片输入、
+  CSV Worker、编辑数据和识别进度；离开项目库时仍清理工作区。返回工作台时先等待同一
+  自动保存队列，再从 Main 读取活动任务详情并刷新任务列表，防止展示旧快照。
+- 根据复审补齐隐藏路由边界：进行中的图片准备/压缩请求继续完成，准备服务在 Worker
+  空闲后释放资源，回到工作台会取消延迟释放；图像裁剪取所有有效内容带的外包围范围，
+  不因标题与表格间的留白丢失识别内容；日志目录按钮在旧 Preload 缺少新方法时显示
+  完整重启指引，而不是暴露裸 TypeError。
+- 新增日志目录 IPC、Preload/Shared Contract、日志页交互和工作台返回刷新回归覆盖。
+- 本轮验证：npm run typecheck、npm run check、npm run test:modern（20 个文件、
+  85/85）、图像预处理回归（5/5）、npm run build:modern、npm run build:storybook、
+  Electron IPC 定向测试和 git diff --check 均通过。Storybook 仅报告沙盒无法写入
+  用户目录的既有提示；未启动 Electron 前台窗口。
+
+## 2026-08-30 PaddleOCR 参数预设、v6 模型与后台预加载
+
+- 新增 `PADDLEOCR_PRESET=custom|performance|balanced|fast`。命名预设完整接管
+  PP-OCRv6 模型、检测最长边、识别 batch、最低置信度和文字块上限；性能档使用
+  medium/1280/4/0.05/不限，平衡档使用 small/960/8/0.10/256，快速档使用
+  tiny/736/16/0.25/64。`custom` 或缺省预设逐字段保留既有手动设置，因此原有
+  PP-OCRv5 只需选择自定义并保留 `PADDLEOCR_MODEL_VERSION=PP-OCRv5`。
+- `PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN` 已加入全局配置白名单与 Shared Contract，校验
+  范围为 320–4096；有效预设参数进入 OCR 状态、请求 payload、缓存键和 Worker 配置键。
+  文字块/置信度仍是输出证据过滤，快速档截断继续使用均匀页面覆盖，避免只留下页面顶部。
+- Python bridge 新增 `--server` 常驻模式、requestId 逐行协议和合成图片 warmup；同一
+  模型配置只创建一个 CPU Worker。Main 在启动完成、OCR 设置保存或模型/预设变化后后台
+  预热；识别等待同一 Worker promise，配置切换先排空活动任务再释放旧进程，退出时强制关闭。
+  预加载失败不阻塞保存，One-shot runner 仍作为兼容回退；未新增 Renderer IPC 或改变
+  OCR evidence、任务存储和 Provider 请求格式。
+- Modern 全局设置使用现有 Graphite/indigo token、Field/Select 和焦点样式；命名预设下
+  的受控字段只读，切换自定义会物化当前预设值，快速档显示复杂手写/低置信度文字可能
+  减少的提示。Legacy 回退设置表同步登记两个新字段。
+- 官方 Apple M4 端到端基准（PP-OCRv6 页面给出的 200 张图）为 medium 8.82 秒/张、
+  small 3.07 秒/张、tiny 0.96 秒/张；该页面同时提示 v5/v6 评测集不同，准确率不作
+  直接横向结论。本机现有缓存的 v5 balanced 单视图基线为：模型 ready 约 1.9 秒、
+  识别约 3.851 秒、runner 约 4.457 秒、端到端墙钟约 5.949 秒；v6 权重未在本轮
+  预下载，避免为三个档位重复下载，需在目标机器首次选择预设后记录冷/热启动与
+  1/4/12 视图实测。
+- `paddleocr_runner.py --check` 实测 Paddle 3.3.1 / PaddleOCR 3.7.0；新增预设解析、
+  Worker warmup/配置切换/取消和设置页物化回归。最终验证结果记录在本节末尾，后续若
+  改动 Worker 生命周期或参数优先级，必须同步更新本节与对应测试。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（20 个文件、
+  86/86）、`npm run build:modern`、OCR/全局设置定向回归与 `git diff --check` 通过；
+  `npm run test:node` 为 286 项通过 285 项，唯一失败仍是既有 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），本次未修改该无关基线。
+
+## 2026-08-30 PaddleOCR 模型版本下拉与版本切换
+
+- Modern 与 Legacy 设置均将 `PADDLEOCR_MODEL_VERSION` 改为 `PP-OCRv6（推荐）` /
+  `PP-OCRv5（兼容）` 下拉选项；命名参数预设仍锁定其自身的 PP-OCRv6 版本，只有自定义
+  模式允许手动选择版本。
+- 自定义模式切换版本时自动清空旧版本的检测/识别模型覆盖，改用所选版本与性能档的默认
+  管线；Main 与 Python runner 还会过滤已知的跨版本模型名，同时保留手填的自定义模型 ID，
+  避免构造混合 v5/v6 管线。批量、置信度、文字块上限和检测边长不因版本切换被重置。
+- 版本字符串在 Main/Python 边界统一为规范的 `PP-OCRv5` / `PP-OCRv6`；未来或本地版本
+  字符串仍保留兼容能力，但设置界面只暴露已有默认模型映射的两个版本。
+- 新增模型版本下拉交互、跨版本模型覆盖清理与 Main 配置解析回归；后续验证结果记录在
+  本节末尾，若调整版本映射或下拉选项需同步更新设置页、runner 和测试。
+- 最终验证：Modern 设置定向测试 6/6、OCR/全局设置定向 Node 测试 20/20，`npm run
+  test:modern` 20 个文件 87/87、`npm run check`、`npm run typecheck`、`npm run
+  build:modern`、Python AST/字节码检查和 `git diff --check` 均通过；完整
+  `npm run test:node` 为 287 项通过 286 项，唯一失败是 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`）。
+
+## 2026-08-30 系统说明页
+
+- 在左侧“系统”分组新增“说明”入口和 `help` Renderer 路由；说明页不依赖项目上下文，
+  从项目库、工作台导入/识别/校对/导出，到全局 Provider、模型和本地 OCR 配置均可直接
+  查看。保留 Workspace 的隐藏挂载逻辑，不新增 Renderer IPC、任务存储或 Provider 请求格式。
+- 说明页使用现有 Graphite/indigo 设计 token、`Surface`、`Field`、`Input`、`Badge` 和
+  `Text`；左侧目录采用原生锚点，搜索只过滤本地章节。搜索、锚点、键盘焦点和窄窗口布局
+  均在页面内完成，并为快速 PaddleOCR 预设明确提示 tiny/高门槛可能减少手写和低置信度文字。
+- 内容与当前实现保持同步：Provider 列表及 OpenAI 兼容接口选项、Vision 路由优先级和参数、
+  PP-OCRv5/v6、自定义/性能/平衡/快速预设、检测最长边、识别 batch、置信度、文字块上限、
+  缓存、常驻 Worker 以及全局并行/超时/重试参数均有说明。后续增加设置字段或调整路由时，
+  必须同步更新 `HelpPage.tsx` 与本节记录。
+- 新增说明页渲染/关键词筛选回归和系统导航静态契约测试。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（21 个文件、
+  90/90）、`npm run build:modern` 和 `git diff --check` 均通过。
+
+## 2026-08-30 复审意见修复
+
+- PaddleOCR 数值配置将空白 `.env` 值视为未配置，`PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN=`
+  因而保留自定义模式的 960 默认值，不再被错误夹到 320；新增对应配置回归测试。
+- OCR 识别为排队、Worker 预热、识别和兼容性 one-shot 回退共用一个绝对截止时间；队列在
+  调用方超时后仍保持串行占用，已开始的 Worker 超时会清理进程，排队尚未开始的任务不会
+  误杀其他识别任务。回退只使用剩余预算，超时不再重新获得一轮完整 timeout。
+- 说明页目录改为渲染当前可见章节；搜索或无匹配结果时不会保留指向已卸载 DOM 的失效锚点，
+  并补充目录目标与筛选联动测试。说明正文移除额外的“安全提醒”提示，保持内容聚焦配置
+  控件与使用方法。桌面端目录固定在正文左侧并在视口过矮时启用独立滚动；窄窗口回退为
+  正常流式布局，避免遮挡正文。
+- 本轮验证：`node --test test/ocr.test.mjs`（17/17）、说明页定向 Vitest（2/2）、
+  `npm run check`、`npm run typecheck`、`npm run test:modern`（21 个文件、90/90）、
+  `npm run build:modern` 与 `git diff --check` 均通过。
+
+## 2026-08-30 PP-OCRv6 检测与识别模型下拉
+
+- 当 `PADDLEOCR_MODEL_VERSION` 为 PP-OCRv6 时，Modern 设置页的检测模型和识别模型
+  使用下拉列表提供 `medium`、`small`、`tiny` 三档，并保留“使用当前版本默认模型”选项；
+  下拉旁仍提供可编辑的自定义模型 ID 输入，命名预设仍以只读方式显示其实际模型值。
+- 自定义 PP-OCRv5 继续使用可编辑文本输入，避免破坏已有自定义模型 ID；PP-OCRv6 中
+  已保存但不在内置列表的模型 ID 会作为“当前自定义”选项保留，也可以直接编辑为新的
+  本地 ID。Legacy 回退设置表同步提供同样的下拉与自定义输入，并按规范化的模型版本切换
+  控件；重绘设置组时保留用户当前展开状态。
+- 选择下拉项会保存精确的检测/识别模型名称，Main 与 Python runner 的版本过滤和
+  配置缓存会据此创建匹配的 PP-OCRv6 管线；说明页同步记录三档模型选择含义。
+- 修改模型版本、模型列表或设置页交互时，必须同步更新 Modern、Legacy、说明页和
+  `test/refactor/ip-03-08/global-settings.test.tsx`，并重新执行设置页与构建检查。
+- 最终验证：Modern 全局设置测试 8/8、`npm run check`、`npm run typecheck`、
+  `npm run test:modern`（21 个文件、92/92）、`npm run build:modern` 和
+  `git diff --check` 均通过；Node 定向测试中的 OCR 相关 21/21 通过，另有既有
+  `package.version` 基线漂移与本机 `better-sqlite3` Node ABI 不匹配未处理。
+
+## 2026-08-30 全局设置标题文案
+
+- 移除“全局设置”页标题下的冗长副标题，让标题区域保持简洁；配置说明统一放在
+  左侧“系统 → 说明”页面中，未改变任何设置字段、保存逻辑或运行行为。
+
+## 2026-08-31 多自定义 OpenAI 兼容接口
+
+- 新增 Main 侧 v2 `global-config.json` 自定义 Provider 注册表；记录只包含名称、
+  安全 Base URL、传输/JSON/图片模式、手动模型 ID、修订号和非敏感能力缓存。
+  API Key 仍由 `provider-keys.json` 单独以 0600 原子写入保存，动态连接不会写入
+  环境变量、项目库、日志或 Renderer DTO。
+- 自定义连接使用 `openai-compatible:<uuid>` 稳定 ID，支持可选 Key 与任意数量模型。
+  `/models` 结果分为可用、待验证和失败/不支持；待验证模型只能通过 Main 侧并发 2、
+  30 秒带标记合成图片探针后进入项目选择器。修改连接或 Key 会递增修订并失效旧缓存。
+- Modern 与 Legacy 全局设置均提供新增/编辑/删除、名称/URL 校验、模型发现、供应商
+  分组、搜索、探针进度和取消；删除不改写项目数据库，旧引用保留并阻止识别直到重选。
+- 评级只显示带依据和更新时间的维护模型族/实时价格参考，未知精度显示“暂无数据”、
+  未知价格显示“价格未知”，不使用伪造默认分数。`OPENAI_COMPATIBLE_*` 与
+  `openai-compatible/custom` 继续作为旧连接兼容别名。
+- 最终沙盒验证：`npm run check`、`npm run typecheck`、`npm run test:modern`
+  （21 个文件、92/92）、`npm run build:modern`、`npm run build:storybook`、
+  premium strict audit（0 findings）和 `git diff --check` 均通过；Storybook 仅报告
+  无法写入沙盒外的用户级 `/Users/rasteaks/.storybook/settings.json`，静态产物构建
+  成功，未启动 Electron 前台窗口。
+- `npm run test:node` 共 288 项，287 项通过；唯一失败是既有 baseline 的
+  `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），与本次自定义接口实现无关。
+  自定义模型/能力/识别链路定向回归 55/55 通过；未为通过无关基线回退 v2 契约或
+  新增安全边界。
+
+## 2026-08-31 复审问题修复
+
+- 旧版 `openai-compatible` 配置在物化前统一归一化传输协议和 JSON 模式；Responses
+  与 `json_object` 继续映射为 `json_schema`，运行时注册表也会兼容修复历史快照。
+  “恢复环境默认”会移除该迁移记录并清理对应模型注册，保留 UUID 自定义接口。
+- Modern/Legacy 自定义接口发现使用最新请求令牌；切换、编辑或删除时丢弃旧模型发现、
+  能力缓存和探针进度，晚到 IPC 响应不能覆盖当前 Provider。探针完成或失败后显式清理
+  进度，并要求模型读取合成图片中未出现在提示词里的标记，避免文本接口伪造 Vision
+  能力通过。
+- Field 不再把 ID 克隆到原生布局 wrapper；PP-OCRv6 复合选择器保留唯一 ID 并保持
+  `htmlFor` 指向实际 select。未知精度模型恢复排在已评分模型之后，避免“暂无数据”
+  被误作推荐排序。
+- 新增兼容配置、重置迁移、图像探针、未知评分和 PP-OCRv6 ID 唯一性回归；后续修改
+  Provider 迁移、能力探针或 Field 复合控件时需同步更新上述测试和本节记录。
+
+## 2026-08-31 DeepSeek v4flash Review 修复方案
+
+- Responses 的 `json_object` 请求在 system prompt 中携带完整 `SLATE_SCHEMA`；凭据更新
+  区分非空替换、空值保留和显式清除，Modern/Legacy 设置页清除 Key 时同步清理过期的
+  `replaceApiKey` 状态。
+- 自定义 Provider 和 legacy materialize 使用候选配置、Key 快照和 copy-on-write 提交；
+  配置或 Key 保存失败时回滚磁盘、内存和 Key 状态，不留下 phantom Provider、孤儿 Key，
+  也不阻塞同名重试。
+- `discoveredRevisions` 保留 null 哨兵并严格匹配 revision；探针成功后刷新 discovery
+  与 registered-model 缓存。`manualModelIds` 只保存用户输入，能力缓存保存当前 revision
+  下实际探测过的 verified/failed/canceled 模型；取消项继续待验证但默认不选中。
+- legacy alias 与真实模型按物理 `apiId` 合并并保留 `CUSTOM_MODEL_ID` 兼容引用；已
+  materialize 的 Provider 只使用持久化模型 ID，不再回退过期环境变量。Legacy Renderer
+  探针切换和晚到响应均基于当前 Provider 状态处理，不恢复旧搜索、选择或 probing 状态。
+- 新增请求格式、Key 保留/清除、保存回滚、revision、探针缓存、legacy 去重/持久化和
+  Renderer 状态回归测试；未新增 IPC channel 或凭据字段。修改上述链路时需同步更新
+  `src/shared/contracts/index.ts`、Main/Renderer 测试及本节记录。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（22 个文件、
+  94/94）、`npm run build:modern`、`npm run build:storybook` 和 `git diff --check` 均
+  通过。Storybook 仅报告沙盒无法创建用户级 `/Users/rasteaks/.storybook/settings.json`，
+  静态构建成功。
+- `npm run test:node` 共 302 项，302 项通过；历史 baseline 继续保留其发布时的
+  `0.1.0`，测试改为校验当前 `package.json` 与 `package-lock.json` 的 `0.2.0` 发布版本
+  一致性，本轮新增的回归测试均通过。
+
+## 2026-08-31 按宿主系统选择打包目标
+
+- 本地 `electron:build` 与 `electron:build:dir` 统一经过
+  `scripts/electron-build-host.mjs`：macOS 主机显式传入 `--mac`，Windows 主机显式
+  传入 `--win --x64`；Linux 主机和跨平台目标参数立即失败。
+- `electron-builder.yml` 保留 macOS arm64/x64 的 DMG 与 ZIP，并新增 Windows NSIS x64
+  目标；macOS 的 `bin/vision-ocr` 资源只进入 macOS 包，不进入 Windows 包。
+- Windows ia32/x86/armv7l 不属于支持目标；GitHub Release 工作流仍使用 macOS runner，
+  因而继续只发布 macOS。
+- 最终验证：`npm run check`、`npm run typecheck`、`npm test`（Node 302/302，Modern
+  23 个文件、97/97）、`npm run build:modern`、baseline 打包契约和 `git diff --check`
+  均通过；宿主目标选择、Windows x64 固定和跨平台参数拒绝均有回归覆盖，未启动
+  Electron 前台窗口，也未访问本地 `data/`。
+
+## 2026-08-31 项目独立导出与项目库导入
+
+- 项目包采用固定的 `.slatesync-project` 目录格式，包含
+  `slatesync-project.json`、原格式 `project.json`、在线备份生成的 `project.sqlite`、
+  `tasks/*.json` 和 `diagnostics/*.json`；v1 不生成 ZIP，不提升现有项目格式版本。
+- `slatesync-project.json` 记录包版本、项目名称/描述、原项目 ID、创建/更新时间和
+  `archivedAt`。导出允许活动、归档和默认项目；默认保存路径为 Downloads 下清理后的
+  `<项目名>.slatesync-project`，目标已存在、同路径、嵌套路径或符号链接均拒绝。
+- `lib/project-library-transfer.mjs` 负责包根目录、未来版本、JSON 快照、SQLite 完整性、
+  所有权字段和符号链接校验，使用临时目录 + SQLite online backup + 原子重命名。在线备份
+  副本切换为 DELETE journal，避免开放源连接产生的 WAL/SHM 临时文件进入固定包结构；导入
+  在临时副本中重绑定新 `project-*` ID、当前 `libraryId`、项目元数据、任务/诊断数据库行和
+  快照，保留设置、场记结构、时间戳、诊断与归档状态。
+- 导入始终插入新项目库索引行，允许同名项目，不覆盖源数据；全局配置、Provider API Key、
+  OCR 环境/路径、日志和项目库索引不进入包。索引写入失败时清理未登记目录，无法立即删除
+  的目录改为启动时重试的 tombstone。
+- 新增 `import-project` / `export-project` IPC、Shared Contract 的
+  `ProjectImportResult` / `ProjectExportResult`、Preload typed gateway 与 Legacy bridge。
+  两个操作与项目库整体传输共用独占锁，识别、自动保存、创建、归档、删除或其他项目写入
+  期间返回 `LIBRARY_BUSY`。
+- Modern 与 Legacy 项目库页面均提供顶部“导入项目”及活动/归档/默认卡片“导出项目”；
+  成功后留在项目库刷新并 Toast，归档导入副本继续显示在归档区。离开工作台或开始项目库
+  传输前等待 autosave flush；保存失败或识别进行中不会进入文件选择器，取消不改变状态。
+- 更新 `UX-CONTRACT.md`、Modern Help、README 和本方案记录；新增 Node 传输、IPC、Preload/
+  bridge、Modern 项目库回归，并补充 Legacy HTML/脚本静态契约。GUI Electron E2E 仍按既有
+  约定仅在 Owner 明确要求时运行。
+- 最终验证：`npm run typecheck`、`npm run test:modern`（24 个文件、102/102）、
+  `npm run test:node`（305/305）、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook` 与 `git diff --check` 均通过。Storybook 仅报告沙盒无法写入
+  用户级 `/Users/rasteaks/.storybook/settings.json`，静态产物构建成功；未启动 Electron
+  GUI E2E，按既有 Owner 明确要求约定保留为后续验证。
+
+## 2026-09-01 自定义接口注册表 UI 优化
+
+- Modern Renderer 的自定义接口设置改为稳定的“注册列表 + 详情工作区”组合：左侧只负责
+  选择接口，右侧按接口身份、连接能力、检测/探针动作、可用模型、待验证模型和失败项
+  的顺序展示，继续复用 `Surface`、`Button`、`Badge`、`Field`、`EmptyState`、`Progress`
+  和 `Spinner`，不新增业务状态或 IPC 通道。
+- 移除该组件的内联布局样式，所有间距、选中态、键盘焦点态、警告提示、模型分组、搜索
+  和窄窗口堆叠规则集中到 `src/renderer/app/app.module.css`，仅使用现有 `--ss-*` 语义
+  令牌；加载态、无接口态、未选择态和探针进行态均有明确的可读反馈。
+- 详情区新增协议/JSON/图片细节摘要、HTTPS 警告、能力状态 Badge、模型搜索清除动作、
+  分供应商全选以及失败项独立重试；保存表单改为真实 `<form>`，API Key 显示切换补齐
+  accessible label。共享 `EmptyState` 支持 feature-level className，但保留统一图标、标题、
+  描述和 action 语义。
+- 补充自定义接口注册表结构与 `aria-pressed` 状态回归断言；附带的图片仅作为视觉参考，
+  不作为实现指令。Legacy Renderer 保持原有实现，Modern 仍是默认入口。
+- 本轮验证：定向组件测试 2/2、`npm run typecheck`、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook`、premium strict audit（0 findings）和 `git diff --check` 通过。
+  Storybook 仅因沙盒无法写入用户级 `/Users/rasteaks/.storybook/settings.json` 发出提示，
+  静态产物构建成功。`npm run test:modern` 共 24 个文件、98/99 通过；唯一失败为工作区已有
+  的 `legacy-project-library.test.ts` 静态契约仍查找不存在的 `import-project-button`，与本次
+  Modern 自定义接口改动无关。
+
+## 2026-09-01 项目包入口调整
+
+- Modern 与 Legacy 的项目库首页不再直接显示项目包“导入项目”或卡片“导出项目”；卡片仍保留
+  项目设置入口以及活动/归档状态操作。项目包操作统一收纳到当前项目的“项目设置”区域，继续
+  复用现有 Button、Surface、Toast/状态文本和自动保存闸门。
+- 从项目设置导入后刷新项目索引并返回项目库，不自动打开新副本；导出仍可用于活动、归档和
+  默认项目，取消选择不改变状态。Legacy 同步移除项目库头部与卡片导出入口，并加入设置页
+  的项目包状态反馈。
+- 更新 Modern 组件测试、Legacy 静态契约、README、Help 与 UX-CONTRACT；项目包 Main/IPC/
+  Preload 能力和目录格式保持不变。GUI Electron E2E 仍按 Owner 明确要求约定不自动启动。
+- 最终验证：`npm run typecheck`、`npm run test:modern`（24 个文件、102/102）、
+  `npm run test:node`（305/305）、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook`、premium `audit_project.py --mode strict --no-write`（0 findings）
+  与 `git diff --check` 均通过。Storybook 仅报告沙盒无法写入用户级
+  `/Users/rasteaks/.storybook/settings.json`，静态产物构建成功；未启动 Electron GUI E2E，
+  按既有 Owner 明确要求约定保留为后续验证。
+
+## 2026-09-01 DeepSeek Review comments 修复
+
+- Modern/Legacy 的项目库导航和项目加载都加入递增意图令牌；异步 autosave、项目加载或导入
+  完成后，只能提交仍属于当前路由/项目的结果。识别进行中、保存失败和跨路由完成的项目包结果
+  统一写入可见共享提示区，不再把反馈写到隐藏页面。
+- 项目包导入在索引刷新失败时保留 Main 已提交的项目行并提示稍后刷新，避免用户因看不到成功
+  结果而重复导入；Modern/Legacy 的传输按钮、项目设置保存和整体项目库传输均正确释放忙碌态。
+  Modern 项目设置检测未保存表单并阻止项目包操作，要求先保存，避免设置随成功跳转静默丢失。
+- 传输层允许旧版损坏 JSON 快照作为不透明证据继续导出/导入，忽略中断留下的 `.tmp` 文件，
+  同时继续拒绝符号链接和数据库行级损坏；导出只在暂存目录校验后原子提交，不再在提交后校验
+  失败时删除用户目标，并复用已完成的导入校验结果。项目包扩展名比较改为不区分大小写，
+  Windows 保留设备名改为安全前缀。
+- 新增导航、刷新回退、未保存设置、旧快照/.tmp、混合大小写扩展名和 Windows 保留名回归；
+  遵循项目注释约定补充了相关实现注释。最终验证：`npm test`（Node 306/306、Modern
+  104/104）、`npm run typecheck`、`npm run check`、`npm run build:modern`、
+  `npm run build:storybook`、premium strict audit（0 findings）和 `git diff --check` 均通过；
+  Storybook 仍仅报告沙盒无法写入用户级 `/Users/rasteaks/.storybook/settings.json`，未启动
+  Electron GUI E2E。
+
+## 2026-09-01 打包版本地 OCR 引擎路径修复
+
+- Vision OCR 与 PaddleOCR 都改为在实际调用时解析 Main 注入的 `SLATESYNC_PROJECT_DIR`，
+  解决 Electron 静态 import 早于运行时环境初始化导致的路径失效；打包后分别对应
+  `Resources/app/bin/vision-ocr` 与 `Resources/app/scripts/paddleocr_runner.py`。
+- Vision 在打包环境只使用 `extraResources` 中的预编译 bridge，缺失时给出安装/重新打包提示，
+  不会尝试向只读 App bundle 编译；PaddleOCR 仍可通过设置中的外部 Python/虚拟环境启用，
+  不再被误认为只能使用 Vision OCR。OCR 选路、证据格式和 Renderer IPC 协议保持不变。
+- 新增 Vision 打包 bridge 存在/缺失回归测试，以及 PaddleOCR 打包 runner 路径回归测试；
+  增加 `SLATESYNC_PACKAGED` 生命周期标记，并同步更新设置页的 bridge 路径说明。
+
+## 2026-09-01 打包版 PaddleOCR 一键安装
+
+- 打包资源包含 `scripts/paddleocr_runner.py` 与 `requirements-ocr.txt`，不包含 Python
+  解释器、PaddlePaddle 或 PaddleOCR wheel；用户只需准备 Python 3.10+，不需要手动创建
+  虚拟环境。全局设置“本地 OCR”标题旁的安装按钮由 Main 进程完成环境创建、依赖安装和
+  runner 验证，安装结果自动写入 OCR 设置与全局 `PADDLEOCR_PYTHON`。
+- 安装目录固定为 Electron `<userData>/paddleocr-venv`，不写入只读/签名的
+  `Resources/app`。安装器复用运行时资源路径，固定读取打包随附的依赖清单；支持 Python
+  探测、venv 创建、pip 安装、验证、进度事件、取消（SIGTERM 后强制终止）、超时和失败重试。
+- 新增 `install-paddleocr`、`cancel-paddleocr-install` 及 typed progress 事件，Modern 与
+  Legacy 均复用同一 Preload gateway。安装未验证成功前不持久化路径，避免半成品环境把 OCR
+  路由标记为可用；两套设置页都保留忙碌、成功、取消和错误重试反馈。
+- 更新 `UX-CONTRACT.md`、README、打包清单和安装器/IPC/bridge/Modern 组件测试；不改变
+  Vision/PaddleOCR 识别算法或 OCR 选路语义。验证需覆盖不下载依赖的安装器状态机、IPC
+  持久化、双 Renderer 入口、类型检查、静态语法和 Modern 构建。
+
+## 2026-09-02 Review comment 修复
+
+- PaddleOCR 安装器与验证器的 Python 子进程只接收显式白名单环境变量；provider API Key
+  等 Main 进程凭据不会再传入 venv、pip 或 `--check` 子进程，必要的 pip index/proxy
+  与运行时路径仍会保留。
+- 安装目录使用 `lstat` 并拒绝符号链接，继续把 venv/pip 写入范围限制在 Electron
+  `userData`；验证阶段同时支持 AbortSignal 和外层取消兜底，取消不会被 120 秒健康检查
+  超时拖住。
+- Legacy 项目设置表单增加未保存脏状态：所有输入/选择和默认值重置都会标记草稿，项目
+  包与项目库传输在保存前被阻止，传输收尾渲染不会覆盖未保存的 DOM 值；成功保存后才
+  清除标记。
+- 为环境隔离、符号链接边界、验证取消和 Legacy 脏表单契约补充回归覆盖；未提交、提交、
+  推送、重置、清理或切换分支。
+
+## 2026-09-02 修复 PaddleOCR 设置草稿与退出生命周期 Review comments
+
+- Legacy 与 Modern 设置页都以 Main 的命名预设生效值渲染，并锁定预设拥有的模型版本、模型
+  ID、批量和过滤参数；切换到自定义时物化当前预设，避免界面显示值与实际 OCR 管道不一致。
+- PP-OCRv5/v6 的检测、识别模型覆盖按版本保存未提交草稿；切换版本时隔离不同代模型，切回
+  时恢复原自定义 ID。两端均覆盖预设切换、版本往返和 Legacy 静态契约回归。
+- PaddleOCR Worker 增加生命周期代数和应用关闭标记。强制关闭会立即终止当前 Python Worker、
+  使排队 preload 失效，并在有限期限内等待队列收敛；Electron `before-quit` 先完成这次清理，
+  `will-quit` 保留幂等兜底，避免退出后重新拉起孤儿进程。
+- 最终验证：`npm test`（Node 316/316、Modern 109/109）、`npm run typecheck`、
+  `npm run check`、`npm run build:modern` 与 `git diff --check` 均通过；未启动 Electron GUI E2E。
+
+## 2026-09-02 分支审查问题修复
+
+- 项目库改名现在与导入、导出和切换位置共用 Renderer 的识别拦截、autosave
+  准备闸门和 busy 锁；Main 为项目库索引、信息和项目/任务/Profile 读取增加
+  共享读租约。传输先禁止新读写，再等待已有读取排空；异常路径统一释放租约，
+  保留项目删除既有的项目级读写排空。
+- 新增 OCR 子进程环境白名单。PaddleOCR 检查、常驻 Worker、单次 Worker、
+  安装器和 Vision bridge 均不再继承 Provider API Key 或任意 Main 环境变量；
+  运行时只保留系统路径、临时目录、语言/locale、项目/缓存路径与必要代理，
+  pip 安装才额外保留包源配置。关闭引擎会清除对应 `*_REQUIRED`，显式启用
+  仍会互斥清除另一引擎路由，Renderer 与 Main 行为一致。
+- AI 请求与模型发现将响应体读取纳入同一 AbortController deadline；响应体超时
+  复用现有重试策略，最终统一为可读的 HTTP 504，并保留外部取消语义。新增
+  路由标题映射、`document.title` 同步和中文初始 HTML 标题，项目名继续由顶部
+  栏显示，避免项目库页面残留过期名称。
+- 新增 `scripts/build-vision-ocr.mjs`，支持 `--arch arm64|x64|universal`，
+  macOS 默认构建 universal，thin 构建后检查文件权限、架构和
+  `vision-ocr --check` JSON 响应；electron-build-host、macOS release 脚本和
+  GitHub Actions 均接入，Windows 保持 Swift 编译 no-op。同步更新 check 与
+  build contract inventory。
+- 回归覆盖读锁排空/异常释放、改名保存闸门、OCR 环境隔离与路由互斥、响应体
+  超时重试/504、路由标题以及 Windows no-op/universal 构建验证。Node 测试
+  323/323、Modern Vitest 118/118、`npm run check`、`npm run typecheck`、
+  `npm run build:modern`、`npm run build:storybook`、`npm run test:native:abi`
+  和 premium strict audit 均通过；Storybook 仅提示沙盒不能写入用户级
+  `/Users/rasteaks/.storybook/settings.json`，静态构建成功。
+- 本机真实 `node scripts/build-vision-ocr.mjs --arch universal` 已执行，但当前
+  CommandLineTools 的 SwiftBridging module map 重复定义导致 Foundation/Vision
+  编译失败；这是本机 SDK/toolchain 环境问题，不是源码检查失败。仓库已有
+  arm64 bridge 的 `lipo -archs` 和 `--check` 均通过。安装完整匹配的 Xcode/
+  CommandLineTools 后应重跑 universal 构建，脚本会在打包前阻断未验证产物。
+- Windows 项目库改名的 SQLite 关闭顺序和 POSIX 目录改名假设按本次范围继续
+  保留，作为后续专项遗留风险；本轮未执行 Windows 实机验证、Electron 前台 GUI
+  或发布上传，也未提交、推送、重置、清理或切换分支。

@@ -19,7 +19,7 @@ import type {
   TaskListItem,
 } from "../../shared/contracts/index.js";
 
-export type Route = "projects" | "workspace" | "project-settings" | "global-settings" | "logs";
+export type Route = "projects" | "workspace" | "project-settings" | "global-settings" | "logs" | "help";
 export type Theme = "system" | "dark" | "light";
 export type Density = "comfortable" | "compact";
 
@@ -77,6 +77,9 @@ export interface SlateSlice {
 export interface RecognitionSlice {
   operationId: number;
   projectId: string | null;
+  taskId: string | null;
+  /** Whether the workspace should rehydrate this global run after a log detour. */
+  resumeOnWorkspace: boolean;
   running: boolean;
   phase: string;
   percent: number;
@@ -87,7 +90,10 @@ export interface RecognitionSlice {
   data: RecognitionData | null;
   records: readonly RecognitionRecord[];
   error: AppError | null;
-  start(operationId: number, projectId: string | null, totalPages: number): void;
+  start(operationId: number, projectId: string | null, totalPages: number, taskId?: string | null): void;
+  setTaskId(taskId: string | null): void;
+  markWorkspaceHandoff(projectId?: string | null, taskId?: string | null): void;
+  clearWorkspaceHandoff(): void;
   progress(operationId: number, event: ProgressData): void;
   complete(operationId: number, data: RecognitionData): void;
   requestCancel(operationId: number): void;
@@ -114,12 +120,14 @@ export interface MetadataSlice {
 
 export interface TaskSlice {
   items: readonly TaskListItem[];
+  /** Project ID represented by items; null means no project list has been loaded. */
+  loadedProjectId: string | null;
   activeId: string | null;
   active: TaskData | null;
   loading: boolean;
   saveState: "idle" | "dirty" | "saving" | "saved" | "error";
   error: AppError | null;
-  setItems(items: readonly TaskListItem[]): void;
+  setItems(items: readonly TaskListItem[], projectId?: string | null): void;
   setActive(id: string | null, task: TaskData | null): void;
   setLoading(loading: boolean): void;
   setSaveState(saveState: TaskSlice["saveState"]): void;
