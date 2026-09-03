@@ -1,7 +1,7 @@
 # SlateSync Swift migration authority
 
 Updated: 2026-09-03
-Current phase: **SM-01 COMPLETE; SM-02 implementation uncommitted and review pending**
+Current phase: **SM-01 COMPLETE; SM-02 implementation committed and formal review pending**
 Target: **native macOS 15.0+, arm64 + x86_64**
 
 This directory is the current authority for replacing the Electron application
@@ -38,10 +38,10 @@ uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
 The SM-01 implementation is formally `COMPLETE` in `CURRENT_STATE.json`. The
-SM-02 platform contract implementation is present only in the current working
-tree and still needs a dedicated review commit, a formal `phase_gate.sh` PASS,
-and independent review. `CURRENT_STATE.json` is intentionally unchanged until
-that governance process runs.
+SM-02 platform contract implementation is committed and undergoing formal
+review. It still needs a clean `phase_gate.sh` PASS, an evidence report and
+Repository Owner approval. `CURRENT_STATE.json` is intentionally unchanged
+until that governance process completes.
 
 Electron, React, Node and cross-platform-era files remain retained as migration
 evidence until SM-09; SM-02 changes only their current macOS product entrypoints.

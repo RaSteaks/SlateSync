@@ -12,8 +12,8 @@
   请求与识别取消/重试/并发行为在迁移 Gate 前保持兼容。
 - 所有自动测试使用显式临时 Application Support 与 Project Library，禁止
   访问用户默认 Library。
-- `SM-01` 已完成 Owner 批准；SM-02 的平台收敛改动当前保持未提交，等待
-  Sol 独立审查，SM-03 及之后阶段尚未开始。
+- `SM-01` 已完成 Owner 批准；SM-02 的平台收敛实现已形成 dedicated commit，
+  正在等待 clean Gate、审查报告和 Owner 批准，SM-03 及之后阶段尚未开始。
 - 阶段状态、环境替代证据与不可豁免项以
   `.codex/swift-migration/PHASE_GATES.md` 为准；本地统一入口为
   `./script/phase_gate.sh SM-XX`，禁止用 dirty diagnostic 结果声明完成。
@@ -47,8 +47,8 @@
 - Electron、React、Node 与跨平台历史 helper 仍保留在仓库，作为 SM-09 前的兼容
   基线；本阶段只切断其当前非 macOS 产品入口，不修改 SQLite、CSV、OCR、Provider
   或任务数据契约。
-- SM-02 代码与测试尚未提交，`CURRENT_STATE.json` 继续保留 SM-01 COMPLETE；
-  不得据此宣布 SM-02 PASS 或 COMPLETE。
+- SM-02 代码与测试已进入正式审查，`CURRENT_STATE.json` 在 clean Gate、审查报告
+  和 Owner 批准全部完成前继续保留 SM-01 COMPLETE。
 
 以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
 
