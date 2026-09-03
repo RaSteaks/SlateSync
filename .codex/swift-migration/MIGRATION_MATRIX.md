@@ -9,4 +9,4 @@
 | ai-client / provider registry / discovery | SlateSyncWorkflow actors | SM-07 |
 | React/Zustand renderer | SlateSyncUI observable feature models | SM-08 |
 | Electron main/preload/window | Xcode app target and Swift services | SM-01–09 |
-| electron-builder / Windows NSIS | Xcode Archive, macOS-only release | SM-02/09 |
+| Electron transition packaging | Xcode Archive, macOS-only release | SM-02/09 |

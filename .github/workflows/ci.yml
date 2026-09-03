@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -24,6 +24,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run the shared SM-02 phase Gate
+        run: ./script/phase_gate.sh SM-02
 
       - name: Check source files
         run: npm run check

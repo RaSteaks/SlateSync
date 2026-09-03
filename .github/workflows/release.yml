@@ -35,6 +35,7 @@ jobs:
 
       - name: Verify source and tests
         run: |
+          ./script/phase_gate.sh SM-02
           npm run check
           npm run typecheck
           npm test
@@ -62,7 +63,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4

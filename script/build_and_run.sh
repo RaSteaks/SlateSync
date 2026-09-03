@@ -5,10 +5,19 @@ script_dir="${0:A:h}"
 project_root="${script_dir:h}"
 derived_data="${project_root}/DerivedData/SlateSync"
 source "${script_dir}/lib/phase_gate_lib.sh"
+
+# This is the native app's current run entry; fail before invoking Xcode when
+# it is accidentally called from a non-macOS host.
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  print -u2 "[SlateSync] 当前产品仅支持在 macOS 主机上运行 macOS 应用。"
+  exit 1
+fi
+
 configuration="Debug"
 show_logs=0
 show_telemetry=0
 verify_only=0
+background_launch=0
 verification_timeout=10
 
 for argument in "$@"; do
@@ -18,6 +27,7 @@ for argument in "$@"; do
     --logs) show_logs=1 ;;
     --telemetry) show_telemetry=1 ;;
     --verify) verify_only=1 ;;
+    --background) background_launch=1 ;;
     *) print -u2 "未知参数: $argument"; exit 64 ;;
   esac
 done
@@ -41,7 +51,13 @@ xcodebuild \
 
 test -d "$app_path"
 test -x "$app_executable"
-/usr/bin/open -n "$app_path"
+# Automated Gate runs launch without activating the app, while the normal Run
+# action preserves the expected foreground development experience.
+if (( background_launch )); then
+  /usr/bin/open -g -n "$app_path"
+else
+  /usr/bin/open -n "$app_path"
+fi
 
 # `open` returns before LaunchServices finishes spawning the process. Polling
 # gives Gate automation a deterministic launch result instead of a bundle-only check.

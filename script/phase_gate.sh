@@ -165,15 +165,24 @@ sm01_scope_contract_check() {
   local sensitive_content
   baseline_parent="$(git rev-parse 1f82c1645a6afac5ffdf453da1dcc44a49449b88^ 2>/dev/null)" || return 1
 
-  # Historical evidence and CI are outside SM-01's authorized implementation scope.
-  git diff --quiet "${baseline_parent}..${review_commit}" -- .github .codex/refactor || {
-    print -u2 "SM-01 changed .github or protected .codex/refactor history"
-    return 1
-  }
-  [[ -z "$(git status --porcelain=v1 --untracked-files=all -- .github .codex/refactor)" ]] || {
-    print -u2 "working tree changes .github or protected .codex/refactor history"
-    return 1
-  }
+  # The historical scope closure is strict for SM-01, but later migration
+  # phases are explicitly allowed to change CI. Protected refactor evidence
+  # remains immutable for every phase and is checked below.
+  if [[ "$phase" == "SM-01" ]]; then
+    git diff --quiet "${baseline_parent}..${review_commit}" -- .github .codex/refactor || {
+      print -u2 "SM-01 changed .github or protected .codex/refactor history"
+      return 1
+    }
+    [[ -z "$(git status --porcelain=v1 --untracked-files=all -- .github .codex/refactor)" ]] || {
+      print -u2 "working tree changes .github or protected .codex/refactor history"
+      return 1
+    }
+  else
+    [[ -z "$(git status --porcelain=v1 --untracked-files=all -- .codex/refactor)" ]] || {
+      print -u2 "working tree changes protected .codex/refactor history"
+      return 1
+    }
+  fi
   local legacy_path
   for legacy_path in electron src public lib package.json package-lock.json electron-builder.yml .github; do
     [[ -e "$legacy_path" ]] || {
@@ -207,7 +216,7 @@ sm01_scope_contract_check() {
     print -u2 "tracked source contains a credential-like value"
     return 1
   fi
-  print "scope protected; SM-02 not started; legacy baseline present; generated artifacts untracked"
+  print "scope protected; SM-01 state preserved; legacy baseline present; generated artifacts untracked"
 }
 
 sm01_real_app_launch_check() {
@@ -225,7 +234,7 @@ sm01_real_app_launch_check() {
   # The environment override is owned by the Gate so a plain formal invocation
   # cannot reach the user's default Application Support directory.
   launch_output="$(SLATESYNC_TEST_ROOT="$isolated_root" \
-    ./script/build_and_run.sh --debug --verify 2>&1)" || launch_status=$?
+    ./script/build_and_run.sh --debug --verify --background 2>&1)" || launch_status=$?
   print -r -- "$launch_output"
   verified_pid="$(print -r -- "$launch_output" | \
     sed -n 's/.*pid=\([0-9][0-9]*\), executable=.*/\1/p' | tail -n 1)"
@@ -488,38 +497,48 @@ run_check xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
   test
 
 case "$phase" in
-  SM-01)
-    run_check sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
-      sm01_debug_settings_check
-    run_check sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \
-      sm01_real_app_launch_check
-    run_check sm01_release_build true "Release generic macOS 构建通过" \
-      xcodebuild -quiet \
-      -project SlateSync.xcodeproj \
-      -scheme SlateSync \
-      -configuration Release \
-      -destination 'generic/platform=macOS' \
-      -derivedDataPath "${result_dir}/DerivedData/Release" \
-      build
-    run_check sm01_release_artifact true "Release 为 Universal、macOS 15.0 且签名有效" \
-      sm01_release_artifact_check
-    run_check sm01_archive true "共享 Scheme 可生成 Release Archive" \
-      xcodebuild -quiet \
-      -project SlateSync.xcodeproj \
-      -scheme SlateSync \
-      -configuration Release \
-      -destination 'generic/platform=macOS' \
-      -archivePath "${result_dir}/SlateSync.xcarchive" \
-      archive
-    run_check sm01_archive_artifact true "Archive 为 Universal、macOS 15.0 且签名有效" \
-      sm01_archive_artifact_check
+  SM-02)
+    run_check sm02_platform_contract true "当前入口、CI/release、平台拒绝策略与历史基线完整" \
+      node script/tests/sm02_platform_contract.mjs
     ;;
+  SM-01) ;;
   *)
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing
     ;;
 esac
 
-if rg -q '"lifecycleState"[[:space:]]*:[[:space:]]*"COMPLETE"' \
+# SM-02 changes the native run and release authority, so the executable checks
+# established by SM-01 remain mandatory instead of degrading to source scans.
+if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]]; then
+  run_check sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
+    sm01_debug_settings_check
+  run_check sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \
+    sm01_real_app_launch_check
+  run_check sm01_release_build true "Release generic macOS 构建通过" \
+    xcodebuild -quiet \
+    -project SlateSync.xcodeproj \
+    -scheme SlateSync \
+    -configuration Release \
+    -destination 'generic/platform=macOS' \
+    -derivedDataPath "${result_dir}/DerivedData/Release" \
+    build
+  run_check sm01_release_artifact true "Release 为 Universal、macOS 15.0 且签名有效" \
+    sm01_release_artifact_check
+  run_check sm01_archive true "共享 Scheme 可生成 Release Archive" \
+    xcodebuild -quiet \
+    -project SlateSync.xcodeproj \
+    -scheme SlateSync \
+    -configuration Release \
+    -destination 'generic/platform=macOS' \
+    -archivePath "${result_dir}/SlateSync.xcarchive" \
+    archive
+  run_check sm01_archive_artifact true "Archive 为 Universal、macOS 15.0 且签名有效" \
+    sm01_archive_artifact_check
+fi
+
+if rg -q '"phase"[[:space:]]*:[[:space:]]*"'"${phase}"'"' \
+  .codex/swift-migration/CURRENT_STATE.json && \
+  rg -q '"lifecycleState"[[:space:]]*:[[:space:]]*"COMPLETE"' \
   .codex/swift-migration/CURRENT_STATE.json; then
   run_check approval_freshness true "COMPLETE 状态包含匹配当前提交的 Owner 批准" \
     gate_validate_approval_state \

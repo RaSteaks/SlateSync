@@ -58,6 +58,12 @@ import {
 } from "../lib/ocr/paddleocr.mjs";
 import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
 import { createPaddleOcrInstaller } from "./paddleocr-installer.mjs";
+import { assertMacOSPlatform } from "../lib/macos-platform-guard.mjs";
+
+// Direct Electron launches must obey the same current-product boundary as
+// npm and builder wrappers; legacy platform helpers remain importable for
+// compatibility tests but cannot start the application on another OS.
+assertMacOSPlatform();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -511,7 +517,7 @@ async function createWindow() {
 }
 
 function configureDevelopmentIcon() {
-  if (!isDev || process.platform !== "darwin") return;
+  if (!isDev) return;
   const icon = nativeImage.createFromPath(DEV_ICON_PATH);
   if (!icon.isEmpty()) app.dock.setIcon(icon);
 }

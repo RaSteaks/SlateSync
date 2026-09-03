@@ -16,11 +16,12 @@ import {
   verifyVisionOcrBinary,
   visionArchitectureFromArgs,
 } from "../../../scripts/build-vision-ocr.mjs";
+import { assertMacOSPlatform } from "../../../lib/macos-platform-guard.mjs";
 
 const repositoryRoot = new URL("../../../", import.meta.url);
 
 describe("host-specific Electron packaging", () => {
-  it("uses guarded host entrypoints and declares macOS/Windows targets", async () => {
+  it("uses guarded macOS entrypoints and declares no other package target", async () => {
     const [packageJson, builderConfig, buildScript] = await Promise.all([
       readFile(new URL("package.json", repositoryRoot), "utf8").then(JSON.parse),
       readFile(new URL("electron-builder.yml", repositoryRoot), "utf8"),
@@ -30,34 +31,30 @@ describe("host-specific Electron packaging", () => {
     expect(packageJson.scripts["electron:build"]).toBe("node scripts/electron-build-host.mjs");
     expect(packageJson.scripts["electron:build:dir"]).toBe("node scripts/electron-build-host.mjs --dir");
     expect(packageJson.scripts.check).toContain("node --check scripts/electron-build-host.mjs");
-    expect(builderConfig).toMatch(/^win:\n  target:\n    - target: nsis\n      arch: \[x64\]/m);
+    expect(builderConfig).not.toMatch(/^win:/m);
     expect(builderConfig).not.toMatch(/^linux:/m);
+    expect(builderConfig).toMatch(/^mac:[\s\S]*?minimumSystemVersion: "15\.0"/m);
     expect(builderConfig).toMatch(/^mac:[\s\S]*?extraResources:\n    - from: bin\/\n      to: app\/bin\/\n/m);
     expect(builderConfig).not.toMatch(/^extraResources:[\s\S]*?from: bin\/\n/m);
-    expect(buildScript).toContain("hostTargets");
+    expect(buildScript).toContain("macOSTarget");
     expect(buildScript).toContain('"--mac"');
-    expect(buildScript).toContain('"--win"');
-    expect(buildScript).toContain('"--x64"');
+    expect(buildScript).toContain("assertMacOSPlatform");
 
-    // Keep the regression guard close to the packaging entrypoint so a future
-    // convenience flag cannot reintroduce Windows ia32/x86 artifacts.
-    for (const flag of ["--win", "--windows", "-w", "-o", "--ia32", "--x86"]) {
-      expect(buildScript).toContain(`"${flag}"`);
-    }
+    // The platform contract is asserted behaviorally below; source text alone
+    // cannot prove that an alias is rejected before electron-builder starts.
+    expect(buildScript).toContain("rejectedPlatformFlags");
   });
 
-  it("maps each supported host to one package platform and Windows x64", () => {
+  it("maps the only supported host to macOS and rejects other hosts/targets", () => {
     expect(resolveHostTarget("darwin")).toMatchObject({ label: "macOS", builderFlag: "--mac" });
-    expect(resolveHostTarget("win32")).toMatchObject({ label: "Windows", builderFlag: "--win" });
     expect(buildHostArguments("darwin")).toEqual(["--mac"]);
-    expect(buildHostArguments("win32")).toEqual(["--win", "--x64"]);
-    expect(buildHostArguments("win32", ["--x64", "--dir"])).toEqual(["--win", "--x64", "--dir"]);
-    expect(() => resolveHostTarget("linux")).toThrow(/macOS 或 Windows/);
-    expect(() => buildHostArguments("darwin", ["--win"])).toThrow(/不能生成 win32 包/);
-    expect(() => buildHostArguments("darwin", ["-mw"])).toThrow(/不能生成 win32 包/);
-    expect(() => buildHostArguments("win32", ["-wl"])).toThrow(/不能生成 linux 包/);
-    expect(() => buildHostArguments("win32", ["--ia32"])).toThrow(/ia32\/x86/);
-    expect(() => buildHostArguments("win32", ["--arm64"])).toThrow(/固定使用 x64/);
+    expect(() => resolveHostTarget("win32")).toThrow(/仅支持在 macOS/);
+    expect(() => resolveHostTarget("linux")).toThrow(/仅支持在 macOS/);
+    expect(() => buildHostArguments("darwin", ["--win"])).toThrow(/拒绝 win32/);
+    expect(() => buildHostArguments("darwin", ["-mw"])).toThrow(/拒绝 win32/);
+    expect(() => buildHostArguments("darwin", ["--linux"])).toThrow(/拒绝 linux/);
+    expect(() => buildHostArguments("darwin", ["--ia32"])).toThrow(/macOS 当前打包不支持/);
+    expect(() => assertMacOSPlatform("win32")).toThrow(/仅支持在 macOS/);
   });
 
   it("rejects unsupported packaging requests before electron-builder starts", async () => {
@@ -68,11 +65,7 @@ describe("host-specific Electron packaging", () => {
     const output = `${result.stdout}${result.stderr}`;
 
     expect(result.status).toBe(1);
-    if (process.platform === "darwin" || process.platform === "win32") {
-      expect(output).toContain("不能生成 linux 包");
-    } else {
-      expect(output).toContain("当前只支持在 macOS 或 Windows");
-    }
+    expect(output).toContain("拒绝 linux");
   });
 
   it("selects the bridge architecture from the package target", () => {
@@ -81,23 +74,22 @@ describe("host-specific Electron packaging", () => {
     expect(visionBridgeArchitecture("darwin", ["--x64"])).toBe("x64");
     expect(visionBridgeArchitecture("darwin", ["--arm64", "--x64"])).toBe("universal");
     expect(visionBridgeArchitecture("darwin", ["--universal"])).toBe("universal");
-    expect(visionBridgeArchitecture("win32", ["--x64"])).toBeNull();
+    expect(() => visionBridgeArchitecture("win32", ["--x64"])).toThrow(/仅支持在 macOS/);
     expect(visionArchitectureFromArgs(["--arch", "arm64"])).toBe("arm64");
     expect(visionArchitectureFromArgs(["--arch", "universal"])).toBe("universal");
     expect(visionArchitectureFromArgs(["--arch", "x86_64"])).toBe("x64");
     expect(() => visionArchitectureFromArgs(["--arch", "ia32"])).toThrow(/不支持的 Vision OCR 架构/);
   });
 
-  it("skips Swift compilation on Windows", () => {
+  it("rejects Vision compilation outside macOS", () => {
     let commandCount = 0;
-    const result = buildVisionOcr({
+    expect(() => buildVisionOcr({
       platform: "win32",
       runCommand: () => {
         commandCount += 1;
         return { status: 0, stdout: "", stderr: "" };
       },
-    });
-    expect(result).toMatchObject({ skipped: true, architecture: null });
+    })).toThrow(/仅支持在 macOS/);
     expect(commandCount).toBe(0);
   });
 
@@ -148,10 +140,10 @@ describe("host-specific Electron packaging", () => {
     }
   });
 
-  it("does not invoke the bridge builder for a Windows host package", () => {
+  it("rejects a non-macOS package before invoking bridge or builder", () => {
     let bridgeCalls = 0;
     let builderCalls = 0;
-    const status = runHostPackaging({
+    expect(() => runHostPackaging({
       platform: "win32",
       args: ["--dir"],
       buildBridge: () => {
@@ -161,10 +153,9 @@ describe("host-specific Electron packaging", () => {
         builderCalls += 1;
         return { status: 0 };
       },
-    });
-    expect(status).toBe(0);
+    })).toThrow(/仅支持在 macOS/);
     expect(bridgeCalls).toBe(0);
-    expect(builderCalls).toBe(1);
+    expect(builderCalls).toBe(0);
   });
 
   it("reports a precise architecture verification failure", () => {

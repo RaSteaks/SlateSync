@@ -12,9 +12,8 @@
   请求与识别取消/重试/并发行为在迁移 Gate 前保持兼容。
 - 所有自动测试使用显式临时 Application Support 与 Project Library，禁止
   访问用户默认 Library。
-- `SM-01` 实现已进入 `REVIEW_READY`：SwiftPM/Xcode 骨架、Run/Debug、
-  Unit/UI Test、Profile/Archive 与 Universal Release 已验证，但仍需独立基线
-  提交、正式 Gate PASS 和 Owner 批准；`SM-02` 及之后阶段尚未开始。
+- `SM-01` 已完成 Owner 批准；SM-02 的平台收敛改动当前保持未提交，等待
+  Sol 独立审查，SM-03 及之后阶段尚未开始。
 - 阶段状态、环境替代证据与不可豁免项以
   `.codex/swift-migration/PHASE_GATES.md` 为准；本地统一入口为
   `./script/phase_gate.sh SM-XX`，禁止用 dirty diagnostic 结果声明完成。
@@ -32,6 +31,24 @@
 - SwiftPM Project Library 测试在 SQLite 生命周期结束后清理完整临时目录。
   修复提交必须重新通过干净正式 Gate，随后才允许 Owner 用仅含状态和审查报告
   的治理提交将 SM-01 标记为 `COMPLETE`。
+
+## 2026-09-03 SM-02 macOS-only platform contract
+
+- 当前产品入口固定面向 macOS：原生 `build_and_run.sh`、Electron 开发/打包、
+  Vision OCR 与 PaddleOCR 安装入口均在执行构建或安装前拒绝非 macOS 主机。
+- `electron-builder.yml` 只保留 macOS DMG/ZIP 的 arm64 与 x86_64 目标；宿主包装
+  脚本会拒绝非 macOS builder 参数，过渡包最低系统固定为 macOS 15.0，不再保留
+  Windows/Linux 当前产物配置。
+- GitHub CI 与 Release build/publish jobs 统一使用 macOS runner，并调用同一份
+  `./script/phase_gate.sh SM-02`；不使用 `--allow-dirty` 伪造正式 Gate 结果。
+- SM-02 Gate 继续实际运行 SM-01 建立的隔离 App 启动、Universal Release、Xcode
+  Archive 与 ad-hoc 签名检查；自动 App 验证使用 `open -g` 后台启动，平台收敛不得
+  把产物验证降级为静态配置扫描，也不得让 Gate 抢占前台。
+- Electron、React、Node 与跨平台历史 helper 仍保留在仓库，作为 SM-09 前的兼容
+  基线；本阶段只切断其当前非 macOS 产品入口，不修改 SQLite、CSV、OCR、Provider
+  或任务数据契约。
+- SM-02 代码与测试尚未提交，`CURRENT_STATE.json` 继续保留 SM-01 COMPLETE；
+  不得据此宣布 SM-02 PASS 或 COMPLETE。
 
 以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
 

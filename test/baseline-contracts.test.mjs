@@ -15,6 +15,26 @@ const contractRoot = new URL("../.codex/refactor/baseline/contracts/", import.me
 const additiveContractRoot = new URL("../.codex/refactor/additive/contracts/", import.meta.url);
 const repo = new URL("../", import.meta.url);
 
+// SM-02 intentionally changes only current platform entrypoints. Keep the
+// frozen pre-SM-02 inventory intact while routing these names through the new
+// macOS-only contract checks instead of rewriting historical evidence.
+const sm02PlatformScriptNames = new Set([
+  "dev:renderer",
+  "ocr:setup",
+  "ocr:check",
+  "preelectron:dev",
+  "electron:dev",
+  "preelectron:dev:modern",
+  "electron:dev:modern",
+  "electron:build",
+  "electron:build:dir",
+  "preelectron:build",
+  "preelectron:build:dir",
+  "release:mac",
+  "release:mac:publish",
+  "check",
+]);
+
 // This independent literal keeps post-baseline features from being rewritten
 // into the fixture that represents c7dafa4's historical IPC surface.
 const historicalIpcMethodNames = [
@@ -189,10 +209,12 @@ test("baseline package and electron-builder inventories match live configuration
   assert.equal(lockfile.packages[""].version, packageJson.version, "package-lock package version drift");
   const transitionScriptNames = new Set(Object.keys(build.transition.scripts));
   for (const [name, command] of Object.entries(build.package.scripts)) {
+    if (sm02PlatformScriptNames.has(name)) continue;
     if (transitionScriptNames.has(name)) continue;
     assert.equal(packageJson.scripts[name], command, `legacy package.scripts.${name} drift`);
   }
   for (const [name, command] of Object.entries(build.transition.scripts)) {
+    if (sm02PlatformScriptNames.has(name)) continue;
     assert.equal(packageJson.scripts[name], command, `IP-01 package.scripts.${name} drift`);
   }
   for (const [name, version] of Object.entries(build.package.dependencies)) {

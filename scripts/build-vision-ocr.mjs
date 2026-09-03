@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertMacOSPlatform } from "../lib/macos-platform-guard.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(SCRIPT_DIR, "..");
@@ -131,10 +132,9 @@ export function buildVisionOcr({
   runCommand = spawnSync,
   outputPath = OUTPUT_PATH,
 } = {}) {
-  if (platform !== "darwin") {
-    // Swift Vision is macOS-only; Windows packaging must remain a no-op.
-    return { skipped: true, binaryPath: outputPath, architecture: null };
-  }
+  // A successful no-op here would let a non-macOS caller appear to have
+  // produced a valid package, so reject the obsolete platform path explicitly.
+  assertMacOSPlatform(platform);
   const targetArchitecture = normalizeVisionArchitecture(architecture);
   if (!existsSync(SOURCE_PATH)) {
     throw new Error(`[SlateSync] 缺少 Vision OCR 源文件：${SOURCE_PATH}`);
@@ -172,8 +172,7 @@ if (invokedDirectly) {
   try {
     const architecture = visionArchitectureFromArgs(process.argv.slice(2));
     const result = buildVisionOcr({ architecture });
-    if (result.skipped) console.log("[SlateSync] 当前宿主平台跳过 Vision OCR bridge 编译。");
-    else console.log(`[SlateSync] Vision OCR bridge 已验证：${result.actualArchitectures.join("+")}`);
+    console.log(`[SlateSync] Vision OCR bridge 已验证：${result.actualArchitectures.join("+")}`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

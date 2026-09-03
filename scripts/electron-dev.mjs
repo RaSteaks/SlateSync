@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertMacOSPlatform } from "../lib/macos-platform-guard.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const rendererUrl = process.env.SLATESYNC_RENDERER_URL || "http://localhost:5173";
@@ -85,6 +86,9 @@ process.on("SIGINT", () => handleSignal("SIGINT"));
 process.on("SIGTERM", () => handleSignal("SIGTERM"));
 
 async function main() {
+  // Keep direct script invocation aligned with the npm lifecycle guard; this
+  // prevents a caller from bypassing the macOS-only development contract.
+  assertMacOSPlatform();
   const electronArgs = [electronCli, "electron/main.mjs", ...process.argv.slice(2)];
   if (legacyRequested) {
     // Explicit legacy recovery must not claim the Modern HMR port or alter

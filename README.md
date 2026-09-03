@@ -277,9 +277,9 @@ npm run build:storybook      # Storybook 构建
 
 ## 构建与打包
 
-本地源码打包会根据宿主系统选择目标：macOS 只生成 macOS DMG/ZIP（arm64 与 x64），
-Windows 只生成 Windows NSIS x64 包；不会生成 Windows ia32/x86 包。Linux 主机以及
-跨平台打包参数会被直接拒绝。GitHub Release 工作流目前仍只发布 macOS。
+当前产品、CI 和 GitHub Release 只面向 macOS 15.0+；Electron 过渡打包入口固定生成
+macOS DMG/ZIP，并保留 arm64 与 x86_64 两个架构。其他宿主系统和非 macOS 打包参数
+会在构建开始前拒绝，不会生成其他平台应用。
 
 构建 Modern 产物：
 
@@ -287,17 +287,13 @@ Windows 只生成 Windows NSIS x64 包；不会生成 Windows ia32/x86 包。Lin
 npm run build:modern
 ```
 
-生成当前宿主平台的未签名应用目录：
+生成 macOS 未签名应用目录：
 
 ```bash
-# macOS
 CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:build:dir
-
-# Windows
-npm run electron:build:dir
 ```
 
-生成当前宿主平台的安装包：
+生成 macOS 安装包：
 
 ```bash
 npm run electron:build

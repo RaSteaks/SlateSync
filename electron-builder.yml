@@ -13,10 +13,12 @@ directories:
   output: dist
   buildResources: build
 
-# Local source builds select the host platform explicitly. macOS release builds
-# retain both supported architectures; Windows builds are intentionally x64-only.
+# The current Electron transition target is macOS only. Both supported slices
+# stay declared here so local packages remain reproducible across Apple hosts.
 mac:
   category: public.app-category.productivity
+  # Keep the transition package aligned with the native app's platform floor.
+  minimumSystemVersion: "15.0"
   # Use the layered Icon Composer asset for macOS and keep the PNG as a fallback.
   icon: build/slatesync.icon
   target:
@@ -28,15 +30,10 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # Vision OCR is a macOS binary and must not be copied into Windows packages.
+  # Vision OCR is a macOS binary and belongs inside every macOS package.
   extraResources:
     - from: bin/
       to: app/bin/
-
-win:
-  target:
-    - target: nsis
-      arch: [x64]
 
 dmg:
   title: SlateSync
