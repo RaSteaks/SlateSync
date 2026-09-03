@@ -30,8 +30,8 @@
     "evidenceReport": ".codex/swift-migration/reviews/SM-01.md",
     "approvable": false,
     "blockers": [
-      "SM-01 changes are not frozen in a clean dedicated review commit.",
-      "A formal clean-worktree Gate PASS and Repository Owner approval are pending."
+      "The independent review remediation must be frozen and pass a new formal clean-worktree Gate.",
+      "Repository Owner approval is pending for the remediated review commit."
     ]
   },
   "verification": {
@@ -44,11 +44,6 @@
     "archive": "passed-arm64-x86_64",
     "minimumSystem": "15.0",
     "premiumStrictAudit": "0 findings",
-    "lastDiagnosticGate": {
-      "result": "PASS",
-      "approvable": false,
-      "reviewCommit": "aa3a514aae65b99c93b0547b4e5f330bef53782a",
-      "evidence": ".codex/gate-results/SM-01/20260902T180330Z-aa3a514aae65/result.json"
-    }
+    "lastDiagnosticGate": null
   }
 }

@@ -3,6 +3,47 @@
 # Pure Gate helpers live separately so result classification can be tested
 # without building or launching the macOS application.
 
+slatesync_command_matches_executable() {
+  local process_command="$1"
+  local expected_executable="$2"
+  [[ "$process_command" == "$expected_executable" || \
+     "$process_command" == "${expected_executable} "* ]]
+}
+
+slatesync_process_ids_for_executable() {
+  local process_name="$1"
+  local expected_executable="$2"
+  local candidates
+  local candidate_pid
+  local process_command
+
+  candidates="$(pgrep -x "$process_name" 2>/dev/null || true)"
+  for candidate_pid in ${(f)candidates}; do
+    process_command="$(ps -p "$candidate_pid" -o command= 2>/dev/null | sed 's/^[[:space:]]*//')"
+    if slatesync_command_matches_executable "$process_command" "$expected_executable"; then
+      print -r -- "$candidate_pid"
+    fi
+  done
+}
+
+slatesync_stop_executable() {
+  local process_name="$1"
+  local expected_executable="$2"
+  local process_id
+  local attempt
+
+  # Restrict termination to this repository's built executable; another installed
+  # SlateSync instance may legitimately share the same process name.
+  for process_id in ${(f)"$(slatesync_process_ids_for_executable "$process_name" "$expected_executable")"}; do
+    [[ -n "$process_id" ]] && kill "$process_id" 2>/dev/null || true
+  done
+  for (( attempt = 1; attempt <= 20; attempt += 1 )); do
+    [[ -z "$(slatesync_process_ids_for_executable "$process_name" "$expected_executable")" ]] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
 gate_valid_phase() {
   [[ "${1:-}" =~ '^SM-0[0-9]$' ]]
 }

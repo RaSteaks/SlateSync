@@ -19,6 +19,20 @@
   `.codex/swift-migration/PHASE_GATES.md` 为准；本地统一入口为
   `./script/phase_gate.sh SM-XX`，禁止用 dirty diagnostic 结果声明完成。
 
+## 2026-09-03 SM-01 独立审查修复
+
+- 正式 Gate 的真实 App 启动必须由 Gate 创建并注入临时
+  `SLATESYNC_TEST_ROOT`，验证隔离 Library 数据库后精确停止进程；任何普通
+  Gate 调用都不得回退到用户默认 Application Support。
+- 运行脚本按本仓库构建产物的完整 executable path 查找、停止和验证进程，
+  不再用共享进程名影响其他 SlateSync 安装。
+- Gate 显式校验五个 SwiftPM 模块、macOS 15、Swift 6、Xcode 三目标、共享
+  Scheme/Test Plan、SM-02 未开始、历史基线存续和生成物未被跟踪；Release 与
+  Archive 另外验证签名确为 ad-hoc。
+- SwiftPM Project Library 测试在 SQLite 生命周期结束后清理完整临时目录。
+  修复提交必须重新通过干净正式 Gate，随后才允许 Owner 用仅含状态和审查报告
+  的治理提交将 SM-01 标记为 `COMPLETE`。
+
 以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
 
 ## 当前任务

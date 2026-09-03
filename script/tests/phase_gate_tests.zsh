@@ -75,6 +75,18 @@ assert_success "Universal architectures" gate_validate_architectures \
 assert_failure "missing Universal architecture" gate_validate_architectures "arm64"
 assert_success "minimum macOS 15" gate_validate_minimum_system "15.0"
 assert_failure "incorrect minimum macOS" gate_validate_minimum_system "14.0"
+assert_success "exact built executable command" slatesync_command_matches_executable \
+  "/tmp/SlateSync.app/Contents/MacOS/SlateSync" \
+  "/tmp/SlateSync.app/Contents/MacOS/SlateSync"
+assert_success "built executable command with arguments" slatesync_command_matches_executable \
+  "/tmp/SlateSync.app/Contents/MacOS/SlateSync --diagnostic" \
+  "/tmp/SlateSync.app/Contents/MacOS/SlateSync"
+assert_success "built executable path containing spaces" slatesync_command_matches_executable \
+  "/tmp/Slate Sync/SlateSync.app/Contents/MacOS/SlateSync" \
+  "/tmp/Slate Sync/SlateSync.app/Contents/MacOS/SlateSync"
+assert_failure "same-name executable from another bundle" slatesync_command_matches_executable \
+  "/Applications/SlateSync.app/Contents/MacOS/SlateSync" \
+  "/tmp/SlateSync.app/Contents/MacOS/SlateSync"
 
 cat > "${fixture_root}/state.json" <<'JSON'
 {

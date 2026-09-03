@@ -108,12 +108,155 @@ workspace_layout_check() {
 
 required_tools_check() {
   local tool
-  for tool in git rg python3 swift xcodebuild lipo codesign open pgrep pkill /usr/libexec/PlistBuddy; do
+  for tool in git rg python3 swift xcodebuild lipo codesign open pgrep ps /usr/libexec/PlistBuddy; do
     command -v "$tool" >/dev/null 2>&1 || {
       print -u2 -r -- "missing required tool: ${tool}"
       return 127
     }
   done
+}
+
+sm01_foundation_contract_check() {
+  python3 - Package.swift SlateSync.xcodeproj/project.pbxproj \
+    SlateSync.xcodeproj/xcshareddata/xcschemes/SlateSync.xcscheme \
+    SlateSync.xctestplan <<'PY'
+import json
+import re
+import sys
+
+package_path, project_path, scheme_path, test_plan_path = sys.argv[1:]
+package = open(package_path, encoding="utf-8").read()
+project = open(project_path, encoding="utf-8").read()
+scheme = open(scheme_path, encoding="utf-8").read()
+test_plan = json.load(open(test_plan_path, encoding="utf-8"))
+
+expected_products = {
+    "SlateSyncDomain", "SlateSyncPersistence", "SlateSyncMedia",
+    "SlateSyncWorkflow", "SlateSyncUI",
+}
+products = set(re.findall(r'\.library\(name: "([^"]+)"', package))
+assert products == expected_products, (products, expected_products)
+assert 'platforms: [.macOS(.v15)]' in package
+assert 'swiftLanguageModes: [.v6]' in package
+for setting in (
+    'MACOSX_DEPLOYMENT_TARGET = 15.0;',
+    'SWIFT_STRICT_CONCURRENCY = complete;',
+    'SWIFT_VERSION = 6.0;',
+    'ONLY_ACTIVE_ARCH = YES;',
+    'ONLY_ACTIVE_ARCH = NO;',
+    'CODE_SIGN_IDENTITY = "-";',
+):
+    assert setting in project, setting
+for target in ("SlateSync", "SlateSyncTests", "SlateSyncUITests"):
+    assert f'name = {target};' in project, target
+assert 'buildConfiguration="Debug"' in scheme
+assert '<ProfileAction buildConfiguration="Release"' in scheme
+assert '<ArchiveAction buildConfiguration="Release"' in scheme
+test_targets = {entry["target"]["name"] for entry in test_plan["testTargets"]}
+assert test_targets == {"SlateSyncTests", "SlateSyncUITests"}, test_targets
+print("five SwiftPM libraries, macOS 15, Swift 6, Xcode targets, scheme and test plan verified")
+PY
+}
+
+sm01_scope_contract_check() {
+  local baseline_parent
+  local changed_paths
+  local forbidden_tracked
+  local sensitive_content
+  baseline_parent="$(git rev-parse 1f82c1645a6afac5ffdf453da1dcc44a49449b88^ 2>/dev/null)" || return 1
+
+  # Historical evidence and CI are outside SM-01's authorized implementation scope.
+  git diff --quiet "${baseline_parent}..${review_commit}" -- .github .codex/refactor || {
+    print -u2 "SM-01 changed .github or protected .codex/refactor history"
+    return 1
+  }
+  [[ -z "$(git status --porcelain=v1 --untracked-files=all -- .github .codex/refactor)" ]] || {
+    print -u2 "working tree changes .github or protected .codex/refactor history"
+    return 1
+  }
+  local legacy_path
+  for legacy_path in electron src public lib package.json package-lock.json electron-builder.yml .github; do
+    [[ -e "$legacy_path" ]] || {
+      print -u2 "missing legacy compatibility baseline: $legacy_path"
+      return 1
+    }
+  done
+  rg -q '"phase"[[:space:]]*:[[:space:]]*"SM-01"' \
+    .codex/swift-migration/CURRENT_STATE.json || return 1
+  rg -q '"nextPackage"[[:space:]]*:[[:space:]]*"\.codex/swift-migration/packages/SM-02\.md"' \
+    .codex/swift-migration/CURRENT_STATE.json || return 1
+
+  forbidden_tracked="$(git ls-files | rg \
+    '(^|/)(\.build|DerivedData|\.swiftpm/xcode|\.codex/gate-results)(/|$)|premium-audit\.json$|\.xcarchive(/|$)|\.xcresult(/|$)|\.log$' || true)"
+  if [[ -n "$forbidden_tracked" ]]; then
+    print -u2 -r -- "$forbidden_tracked"
+    print -u2 "generated artifacts are tracked"
+    return 1
+  fi
+  changed_paths="$(git diff --name-only "${baseline_parent}..${review_commit}")"
+  if print -r -- "$changed_paths" | rg -q \
+    '(^|/)(\.env$|id_rsa|id_ed25519|.*\.(pem|p12|key|sqlite|sqlite-shm|sqlite-wal)$|Application Support)(/|$)'; then
+    print -u2 "SM-01 commit contains a credential or user-data path"
+    return 1
+  fi
+  sensitive_content="$(git grep -n -I -E \
+    'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9]{20,}' \
+    "$review_commit" -- . ':!.env.example' 2>/dev/null || true)"
+  if [[ -n "$sensitive_content" ]]; then
+    print -u2 -r -- "$sensitive_content"
+    print -u2 "tracked source contains a credential-like value"
+    return 1
+  fi
+  print "scope protected; SM-02 not started; legacy baseline present; generated artifacts untracked"
+}
+
+sm01_real_app_launch_check() {
+  local isolated_root
+  local launch_output
+  local launch_status=0
+  local verified_pid=""
+  local database_path
+  local attempt
+
+  isolated_root="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-sm01-launch.XXXXXX")" || return 1
+  database_path="${isolated_root}/Local SlateSync Library/library.sqlite"
+  print -r -- "Isolated SLATESYNC_TEST_ROOT=${isolated_root}"
+
+  # The environment override is owned by the Gate so a plain formal invocation
+  # cannot reach the user's default Application Support directory.
+  launch_output="$(SLATESYNC_TEST_ROOT="$isolated_root" \
+    ./script/build_and_run.sh --debug --verify 2>&1)" || launch_status=$?
+  print -r -- "$launch_output"
+  verified_pid="$(print -r -- "$launch_output" | \
+    sed -n 's/.*pid=\([0-9][0-9]*\), executable=.*/\1/p' | tail -n 1)"
+
+  if (( launch_status == 0 )); then
+    if [[ -z "$verified_pid" ]]; then
+      print -u2 "verified executable PID was not recorded"
+      launch_status=1
+    else
+      print -r -- "Verified executable PID=${verified_pid}"
+    fi
+  fi
+  if (( launch_status == 0 )); then
+    for (( attempt = 1; attempt <= 40; attempt += 1 )); do
+      [[ -f "$database_path" ]] && break
+      sleep 0.1
+    done
+    if [[ ! -f "$database_path" ]]; then
+      print -u2 "isolated Project Library database was not created"
+      launch_status=1
+    else
+      print -r -- "Verified isolated Project Library database: ${database_path}"
+    fi
+  fi
+
+  # Stop only the executable verified above before removing its temporary data root.
+  slatesync_stop_executable SlateSync \
+    "${project_root}/DerivedData/SlateSync/Build/Products/Debug/SlateSync.app/Contents/MacOS/SlateSync" || \
+    launch_status=1
+  rm -rf "$isolated_root"
+  return "$launch_status"
 }
 
 clean_workspace_check() {
@@ -176,7 +319,11 @@ sm01_release_artifact_check() {
     "${app_path}/Contents/Info.plist")" || return $?
   print -r -- "LSMinimumSystemVersion=${minimum_system}"
   gate_validate_minimum_system "$minimum_system" || return 1
-  codesign --verify --deep --strict --verbose=2 "$app_path"
+  codesign --verify --deep --strict --verbose=2 "$app_path" || return $?
+  local signing_details
+  signing_details="$(codesign -dvvv "$app_path" 2>&1)" || return $?
+  print -r -- "$signing_details"
+  [[ "$signing_details" == *"Signature=adhoc"* ]]
 }
 
 sm01_archive_artifact_check() {
@@ -192,7 +339,11 @@ sm01_archive_artifact_check() {
     "${app_path}/Contents/Info.plist")" || return $?
   print -r -- "LSMinimumSystemVersion=${minimum_system}"
   gate_validate_minimum_system "$minimum_system" || return 1
-  codesign --verify --deep --strict --verbose=2 "$app_path"
+  codesign --verify --deep --strict --verbose=2 "$app_path" || return $?
+  local signing_details
+  signing_details="$(codesign -dvvv "$app_path" 2>&1)" || return $?
+  print -r -- "$signing_details"
+  [[ "$signing_details" == *"Signature=adhoc"* ]]
 }
 
 phase_specific_gate_missing() {
@@ -313,6 +464,10 @@ run_check forbidden_items true "原生代码不存在冲突标记或禁止的不
 run_check diff_integrity true "Git diff 不含空白错误" git diff --check
 run_check gate_self_tests true "Gate 分类、证据替代与批准新鲜度测试通过" \
   ./script/tests/phase_gate_tests.zsh
+run_check sm01_foundation_contract true "五模块、macOS 15、Swift 6 与 Xcode 基础契约完整" \
+  sm01_foundation_contract_check
+run_check sm01_scope_contract true "SM-01 范围、历史基线与生成物边界完整" \
+  sm01_scope_contract_check
 run_check swift_build true "SwiftPM Debug 构建通过" swift build
 run_check swift_test true "SwiftPM 核心测试通过" swift test
 run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
@@ -336,10 +491,8 @@ case "$phase" in
   SM-01)
     run_check sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
       sm01_debug_settings_check
-    run_check sm01_real_app_launch true "统一脚本构建、启动并确认真实 SlateSync 进程" \
-      ./script/build_and_run.sh --debug --verify
-    # The Gate owns this verification launch and cleans it up after evidence is captured.
-    pkill -x SlateSync >/dev/null 2>&1 || true
+    run_check sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \
+      sm01_real_app_launch_check
     run_check sm01_release_build true "Release generic macOS 构建通过" \
       xcodebuild -quiet \
       -project SlateSync.xcodeproj \
