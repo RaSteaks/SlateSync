@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "updatedAt": "2026-09-03",
   "phase": "SM-01",
-  "lifecycleState": "REVIEW_READY",
+  "lifecycleState": "PASS",
   "platform": {
     "minimumMacOS": "15.0",
     "architectures": ["arm64", "x86_64"],
@@ -23,14 +23,13 @@
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
-    "conclusion": "BLOCKED",
-    "reviewCommit": null,
+    "conclusion": "PASS",
+    "reviewCommit": "a289954a9bfbd5d21418fae75b0588c76d0b1dd7",
     "owner": null,
     "approvedAt": null,
     "evidenceReport": ".codex/swift-migration/reviews/SM-01.md",
-    "approvable": false,
+    "approvable": true,
     "blockers": [
-      "The independent review remediation must be frozen and pass a new formal clean-worktree Gate.",
       "Repository Owner approval is pending for the remediated review commit."
     ]
   },
@@ -44,6 +43,17 @@
     "archive": "passed-arm64-x86_64",
     "minimumSystem": "15.0",
     "premiumStrictAudit": "0 findings",
-    "lastDiagnosticGate": null
+    "lastDiagnosticGate": {
+      "result": "PASS",
+      "approvable": false,
+      "reviewCommit": "860fe161dc87d24ff1d15c6c68c9e52c4b33cb76",
+      "evidence": ".codex/gate-results/SM-01/20260903T102949Z-860fe161dc87/result.json"
+    },
+    "lastFormalGate": {
+      "result": "PASS",
+      "approvable": true,
+      "reviewCommit": "a289954a9bfbd5d21418fae75b0588c76d0b1dd7",
+      "evidence": ".codex/gate-results/SM-01/20260903T103242Z-a289954a9bfb/result.json"
+    }
   }
 }
