@@ -998,3 +998,29 @@ Worker 边界、验收证据和最终治理交接。
 - Windows 项目库改名的 SQLite 关闭顺序和 POSIX 目录改名假设按本次范围继续
   保留，作为后续专项遗留风险；本轮未执行 Windows 实机验证、Electron 前台 GUI
   或发布上传，也未提交、推送、重置、清理或切换分支。
+
+## 2026-09-04 CSV 回填（以 Resolve 规范列为准）
+
+- 管线：Resolve CSV 为主体；两条独立回填通道——场记单识别 `records` 回填素材行
+  Scene/Shot/Take/Comments；slate.txt 侧车回填素材行 Camera FPS / Shoot Day，按
+  「CSV 素材 ∩ 已匹配 sidecar」驱动、**与场记解耦**（素材无场记记录但只要卡片有
+  对应侧车，帧率/拍摄日照样回填）。Camera # 是素材文件名机位码首字母
+  （`A004C004_20260801_RA259` → `A`），回填所有可解析行的空单元格、已有值绝不
+  覆盖，且不记入 exportable。补建的列名严格采用 Resolve 规范字符串
+  （`Scene/Shot/Take/Comments/Camera FPS/Shoot Day/Camera #`），不产生任何非规范
+  列（本地化变体或自造审计标记一律不识别/不写入）。
+- 目录扫描器（`electron/slate-scanner.mjs`）：只收集素材 key 属于当前 Resolve CSV
+  的 sidecar（按解析内容 key 过滤）；目录里 CSV 没有的素材（剪枝目录、松散文件名）
+  直接忽略，不再产 unmatched。机位命名结构学习与 matched 枚举保留。
+- 无对账机制：导出的 Resolve CSV 不含对账尾行，也不含 `FPS 对账` 等自造列；
+  帧率冲突仅以 buildSlateMetadataIndex 警告提示（不写入素材行），已识别但缺 fps
+  的素材报「Sensor FPS 缺失 / Shoot Day 缺失」警告，均不生成人工确认行。换载 CSV
+  仍清空扫描派生状态、重扫清 edits；扫描进行中禁止载入 Resolve CSV（modern 拖拽+
+  按钮、legacy input 都禁用，并在 loadResolveCsv 入口兜底）。`export-resolve` 的
+  「记录与 CSV 完全不匹配」门禁按 **matchedRecordCount** 判定——fps/Shoot Day
+  由 sidecar 独立回填、即使撑高 exportableCount 也不会掩盖卷号错配。
+- 覆盖：resolve-csv 44/44（解耦回填、缺失仅警告、Camera # 回填与规范列、重复列
+  取首、不覆盖）、scanner 4/4（缺目录/忽略无关侧车/剪枝不收集/fixed-name 学习）、
+  csv-background-tasks 6/6（记录错配报错、有 sidecar 回填仍报错）、baseline-csv 8/8；
+  Modern Vitest 118/118、`npm run typecheck` 通过；全量 Node 332 中仅存的 23 个
+  失败与改动前一致（SQLite/项目库本机环境，非本次引入）。

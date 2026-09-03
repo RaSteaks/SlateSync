@@ -1596,7 +1596,7 @@ function applySlateDirectoryResult({
     state.slateWarnings = compactSlateWarnings(warnings);
     const discovered = stats.discoveredSlateFiles || 0;
     const reason = discovered
-      ? `找到 ${discovered} 个元数据文件，但均缺少有效的 Clip Name、Sensor FPS 或 Shot Date。`
+      ? `找到 ${discovered} 个元数据文件，但均未解析出有效的 Clip Name、Sensor FPS 或 Shot Date。`
       : `未找到与 CSV 素材匹配的元数据文件（已搜索前 ${slateMaxDirectoryDepth()} 层），请检查目录结构。`;
     showSlateScanFailure(directoryName, reason);
     if (state.records.length) renderTable();
@@ -1667,13 +1667,18 @@ function updateMetadataInputState() {
   const reportReady = state.imageDataGroups.length > 0;
   const slateCsvLoaded = Boolean(state.slateCsvRecords?.length);
   const writable = !isProjectReadOnly();
-  const enabled = writable && canLoadResolveCsv({ reportReady, slateCsvLoaded });
+  // A directory scan in flight is keyed to the current CSV; never let another
+  // Resolve CSV be loaded underneath it (its result would be stale).
+  const scanning = state.slateScanning;
+  const enabled = writable && !scanning && canLoadResolveCsv({ reportReady, slateCsvLoaded });
   elements.metadataInput.disabled = !enabled;
   elements.metadataDropzone.classList.toggle("is-disabled", !enabled);
   elements.metadataDropzone.setAttribute("aria-disabled", String(!enabled));
-  elements.metadataHelp.textContent = enabled
-    ? "可选 · 载入后回填导出"
-    : "可选 · 请先选择场记单或场记 CSV";
+  elements.metadataHelp.textContent = scanning
+    ? "目录扫描中，暂不可载入"
+    : enabled
+      ? "可选 · 载入后回填导出"
+      : "可选 · 请先选择场记单或场记 CSV";
 
   // Slate CSV can always be loaded independently
   const slateEnabled = writable && canLoadSlateCsv();
@@ -3142,6 +3147,11 @@ async function skipOcrSetup() {
 
 async function loadResolveCsv(file) {
   hideError();
+  if (state.slateScanning) {
+    elements.metadataInput.value = "";
+    showError("请等待目录扫描完成后再载入 Resolve CSV。");
+    return;
+  }
   if (!canLoadResolveCsv({ reportReady: state.imageDataGroups.length > 0, slateCsvLoaded: Boolean(state.slateCsvRecords?.length) })) {
     elements.metadataInput.value = "";
     showError("请先选择场记单或场记 CSV，再载入 Resolve CSV。");
@@ -3162,16 +3172,27 @@ async function loadResolveCsv(file) {
     const data = await file.arrayBuffer();
     // Keep the source buffer available for the renderer fallback until the
     // Worker confirms decoding; transferring it here would detach it.
-    const { table } = await runCsvBackgroundTask({
+    const table = await runCsvBackgroundTask({
       type: "decode-metadata",
       data,
-    });
+    }).then(({ table }) => table);
     // Keep the renderer fallback primed without cloning the large table. It is
     // used only if the module Worker becomes unavailable later in the session.
     fallbackCsvProcessor({ type: "prime-metadata", table });
     state.metadataFile = file;
     state.metadataTable = table;
     state.csvEdits.clear();
+    // A different Resolve CSV invalidates scan-derived metadata (it is keyed to
+    // the previously loaded file's material set), so drop it and force a
+    // re-scan. Mirrors clearSlateMetadata() without its extra renderTable().
+    state.slateMetadata = [];
+    state.slateWarnings = [];
+    state.missingMetadataKeys = new Set();
+    state.slateScanning = false;
+    elements.slateCard.hidden = true;
+    elements.slateDropzone.hidden = false;
+    clearSlateStatus();
+    elements.slateDirectoryName.textContent = "";
     elements.metadataFileName.textContent = file.name;
     elements.metadataFileMeta.textContent = `${table.rows.length} 条素材 · ${table.headers.length} 列 · ${encodingLabel(table.format)}`;
     elements.metadataCard.hidden = false;

@@ -52,6 +52,10 @@ async function scanSlateDirectory(dirPath, options = {}) {
     const directoryKey = isRoot ? "" : extractCombinedMaterialKey(dirName);
 
     if (directoryKey) {
+      // Pruned clip directories never reach walk(); they are intercepted in
+      // the parent's enumeration below, which probes them for a sidecar
+      // before skipping the subtree. Reaching this branch means an expected
+      // clip directory was visited directly.
       if (!expectedKeys.has(directoryKey)) {
         stats.prunedDirectories += 1;
         return;
@@ -111,19 +115,21 @@ async function scanSlateDirectory(dirPath, options = {}) {
       if (entry.isFile()) {
         if (!METADATA_FILE_PATTERN.test(entry.name)) continue;
         const fileKey = extractCombinedMaterialKey(entry.name);
-        if (!fileKey || expectedKeys.has(fileKey)) {
-          candidates.push({
-            filePath: join(currentPath, entry.name),
-            sourceName: [...pathParts, entry.name].join("/"),
-          });
-          stats.discoveredSlateFiles += 1;
-        }
+        // Loose sidecars whose clip is not part of this Resolve CSV are
+        // ignored; only files that can belong to an expected clip are read.
+        if (fileKey && !expectedKeys.has(fileKey)) continue;
+        candidates.push({
+          filePath: join(currentPath, entry.name),
+          sourceName: [...pathParts, entry.name].join("/"),
+        });
+        stats.discoveredSlateFiles += 1;
         continue;
       }
       if (!entry.isDirectory()) continue;
 
       const childKey = extractCombinedMaterialKey(entry.name);
       if (childKey && !expectedKeys.has(childKey)) {
+        // A clip directory outside this Resolve CSV is pruned from the walk.
         stats.prunedDirectories += 1;
         continue;
       }
@@ -163,16 +169,25 @@ async function scanSlateDirectory(dirPath, options = {}) {
   const rootName = dirPath.split("/").filter(Boolean).pop() || "素材根目录";
   await walk(dirPath, [rootName], 0, true);
 
-  // Read and parse all candidate files
+  // Read and parse every candidate file. Only sidecars whose content-derived
+  // material key belongs to this Resolve CSV are kept as matched metadata;
+  // anything else (including clips absent from the CSV) is ignored.
   const metadata = [];
   for (const candidate of candidates) {
+    const parsed = await readCandidate(candidate);
+    if (!parsed || !parsed.materialKey) continue;
+    if (!expectedKeys.has(parsed.materialKey)) continue;
+    metadata.push(parsed);
+  }
+
+  async function readCandidate(candidate) {
     try {
       const fileStat = await stat(candidate.filePath);
       if (fileStat.size > maxFileBytes) {
         warnings.push(
           `${candidate.sourceName} 超过 ${Math.floor(maxFileBytes / 1024 / 1024)} MB，已跳过。`,
         );
-        continue;
+        return null;
       }
       stats.readSlateFiles += 1;
       const buffer = await readFile(candidate.filePath);
@@ -180,11 +195,13 @@ async function scanSlateDirectory(dirPath, options = {}) {
         buffer.byteOffset,
         buffer.byteOffset + buffer.byteLength,
       );
-      metadata.push(parseMetadataFile(arrayBuffer, candidate.sourceName));
+      return parseMetadataFile(arrayBuffer, candidate.sourceName);
     } catch (error) {
       warnings.push(error.message || `${candidate.sourceName} 无法读取`);
+      return null;
     }
   }
+
   // Reconcile after parsing so expected clips with an entirely absent
   // directory are reported just like clips with an empty directory.
   const foundKeys = new Set(
@@ -198,7 +215,12 @@ async function scanSlateDirectory(dirPath, options = {}) {
     );
   }
 
-  return { metadata, warnings, stats, missingKeys: [...missingKeys] };
+  return {
+    metadata,
+    warnings,
+    stats,
+    missingKeys: [...missingKeys],
+  };
 }
 
 function boundedInteger(value, fallback, minimum, maximum) {

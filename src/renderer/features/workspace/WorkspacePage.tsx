@@ -764,6 +764,12 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   }, [autosave, captureTask]);
 
   const loadResolveCsv = async (file: File) => {
+    // A directory scan in flight is keyed to the current CSV; loading another
+    // one now would let the stale scan land on the wrong table.
+    if (metadata.scanning) {
+      setError("请等待目录扫描完成后再载入 Resolve CSV。");
+      return;
+    }
     const validation = validateCsvFile(file, "resolve");
     if (!validation.ok) { setError(validation.message); return; }
     setError(null);
@@ -771,6 +777,11 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     try {
       const table = await getCsvWorkerService().decode(await file.arrayBuffer());
       useExportStore.getState().setTable(table, file.name);
+      // Scan-derived metadata (slate sidecars) is keyed to the previously loaded
+      // CSV's material set; clear it so a stale scan is never re-applied against
+      // a different CSV. Recognition records are kept — a genuine mismatch is
+      // caught by the export gate instead.
+      useMetadataStore.getState().clear();
       await refreshResolvePreview();
       setToast({ tone: "success", message: `已载入 ${table.rows.length.toLocaleString("zh-CN")} 行 Resolve CSV` });
       autosave.markDirty(captureTask());
@@ -802,7 +813,10 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   };
 
   const slateCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running, onFile: loadSlateCsv });
-  const resolveCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running, onFile: loadResolveCsv });
+  // Loading a Resolve CSV must be blocked while a directory scan is in flight:
+  // the scan is keyed to the current CSV and would otherwise land as stale
+  // results after the store is cleared for the newly loaded file.
+  const resolveCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running || metadata.scanning, onFile: loadResolveCsv });
 
   const selectMetadataDirectory = async () => {
     if (!exportState.table || !project) return;
@@ -818,6 +832,10 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
         ...(config?.workflow.slate.maxDirectoryDepth !== undefined ? { maxDepth: config.workflow.slate.maxDirectoryDepth } : {}),
       }));
       useMetadataStore.getState().setResult(result);
+      // A re-scan rebuilds the preview tail, so grid edits recorded against the
+      // old row layout would drift onto different cells; drop them (legacy
+      // clears csvEdits on scan too).
+      useExportStore.getState().setEdits({});
       await refreshResolvePreview();
       autosave.markDirty(captureTask());
     } catch (nextError) {
@@ -1024,7 +1042,13 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     }
   };
 
-  const canExport = Boolean(project && recognition.records.length && !exportState.processing && !recognition.running && !switchingTask);
+  const canExport = Boolean(
+    project &&
+      recognition.records.length &&
+      !exportState.processing &&
+      !recognition.running &&
+      !switchingTask,
+  );
   // Keep the parent toolbar callback stable while this ref follows the latest
   // draft, project, metadata, table edits, and export error handling closure.
   exportCsvRef.current = () => { void exportCsv(); };
@@ -1072,7 +1096,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
               {/* Both CSV sources use the same outlined affordance so neither
                   input is visually mistaken for an unbounded text action. */}
               <span className={styles.fileDropTarget} data-dragging={slateCsvDrop.dragging || undefined} {...slateCsvDrop.dropProps}><input ref={slateCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => slateCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></span>
-              <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
+              <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden disabled={exportState.processing || recognition.running || metadata.scanning} onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" disabled={exportState.processing || recognition.running || metadata.scanning} onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
               {exportState.slateCsvRecords && <Badge tone="accent">场记 CSV · {exportState.slateCsvRecords.length} 条</Badge>}
               {exportState.table && <Badge tone="success">Resolve CSV · {exportState.table.rows.length} 行</Badge>}
             </Stack>

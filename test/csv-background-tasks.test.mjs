@@ -75,3 +75,23 @@ test("CSV background processor decodes slate CSV and builds local records", () =
     { cardNumber: "A001", videoCode: "C001", takeStatus: "过" },
   );
 });
+
+
+test("CSV background processor still flags a reel mismatch even when slate fps is backfilled", () => {
+  const processTask = createCsvTaskProcessor();
+  processTask({ type: "decode-metadata", data: source });
+  // OCR records belong to reel B while the CSV holds A001C001; even though a
+  // matched slate sidecar backfills Camera FPS, no record matched a row, so the
+  // reel/video-code mismatch gate must still throw.
+  assert.throws(
+    () => processTask({
+      type: "export-resolve",
+      records: [{ cardNumber: "B001", videoCode: "C001", scene: "1", shot: "2", take: "3", takeStatus: "过" }],
+      csvEdits: [],
+      slateMetadata: [{ sourceName: "A001C001-slate.txt", clipName: "A001C001", materialKey: "A:1:1", sensorFps: "48", shootDay: "" }],
+      fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+      comments: { goodTake: "_OK", holdTake: "_KP" },
+    }),
+    /没有匹配到可写入的完整记录，请检查卷号、视频码/,
+  );
+});

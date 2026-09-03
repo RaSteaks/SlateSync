@@ -34,6 +34,9 @@ const HEADER_ALIASES = Object.freeze({
   comments: ["Comments", "Comment", "备注", "備註", "注释", "註釋"],
   cameraFps: ["Camera FPS", "CameraFPS", "摄影机帧率", "攝影機幀率"],
   shootDay: ["Shoot Day", "ShootDay", "拍摄日期", "拍攝日期"],
+  // Resolve reads only its canonical "Camera #" header; localized variants
+  // are not emitted and are not treated as the camera column.
+  camera: ["Camera #"],
 });
 
 const TARGET_COLUMNS = Object.freeze([
@@ -58,9 +61,25 @@ const SLATE_METADATA_COLUMNS = Object.freeze([
   SHOOT_DAY_COLUMN,
 ]);
 
+// The camera number is an intrinsic property of the clip's own name (the first
+// letter of its camera code, e.g. A from A004C004_20260801_RA259). It is
+// derived from the material identity, independent of the slate sidecars.
+const CAMERA_COLUMN = Object.freeze({
+  field: "camera",
+  header: "Camera #",
+});
+
 const TARGET_COLUMN_FIELDS = new Set(
-  [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS].map((target) => target.field),
+  [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS, CAMERA_COLUMN].map(
+    (target) => target.field,
+  ),
 );
+
+// Writable target columns whose duplicate headers resolve to the FIRST match
+// instead of rejecting the whole CSV at load time. A Resolve export may carry
+// two "Camera #" columns (e.g. added by an external tool); the backfill writes
+// to the first and the file still opens for the user to fix.
+const FIRST_MATCH_TARGET_FIELDS = new Set(["camera"]);
 
 const FIXED_WIDTH_METADATA_FIELDS = Object.freeze([
   { field: "scene", label: "Scene" },
@@ -144,13 +163,18 @@ export function buildSlateMetadataIndex(entries = []) {
     const sensorFpsValues = new Set(
       group.map((entry) => normalizeCameraFps(entry.sensorFps)).filter(Boolean),
     );
+    // Conflicting values keep their candidates so the conflict warning can
+    // list every observed frame rate.
+    const sensorFpsCandidates = [...sensorFpsValues];
     let sensorFps = "";
+    let sensorFpsConflict = false;
     if (sensorFpsValues.size > 1) {
+      sensorFpsConflict = true;
       warnings.push(
-        `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突或无效的 Sensor FPS，Camera FPS 不会写入。`,
+        `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突或无效的 Sensor FPS（${sensorFpsCandidates.join(" / ")}），Camera FPS 不会写入素材行，需人工确认帧率。`,
       );
     } else if (sensorFpsValues.size === 1) {
-      sensorFps = [...sensorFpsValues][0];
+      sensorFps = sensorFpsCandidates[0];
     }
 
     const shootDayValues = new Set(
@@ -165,16 +189,27 @@ export function buildSlateMetadataIndex(entries = []) {
       shootDay = [...shootDayValues][0];
     }
 
-    if (!sensorFps && !shootDay) continue;
+    if (!sensorFps && !shootDay && !sensorFpsConflict) continue;
     byMaterialKey.set(materialKey, {
       materialKey,
       sensorFps,
       shootDay,
+      sensorFpsConflict,
+      sensorFpsCandidates,
       sourceNames: group.map((entry) => entry.sourceName).filter(Boolean),
     });
   }
 
   return { byMaterialKey, warnings };
+}
+
+// The camera letter for a material: the first character of its camera code,
+// derived from the canonical key's leading segment (A:4:4 → "A"). Mirrors the
+// clip-name convention where A004C004_... starts with the camera letter.
+function materialCameraLetter(key) {
+  const camera = String(key || "").split(":")[0] || "";
+  const letter = camera.trim().charAt(0);
+  return /[A-Za-z]/.test(letter) ? letter.toUpperCase() : "";
 }
 
 export function mergeSlateIntoResolveTable(
@@ -187,6 +222,9 @@ export function mergeSlateIntoResolveTable(
     throw new Error("尚未载入有效的 Resolve CSV");
   }
 
+  // The Resolve CSV is the source of truth: columns already present are kept in
+  // place and only genuinely missing Resolve fields are appended. No synthetic
+  // rows are ever written into the exported file.
   const headers = sourceTable.headers.map((value) => String(value));
   const rows = sourceTable.rows.map((row) =>
     normalizeRowWidth(row.map(stringValue), headers.length),
@@ -199,9 +237,16 @@ export function mergeSlateIntoResolveTable(
   warnings.push(...slateIndex.warnings);
 
   let columns = resolveColumnIndexes(headers);
-  const columnsToEnsure = slateMetadata.length
-    ? [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS]
-    : TARGET_COLUMNS;
+  const hasSlateSource = slateMetadata.length > 0;
+  const hasEnrichment = hasSlateSource || records.length > 0;
+  const columnsToEnsure = [
+    ...TARGET_COLUMNS,
+    ...(hasSlateSource ? SLATE_METADATA_COLUMNS : []),
+  ];
+  // Camera # is derived from the clip's own name, never from the slate, so it
+  // is ensured whenever this merge enriches a Resolve table at all (whether or
+  // not a card was scanned).
+  if (hasEnrichment) columnsToEnsure.push(CAMERA_COLUMN);
   for (const target of columnsToEnsure) {
     if (columns[target.field] >= 0) continue;
     headers.push(target.header);
@@ -233,31 +278,53 @@ export function mergeSlateIntoResolveTable(
   const changes = [];
 
   // Camera metadata comes from the camera-generated sidecar and only needs a
-  // trustworthy material identity. Apply it independently so incomplete or
-  // conflicting Scene/Shot/Take recognition cannot suppress these fields.
-  for (const key of recognizedMaterialKeys) {
+  // trustworthy material identity (the CSV row it belongs to). Apply it
+  // independently of recognition records: missing or conflicting Scene/Shot/
+  // Take recognition must never suppress these fields, and a CSV row that
+  // never matched a 场记 record still receives its frame rate whenever the
+  // card sidecar corresponds — a real clip always carries a frame rate, so
+  // "no 场记" must never read as "no fps".
+  const slateKeyedRows = new Set();
+  for (const key of rowIndex.keys()) {
+    if (slateIndex.byMaterialKey.has(key)) slateKeyedRows.add(key);
+  }
+  const cameraMetadataKeys = [
+    ...new Set([...recognizedMaterialKeys, ...slateKeyedRows]),
+  ].sort(compareCanonicalMaterialKeys);
+  for (const key of cameraMetadataKeys) {
     const matchedRows = rowIndex.get(key) || [];
     if (!matchedRows.length) continue;
 
     const slateEntry = slateIndex.byMaterialKey.get(key);
+    const recognized = recognizedMaterialKeys.has(key);
     const slateFields = [
       {
         field: "cameraFps",
         value: slateEntry?.sensorFps || "",
         matchedRows: cameraFpsMatchedRows,
         missingKeys: missingCameraFpsKeys,
+        // fps conflicts are surfaced by the conflict warning, so they must not
+        // be counted again as a missing Sensor FPS.
+        reportMissingWhenRecognized: !slateEntry?.sensorFpsConflict,
       },
       {
         field: "shootDay",
         value: slateEntry?.shootDay || "",
         matchedRows: shootDayMatchedRows,
         missingKeys: missingShootDayKeys,
+        reportMissingWhenRecognized: true,
       },
     ];
 
     for (const slateField of slateFields) {
       if (!slateField.value) {
-        if (slateMetadata.length) slateField.missingKeys.add(key);
+        if (
+          recognized &&
+          slateMetadata.length &&
+          slateField.reportMissingWhenRecognized
+        ) {
+          slateField.missingKeys.add(key);
+        }
         continue;
       }
 
@@ -285,13 +352,32 @@ export function mergeSlateIntoResolveTable(
         });
         updatedRows.add(rowNumber);
         if (previous) {
-          const fileName = rowDisplayName(row, columns) ||
-            canonicalKeyToMaterialPrefix(key);
+          const fileName =
+            rowDisplayName(row, columns) || canonicalKeyToMaterialPrefix(key);
           warnings.push(
             `CSV 第 ${rowNumber + 2} 行 ${fileName} 已覆盖：${headers[columnIndex]}“${previous}”→“${next}”。`,
           );
         }
       }
+    }
+  }
+
+  // Camera # is intrinsic to the clip name (e.g. A from A004C004_20260801_RA259),
+  // so every CSV material row whose identity resolves gets its leading camera
+  // letter backfilled — independent of both sidecars and recognition. Existing
+  // non-empty cells are respected and never overwritten. This is a pure cell
+  // backfill and is deliberately not counted as "writable work": it is derived
+  // from the row's own name and must not flip exportability or the reel-mismatch
+  // gate.
+  if (columns.camera >= 0) {
+    for (let rowNumber = 0; rowNumber < rows.length; rowNumber += 1) {
+      const key = rowKeys[rowNumber];
+      if (!key) continue;
+      const camera = materialCameraLetter(key);
+      if (!camera) continue;
+      const row = rows[rowNumber];
+      if (cleanValue(row[columns.camera])) continue;
+      row[columns.camera] = camera;
     }
   }
 
@@ -306,7 +392,7 @@ export function mergeSlateIntoResolveTable(
   );
   if (unrecognizedMaterials.length) {
     warnings.push(
-      `完整性对账：Resolve CSV 中有 ${unrecognizedMaterials.length} 个素材未在场记识别结果中出现（${compactMaterialRanges(unrecognizedMaterialKeys)}）。这些行不会自动回填，请检查是否漏页或漏识别。`,
+      `Resolve CSV 中有 ${unrecognizedMaterials.length} 个素材未匹配到场记（${compactMaterialRanges(unrecognizedMaterialKeys)}）。这些行不会回填场镜次；若有对应 slate.txt，Camera FPS/Shoot Day 仍会独立回填。请检查是否漏页或漏识别。`,
     );
   }
   const statuses = Array.from({ length: records.length }, () => null);
@@ -459,7 +545,7 @@ export function mergeSlateIntoResolveTable(
   if (missingCameraFpsKeys.size) {
     const sortedKeys = [...missingCameraFpsKeys].sort(compareCanonicalMaterialKeys);
     warnings.push(
-      `Sensor FPS 对账：${sortedKeys.length} 个已识别且匹配 CSV 的素材没有可用 slate.txt（${compactMaterialRanges(sortedKeys)}），其 Camera FPS 保持原值。`,
+      `Sensor FPS 缺失：${sortedKeys.length} 个已识别且匹配 CSV 的素材没有可用 Sensor FPS（${compactMaterialRanges(sortedKeys)}），其 Camera FPS 保持原值，请检查侧车或卡片对应。`,
     );
   }
 
@@ -468,7 +554,7 @@ export function mergeSlateIntoResolveTable(
       compareCanonicalMaterialKeys,
     );
     warnings.push(
-      `Shoot Day 对账：${sortedKeys.length} 个已识别且匹配 CSV 的素材没有可用 Shot Date（${compactMaterialRanges(sortedKeys)}），其 Shoot Day 保持原值。`,
+      `Shoot Day 缺失：${sortedKeys.length} 个已识别且匹配 CSV 的素材没有可用 Shot Date（${compactMaterialRanges(sortedKeys)}），其 Shoot Day 保持原值。`,
     );
   }
 
@@ -641,7 +727,11 @@ export function resolveColumnIndexes(headers) {
   const indexes = {};
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
     const matches = findHeaderIndexes(headers, aliases);
-    if (TARGET_COLUMN_FIELDS.has(field) && matches.length > 1) {
+    if (
+      TARGET_COLUMN_FIELDS.has(field) &&
+      matches.length > 1 &&
+      !FIRST_MATCH_TARGET_FIELDS.has(field)
+    ) {
       throw new Error(
         `CSV 中存在多个 ${aliases[0]} 对应列，无法确定应写入哪一列。`,
       );

@@ -51,14 +51,14 @@
   },
   "outputs": {
     "mergedResolve": {
-      "bytes": 196,
-      "sha256": "c601ab2c779b2b4d474966fef727bb9225cb9c011e61b4f4de282fe4e1a89ab3",
+      "bytes": 211,
+      "sha256": "92f50e81e0ee32bb973b4f68cbcab667ff1cf2e42fea8823d8453ea03b051238",
       "format": { "encoding": "utf-8", "bom": true, "delimiter": ",", "lineEnding": "\n", "finalNewline": true },
-      "headers": ["File Name", "Scene", "Shot", "Take", "Comments", "Notes", "Camera FPS", "Shoot Day"],
+      "headers": ["File Name", "Scene", "Shot", "Take", "Comments", "Notes", "Camera FPS", "Shoot Day", "Camera #"],
       "rows": [
-        ["A001C001.mov", "1 / 2A", "02", "03", "YES", "edited note", "24", "26-01-01"],
-        ["A001C002.mov", "1234", "100", "11", "HOLD", "line 1\nline 2", "", ""],
-        ["A001C999.mov", "", "", "", "", "unmatched", "", ""]
+        ["A001C001.mov", "1 / 2A", "02", "03", "YES", "edited note", "24", "26-01-01", "A"],
+        ["A001C002.mov", "1234", "100", "11", "HOLD", "line 1\nline 2", "", "", "A"],
+        ["A001C999.mov", "", "", "", "", "unmatched", "", "", "A"]
       ]
     },
     "standalone": {

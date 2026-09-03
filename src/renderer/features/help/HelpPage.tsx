@@ -36,7 +36,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
         <article className={styles.helpStep}>
           <div className={styles.helpStepTop}><span className={styles.helpStepNumber}>03</span><Settings2 size={19} aria-hidden="true" /></div>
           <Text as="h3" size="md" weight="bold">准备可选输入</Text>
-          <Text tone="muted" size="sm">需要对账或回填时，载入场记 CSV 与 Resolve CSV；已有 Resolve CSV 后，还可以选择素材目录读取 slate.txt 的帧率和拍摄日。</Text>
+          <Text tone="muted" size="sm">需要回填场镜次或帧率时，载入场记 CSV 与 Resolve CSV；已有 Resolve CSV 后，还可以选择素材目录读取 slate.txt 的帧率和拍摄日。</Text>
         </article>
         <article className={styles.helpStep}>
           <div className={styles.helpStepTop}><span className={styles.helpStepNumber}>04</span><Gauge size={19} aria-hidden="true" /></div>
