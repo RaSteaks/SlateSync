@@ -44,6 +44,8 @@
 - SM-02 Gate 继续实际运行 SM-01 建立的隔离 App 启动、Universal Release、Xcode
   Archive 与 ad-hoc 签名检查；自动 App 验证使用 `open -g` 后台启动，平台收敛不得
   把产物验证降级为静态配置扫描，也不得让 Gate 抢占前台。
+- 阶段状态检查同时覆盖批准前的“上一阶段 COMPLETE → 当前包”和批准后的“当前阶段
+  COMPLETE → 下一包”，避免合法治理提交因硬编码上一阶段状态而被 Gate 误判。
 - Electron、React、Node 与跨平台历史 helper 仍保留在仓库，作为 SM-09 前的兼容
   基线；本阶段只切断其当前非 macOS 产品入口，不修改 SQLite、CSV、OCR、Provider
   或任务数据契约。

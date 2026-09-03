@@ -75,6 +75,42 @@ assert_success "Universal architectures" gate_validate_architectures \
 assert_failure "missing Universal architecture" gate_validate_architectures "arm64"
 assert_success "minimum macOS 15" gate_validate_minimum_system "15.0"
 assert_failure "incorrect minimum macOS" gate_validate_minimum_system "14.0"
+
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-01",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-01.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-02.md"
+}
+JSON
+assert_success "SM-02 pre-admission state" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-02
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-02",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-02.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-03.md"
+}
+JSON
+assert_success "SM-02 post-admission state" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-02
+assert_success "SM-03 pre-admission state" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-03
+assert_failure "stale phase cannot skip to SM-04" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-04
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-02",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-02.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md"
+}
+JSON
+assert_failure "incorrect next package" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-02
+
 assert_success "exact built executable command" slatesync_command_matches_executable \
   "/tmp/SlateSync.app/Contents/MacOS/SlateSync" \
   "/tmp/SlateSync.app/Contents/MacOS/SlateSync"

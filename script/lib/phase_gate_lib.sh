@@ -75,6 +75,48 @@ gate_validate_minimum_system() {
   [[ "$1" == "15.0" ]]
 }
 
+gate_validate_phase_state() {
+  local state_path="$1"
+  local requested_phase="$2"
+
+  python3 - "$state_path" "$requested_phase" <<'PY'
+import json
+import re
+import sys
+
+state_path, requested_phase = sys.argv[1:]
+phase_pattern = re.compile(r"SM-(\d{2})$")
+requested_match = phase_pattern.fullmatch(requested_phase)
+if requested_match is None:
+    raise SystemExit(1)
+
+with open(state_path, encoding="utf-8") as handle:
+    state = json.load(handle)
+
+state_phase = state.get("phase")
+state_match = phase_pattern.fullmatch(state_phase or "")
+if state_match is None or state.get("lifecycleState") != "COMPLETE":
+    raise SystemExit(1)
+
+requested_number = int(requested_match.group(1))
+state_number = int(state_match.group(1))
+if state_number not in {requested_number - 1, requested_number}:
+    raise SystemExit(1)
+
+expected_active = f".codex/swift-migration/packages/{state_phase}.md"
+expected_next_number = state_number + 1
+expected_next = f".codex/swift-migration/packages/SM-{expected_next_number:02d}.md"
+if state.get("activePackage") != expected_active or state.get("nextPackage") != expected_next:
+    raise SystemExit(1)
+
+# Before admission, the previous COMPLETE phase must point at the requested
+# package. After admission, the requested phase itself must point at its successor.
+if state_number == requested_number - 1 and expected_next != f".codex/swift-migration/packages/{requested_phase}.md":
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+}
+
 gate_validate_approval_state() {
   local state_path="$1"
   local expected_commit="$2"

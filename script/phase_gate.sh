@@ -190,10 +190,13 @@ sm01_scope_contract_check() {
       return 1
     }
   done
-  rg -q '"phase"[[:space:]]*:[[:space:]]*"SM-01"' \
-    .codex/swift-migration/CURRENT_STATE.json || return 1
-  rg -q '"nextPackage"[[:space:]]*:[[:space:]]*"\.codex/swift-migration/packages/SM-02\.md"' \
-    .codex/swift-migration/CURRENT_STATE.json || return 1
+  # The Gate must accept both sides of a valid admission transition: the
+  # previous COMPLETE phase before approval and this COMPLETE phase afterward.
+  gate_validate_phase_state \
+    .codex/swift-migration/CURRENT_STATE.json "$phase" || {
+      print -u2 "CURRENT_STATE.json does not describe a valid ${phase} admission boundary"
+      return 1
+    }
 
   forbidden_tracked="$(git ls-files | rg \
     '(^|/)(\.build|DerivedData|\.swiftpm/xcode|\.codex/gate-results)(/|$)|premium-audit\.json$|\.xcarchive(/|$)|\.xcresult(/|$)|\.log$' || true)"
@@ -216,7 +219,7 @@ sm01_scope_contract_check() {
     print -u2 "tracked source contains a credential-like value"
     return 1
   fi
-  print "scope protected; SM-01 state preserved; legacy baseline present; generated artifacts untracked"
+  print "scope protected; phase state valid; legacy baseline present; generated artifacts untracked"
 }
 
 sm01_real_app_launch_check() {
