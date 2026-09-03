@@ -1,0 +1,41 @@
+{
+  "configurations" : [
+    {
+      "id" : "87EBC8F1-3F1E-4E37-8B5A-267202F0DD87",
+      "name" : "Default",
+      "options" : {
+        "environmentVariableEntries" : [
+          {
+            "key" : "SLATESYNC_TESTING",
+            "value" : "1"
+          }
+        ]
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:SlateSync.xcodeproj",
+      "identifier" : "A10000000000000000000001",
+      "name" : "SlateSync"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:SlateSync.xcodeproj",
+        "identifier" : "A10000000000000000000002",
+        "name" : "SlateSyncTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:SlateSync.xcodeproj",
+        "identifier" : "A10000000000000000000003",
+        "name" : "SlateSyncUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

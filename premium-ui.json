@@ -1,0 +1,18 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["Sources/SlateSyncUI", "SlateSyncApp"],
+  "locale": "zh-Hans",
+  "canonicalMap": "UX-CONTRACT.md",
+  "requiredCapabilities": ["Select/Listbox", "Form", "Toast", "CRUD"],
+  "ownership": {
+    "Select/Listbox": "native",
+    "Form": "SwiftUI shared field components",
+    "Toast": "SlateSyncUI feedback policy (inline/banner in SM-01)",
+    "CRUD": "feature models backed by domain services"
+  },
+  "requiredCommands": ["swift", "xcode"],
+  "commands": {
+    "swift": "swift test",
+    "xcode": "xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -destination platform=macOS test"
+  }
+}

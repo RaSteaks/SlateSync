@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "phase": "SM-XX",
+  "reviewCommit": "<40-character Git SHA>",
+  "checks": {
+    "check_id_from_gate": {
+      "result": "PASS",
+      "sourceType": "ci",
+      "command": "<exact command>",
+      "artifact": "<durable CI run or artifact reference>",
+      "recordedAt": "<ISO-8601 timestamp>"
+    },
+    "non_critical_check_id": {
+      "result": "PASS",
+      "sourceType": "owner-waiver",
+      "owner": "<Repository Owner>",
+      "reason": "<external environmental blocker>",
+      "expiresAt": "<ISO-8601 timestamp>",
+      "revalidateByPhase": "SM-XX"
+    }
+  }
+}

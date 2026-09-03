@@ -1,5 +1,26 @@
 # SlateSync 当前项目方案
 
+## 2026-09-03 原生 Swift 重写
+
+- 当前权威方案迁移到 `.codex/swift-migration/README.md`；
+  `.codex/refactor/` 只作为 Electron 兼容行为与历史证据。
+- 目标为 macOS 15.0+ 原生应用，SwiftPM 管理五个业务模块，
+  `SlateSync.xcodeproj` 提供 App、Unit Test、UI Test、Run、Debug、Profile
+  与 Archive。
+- Windows 支持终止；新 CI、打包、文档和运行时代码只面向 macOS。
+- SQLite/Project Library v1、任务 JSON、CSV 字节语义、OCR-first、Provider
+  请求与识别取消/重试/并发行为在迁移 Gate 前保持兼容。
+- 所有自动测试使用显式临时 Application Support 与 Project Library，禁止
+  访问用户默认 Library。
+- `SM-01` 实现已进入 `REVIEW_READY`：SwiftPM/Xcode 骨架、Run/Debug、
+  Unit/UI Test、Profile/Archive 与 Universal Release 已验证，但仍需独立基线
+  提交、正式 Gate PASS 和 Owner 批准；`SM-02` 及之后阶段尚未开始。
+- 阶段状态、环境替代证据与不可豁免项以
+  `.codex/swift-migration/PHASE_GATES.md` 为准；本地统一入口为
+  `./script/phase_gate.sh SM-XX`，禁止用 dirty diagnostic 结果声明完成。
+
+以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
+
 ## 当前任务
 
 执行 `.codex/refactor/packages/IP-03-08-C02.md`，关闭

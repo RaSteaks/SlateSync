@@ -42,6 +42,24 @@
 
 ## 快速开始
 
+### 原生 Swift 工程（SM-01）
+
+原生重写骨架要求 Xcode 26.3、Swift 6.2，并固定最低系统为 macOS 15.0。打开
+`SlateSync.xcodeproj`，选择共享的 `SlateSync` Scheme：`Cmd-R` 运行和断点调试，
+`Cmd-U` 执行 Unit/UI Test，Profile 与 Archive 使用 Release 配置。
+
+```bash
+swift build
+swift test
+xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -destination 'platform=macOS' build
+xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -destination 'platform=macOS' test
+./script/build_and_run.sh --verify
+./script/phase_gate.sh SM-01 --allow-dirty # 开发期诊断，不能批准阶段
+```
+
+SM-01 工程实现已进入审查准备状态；只有在独立提交上执行正式 Gate 并由 Owner
+批准后才算完成。Electron 仍作为后续兼容迁移基线保留，不代表后续阶段已经完成。
+
 ### 1. 环境要求
 
 - macOS：开发和当前打包目标平台。

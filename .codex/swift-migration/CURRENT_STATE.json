@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 2,
+  "updatedAt": "2026-09-03",
+  "phase": "SM-01",
+  "lifecycleState": "REVIEW_READY",
+  "platform": {
+    "minimumMacOS": "15.0",
+    "architectures": ["arm64", "x86_64"],
+    "windowsSupported": false,
+    "legacyWindowsArtifactsPresent": true
+  },
+  "toolchain": {
+    "xcode": "26.3",
+    "xcodeBuild": "17C529",
+    "swift": "6.2.4",
+    "sdk": "macOS 26.2",
+    "nativeFrameworkProbe": "passed",
+    "observationMacroProbe": "passed-outside-command-sandbox",
+    "universalBinaryProbe": "passed"
+  },
+  "activePackage": ".codex/swift-migration/packages/SM-01.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-02.md",
+  "protectedHistoricalEvidence": ".codex/refactor",
+  "blockingDecisions": [],
+  "gate": {
+    "conclusion": "BLOCKED",
+    "reviewCommit": null,
+    "owner": null,
+    "approvedAt": null,
+    "evidenceReport": ".codex/swift-migration/reviews/SM-01.md",
+    "approvable": false,
+    "blockers": [
+      "SM-01 changes are not frozen in a clean dedicated review commit.",
+      "A formal clean-worktree Gate PASS and Repository Owner approval are pending."
+    ]
+  },
+  "verification": {
+    "swiftBuild": "passed",
+    "swiftTest": "4 passed",
+    "xcodeDebugBuild": "passed-arm64-Onone",
+    "xcodeTestPlan": "1 unit + 1 UI passed",
+    "buildAndRunVerify": "passed-real-process-verification",
+    "releaseBuild": "passed-arm64-x86_64",
+    "archive": "passed-arm64-x86_64",
+    "minimumSystem": "15.0",
+    "premiumStrictAudit": "0 findings",
+    "lastDiagnosticGate": {
+      "result": "PASS",
+      "approvable": false,
+      "reviewCommit": "aa3a514aae65b99c93b0547b4e5f330bef53782a",
+      "evidence": ".codex/gate-results/SM-01/20260902T180330Z-aa3a514aae65/result.json"
+    }
+  }
+}

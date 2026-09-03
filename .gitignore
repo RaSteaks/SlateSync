@@ -42,7 +42,39 @@ public/vendor/
 session-*.md
 SlateSync.code-workspace
 .vscode/
-DESIGN.md
-premium-ui.json
-.gitignore
-UX-CONTRACT.md
+
+# SwiftPM/Xcode outputs and per-user IDE state are reproducible local artifacts.
+/.build/
+/DerivedData/
+# Ignore SwiftPM's Xcode integration cache while leaving future shared package
+# configuration (for example mirrors) eligible for version control.
+/.swiftpm/xcode/
+*.xcuserstate
+xcuserdata/
+*.xcuserdatad/
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+
+# Xcode test, profiling, archive, and debug-symbol products are generated locally.
+*.xcresult
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+
+# Local logs, crash reports, and editor backup files are not source artifacts.
+*.log
+*.crash
+*.swp
+*.swo
+*~
+
+# The premium UI audit is regenerated from the committed premium-ui.json policy.
+/premium-audit.json
+
+# Phase Gate raw logs, DerivedData, Archives, and JSON runs are local/CI evidence.
+/.codex/gate-results/
