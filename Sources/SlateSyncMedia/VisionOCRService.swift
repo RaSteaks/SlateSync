@@ -44,3 +44,6 @@ public actor VisionOCRService: OCRServing {
         }
         return OCRPageResult(page: page, blocks: blocks)
     }
+
+    // Keep Vision OCR state isolated behind the actor boundary for callers.
+}

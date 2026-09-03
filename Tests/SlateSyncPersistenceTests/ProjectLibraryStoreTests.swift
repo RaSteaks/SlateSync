@@ -11,3 +11,6 @@ final class ProjectLibraryStoreTests: XCTestCase {
         let projects = try await store.listProjects()
         XCTAssertEqual(projects.map(\.name), ["测试项目"])
     }
+
+    // Injecting a temporary support root keeps this test away from live user data.
+}
