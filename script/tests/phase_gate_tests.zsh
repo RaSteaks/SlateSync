@@ -60,6 +60,10 @@ assert_no_failure_marker() {
   ! rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=' "$1"
 }
 
+path_is_within() {
+  [[ "$1" == "$2"/* ]]
+}
+
 assert_success "known phase" gate_valid_phase SM-01
 assert_failure "unknown phase" gate_valid_phase SM-10
 assert_exit_status "unknown phase CLI status" 64 \
@@ -154,8 +158,13 @@ run_xcode_test_plan_fixture() {
   print -r -- "$summary_json" > "${fixture_dir}/summary.json"
   print -r -- '#!/bin/zsh
 result_bundle=""
+derived_data=""
 while (( $# > 0 )); do
   case "$1" in
+    -derivedDataPath)
+      derived_data="$2"
+      shift 2
+      ;;
     -resultBundlePath)
       result_bundle="$2"
       shift 2
@@ -165,6 +174,8 @@ while (( $# > 0 )); do
       ;;
   esac
 done
+print -r -- "$derived_data" > "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
+print -r -- "$result_bundle" >> "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
 mkdir -p "$result_bundle"
 print -r -- "fixture xcodebuild status=${SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS}"
 exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
@@ -179,10 +190,23 @@ exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
     export PATH="${bin_dir}:${PATH}"
     export SLATESYNC_XCODE_FIXTURE_SUMMARY_PATH="${fixture_dir}/summary.json"
     export SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS="$xcodebuild_status"
+    export SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH="${fixture_dir}/xcodebuild-arguments.txt"
     gate_xcode_test_plan_check "$fixture_dir" "$result_dir"
   ) > "${fixture_dir}/output.log" 2>&1 || command_status=$?
 
   assert_equal "${name} wrapper status" "$expected_command_status" "$command_status"
+  local recorded_derived_data
+  local recorded_result_bundle
+  recorded_derived_data="$(sed -n '1p' "${fixture_dir}/xcodebuild-arguments.txt")"
+  recorded_result_bundle="$(sed -n '2p' "${fixture_dir}/xcodebuild-arguments.txt")"
+  # XCUI executables and their live result bundle must not be hosted below a
+  # protected repository; only the completed evidence is moved into results.
+  assert_failure "${name} DerivedData is outside repository" \
+    path_is_within "$recorded_derived_data" "$fixture_dir"
+  assert_failure "${name} live xcresult is outside repository" \
+    path_is_within "$recorded_result_bundle" "$fixture_dir"
+  assert_success "${name} materializes xcresult evidence" \
+    test -d "${result_dir}/SlateSync.xcresult"
   if [[ "$expected_classification" == "PASS" ]]; then
     # A genuine passing result bundle and an exit-zero xcodebuild invocation
     # must return cleanly without manufacturing a failure marker.

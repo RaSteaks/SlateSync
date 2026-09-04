@@ -165,9 +165,17 @@ gate_xcode_test_plan_check() {
   local result_bundle="${result_dir}/SlateSync.xcresult"
   local summary_path="${result_dir}/xcode_test_summary.json"
   local xcodebuild_log="${result_dir}/xcode_test_plan_xcodebuild.log"
+  local test_workspace
+  local ephemeral_result_bundle
   local command_status=0
+  local artifact_status=0
   local summary_status=0
 
+  # Keep the UI test runner outside a repository that may itself live below a
+  # macOS protected Desktop/Documents folder. Otherwise TCC can interrupt XCUI
+  # with a folder-access prompt even though SlateSync only uses its test root.
+  test_workspace="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-xcode-test.XXXXXX")" || return 1
+  ephemeral_result_bundle="${test_workspace}/SlateSync.xcresult"
   (
     cd "$project_root" &&
     xcodebuild -quiet \
@@ -175,11 +183,23 @@ gate_xcode_test_plan_check() {
       -scheme SlateSync \
       -testPlan SlateSync \
       -destination 'platform=macOS' \
-      -derivedDataPath "${result_dir}/DerivedData/Test" \
-      -resultBundlePath "$result_bundle" \
+      -derivedDataPath "${test_workspace}/DerivedData" \
+      -resultBundlePath "$ephemeral_result_bundle" \
       test
   ) > "$xcodebuild_log" 2>&1 || command_status=$?
   cat "$xcodebuild_log"
+
+  # The parent Gate process materializes immutable evidence after the runner has
+  # exited, so xcresult inspection remains available without giving the runner a
+  # reason to access the protected repository directory.
+  if [[ -e "$ephemeral_result_bundle" ]]; then
+    mv "$ephemeral_result_bundle" "$result_bundle" || artifact_status=$?
+  fi
+  rm -rf -- "$test_workspace"
+  if (( artifact_status != 0 )); then
+    print -u2 -r -- "Unable to materialize the Xcode test result bundle"
+    return "$artifact_status"
+  fi
 
   # An xcresult is useful even when xcodebuild exits non-zero. Inspect it before
   # falling back to log classification so assertion failures and environment

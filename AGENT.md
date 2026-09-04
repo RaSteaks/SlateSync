@@ -101,6 +101,17 @@
   工作树含未提交 review 修复而按设计为 `approvable=false`。新的 review-fix commit
   已获 Owner 授权；只有新 SHA 的 clean Gate 与最终 Owner 批准都完成后才可推进
   `CURRENT_STATE.json`。
+- Owner 授权后已生成 review-fix commit
+  `69411f5a956ea1807715b32055cb74e6984e96c0`。该 SHA 的首次 clean Gate 只在
+  Xcode UI 测试失败；xcresult 附件显示 UI Test Runner 因位于 Desktop 下的
+  仓库内而触发 macOS“桌面文件夹访问” TCC 弹窗，产品窗口和按钮在弹窗前
+  已成功出现。Gate 现将 DerivedData、UI runner 和运行中 xcresult 置于系统
+  临时目录，运行结束后再由 Gate 父进程把完整 xcresult 移入证据目录；
+  端到端夹具会防止 runner 路径退化回受保护的仓库。修复后 Gate helper
+  71/71，完整 dirty diagnostic Gate 的 SwiftPM 96/96、Xcode Test Plan 3/3、
+  Node 323/323、Modern 118/118 及其余技术检查全部 PASS，证据为
+  `.codex/gate-results/SM-04/20260904T165538Z-69411f5a956e/result.json`；
+  其 `approvable=false` 仅因修复未提交。该修复保持未提交，需单独请求提交授权。
 
 以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
 
