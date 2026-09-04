@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-03",
-  "phase": "SM-02",
+  "updatedAt": "2026-09-04",
+  "phase": "SM-03",
   "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
@@ -18,24 +18,24 @@
     "observationMacroProbe": "passed-outside-command-sandbox",
     "universalBinaryProbe": "passed"
   },
-  "activePackage": ".codex/swift-migration/packages/SM-02.md",
-  "nextPackage": ".codex/swift-migration/packages/SM-03.md",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md",
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "3b688d9c7224505412911394ce1a251a15713a44",
+    "reviewCommit": "eed108045704db78f8ae38415f15a3fd0f46d491",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-03T12:28:47Z",
-    "evidenceReport": ".codex/swift-migration/reviews/SM-02.md",
+    "approvedAt": "2026-09-04T13:04:22Z",
+    "evidenceReport": ".codex/swift-migration/reviews/SM-03.md",
     "approvable": true,
     "blockers": []
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "4 passed",
+    "swiftTest": "65 passed",
     "xcodeDebugBuild": "passed-arm64-Onone",
-    "xcodeTestPlan": "1 unit + 1 UI passed",
+    "xcodeTestPlan": "3 passed",
     "buildAndRunVerify": "passed-background-real-process-verification",
     "releaseBuild": "passed-arm64-x86_64",
     "archive": "passed-arm64-x86_64",
@@ -54,8 +54,8 @@
     "lastFormalGate": {
       "result": "PASS",
       "approvable": true,
-      "reviewCommit": "3b688d9c7224505412911394ce1a251a15713a44",
-      "evidence": ".codex/gate-results/SM-02/20260903T122609Z-3b688d9c7224/result.json"
+      "reviewCommit": "eed108045704db78f8ae38415f15a3fd0f46d491",
+      "evidence": ".codex/gate-results/SM-03/20260904T125747Z-eed108045704/result.json"
     }
   }
 }
