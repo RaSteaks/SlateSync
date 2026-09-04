@@ -508,6 +508,22 @@ case "$phase" in
     run_check sm03_contract true "领域合同、设置优先级、OSLog 脱敏、Keychain 迁移事务与兼容边界完整" \
       node script/tests/sm03_contract.mjs
     ;;
+  SM-04)
+    run_check sm04_contract true "SQLite/Project Library v1、快照、迁移与删除安全合同完整" \
+      node script/tests/sm04_contract.mjs
+    run_check sm04_node_compatibility true "Electron 持久化兼容基线继续通过" \
+      npm run test:node
+    run_check sm04_modern_compatibility true "Modern Renderer 兼容基线继续通过" \
+      npm run test:modern
+    run_check sm04_static_checks true "Electron/TypeScript 静态检查继续通过" \
+      npm run check
+    run_check sm04_typecheck true "现代 TypeScript 类型检查继续通过" \
+      npm run typecheck
+    run_check sm04_modern_build true "现代 Renderer 生产构建继续通过" \
+      npm run build:modern
+    run_check sm04_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" \
+      npm run test:native:abi
+    ;;
   SM-01) ;;
   *)
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing

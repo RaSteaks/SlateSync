@@ -13,8 +13,10 @@ struct SlateSyncApp: App {
 
     init() {
         let locator: ApplicationSupportLocator
+        let usesDegradedRoot: Bool
         if let resolved = try? ApplicationSupportLocator() {
             locator = resolved
+            usesDegradedRoot = false
         } else {
             // Keep the process launchable when Application Support is
             // temporarily unavailable; the settings status can still expose
@@ -23,17 +25,18 @@ struct SlateSyncApp: App {
                 root: FileManager.default.temporaryDirectory
                     .appending(path: "SlateSync-unavailable-\(UUID().uuidString)", directoryHint: .isDirectory)
             )
+            usesDegradedRoot = true
         }
 
-        let service: any ProjectLibraryServing
-        do {
-            service = try ProjectLibraryStore(applicationSupportRoot: locator.url)
-        } catch {
-            // Keep the app debuggable when the data root cannot be opened; the
-            // project-library screen will surface the actionable error.
-            service = UnavailableProjectLibraryService(error: .wrapped(error))
-        }
         let runtime = SlateSyncRuntime(locator: locator)
+        // The service resolves settings.json.libraryPath on first use. A
+        // successful Library activation therefore takes effect after relaunch,
+        // while UI tests and degraded startup remain inside their own root.
+        let service = ProjectLibraryStartupService(
+            locator: locator,
+            machineSettings: runtime.machineSettingsStore,
+            forceIsolatedRoot: usesDegradedRoot
+        )
         _navigation = State(initialValue: AppNavigationModel())
         _projects = State(initialValue: ProjectLibraryModel(service: service))
         _runtimeModel = State(initialValue: SlateSyncRuntimeModel(runtime: runtime))
@@ -62,16 +65,4 @@ struct SlateSyncApp: App {
             SettingsRootView(runtimeModel: runtimeModel)
         }
     }
-}
-
-private actor UnavailableProjectLibraryService: ProjectLibraryServing {
-    private let error: SlateSyncError
-
-    init(error: SlateSyncError) {
-        self.error = error
-    }
-
-    func libraryInfo() async throws -> LibraryInfo { throw error }
-    func listProjects() async throws -> [ProjectSummary] { throw error }
-    func createProject(name: String, description: String) async throws -> ProjectData { throw error }
 }

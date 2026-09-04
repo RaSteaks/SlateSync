@@ -1,7 +1,7 @@
 # SlateSync Swift migration authority
 
 Updated: 2026-09-04
-Current phase: **SM-02 COMPLETE; SM-03 implementation ready for formal review**
+Current phase: **SM-03 COMPLETE; SM-04 implementation in progress**
 Target: **native macOS 15.0+, arm64 + x86_64**
 
 This directory is the current authority for replacing the Electron application
@@ -37,10 +37,20 @@ the Icon Composer app icon, and the deterministic build-and-run script. Debug
 uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
-The SM-01 and SM-02 implementations are formally `COMPLETE` in
-`CURRENT_STATE.json`. The SM-03 implementation is ready for its dedicated
-review commit and clean `phase_gate.sh` run. It still needs an evidence report
-and Repository Owner approval before `CURRENT_STATE.json` can advance.
+The SM-01, SM-02 and SM-03 implementations are formally `COMPLETE` in
+`CURRENT_STATE.json`. SM-04 is the active implementation package; its SQLite
+and Project Library work is being frozen in the Owner-authorized dedicated
+review commit. Governance cannot advance until the exact commit has a clean
+`phase_gate.sh` evidence report and explicit Repository Owner approval.
+
+SM-04 now includes the complete v1 portable transfer boundary: staged Project
+and Library exports use SQLite online backups, imported projects receive fresh
+ownership across database rows and snapshots, unsafe external trees are
+rejected, and active-Library changes persist the selected path and drain all
+outgoing connections before the app-level restart. The native App composition
+root consumes that path lazily on relaunch and retains Electron's known-default
+migration/conflict behavior without rewriting portable selections. These changes remain
+subject to the same clean Gate and Owner-approval lifecycle.
 
 Electron, React, Node and cross-platform-era files remain retained as migration
 evidence until SM-09; SM-02 changes only their current macOS product entrypoints.

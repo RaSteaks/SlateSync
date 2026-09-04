@@ -12,8 +12,8 @@
   请求与识别取消/重试/并发行为在迁移 Gate 前保持兼容。
 - 所有自动测试使用显式临时 Application Support 与 Project Library，禁止
   访问用户默认 Library。
-- `SM-01`、`SM-02` 已完成 Owner 批准；SM-03 的实现和审查修复已完成，正在
-  进入 dedicated review commit、clean Gate 与 Owner 批准流程。
+- `SM-01`、`SM-02`、`SM-03` 已完成 Owner 批准；SM-04 施工已获 Owner 授权创建
+  dedicated review commit，clean Gate 与最终 Owner 批准仍待执行。
 - 阶段状态、环境替代证据与不可豁免项以
   `.codex/swift-migration/PHASE_GATES.md` 为准；本地统一入口为
   `./script/phase_gate.sh SM-XX`，禁止用 dirty diagnostic 结果声明完成。
@@ -49,8 +49,44 @@
 - Electron、React、Node 与跨平台历史 helper 仍保留在仓库，作为 SM-09 前的兼容
   基线；本阶段只切断其当前非 macOS 产品入口，不修改 SQLite、CSV、OCR、Provider
   或任务数据契约。
-- SM-02 代码与测试已进入正式审查，`CURRENT_STATE.json` 在 clean Gate、审查报告
-  和 Owner 批准全部完成前继续保留 SM-01 COMPLETE。
+- SM-02 已正式完成；本节保留其平台收敛方案作为后续阶段约束。
+
+## 2026-09-04 SM-04 SQLite 与 Project Library v1
+
+- SM-03 已由 Owner 批准并在 `CURRENT_STATE.json` 标记为 `COMPLETE`；当前施工
+  包为 `.codex/swift-migration/packages/SM-04.md`，治理状态在 SM-04 正式批准前
+  继续保留 SM-03 COMPLETE。
+- `SlateSyncPersistence` 使用系统 SQLite3 保留 v1 的三个数据库文件名、完整
+  Library/Project schema、WAL、foreign keys、5 秒 busy timeout、目录/文件权限和
+  JSON 兼容快照；`SQLiteDatabase.rows` 只在 `SQLITE_DONE` 时返回完整结果。
+- Project Library 继续只持有项目索引；每个项目独立持有 task、diagnostic 和
+  scenario 数据库内容。旧全局数据以只读源一次性迁入 `project-default`，源数据
+  不删除、不改写。
+- v1 传输层保留 `.slatesync-project` / `.slatesync-library` 后缀、manifest 与
+  数据库校验；导出在临时目录中用 SQLite online backup 生成无 WAL 依赖的
+  单文件数据库，校验后原子发布。导入项目生成新 ID，并统一换绑
+  `project_meta`、task/diagnostic JSON 及有效快照的归属。
+- Library 激活/迁移在返回 `restartRequired` 前先保存 `settings.json.libraryPath`，
+  再排空并关闭项目 runtime 与 Library SQLite 连接。原生 App composition root
+  已改用惰性启动服务：重启后读取该路径，自定义便携 Library 保持原址，
+  仅已知历史默认目录可迁移，新旧默认目录冲突时继续使用已持久化目录。
+- 项目删除由 `ProjectRuntime` 租约和 Library tombstone 两层保护：先拒绝新操作并
+  等待/关闭项目 SQLite owners，再改名、删索引；索引失败恢复目录，物理清理失败
+  留待下次启动重试。
+- `ProjectRuntime` 作为唯一项目租约入口，已暴露 task 的 create/update/list/load/delete、
+  diagnostic 的 create/list/load/delete 和 scenario 的 import/read/observation；所有修改均在
+  同一租约内完成，避免后续 workflow 绕开删除/关闭边界直接开库。
+- 自动测试全部使用显式临时目录，覆盖复制 v1 Library 的读写/关闭/重开、未知 JSON
+  字段、快照迁移、诊断保留、场记外键、legacy marker/source preservation、删除补偿，
+  以及开放连接下的项目包/Library 导出、重复导入换绑、链接/路径防护、激活关闭顺序和
+  重启后的 Library 路径选择/历史默认目录冲突语义。
+- Owner 已明确授权本次 dedicated review commit；该授权不等于最终阶段批准，
+  提交后仍需在精确 SHA 上通过 clean Gate、写入 review report 并由 Owner 单独批准。
+- 补齐启动 composition root 后的最新 dirty diagnostic Gate 为全技术检查 PASS：SwiftPM
+  88/88、Xcode Test Plan 3/3、Node 323/323、Modern 118/118，Debug/静态/类型/
+  生产构建与 Node/Electron SQLite ABI 均通过。证据为
+  `.codex/gate-results/SM-04/20260904T144246Z-b5eed3db5d2e/result.json`；该结果产生于
+  review commit 之前，仅是 `approvable=false` 的诊断证据。
 
 以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
 
