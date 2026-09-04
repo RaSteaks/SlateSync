@@ -56,6 +56,10 @@ assert_exit_status() {
   assert_equal "$name" "$expected" "$actual"
 }
 
+assert_no_failure_marker() {
+  ! rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=' "$1"
+}
+
 assert_success "known phase" gate_valid_phase SM-01
 assert_failure "unknown phase" gate_valid_phase SM-10
 assert_exit_status "unknown phase CLI status" 64 \
@@ -69,6 +73,143 @@ assert_equal "command failure classification" FAIL \
 print -r -- "ModuleCache: Operation not permitted" > "${fixture_root}/environment.log"
 assert_equal "environment block classification" BLOCKED_ENV \
   "$(gate_classify_failure "${fixture_root}/environment.log" 1)"
+
+print -r -- '{"result":"Passed","failedTests":0,"testsCount":2}' > "${fixture_root}/xcode-passed.json"
+assert_success "passing Xcode result summary" gate_validate_xcode_test_summary \
+  "${fixture_root}/xcode-passed.json"
+print -r -- '{"result":"Passed","failedTests":0,"testsCount":2,"message":"permission denied is documented setup text"}' > \
+  "${fixture_root}/xcode-passed-environment-word.json"
+assert_success "passing summary ignores non-diagnostic environment text" gate_validate_xcode_test_summary \
+  "${fixture_root}/xcode-passed-environment-word.json"
+assert_equal "passing summary classification ignores non-diagnostic environment text" PASS \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-passed-environment-word.json")"
+
+print -r -- '{"result":"Failed","failedTests":1,"testsCount":2}' > "${fixture_root}/xcode-assertion-failure.json"
+# This validator is called after an exit-zero xcodebuild invocation, so a
+# failed xcresult must still prevent the wrapper from reporting PASS.
+assert_failure "exit-zero Xcode result summary failure" gate_validate_xcode_test_summary \
+  "${fixture_root}/xcode-assertion-failure.json"
+assert_equal "failed Xcode summary is a product failure" FAIL \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-assertion-failure.json")"
+print -r -- '{"result":"Failed","failedTests":0,"testsCount":2,"failureText":"Testing was canceled by Testing.framework"}' > \
+  "${fixture_root}/xcode-canceled-summary.json"
+assert_equal "canceled Xcode summary is an environment block" BLOCKED_ENV \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-canceled-summary.json")"
+print -r -- 'result=Failed failureText=Testing was canceled by Testing.framework' > \
+  "${fixture_root}/xcode-environment-failure.log"
+assert_equal "Xcode runner cancellation classification" BLOCKED_ENV \
+  "$(gate_classify_failure "${fixture_root}/xcode-environment-failure.log" 1)"
+print -r -- 'error: Copy Testing.framework failed with exit code 0' > \
+  "${fixture_root}/xcode-framework-copy-failure.log"
+assert_equal "Xcode Testing.framework copy classification" BLOCKED_ENV \
+  "$(gate_classify_failure "${fixture_root}/xcode-framework-copy-failure.log" 65)"
+print -r -- 'error: the following command failed with exit code 0 but produced no further output' > \
+  "${fixture_root}/xcode-signed-framework-copy-failure.log"
+assert_equal "Xcode signed-framework wrapper classification" BLOCKED_ENV \
+  "$(gate_classify_failure "${fixture_root}/xcode-signed-framework-copy-failure.log" 65)"
+print -r -- 'result=Failed failureText=XCTAssertEqual failed' > \
+  "${fixture_root}/xcode-test-failure.log"
+assert_equal "Xcode assertion classification" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-test-failure.log" 1)"
+print -r -- 'result=Failed failureText=XCTAssertEqual failed; copy Testing.framework failed' > \
+  "${fixture_root}/xcode-mixed-failure.log"
+assert_equal "assertion takes precedence over framework setup text" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-mixed-failure.log" 1)"
+print -r -- 'application code crashed / encountered an error' > \
+  "${fixture_root}/xcode-application-error.log"
+assert_equal "application error is not an environment waiver" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-application-error.log" 1)"
+print -r -- 'SLATESYNC_XCODE_TEST_CLASSIFICATION=FAIL Testing.framework' > \
+  "${fixture_root}/xcode-failure-marker.log"
+assert_equal "result-bundle failure marker takes precedence" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-failure-marker.log" 1)"
+print -r -- 'SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV XCTest XCTAssertEqual failed' > \
+  "${fixture_root}/xcode-blocked-assertion-mixed.log"
+assert_equal "assertion takes precedence over blocked environment marker" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-blocked-assertion-mixed.log" 1)"
+
+# Exercise the complete xcodebuild -> xcresult summary path with command
+# fixtures. This catches status-handling regressions that pure classifier tests
+# cannot see, including a readable result bundle after xcodebuild exits non-zero.
+run_xcode_test_plan_fixture() {
+  local name="$1"
+  local xcodebuild_status="$2"
+  local summary_json="$3"
+  local expected_command_status="$4"
+  local expected_classification="$5"
+  local fixture_dir="${fixture_root}/${name}"
+  local bin_dir="${fixture_dir}/bin"
+  local result_dir="${fixture_dir}/results"
+  local command_status=0
+
+  mkdir -p "$bin_dir" "$result_dir"
+  print -r -- "$summary_json" > "${fixture_dir}/summary.json"
+  print -r -- '#!/bin/zsh
+result_bundle=""
+while (( $# > 0 )); do
+  case "$1" in
+    -resultBundlePath)
+      result_bundle="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+mkdir -p "$result_bundle"
+print -r -- "fixture xcodebuild status=${SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS}"
+exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
+' > "${bin_dir}/xcodebuild"
+  print -r -- '#!/bin/zsh
+/bin/cat "$SLATESYNC_XCODE_FIXTURE_SUMMARY_PATH"
+' > "${bin_dir}/xcrun"
+  chmod +x "${bin_dir}/xcodebuild" "${bin_dir}/xcrun"
+
+  (
+    cd "$fixture_dir" || exit 1
+    export PATH="${bin_dir}:${PATH}"
+    export SLATESYNC_XCODE_FIXTURE_SUMMARY_PATH="${fixture_dir}/summary.json"
+    export SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS="$xcodebuild_status"
+    gate_xcode_test_plan_check "$fixture_dir" "$result_dir"
+  ) > "${fixture_dir}/output.log" 2>&1 || command_status=$?
+
+  assert_equal "${name} wrapper status" "$expected_command_status" "$command_status"
+  if [[ "$expected_classification" == "PASS" ]]; then
+    # A genuine passing result bundle and an exit-zero xcodebuild invocation
+    # must return cleanly without manufacturing a failure marker.
+    assert_success "${name} has no failure marker" \
+      assert_no_failure_marker "${fixture_dir}/output.log"
+  else
+    assert_equal "${name} result classification" "$expected_classification" \
+      "$(gate_classify_failure "${fixture_dir}/output.log" "$command_status")"
+  fi
+}
+
+run_xcode_test_plan_fixture \
+  xcode-exit-zero-result-failure \
+  0 \
+  '{"result":"Failed","failedTests":1,"testsCount":2,"failureText":"XCTAssertEqual failed"}' \
+  1 \
+  FAIL
+run_xcode_test_plan_fixture \
+  xcode-nonzero-readable-result-failure \
+  42 \
+  '{"result":"Failed","failedTests":1,"testsCount":2,"failureText":"XCTAssertEqual failed"}' \
+  1 \
+  FAIL
+run_xcode_test_plan_fixture \
+  xcode-nonzero-readable-result-canceled \
+  42 \
+  '{"result":"Failed","failedTests":0,"testsCount":2,"failureText":"Testing was canceled by Testing.framework"}' \
+  1 \
+  BLOCKED_ENV
+run_xcode_test_plan_fixture \
+  xcode-exit-zero-result-pass \
+  0 \
+  '{"result":"Passed","failedTests":0,"testsCount":2}' \
+  0 \
+  PASS
 
 assert_success "Universal architectures" gate_validate_architectures \
   "Architectures in the fat file are: x86_64 arm64"
@@ -99,6 +240,28 @@ assert_success "SM-02 post-admission state" gate_validate_phase_state \
 assert_success "SM-03 pre-admission state" gate_validate_phase_state \
   "${fixture_root}/phase-state.json" SM-03
 assert_failure "stale phase cannot skip to SM-04" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-04
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-03",
+  "lifecycleState": "IN_PROGRESS",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md"
+}
+JSON
+assert_failure "SM-03 implementation state cannot self-admit" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-03
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-03",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md"
+}
+JSON
+assert_success "SM-03 completed state admits same package" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-03
+assert_success "SM-03 completed state admits SM-04" gate_validate_phase_state \
   "${fixture_root}/phase-state.json" SM-04
 cat > "${fixture_root}/phase-state.json" <<'JSON'
 {

@@ -32,14 +32,15 @@ public struct ResolveCSVFormat: Codable, Hashable, Sendable {
         case bom
         case delimiter
         case lineEnding
+        case newline
         case finalNewline
     }
 
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        encoding = try values.decode(ResolveCSVEncoding.self, forKey: .encoding)
-        bom = try values.decode(Bool.self, forKey: .bom)
-        let delimiterValue = try values.decode(String.self, forKey: .delimiter)
+        encoding = try values.decodeIfPresent(ResolveCSVEncoding.self, forKey: .encoding) ?? .utf8
+        bom = try values.decodeIfPresent(Bool.self, forKey: .bom) ?? false
+        let delimiterValue = try values.decodeIfPresent(String.self, forKey: .delimiter) ?? ","
         guard delimiterValue.count == 1, let delimiter = delimiterValue.first else {
             throw DecodingError.dataCorruptedError(
                 forKey: .delimiter,
@@ -48,8 +49,17 @@ public struct ResolveCSVFormat: Codable, Hashable, Sendable {
             )
         }
         self.delimiter = delimiter
-        lineEnding = try values.decode(String.self, forKey: .lineEnding)
-        finalNewline = try values.decode(Bool.self, forKey: .finalNewline)
+        // `newline` was the field name in early snapshots; prefer the
+        // canonical key while retaining those snapshots on decode.
+        if let canonicalLineEnding = try values.decodeIfPresent(String.self, forKey: .lineEnding) {
+            lineEnding = canonicalLineEnding
+        } else if let legacyLineEnding = try values.decodeIfPresent(String.self, forKey: .newline) {
+            lineEnding = legacyLineEnding
+        } else {
+            lineEnding = "\r\n"
+        }
+        finalNewline = try values.decodeIfPresent(Bool.self, forKey: .finalNewline) ?? true
+        try validate()
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -60,6 +70,14 @@ public struct ResolveCSVFormat: Codable, Hashable, Sendable {
         try values.encode(String(delimiter), forKey: .delimiter)
         try values.encode(lineEnding, forKey: .lineEnding)
         try values.encode(finalNewline, forKey: .finalNewline)
+    }
+
+    /// Resolve only accepts the three line endings used by the legacy CSV
+    /// writer; rejecting other strings prevents silent byte-level drift.
+    public func validate() throws {
+        guard ["\r\n", "\n", "\r"].contains(lineEnding) else {
+            throw SlateSyncError(code: "CSV_FORMAT_INVALID", message: "CSV 换行符无效")
+        }
     }
 }
 

@@ -1,0 +1,19 @@
+{
+  "id": "project-default",
+  "name": "默认项目",
+  "description": "Synthetic baseline project",
+  "relativePath": "project-default",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "taskCount": 1,
+  "settings": {
+    "providerId": "openai",
+    "modelId": "openai/gpt-5.6-luna"
+  },
+  "lastRecognitionDefaults": {
+    "providerId": "openai",
+    "modelId": "openai/gpt-5.6-luna",
+    "customPrompt": ""
+  },
+  "futureField": { "isIgnored": true }
+}

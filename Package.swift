@@ -29,10 +29,15 @@ let package = Package(
                 "SlateSyncWorkflow",
             ]
         ),
-        .testTarget(name: "SlateSyncDomainTests", dependencies: ["SlateSyncDomain"]),
+        .testTarget(
+            name: "SlateSyncDomainTests",
+            dependencies: ["SlateSyncDomain"],
+            resources: [.process("Fixtures")]
+        ),
         .testTarget(
             name: "SlateSyncPersistenceTests",
-            dependencies: ["SlateSyncDomain", "SlateSyncPersistence"]
+            dependencies: ["SlateSyncDomain", "SlateSyncPersistence"],
+            resources: [.process("Fixtures")]
         ),
         .testTarget(
             name: "SlateSyncWorkflowTests",

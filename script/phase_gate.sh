@@ -108,7 +108,7 @@ workspace_layout_check() {
 
 required_tools_check() {
   local tool
-  for tool in git rg python3 swift xcodebuild lipo codesign open pgrep ps /usr/libexec/PlistBuddy; do
+  for tool in git rg python3 swift xcodebuild xcrun lipo codesign open pgrep ps /usr/libexec/PlistBuddy; do
     command -v "$tool" >/dev/null 2>&1 || {
       print -u2 -r -- "missing required tool: ${tool}"
       return 127
@@ -318,6 +318,12 @@ sm01_debug_settings_check() {
   print -r -- "$settings" | rg -q 'SWIFT_STRICT_CONCURRENCY = complete' || return 1
 }
 
+xcode_test_plan_check() {
+  # Keep the executable Gate script small; the helper owns the result-bundle
+  # classification so it can be exercised with deterministic command fixtures.
+  gate_xcode_test_plan_check "$project_root" "$result_dir"
+}
+
 sm01_release_artifact_check() {
   local app_path="${result_dir}/DerivedData/Release/Build/Products/Release/SlateSync.app"
   local executable="${app_path}/Contents/MacOS/SlateSync"
@@ -491,18 +497,16 @@ run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   -derivedDataPath "${result_dir}/DerivedData/Debug" \
   build
 run_check xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
-  xcodebuild -quiet \
-  -project SlateSync.xcodeproj \
-  -scheme SlateSync \
-  -testPlan SlateSync \
-  -destination 'platform=macOS' \
-  -derivedDataPath "${result_dir}/DerivedData/Test" \
-  test
+  xcode_test_plan_check
 
 case "$phase" in
   SM-02)
     run_check sm02_platform_contract true "当前入口、CI/release、平台拒绝策略与历史基线完整" \
       node script/tests/sm02_platform_contract.mjs
+    ;;
+  SM-03)
+    run_check sm03_contract true "领域合同、设置优先级、OSLog 脱敏、Keychain 迁移事务与兼容边界完整" \
+      node script/tests/sm03_contract.mjs
     ;;
   SM-01) ;;
   *)

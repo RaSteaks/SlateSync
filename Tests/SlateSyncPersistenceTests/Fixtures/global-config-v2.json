@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "values": {
+    "OPENAI_BASE_URL": "https://example.test/v1",
+    "MAX_BODY_MB": "120",
+    "UNKNOWN_SETTING": "ignored"
+  },
+  "customProviders": [{
+    "id": "openai-compatible:00000000-0000-4000-8000-000000000001",
+    "label": "Legacy Gateway",
+    "baseUrl": "https://gateway.example/v1"
+  }]
+}

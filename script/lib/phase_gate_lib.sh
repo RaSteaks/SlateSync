@@ -52,17 +52,165 @@ gate_classify_failure() {
   local log_path="$1"
   local exit_status="$2"
 
+  # Real assertions, crashes, and failed tests outrank every marker. A runner
+  # can emit environment text after an application has already failed.
+  if rg -qi \
+    'XCTAssert[A-Za-z0-9_]*[[:space:]]+failed|assertion[[:space:]]+(failed|failure)|failedTests[[:space:]]*=[[:space:]]*[1-9]|test(s)?[[:space:]]+(failed|failure)|application code (crashed|failed)|uncaught exception|fatal error|EXC_CRASH|signal[[:space:]]+[0-9]+' \
+    "$log_path"; then
+    print -r -- "FAIL"
+    return 0
+  fi
+
+  # xcode_test_plan_check emits an explicit result marker after inspecting the
+  # xcresult. It must outrank textual environment hints so a real assertion
+  # failure cannot be hidden by an incidental Testing.framework line.
+  if rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=FAIL' "$log_path"; then
+    print -r -- "FAIL"
+    return 0
+  fi
+  if rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV' "$log_path"; then
+    print -r -- "BLOCKED_ENV"
+    return 0
+  fi
+
   if (( exit_status == 126 || exit_status == 127 )); then
     print -r -- "BLOCKED_ENV"
     return 0
   fi
 
+  # Xcode may fail while copying its signed Testing.framework or cancel the
+  # UI runner before assertions execute; both are environment blocks, not code
+  # regressions, and must remain visible as BLOCKED_ENV in Gate artifacts.
   if rg -qi \
-    'operation not permitted|permission denied|not accessible or not writable|missing required tool|xcode license|unable to load standard library|cannot open file .+ for diagnostics emission|no graphical login session|not authorized to send apple events|requires a development team|no signing certificate|core simulator service connection became invalid' \
+    'operation not permitted|permission denied|not accessible or not writable|missing required tool|xcode license|unable to load standard library|cannot open file .+ for diagnostics emission|no graphical login session|not authorized to send apple events|requires a development team|no signing certificate|core simulator service connection became invalid|testing was (canceled|cancelled)|sandbox_apply|sandbox-exec|the following command failed with exit code 0|((copy|copying|copied|install|sign|codesign).{0,120}Testing[.]framework.{0,120}(fail|error|unable))|((fail|error|unable).{0,120}(copy|copying|copied|install|sign).{0,120}Testing[.]framework)' \
     "$log_path"; then
     print -r -- "BLOCKED_ENV"
   else
     print -r -- "FAIL"
+  fi
+}
+
+gate_classify_xcode_test_summary() {
+  local summary_path="$1"
+  python3 - "$summary_path" <<'PY'
+import json
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    summary = json.load(handle)
+
+result = str(summary.get("result", "")).strip().lower()
+try:
+    failed = int(summary.get("failedTests", 0) or 0)
+except (TypeError, ValueError):
+    failed = 1
+
+# Only these fields are diagnostics/failure evidence. In particular, do not
+# scan arbitrary summary metadata: a passing run may mention environment words
+# in an informational message without being blocked.
+diagnostic_keys = {
+    "failureText",
+    "failureReason",
+    "testFailures",
+    "failures",
+    "errors",
+    "error",
+    "diagnostics",
+}
+diagnostic_values = [summary.get(key) for key in diagnostic_keys if key in summary]
+diagnostic_text = json.dumps(diagnostic_values, ensure_ascii=False).lower()
+
+code_failure = failed > 0 or re.search(
+    r"xctassert|assertion|application code (crashed|failed)|uncaught exception|"
+    r"fatal error|exc_crash|test(?:s)?[\s_-]+(?:failed|failure)",
+    diagnostic_text,
+)
+if code_failure:
+    print("FAIL")
+elif result in {"passed", "success"} and failed == 0:
+    print("PASS")
+elif re.search(
+    r"testing was (canceled|cancelled)|runner[\s_-]+(canceled|cancelled)|"
+    r"sandbox_apply|sandbox-exec|operation not permitted|permission denied|"
+    r"no graphical login session|not authorized to send apple events|"
+    r"testing[.]framework.*(?:copy|fail|error|unable)|"
+    r"(?:copy|fail|error|unable).*testing[.]framework",
+    diagnostic_text,
+):
+    print("BLOCKED_ENV")
+else:
+    print("FAIL")
+PY
+}
+
+gate_validate_xcode_test_summary() {
+  local summary_path="$1"
+  if [[ "$(gate_classify_xcode_test_summary "$summary_path")" != "PASS" ]]; then
+    print -u2 -r -- "Xcode test result is not passing"
+    return 1
+  fi
+}
+
+gate_xcode_test_plan_check() {
+  local project_root="$1"
+  local result_dir="$2"
+  local result_bundle="${result_dir}/SlateSync.xcresult"
+  local summary_path="${result_dir}/xcode_test_summary.json"
+  local xcodebuild_log="${result_dir}/xcode_test_plan_xcodebuild.log"
+  local command_status=0
+  local summary_status=0
+
+  (
+    cd "$project_root" &&
+    xcodebuild -quiet \
+      -project SlateSync.xcodeproj \
+      -scheme SlateSync \
+      -testPlan SlateSync \
+      -destination 'platform=macOS' \
+      -derivedDataPath "${result_dir}/DerivedData/Test" \
+      -resultBundlePath "$result_bundle" \
+      test
+  ) > "$xcodebuild_log" 2>&1 || command_status=$?
+  cat "$xcodebuild_log"
+
+  # An xcresult is useful even when xcodebuild exits non-zero. Inspect it before
+  # falling back to log classification so assertion failures and environment
+  # cancellation remain distinct instead of treating every exit code alike.
+  if [[ ! -e "$result_bundle" ]]; then
+    (( command_status == 0 )) || return "$command_status"
+    print -u2 -r -- "xcodebuild returned success without a result bundle"
+    return 1
+  fi
+
+  # Keep the wrapper and summary statuses separate: a non-zero xcodebuild
+  # status must not prevent a readable result bundle from being classified.
+  (
+    cd "$project_root" &&
+    xcrun xcresulttool get test-results summary \
+      --path "$result_bundle" \
+      --format json
+  ) > "$summary_path" 2>&1 || summary_status=$?
+  if (( summary_status != 0 )); then
+    cat "$summary_path"
+    return "$summary_status"
+  fi
+  cat "$summary_path"
+  local summary_classification
+  summary_classification="$(gate_classify_xcode_test_summary "$summary_path")"
+  if [[ "$summary_classification" != "PASS" ]]; then
+    print -r -- "SLATESYNC_XCODE_TEST_CLASSIFICATION=${summary_classification}"
+    return 1
+  fi
+  if (( command_status != 0 )); then
+    # A passing summary with a non-zero wrapper status is still not a PASS.
+    # Classify the wrapper log narrowly so signed-framework copy/setup errors
+    # remain BLOCKED_ENV while a build/test regression remains FAIL.
+    local wrapper_classification
+    wrapper_classification="$(gate_classify_failure "$xcodebuild_log" "$command_status")"
+    print -r -- "SLATESYNC_XCODE_TEST_CLASSIFICATION=${wrapper_classification}"
+    return "$command_status"
   fi
 }
 

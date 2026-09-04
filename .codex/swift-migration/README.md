@@ -1,7 +1,7 @@
 # SlateSync Swift migration authority
 
-Updated: 2026-09-03
-Current phase: **SM-01 COMPLETE; SM-02 implementation committed and formal review pending**
+Updated: 2026-09-04
+Current phase: **SM-02 COMPLETE; SM-03 implementation ready for formal review**
 Target: **native macOS 15.0+, arm64 + x86_64**
 
 This directory is the current authority for replacing the Electron application
@@ -37,11 +37,10 @@ the Icon Composer app icon, and the deterministic build-and-run script. Debug
 uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
-The SM-01 implementation is formally `COMPLETE` in `CURRENT_STATE.json`. The
-SM-02 platform contract implementation is committed and undergoing formal
-review. It still needs a clean `phase_gate.sh` PASS, an evidence report and
-Repository Owner approval. `CURRENT_STATE.json` is intentionally unchanged
-until that governance process completes.
+The SM-01 and SM-02 implementations are formally `COMPLETE` in
+`CURRENT_STATE.json`. The SM-03 implementation is ready for its dedicated
+review commit and clean `phase_gate.sh` run. It still needs an evidence report
+and Repository Owner approval before `CURRENT_STATE.json` can advance.
 
 Electron, React, Node and cross-platform-era files remain retained as migration
 evidence until SM-09; SM-02 changes only their current macOS product entrypoints.

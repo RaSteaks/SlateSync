@@ -19,6 +19,9 @@ final class SlateSyncUITests: XCTestCase {
     func testLaunchesMainWindowAndProjectLibrary() {
         let app = XCUIApplication()
         app.launchEnvironment["SLATESYNC_TEST_ROOT"] = testRoot.path
+        // A previous local run can leave the same bundle identifier alive;
+        // terminate it so this test always validates a fresh window launch.
+        if app.state != .notRunning { app.terminate() }
         app.launch()
 
         // Window titles follow the current navigation title, so assert the

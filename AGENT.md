@@ -12,8 +12,8 @@
   请求与识别取消/重试/并发行为在迁移 Gate 前保持兼容。
 - 所有自动测试使用显式临时 Application Support 与 Project Library，禁止
   访问用户默认 Library。
-- `SM-01` 已完成 Owner 批准；SM-02 的平台收敛实现已形成 dedicated commit，
-  正在等待 clean Gate、审查报告和 Owner 批准，SM-03 及之后阶段尚未开始。
+- `SM-01`、`SM-02` 已完成 Owner 批准；SM-03 的实现和审查修复已完成，正在
+  进入 dedicated review commit、clean Gate 与 Owner 批准流程。
 - 阶段状态、环境替代证据与不可豁免项以
   `.codex/swift-migration/PHASE_GATES.md` 为准；本地统一入口为
   `./script/phase_gate.sh SM-XX`，禁止用 dirty diagnostic 结果声明完成。
@@ -1052,3 +1052,169 @@ Worker 边界、验收证据和最终治理交接。
 - Windows 项目库改名的 SQLite 关闭顺序和 POSIX 目录改名假设按本次范围继续
   保留，作为后续专项遗留风险；本轮未执行 Windows 实机验证、Electron 前台 GUI
   或发布上传，也未提交、推送、重置、清理或切换分支。
+
+## 2026-09-04 SM-03 Swift Migration implementation 与 Code Review 修复（等待用户确认）
+
+### 施工方案与边界
+
+- 本轮只实现 `.codex/swift-migration/packages/SM-03.md`：把
+  `src/shared/contracts/index.ts` 的项目、任务、识别、OCR、场记、场景、模型发现、
+  Provider、设置和日志 DTO 搬到 `SlateSyncDomain` 的 `Codable + Hashable + Sendable`
+  类型；`JSONValue` 只用于未知字段/诊断边界，不作为已知业务合同的 `[String: Any]`
+  替代物。
+- `ProjectSettings`、Resolve 字段格式/注释、场景匹配和工作流配置在解码时补齐既有
+  默认值并做版本、长度、范围、换行符校验；旧 CSV 快照的 `newline` 仍可读取，原生
+  编码统一输出兼容的 `lineEnding`。
+- 不实现 SM-04 SQLite schema/迁移、SM-05 CSV 引擎重写、SM-06 媒体/OCR、SM-07
+  Provider 网络层或 SM-08 UI；Electron/React/Node/TS 兼容基线与 `.codex/refactor`
+  历史证据保持不变。`CURRENT_STATE.json` 仍保持 SM-02 COMPLETE / next SM-03。
+
+### 配置、数据根与安全决策
+
+- `ApplicationSupportLocator` 的生产根继续是 macOS
+  `~/Library/Application Support/SlateSync`，测试只能显式传入临时 root 或
+  `SLATESYNC_TEST_ROOT`；项目库、`settings.json`、`global-config.json` 和迁移源均不
+  指向测试机真实用户数据。目录权限为 0700，JSON 原子写入为临时文件 + rename，文件
+  权限为 0600。
+- 生效优先级固定为：调用点显式值 > `global-config.json` 有效覆盖 > 旧
+  `settings.json.ocrPythonPath`（仅 `PADDLEOCR_PYTHON`） > 已存在的 process env
+  （空值也遮蔽 `.env`） > `.env` > 内置默认值。全局 key 白名单、URL/枚举/数字范围和
+  OCR 引擎互斥/required 清理均在 Swift typed validator 中执行；无效持久化值按字段
+  忽略，不阻塞启动。
+- `SlateSyncLogger` 使用 subsystem `com.slatesync.app` 的 OSLog；结构化 metadata
+  先经过递归 redaction，API key、OAuth/token、Authorization、client secret、密码、
+  cookie、Bearer/Basic 等不写入日志，path/request/task/session/diagnostic 标识采用
+  private privacy。
+- `KeychainCredentialStore` 以 `SecurityKeychainBackend` 为生产实现，以
+  `InMemoryKeychainBackend` 为注入测试实现。旧 `provider-keys.json` 先严格解析并拒绝
+  顶层重复 key，再逐条预检 Keychain：已有相同值只验证、不覆盖；冲突立即取消；新增
+  值使用原子 create-if-absent 并取得不落盘的 ownership marker，再逐条 read-back 校验，
+  任意失败只补偿本轮实际创建且仍匹配 ownership 的账户；只有全部验证成功才删除旧文件。
+  删除失败会保留旧文件并返回无 secret 的错误，便于重试；文件删除还会校验原始内容和
+  文件身份。该补偿仍是单次迁移调用内的 compensating transaction，不覆盖绕过协调锁的
+  任意外部 Keychain 写入者。
+
+### SM-03 Code Review 修复
+
+- Provider 请求 DTO 恢复 `apiKey` 的 Codable round-trip；`CustomProviderConfiguration`
+  仍是无密钥持久化 DTO，新增 `DomainResult<Value>` 对应 TS 的 success/error envelope，
+  没有提前建立完整 `SlateSyncApi` 或接入 `SlateSyncApp` 启动编排。
+- 新增 `CustomProviderValidator`，与 `lib/custom-provider.mjs` 对齐 ID、名称、Base URL、
+  transport/JSON/image 枚举、模型 ID、revision 和 capability cache 规则；旧快照只发布
+  经过规范化的有效记录，显式保存非法记录时抛出无密钥错误且不发布半成品文件。
+- 配置目录/文件读取会修复为 0700/0600，原子写入失败清理临时快照；旧
+  `provider-keys.json` 在读取前同样执行权限修复；`.env` 重复 key 采用首次出现优先。
+- Keychain 补偿只处理本次实际写入的条目，并在删除前做值匹配；回滚失败返回
+  `KEYCHAIN_MIGRATION_ROLLBACK` 并保留旧源。该语义是单次迁移调用内的 compensating
+  transaction，不宣称跨进程绝对原子性；Provider ID 拒绝全部 C0/C1 控制字符。
+- Xcode Test Plan 使用明确的 `-resultBundlePath`，Gate 在 xcodebuild 退出 0 或非零但
+  result bundle 存在时读取 xcresult summary；断言/崩溃优先为 `FAIL`，UI runner 取消、
+  Testing.framework 拷贝或沙盒环境错误为 `BLOCKED_ENV`，不再仅凭进程退出码记录 PASS。
+
+### 本轮验证与未覆盖风险
+
+- 最终 SwiftPM 验证为 39/39 通过，覆盖 shared fixture、请求 API key round-trip、
+  无密钥持久化、DomainResult、Provider 校验/兼容别名、设置优先级、权限修复、显式
+  `null` 删除、原子写入失败、递归日志脱敏、Keychain 冲突/重复 key/回读失败/写后失败/
+  条件回滚/旧源保留，以及临时数据根隔离。`node script/tests/sm03_contract.mjs`、Gate
+  helper 35/35、`git diff --check` 均通过。
+- `npm test` 为 Node 323/323、Modern 118/118；`npm run check`、`npm run typecheck`、
+  `npm run build:modern` 和 `npm run test:native:abi` 通过。Xcode Debug 构建通过，隔离的
+  `SlateSyncTests` 为 1/1 通过；最终隔离完整 Test Plan result bundle 为 Unit/UI
+  2/2 通过，Gate 也读取 summary 后记录 `xcode_test_plan=PASS`。Gate fixture 另覆盖
+  exit-0 但 summary 失败、实际断言失败和 Testing.framework/runner 环境取消，并将后两类
+  环境问题分类为 `BLOCKED_ENV`。
+- dirty diagnostic Gate 在显式临时根
+  `SLATESYNC_TEST_ROOT=/private/tmp/slatesync-sm03-review-gate-root-20260904d` 下运行，
+  结果目录为 `/private/tmp/slatesync-sm03-review-gate-20260904d/SM-03/20260903T195846Z-c962e952ee08`；
+  工件为 `overallResult=PASS`、`approvable=false`、`diagnosticDirtyWorkspace=true`。
+  这是诊断证据，不是 Owner 批准或阶段完成；本轮未修改 `CURRENT_STATE.json`、
+  `.codex/refactor`，未提交或推送。
+- 受限 sandbox 中 SwiftPM 曾在 manifest 阶段报 `sandbox_apply: Operation not permitted`；
+  在完整工具链权限下 `swift build`/`swift test` 通过。真实 Security.framework 登录钥匙串
+  尚未在测试中读写；生产实现仍待后续启动/设置编排接入。当前完整 Test Plan 已通过，
+  但不同 Xcode runner 若再次出现 signed `Testing.framework` copy 或 UI 取消，应保留
+  `BLOCKED_ENV`，不得改写为 PASS。
+- 所有失败注入和 fixture 均使用临时目录/内存后端，不读取或删除真实
+  `~/Library/Application Support/SlateSync`；`npm audit` 已存在的依赖漏洞仍作为独立
+  依赖治理事项保留，未修改锁文件；改动保持未提交，等待用户确认及独立审查。
+
+## 2026-09-04 Sol review comments 修复（等待用户确认）
+
+- 修复 Keychain 迁移的预检竞态：Security backend 使用原子 `SecItemAdd` 返回本次创建
+  的 ownership marker，补偿删除将 marker 纳入条件并由服务级 sidecar `flock` 协调原生
+  写入；旧 `provider-keys.json` 删除改为内容、大小、device/inode 快照校验，变化时保留
+  源文件并返回 `KEYCHAIN_MIGRATION_SOURCE_CHANGED`。文档明确不宣称对绕过该协调机制的
+  任意进程实现绝对跨进程原子性。
+- 扩展日志字段/文本脱敏覆盖 refresh/id/oauth/auth/bearer token、client secret 和
+  cookie 等常见 OAuth 凭据形态；补充 `.env` 缺失文件的 macOS `fileReadNoSuchFile`
+  回退，避免首次运行误报配置错误。
+- 新增共用 HTTP URL 规范化：按 JS URL 语义处理 scheme/host 大小写、默认端口和 `.`/
+  `..` 路径段，并分别保留 custom provider 全量尾斜杠清理与 global setting 单个尾斜杠
+  清理；capability cache 缺失/非法 revision 不再默认成当前 revision，错误的可选诊断
+  字段只被忽略。
+- 将 OCR、项目库和项目导入/导出/重命名结果改为带自定义 Codable 的 enum union，严格
+  拒绝跨分支字段，保证取消与成功 wire shape 与 `src/shared/contracts/index.ts` 一致。
+- Gate 在 xcodebuild 非零但存在 xcresult 时继续解析 summary；失败断言/崩溃优先于
+  runner 文本，移除泛化的 `Testing.framework` 与 `encountered an error` 环境匹配，并
+  增加混合失败、summary 取消和应用错误 fixture。
+- 本次修复验证：`swift test` 46/46、`./script/tests/phase_gate_tests.zsh` 41/41、
+  `node script/tests/sm03_contract.mjs`、`git diff --check` 通过；受限 sandbox 的
+  SwiftPM manifest 仍因 `sandbox_apply: Operation not permitted` 阻塞，完整 Xcode
+  toolchain 测试不访问真实用户目录或登录钥匙串。未修改 `CURRENT_STATE.json`、
+  `.codex/refactor`，未接入 `SlateSyncApp`，未提交或推送。
+- 未覆盖风险：真实 Security.framework Keychain 竞争者、不同 Xcode runner 的实际 UI
+  取消/签名 framework 错误仍需在隔离环境观察；完整 Test Plan 若出现环境问题只能记录
+  `BLOCKED_ENV`，不能替换为 PASS。`npm audit` 既有依赖漏洞继续作为独立治理事项。
+
+## 2026-09-04 SM-03 全量问题修复实施（当前有效）
+
+- 已按 SM-03 review 报告关闭全部 P1/P2/P3：旧任务缺失 `warnings` 的兼容解码、
+  `providerId` Codable round-trip、Workflow 严格校验与 Project 设置宽容归一化、
+  JS 数字/UTF-16/.env/Provider ID 兼容、HTTP(S) WHATWG 边界（含 IPv6 zone-id
+  拒绝与空 userinfo 清理）、PaddleOCR 200 字符上限和动态 `paddlex` 默认值。
+- 配置解析只保留 `GlobalSettingsResolution` 一套优先级实现；生产
+  `ConfigurationResolver` 覆盖 legacy、空 process env、`.env` 和 dynamic root，
+  并返回来源。非密配置权限修复失败回退默认值；密钥文件权限无法保护时拒绝读取并保留源文件。
+- `SecurityKeychainBackend` 已成为生产运行时默认后端：使用 Application Support 下
+  稳定 `.locks` 命名空间、有限等待、Data Protection Keychain、`AfterFirstUnlock`、
+  service 常量、value + ownership marker 条件删除和 OSStatus 保留；旧凭据删除前
+  复核 descriptor snapshot、device/inode、大小与内容。`CancellationError` 先补偿后原样
+  抛出，`InMemoryKeychainBackend` 仅存在于 SwiftPM 测试支持目录。
+- 新增 `SlateSyncRuntime` actor 与 secret-free `SlateSyncRuntimeSnapshot`，在启动时加载
+  machine/global/`.env`、按来源解析配置并迁移真实 `provider-keys.json`；迁移失败不阻塞
+  App 启动，保留源文件并在设置状态页提供重试。`SlateSyncApp` 已创建并 bootstrap
+  `SlateSyncRuntimeModel`，`SettingsRootView` 只显示状态，不提前实现 SM-08 编辑工作流。
+- Gate 分类顺序固定为真实断言/崩溃 > FAIL marker > BLOCKED_ENV marker > 环境文本，
+  summary 只扫描诊断字段；`sm03_contract.mjs` 接受批准前后合法阶段状态并包含
+  post-admission、PASS、混合失败和实现存在性夹具。所有新增代码路径均补充了边界注释。
+- 当前验收已通过 SwiftPM 65/65、Gate fixture 52/52、Xcode Test Plan Unit/UI 2/2，
+  以及 Node 323/323、Modern 118/118、typecheck/check、modern build 和 native ABI
+  检查。真实 `SecurityKeychainBackend` 测试只使用随机 service/account 与独立协调目录，
+  并在成功、断言失败和异常路径清理条目，不读取既有用户 Keychain 项。
+- 本轮不修改 `CURRENT_STATE.json`、Electron/TypeScript 历史基线或 SQLite/CSV/OCR/
+  Provider 网络实现；dirty diagnostic Gate 仅作为实现验收证据，正式 clean Gate、
+  审查报告与 Owner 批准按治理流程继续执行。
+
+## 2026-09-04 Sol 独立复审闭环（等待用户确认）
+
+- 修复 Gate 的最后一处状态竞态：`xcodebuild` 与 `xcresulttool` 使用独立状态，
+  因此在 `xcodebuild` 非零但 result bundle 可读时仍会先解析 summary；新增 exit-0
+  summary 失败、非零可读断言失败、非零可读 runner 取消三条端到端夹具。
+- 补齐 `HTTPURLNormalizer` 与 Electron WHATWG URL 的 authority 差分：IDNA/punycode、
+  十进制/八进制/十六进制及压缩 IPv4、端口范围与前导零、HTTP(S) 反斜杠、编码点段、
+  IPv4 尾点、IPv6 首个最长零段压缩和 IPv4-mapped IPv6 十六进制序列化；保留 `%2f`
+  不被整体解码的安全边界。
+- 最终验证：SwiftPM `swift test` 48/48、`CustomProviderValidationTests` 7/7、
+  Gate helper 47/47、Xcode Test Plan 2/2、`node script/tests/sm03_contract.mjs`、
+  `npm run test:node` 323/323、`npm run test:modern` 118/118、`npm run check`、
+  `npm run typecheck`、`npm run build:modern`、`npm run test:native:abi`、shell syntax
+  与 `git diff --check` 均通过。
+- Sol 对当前未提交工作区进行最终只读复审，未发现 P0/P1/P2；原 7 条 review comment
+  均已关闭，可交给独立 reviewer。隔离诊断 Gate 的技术检查通过；其退出码 3 只因
+  `--allow-dirty` 将 `approvable=false`，不代表阶段批准或阶段完成。
+- 本轮仍未修改 `CURRENT_STATE.json`、`.codex/refactor`；该复审阶段当时尚未接入
+  `SlateSyncApp`，后续 SM-03 全量修复已完成最小 bootstrap 接线，
+  未提交或推送；测试只使用临时目录/内存 Keychain，不访问真实用户目录或登录钥匙串。
+  真实 Security.framework 竞争者及不同 Xcode runner 的环境行为仍是后续验证风险，
+  `npm audit` 既有漏洞继续作为独立依赖治理事项。
