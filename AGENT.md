@@ -1024,3 +1024,21 @@ Worker 边界、验收证据和最终治理交接。
   csv-background-tasks 6/6（记录错配报错、有 sidecar 回填仍报错）、baseline-csv 8/8；
   Modern Vitest 118/118、`npm run typecheck` 通过；全量 Node 332 中仅存的 23 个
   失败与改动前一致（SQLite/项目库本机环境，非本次引入）。
+
+## 2026-09-04 说明页新增场记术语对照表
+
+- “系统 → 说明”在“软件使用方法”之后新增“02 / 术语对照 · 场记术语对照表”章节：
+  场记单术语（场次/镜/次/条次状态/卷号/视频码/景别/机位/拍摄内容/备注）→ 应用字段
+  → Resolve 写入列的四列对照，素材键对账与 Camera # 规则的 callout，以及摄影机子行、
+  换号、合并单元格继承、Shoot Day/Camera FPS、场记结构 Profile、OCR evidence、
+  置信度与“精确”模式三阶段（主识别/核心查漏/冲突复核）的定义列表。内容以
+  `lib/schema.mjs` 提示词与 `public/resolve-csv.js` 回填行为为准，不引入新规则。
+- 现有章节顺延为 03–07（项目库、Provider、Local OCR、PaddleOCR、调优）；页面副标题
+  同步提及术语对照。未改动任何设置字段、路由或运行行为；术语章节全部复用现有说明页
+  组件（`helpTableFrame`/`helpCallout`/`helpDefinitions`）与设计 token，未新增样式。
+  布局评估结论：章节规模（7 节）仍在“左侧目录 + 关键词搜索”平铺结构的适用范围内，
+  暂不做分组/折叠改造；后续章节继续增加时再评估分组。
+- 同步更新 `test/refactor/ip-03-08/help-page.test.tsx`：目录与章节数量 6→7，新增
+  术语章节渲染与“视频码”关键词筛选回归。
+- 验证：说明页定向 Vitest 3/3、`npm run test:modern`（26 个文件、133/133）、
+  `npm run typecheck` 均通过。

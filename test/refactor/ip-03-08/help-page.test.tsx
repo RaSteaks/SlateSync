@@ -37,8 +37,9 @@ describe("HelpPage", () => {
 
     expect(host.querySelector("h1")?.textContent).toBe("说明");
     expect(host.querySelector('[aria-label="说明目录"]')).not.toBeNull();
-    expect(host.querySelectorAll('[aria-label="说明目录"] a')).toHaveLength(6);
+    expect(host.querySelectorAll('[aria-label="说明目录"] a')).toHaveLength(7);
     expect(host.textContent).toContain("软件使用方法");
+    expect(host.textContent).toContain("场记术语对照表");
     expect(host.textContent).toContain("项目独立导入与导出");
     expect(host.textContent).toContain("slatesync-project");
     expect(host.textContent).toContain("大模型如何配置");
@@ -71,6 +72,22 @@ describe("HelpPage", () => {
     const clear = host.querySelector<HTMLButtonElement>('[aria-label="清空搜索"]');
     expect(clear).not.toBeNull();
     act(() => clear?.click());
-    expect(host.querySelectorAll('section[id^="help-"]')).toHaveLength(6);
+    expect(host.querySelectorAll('section[id^="help-"]')).toHaveLength(7);
+  });
+
+  it("renders the glossary section and filters it by terminology keywords", () => {
+    const { host, root } = mount();
+    act(() => root.render(<HelpPage />));
+
+    expect(host.querySelector("#help-glossary")).not.toBeNull();
+    expect(host.textContent).toContain("素材键对账");
+    expect(host.textContent).toContain("C011-18");
+
+    const input = host.querySelector<HTMLInputElement>("input");
+    if (!input) throw new Error("missing help search input");
+    act(() => setInputValue(input, "视频码"));
+    expect(host.querySelectorAll('section[id^="help-"]')).toHaveLength(1);
+    expect(host.querySelector("#help-glossary")).not.toBeNull();
+    expect(host.querySelector('[aria-label="说明目录"] a')?.getAttribute("href")).toBe("#help-glossary");
   });
 });

@@ -60,9 +60,51 @@ const HELP_SECTIONS: readonly HelpSection[] = [
     </>,
   },
   {
+    // 术语以 lib/schema.mjs 的识别提示词与 public/resolve-csv.js 的回填行为为准。
+    id: "help-glossary",
+    kicker: "02 / 术语对照",
+    title: "场记术语对照表",
+    summary: "场记单上的术语如何对应应用字段与 Resolve 列，以及识别流程中的常用词。",
+    keywords: "术语 对照 场次 镜 次 场镜次 条次 状态 过 保 废条 卷号 视频码 C0 素材键 景别 机位 拍摄内容 备注 A机 B机 C机 D机 换号 合并单元格 Scene Shot Take Comments Camera FPS Shoot Day Camera # slate.txt Profile 场记结构 OCR evidence 置信度 主识别 查漏 复核 冲突 精确",
+    icon: BookOpen,
+    content: <>
+      <div className={styles.helpTableFrame}>
+        <table className={styles.helpTable}>
+          <caption className={styles.srOnly}>场记单术语与字段对照</caption>
+          <thead><tr><th>场记单术语</th><th>应用字段</th><th>写入 Resolve</th><th>含义与格式</th></tr></thead>
+          <tbody>
+            <tr><td>场次</td><td><code>scene</code></td><td>Scene（中文界面“场景”）</td><td>纯数字补足三位（1→001）；带字母后缀转大写（87a→87A）；同素材跨多场用斜杠连接（57、58→57 / 58）。</td></tr>
+            <tr><td>镜</td><td><code>shot</code></td><td>Shot（中文界面“镜次”）</td><td>常写在合并单元格中并向下继承；补足两位（2→02），不能把当前行的“次”误作镜号。</td></tr>
+            <tr><td>次</td><td><code>take</code></td><td>Take（中文界面“镜头”）</td><td>每条素材自己的条次数；补足两位（9→09），镜号留空不代表 Take 重置为 01。</td></tr>
+            <tr><td>条次状态</td><td><code>takeStatus</code></td><td>Comments（按项目设置换算）</td><td>☑/√/✓＝“过”（默认写 <code>_OK</code>）；△/▲＝“保”（默认写 <code>_KP</code>）；X/×＝“废条”（写空）。</td></tr>
+            <tr><td>卷号</td><td><code>cardNumber</code></td><td>不写入列</td><td>如 E001、A001、D001，首字母是摄影机编号；与视频码组成素材键，用于和 Resolve CSV 对账。</td></tr>
+            <tr><td>视频码</td><td><code>videoCode</code></td><td>不写入列</td><td>卷内条号 C0XX：预印 C0 加手写两位（填 5→C005）；范围写法（C011-18）逐条展开。</td></tr>
+            <tr><td>景别</td><td><code>shotSize</code></td><td>不写入列</td><td>独立“景别”列，容易误认成 Scene；仅作校对参考。</td></tr>
+            <tr><td>机位</td><td><code>cameraPosition</code></td><td>不写入列</td><td>单独“机位”列的内容；A机/B机/C机/D机是摄影机子行标签，不是机位。</td></tr>
+            <tr><td>拍摄内容</td><td><code>description</code></td><td>不写入列</td><td>“拍摄内容”或“内容/视效说明”栏原文。</td></tr>
+            <tr><td>备注</td><td><code>comments</code></td><td>不写入列</td><td>最右侧“备注”栏原文，仅供人工校对；Resolve Comments 只按条次状态换算，不会写入备注原文。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className={styles.helpCallout} data-tone="accent">
+        <strong>素材键对账：</strong>卷号 + 视频码拼成素材键（如 E001 + C001 → E001C001），识别结果靠它与 Resolve CSV 的素材文件名行匹配；Camera # 取文件名的机位码首字母（A004C004_… → A）。
+      </div>
+      <dl className={styles.helpDefinitions}>
+        <div><dt>摄影机子行</dt><dd>同一横行按 A机/B机/C机/D机分成子区块，各自读取视频码和状态，但共用左侧的场次、镜、次。</dd></div>
+        <div><dt>换号</dt><dd>摄影机中途更换卷号的标记（如 B015.B016）；标记前后的记录分属前后两个卷号。</dd></div>
+        <div><dt>合并单元格继承</dt><dd>场次和镜常只写一次，下方留空的行沿用所属区块上方最近的值；跨页看不清时返回 null，由程序继承。</dd></div>
+        <div><dt>Shoot Day / Camera FPS</dt><dd>从素材目录 slate.txt 读取的拍摄日期与帧率，独立回填到 Resolve CSV，不依赖场记识别结果。</dd></div>
+        <div><dt>场记结构 Profile</dt><dd>应用从 OCR 表头和页面版式学习的表格结构档案，可在“识别设置”中自动学习或复用。</dd></div>
+        <div><dt>OCR evidence</dt><dd>本地 OCR 预先提取的文字、置信度和坐标证据，供视觉模型交叉核对；它不是最终答案，以图像为准。</dd></div>
+        <div><dt>置信度</dt><dd>每条记录的整体识别可信度（high/medium/low）；低置信度行和警告建议在导出前人工复核。</dd></div>
+        <div><dt>主识别 / 核心查漏 / 冲突复核</dt><dd>“精确”识别模式的三个阶段：整页主识别、核心字段独立查漏（audit）、对冲突与查漏候选定向复核。</dd></div>
+      </dl>
+    </>,
+  },
+  {
     // 项目包入口位于项目设置，说明与 Modern/Legacy 的按钮文案保持一致。
     id: "help-project-transfer",
-    kicker: "02 / 项目库",
+    kicker: "03 / 项目库",
     title: "项目独立导入与导出",
     summary: "项目库可以单独保存一个项目，也可以把目录包导入为新的项目副本。",
     keywords: "项目独立导入项目导出 slatesync-project 项目包 目录包 同名 新 ID 新项目 归档 默认项目 下载 Downloads 任务 诊断 场记结构 设置 图片 CSV API Key 密钥 日志 OCR",
@@ -104,7 +146,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-model",
-    kicker: "03 / Provider",
+    kicker: "04 / Provider",
     title: "大模型如何配置",
     summary: "密钥属于设备级设置，Provider、模型和识别偏好可以在项目或任务级别选择。",
     keywords: "大模型 Provider API Key 密钥 Base URL OpenAI OpenRouter Token Plan DashScope 阿里云 百炼 兼容模型 模型 ID Chat Completions Responses JSON Schema JSON Object 图片细节 识别模式 精确 快速 场记结构 提示",
@@ -145,7 +187,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-ocr",
-    kicker: "04 / Local OCR",
+    kicker: "05 / Local OCR",
     title: "OCR 如何配置",
     summary: "本地 OCR 只提取文字和坐标作为证据，最终字段仍由视觉模型结合页面图片确认。",
     keywords: "OCR 本地 Apple Vision Vision bridge macOS Swift PaddleOCR Python venv 启用 必需 自动选择 回退 文字块 证据",
@@ -181,7 +223,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-paddle-parameters",
-    kicker: "05 / PaddleOCR",
+    kicker: "06 / PaddleOCR",
     title: "PaddleOCR 参数具体含义",
     summary: "预设控制主要速度参数；自定义模式保留现有 v5/v6 配置，适合逐项调优。",
     keywords: "PaddleOCR PP-OCRv5 PP-OCRv6 模型版本 参数预设 性能 平衡 快速 自定义 medium small tiny detection recognition batch 批量 置信度 检测边长 文字块上限 profile device language timeout Python cache",
@@ -223,7 +265,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
   },
   {
     id: "help-runtime",
-    kicker: "06 / 调优",
+    kicker: "07 / 调优",
     title: "速度、运行参数与排查",
     summary: "冷启动慢通常来自模型下载和初始化；热启动会复用缓存与后台 Worker。",
     keywords: "速度 性能 冷启动 热启动 预加载 Worker 缓存 请求体 超时 重试 并行 页面 并行识别任务 排查 日志 失败",
@@ -297,7 +339,7 @@ export function HelpPage() {
   // behavior predictable without adding another renderer/main contract.
   return <div className={styles.page}>
     <div className={styles.pageHeader}>
-      <div><p className={styles.eyebrow}>使用指南</p><h1 className={styles.heading}>说明</h1><p className={styles.subtitle}>从第一次导入到 OCR 与大模型调优，快速找到 SlateSync 的使用方法和参数解释。</p></div>
+      <div><p className={styles.eyebrow}>使用指南</p><h1 className={styles.heading}>说明</h1><p className={styles.subtitle}>从场记术语对照到 OCR 与大模型调优，快速找到 SlateSync 的使用方法和参数解释。</p></div>
       <div className={styles.pageActions}><Badge tone="accent" icon={BookOpen}>本地说明</Badge></div>
     </div>
 
