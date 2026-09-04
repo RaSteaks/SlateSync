@@ -58,6 +58,7 @@ import {
 } from "../lib/ocr/paddleocr.mjs";
 import { resolveOcrSelection } from "../lib/ocr/selection.mjs";
 import { createPaddleOcrInstaller } from "./paddleocr-installer.mjs";
+import { createOcrEnvironmentProbe } from "./ocr-environment.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -132,6 +133,11 @@ async function initialize() {
     userDataPath,
     checkOcr: checkPaddleOcr,
   });
+  // Read-only probe for the Global Settings detection dialog; it observes the
+  // same userData install target as the installer without ever writing to it.
+  // runtimeEnv() is resolved per snapshot so a PaddleOCR Python path saved in
+  // Global Settings is reflected immediately, exactly as recognition sees it.
+  const ocrEnvironment = createOcrEnvironmentProbe({ userDataPath, env: () => runtimeEnv() });
   function runtimeEnv() {
     const env = { ...process.env };
     // Resolve the cache default after .env is loaded so a user-provided
@@ -311,6 +317,7 @@ async function initialize() {
     runtimeCustomProviders,
     refreshRuntimeSettings,
     paddleOcrInstaller,
+    ocrEnvironment,
     libraryActions,
     logger: appLogger,
     openLogDirectory,

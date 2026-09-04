@@ -6,6 +6,8 @@ import { appErrorFromUnknown, getSlateSync, requireGlobalSettingsApi, unwrap } f
 import { useProjectStore, useSettingsStore, useUiStore, type Theme } from "../../state";
 import styles from "../../app/app.module.css";
 import { CustomProviderSettingsPanel } from "./CustomProviderSettingsPanel";
+import { OcrEnvironmentDialog } from "./OcrEnvironmentDialog";
+import { engineStatus, engineStatusLabel, engineStatusTone, type PaddleOcrInstallState, type StatusTone } from "./ocrEngineStatus";
 
 const KEY_PROVIDERS = new Set(["openai", "openrouter", "tokenplan", "dashscope", "openai-compatible"]);
 const PROVIDER_BASE_URL_KEYS: Partial<Record<string, GlobalSettingKey>> = {
@@ -16,9 +18,7 @@ const PROVIDER_BASE_URL_KEYS: Partial<Record<string, GlobalSettingKey>> = {
   "openai-compatible": "OPENAI_COMPATIBLE_BASE_URL",
 };
 
-type StatusTone = "neutral" | "success" | "warning" | "danger";
 type GlobalSaveState = "idle" | "saving" | "saved" | "error";
-type PaddleOcrInstallState = "idle" | "installing" | "installed" | "canceled" | "error";
 type OcrPreference = "auto" | "vision" | "paddleocr" | "disabled";
 type PaddlePreset = "custom" | "performance" | "balanced" | "fast";
 type PaddleModelVersion = "PP-OCRv5" | "PP-OCRv6";
@@ -103,25 +103,6 @@ function isCustomPaddleModel(
   selectedValue: string,
 ) {
   return Boolean(selectedValue) && !options.some((option) => option.value === selectedValue);
-}
-
-function engineStatus(config: ConfigData | null, id: "vision" | "paddleocr"): OcrEngineStatus | null {
-  return config?.ocrEngines.find((engine) => engine.id === id) || null;
-}
-
-function engineStatusLabel(engine: OcrEngineStatus | null): string {
-  if (!engine) return "未读取";
-  if (engine.enabled && engine.available) return "环境可用";
-  if (engine.enabled) return "已启用但不可用";
-  return engine.mode === "auto" ? "未启用" : "已关闭";
-}
-
-function engineStatusTone(engine: OcrEngineStatus | null): StatusTone {
-  if (!engine) return "neutral";
-  if (engine.enabled && engine.available) return "success";
-  if (engine.enabled && engine.required) return "danger";
-  if (engine.enabled) return "warning";
-  return "neutral";
 }
 
 function selectionTone(selection: OcrSelection | undefined): StatusTone {
@@ -271,6 +252,7 @@ interface OcrStatusPanelProps {
   paddleInstallError: string | null;
   installPaddleOcr: () => void;
   cancelPaddleOcrInstall: () => void;
+  openEnvironmentDialog: () => void;
 }
 
 function OcrStatusPanel({
@@ -292,6 +274,7 @@ function OcrStatusPanel({
   paddleInstallError,
   installPaddleOcr,
   cancelPaddleOcrInstall,
+  openEnvironmentDialog,
 }: OcrStatusPanelProps) {
   const paddleModelDraftsRef = useRef<Partial<Record<PaddleModelVersion, PaddleModelDraft>>>({});
   const seededSavedValuesRef = useRef<GlobalSettingsData["values"] | null>(null);
@@ -422,14 +405,13 @@ function OcrStatusPanel({
         <div className={styles.ocrHeaderLine}>
           <h2 className={styles.sectionTitle} id="local-ocr-title">本地 OCR</h2>
           <Button
-            className={styles.ocrInstallButton}
+            className={styles.ocrToolsButton}
             size="sm"
             variant="secondary"
-            loading={paddleInstallState === "installing"}
-            onClick={installPaddleOcr}
+            onClick={openEnvironmentDialog}
             startIcon={<Download size={15} />}
           >
-            {paddleInstallState === "installed" ? "重新安装 PaddleOCR" : "安装 PaddleOCR"}
+            OCR 环境检测与下载
           </Button>
         </div>
       </div>
@@ -626,6 +608,8 @@ export function GlobalSettingsPage() {
   const [jsonSchemaState, setJsonSchemaState] = useState<"idle" | "checking">("idle");
   const [jsonSchemaResult, setJsonSchemaResult] = useState<JsonSchemaCapabilityResult | null>(null);
   const [jsonSchemaError, setJsonSchemaError] = useState<string | null>(null);
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  const autoOpenedOcrDialogRef = useRef(false);
 
   useEffect(() => {
     setProviderId((previous) => {
@@ -638,6 +622,21 @@ export function GlobalSettingsPage() {
     setJsonSchemaResult(null);
     setJsonSchemaError(null);
   }, [providerId]);
+
+  // First-run guidance: when the capability snapshot says no local OCR engine
+  // can run yet, surface the detection/download dialog once per visit so the
+  // user learns what is missing without hunting for the header button. A
+  // deliberate "disabled" preference means the user opted out of local OCR
+  // entirely and must not be nagged.
+  useEffect(() => {
+    if (autoOpenedOcrDialogRef.current || !globalSettings) return;
+    const engines = config?.ocrEngines;
+    if (!engines?.length) return;
+    if (ocrPreferenceFromValues(globalValues) === "disabled") return;
+    if (engines.some((engine) => engine.available)) return;
+    autoOpenedOcrDialogRef.current = true;
+    setOcrDialogOpen(true);
+  }, [config, globalSettings, globalValues]);
 
   useEffect(() => {
     let active = true;
@@ -938,7 +937,21 @@ export function GlobalSettingsPage() {
         </div>
       </Surface>
 
-      <OcrStatusPanel config={config} ocr={ocr} values={globalValues} savedValues={globalSettings?.values || null} setValue={setValue} paddleCheck={paddleCheck} ocrState={ocrState} checkAndSaveOcr={checkAndSaveOcr} visionCheck={visionCheck} visionCheckState={visionCheckState} checkVision={checkVision} saveGlobalSettings={() => saveGlobalSettings()} globalSaveState={globalSaveState} paddleInstallState={paddleInstallState} paddleInstallProgress={paddleInstallProgress} paddleInstallError={paddleInstallError} installPaddleOcr={() => void installPaddleOcr()} cancelPaddleOcrInstall={() => void cancelPaddleOcrInstall()} />
+      <OcrStatusPanel config={config} ocr={ocr} values={globalValues} savedValues={globalSettings?.values || null} setValue={setValue} paddleCheck={paddleCheck} ocrState={ocrState} checkAndSaveOcr={checkAndSaveOcr} visionCheck={visionCheck} visionCheckState={visionCheckState} checkVision={checkVision} saveGlobalSettings={() => saveGlobalSettings()} globalSaveState={globalSaveState} paddleInstallState={paddleInstallState} paddleInstallProgress={paddleInstallProgress} paddleInstallError={paddleInstallError} installPaddleOcr={() => void installPaddleOcr()} cancelPaddleOcrInstall={() => void cancelPaddleOcrInstall()} openEnvironmentDialog={() => setOcrDialogOpen(true)} />
     </div>
+
+    <OcrEnvironmentDialog
+      open={ocrDialogOpen}
+      onClose={() => setOcrDialogOpen(false)}
+      config={config}
+      paddleInstallState={paddleInstallState}
+      paddleInstallProgress={paddleInstallProgress}
+      paddleInstallError={paddleInstallError}
+      onInstallPaddleOcr={() => void installPaddleOcr()}
+      onCancelPaddleOcrInstall={() => void cancelPaddleOcrInstall()}
+      visionCheck={visionCheck}
+      visionCheckState={visionCheckState}
+      onCheckVision={() => void checkVision()}
+    />
   </div>;
 }

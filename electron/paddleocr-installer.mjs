@@ -24,11 +24,30 @@ const INSTALL_COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
 const REQUIRED_PACKAGES = ["paddlepaddle", "paddleocr"];
 
 /** Return the stable, writable venv location used by packaged and dev builds. */
+export function paddleOcrInstallDirectory(userDataPath) {
+  return join(userDataPath, INSTALL_DIRECTORY_NAME);
+}
+
 export function paddleOcrInstallPath(userDataPath, platform = process.platform) {
-  const pythonDirectory = join(userDataPath, INSTALL_DIRECTORY_NAME);
+  const pythonDirectory = paddleOcrInstallDirectory(userDataPath);
   return platform === "win32"
     ? join(pythonDirectory, "Scripts", "python.exe")
     : join(pythonDirectory, "bin", "python");
+}
+
+/** Interpreter aliases probed in order; shared by the installer and the
+ * read-only environment snapshot so the two can never drift. */
+export function pythonProbeCandidates(platform = process.platform) {
+  return platform === "win32"
+    ? [
+      { command: "py", prefix: ["-3"] },
+      { command: "python", prefix: [] },
+      { command: "python3", prefix: [] },
+    ]
+    : [
+      { command: "python3", prefix: [] },
+      { command: "python", prefix: [] },
+    ];
 }
 
 /**
@@ -139,7 +158,7 @@ export function createPaddleOcrInstaller({
     });
 
     const pythonPath = paddleOcrInstallPath(userDataPath, platform);
-    const venvPath = join(userDataPath, INSTALL_DIRECTORY_NAME);
+    const venvPath = paddleOcrInstallDirectory(userDataPath);
     await assertInstallDirectoryCanBeUsed(venvPath, lstatImpl);
     await mkdirImpl(userDataPath, { recursive: true });
     throwIfCanceled(operation);
@@ -241,17 +260,7 @@ export function createPaddleOcrInstaller({
   }
 
   async function findPython({ operation, projectDir, env: candidateEnv }) {
-    const candidates = platform === "win32"
-      ? [
-        { command: "py", prefix: ["-3"] },
-        { command: "python", prefix: [] },
-        { command: "python3", prefix: [] },
-      ]
-      : [
-        { command: "python3", prefix: [] },
-        { command: "python", prefix: [] },
-      ];
-    for (const candidate of candidates) {
+    for (const candidate of pythonProbeCandidates(platform)) {
       try {
         await runCommand(
           candidate,

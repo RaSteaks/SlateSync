@@ -93,6 +93,7 @@ describe("electron IPC handlers", () => {
       "install-paddleocr",
       "cancel-paddleocr-install",
       "check-vision-ocr",
+      "get-ocr-environment",
       "logs-read",
       "logs-open-directory",
     ];
@@ -171,6 +172,54 @@ describe("electron IPC handlers", () => {
       systemVersion: "15.0",
     });
     assert.deepEqual(calls, ["/synthetic/vision-ocr"]);
+  });
+
+  it("returns the injected OCR environment snapshot", async () => {
+    const snapshot = {
+      platform: "darwin",
+      platformLabel: "macOS 15.5",
+      architecture: "arm64",
+      architectureLabel: "Apple Silicon（arm64）",
+      packaged: false,
+      python: {
+        found: true,
+        command: "python3",
+        version: "Python 3.12.4",
+        meetsMinimum: true,
+        candidates: ["python3", "python"],
+        error: null,
+      },
+      paddle: {
+        venvPath: "/synthetic/user-data/paddleocr-venv",
+        pythonPath: "/synthetic/user-data/paddleocr-venv/bin/python",
+        venvExists: false,
+        configuredPythonPath: "",
+        activePythonPath: "",
+        activePythonExists: null,
+      },
+      vision: {
+        binaryPath: "/synthetic/app/bin/vision-ocr",
+        binaryExists: true,
+        source: "local-build",
+        swiftToolchain: false,
+      },
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      ocrEnvironment: { snapshot: async () => snapshot },
+    }));
+
+    assert.deepEqual(await ipcMain.invoke("get-ocr-environment"), snapshot);
+  });
+
+  it("rejects get-ocr-environment when the environment probe is unavailable", async () => {
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext());
+
+    await assert.rejects(
+      () => ipcMain.invoke("get-ocr-environment"),
+      /OCR 环境检测不可用/,
+    );
   });
 
   it("reads local logs through the additive filtered IPC handler", async () => {

@@ -9,6 +9,7 @@
     "renameLibrary": { "channel": "rename-library", "args": ["name"] },
     "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
     "checkVisionOcr": { "channel": "check-vision-ocr", "args": [] },
+    "getOcrEnvironment": { "channel": "get-ocr-environment", "args": [] },
     "readLogs": { "channel": "logs-read", "args": ["request"] },
     "openLogsDirectory": { "channel": "logs-open-directory", "args": [] },
     "getGlobalSettings": { "channel": "get-global-settings", "args": [] },

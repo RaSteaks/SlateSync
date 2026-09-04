@@ -318,7 +318,7 @@
 .ocrHeaderCopy { display: grid; min-width: 0; gap: 6px; }
 .ocrHeaderCopy > .kicker { margin: 0; }
 .ocrHeaderLine { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: var(--ss-space-3); }
-.ocrInstallButton { flex: 0 0 auto; min-width: 142px; }
+.ocrToolsButton { flex: 0 0 auto; min-width: 142px; }
 .ocrDecision { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(220px, .7fr); gap: 16px; align-items: center; margin-top: 16px; padding: 16px; border: 1px solid color-mix(in srgb, var(--ss-color-accent) 34%, var(--ss-color-line)); border-left: 3px solid var(--ss-color-accent); border-radius: var(--ss-radius-lg); background: var(--ss-color-accent-soft); }
 .ocrDecisionTitle { margin: 6px 0 4px; }
 .ocrDecisionMeta { display: grid; min-width: 0; justify-items: stretch; gap: 8px; }
@@ -344,6 +344,18 @@
 .ocrInstallFeedbackHeader { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: var(--ss-space-3); }
 .ocrInstallFeedbackCopy { display: grid; min-width: 0; gap: 3px; }
 .ocrInstallFeedbackCopy > * { overflow-wrap: anywhere; }
+/* The OCR detection dialog reuses the engine-card language for a machine
+   overview plus per-engine download state. */
+.ocrEnvironmentMachine { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
+.ocrEnvironmentMachineHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ocrEnvironmentMachineHeader h3 { display: inline-flex; align-items: center; gap: 7px; margin: 0; }
+.ocrEnvironmentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.ocrEnvironmentItem { display: grid; min-width: 0; gap: 3px; }
+.ocrEnvironmentItem dt { color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .64rem; }
+.ocrEnvironmentItem dd { margin: 0; color: var(--ss-color-ink-muted); font-size: .78rem; overflow-wrap: anywhere; }
+.ocrEnvironmentItemFull { grid-column: 1 / -1; }
+.ocrEnvironmentPath { font-family: var(--ss-font-mono); font-size: .7rem; }
+.ocrEnvironmentPending { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1px dashed var(--ss-color-line-strong); border-radius: var(--ss-radius-md); color: var(--ss-color-ink-subtle); }
 .ocrPaddleForm { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--ss-color-line); }
 .ocrFootnote { margin: 14px 0 0; }
 /* Advanced environment controls use native details so the complete .env
@@ -433,7 +445,8 @@
   .ocrDecisionMeta { justify-items: start; }
   .ocrEngineGrid { grid-template-columns: 1fr; }
   .ocrHeaderLine { align-items: flex-start; flex-direction: column; }
-  .ocrInstallButton { width: 100%; }
+  .ocrToolsButton { width: 100%; }
+  .ocrEnvironmentGrid { grid-template-columns: 1fr; }
   .ocrInstallFeedbackHeader { align-items: stretch; flex-direction: column; }
   .ocrEngineDetails > div { align-items: flex-start; flex-direction: column; gap: 2px; }
   .ocrEngineDetails dd { text-align: left; }

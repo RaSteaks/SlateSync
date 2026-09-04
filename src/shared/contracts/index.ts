@@ -484,6 +484,55 @@ export type VisionOcrCheckResult =
       readonly error: { readonly code: string; readonly message: string };
     };
 
+/** Read-only Python probe result for the OCR environment dialog. */
+export interface OcrPythonProbe {
+  readonly found: boolean;
+  /** Resolved probe command for display, e.g. "python3" or "py -3". */
+  readonly command: string;
+  /** Interpreter banner, e.g. "Python 3.12.4". Empty when not found. */
+  readonly version: string;
+  /** Installer guidance is Python 3.10+; null when the banner is unparseable. */
+  readonly meetsMinimum: boolean | null;
+  /** Probe order that was attempted, e.g. ["python3", "python"]. */
+  readonly candidates: readonly string[];
+  readonly error: string | null;
+}
+
+/** Secret-free machine probe behind the Global Settings OCR dialog. */
+export interface OcrEnvironmentSnapshot {
+  readonly platform: string;
+  /** Human label with OS version when available, e.g. "macOS 15.5". */
+  readonly platformLabel: string;
+  readonly architecture: string;
+  /** Human label, e.g. "Apple Silicon（arm64）". */
+  readonly architectureLabel: string;
+  readonly packaged: boolean;
+  readonly python: OcrPythonProbe;
+  readonly paddle: {
+    readonly venvPath: string;
+    /** Interpreter path the one-click installer owns. */
+    readonly pythonPath: string;
+    readonly venvExists: boolean;
+    /** PADDLEOCR_PYTHON from the effective runtime env; "" when not pinned. */
+    readonly configuredPythonPath: string;
+    /**
+     * Interpreter the next recognition would actually use (configured →
+     * workspace venv). Empty when neither exists and runtime falls back to
+     * auto-discovery ("python3").
+     */
+    readonly activePythonPath: string;
+    /** Existence of activePythonPath; null while resolution is auto-discovery. */
+    readonly activePythonExists: boolean | null;
+  };
+  readonly vision: {
+    readonly binaryPath: string;
+    readonly binaryExists: boolean;
+    readonly source: "explicit" | "bundled" | "local-build" | "missing";
+    /** No binary yet, but a dev Swift toolchain can build one on demand. */
+    readonly swiftToolchain: boolean;
+  };
+}
+
 export interface JsonSchemaCapabilityResult {
   readonly supported: boolean;
   readonly model: string;
@@ -966,6 +1015,7 @@ export interface SlateSyncApi {
     cancelPaddleOcrInstall(): Promise<Result<{ readonly canceled: boolean }>>;
     onPaddleOcrInstallProgress(listener: (event: PaddleOcrInstallProgress) => void): () => void;
     checkVisionOcr(): Promise<Result<VisionOcrCheckResult>>;
+    getOcrEnvironment(): Promise<Result<OcrEnvironmentSnapshot>>;
     checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
     listCustomProviders(): Promise<Result<CustomProviderSummary[]>>;
     createCustomProvider(request: CustomProviderConfigRequest): Promise<Result<CustomProviderSummary>>;

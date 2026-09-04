@@ -35,6 +35,24 @@ const initialGlobalSettings = {
   restartRequired: false,
 } satisfies GlobalSettingsData;
 
+const environmentSnapshot = {
+  platform: "darwin",
+  platformLabel: "macOS 15.5",
+  architecture: "arm64",
+  architectureLabel: "Apple Silicon（arm64）",
+  packaged: false,
+  python: { found: true, command: "python3", version: "Python 3.12.4", meetsMinimum: true, candidates: ["python3"], error: null },
+  paddle: {
+    venvPath: "/user-data/paddleocr-venv",
+    pythonPath: "/user-data/paddleocr-venv/bin/python",
+    venvExists: false,
+    configuredPythonPath: "",
+    activePythonPath: "",
+    activePythonExists: null,
+  },
+  vision: { binaryPath: "/app/bin/vision-ocr", binaryExists: false, source: "missing", swiftToolchain: false },
+};
+
 afterEach(() => {
   for (const { host, root } of mounted.splice(0)) {
     act(() => root.unmount());
@@ -59,9 +77,18 @@ async function renderSettings(
       paddleOcrVersion: "3.7.0",
     },
   })),
+  overrides: {
+    config?: ConfigData;
+    environmentSnapshot?: typeof environmentSnapshot | null;
+  } = {},
 ) {
+  const renderedConfig = overrides.config ?? config;
+  const getOcrEnvironment = vi.fn(async () => ({
+    ok: true as const,
+    data: overrides.environmentSnapshot === undefined ? environmentSnapshot : overrides.environmentSnapshot,
+  }));
   const api = {
-    app: { getConfig: vi.fn(async () => ({ ok: true as const, data: config })) },
+    app: { getConfig: vi.fn(async () => ({ ok: true as const, data: renderedConfig })) },
     settings: {
       getGlobalSettings: vi.fn(async () => ({ ok: true as const, data: settings })),
       getOcrSettings: vi.fn(async () => ({ ok: true as const, data: { pythonPath: "", setupCompleted: false, setupSkipped: false } })),
@@ -69,10 +96,11 @@ async function renderSettings(
       installPaddleOcr,
       cancelPaddleOcrInstall: vi.fn(async () => ({ ok: true as const, data: { canceled: true } })),
       onPaddleOcrInstallProgress: vi.fn(() => () => {}),
+      getOcrEnvironment,
     },
   } as unknown as SlateSyncApi;
   Object.defineProperty(window, "slateSync", { configurable: true, value: api });
-  useProjectStore.setState({ config });
+  useProjectStore.setState({ config: renderedConfig });
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -82,7 +110,7 @@ async function renderSettings(
     await Promise.resolve();
     await Promise.resolve();
   });
-  return host;
+  return { host, getOcrEnvironment };
 }
 
 function changeSelect(select: HTMLSelectElement, value: string) {
@@ -106,7 +134,7 @@ function findField(host: HTMLDivElement, labelText: string) {
 describe("global settings layout and OCR routing", () => {
   it("keeps credentials and appearance in the same explicit overview row", async () => {
     const save = vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings }));
-    const host = await renderSettings(save);
+    const { host } = await renderSettings(save);
     const overview = host.querySelector('[data-testid="settings-overview-grid"]');
     const titles = [...(overview?.querySelectorAll("h2") || [])].map((heading) => heading.textContent);
 
@@ -122,7 +150,7 @@ describe("global settings layout and OCR routing", () => {
         values: { ...initialGlobalSettings.values, ...request.values },
       },
     }));
-    const host = await renderSettings(save);
+    const { host } = await renderSettings(save);
     const preferenceLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("首选 OCR 引擎"));
     const preference = preferenceLabel?.querySelector("select");
     if (!(preference instanceof HTMLSelectElement)) throw new Error("missing OCR preference select");
@@ -146,7 +174,7 @@ describe("global settings layout and OCR routing", () => {
     });
   });
 
-  it("offers one-click PaddleOCR installation beside the Local OCR heading", async () => {
+  it("offers one-click PaddleOCR installation inside the detection dialog", async () => {
     const save = vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings }));
     const install = vi.fn(async () => ({
       ok: true as const,
@@ -158,19 +186,73 @@ describe("global settings layout and OCR routing", () => {
         paddleOcrVersion: "3.7.0",
       },
     }));
-    const host = await renderSettings(save, initialGlobalSettings, install);
-    const button = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "安装 PaddleOCR");
-    if (!(button instanceof HTMLButtonElement)) throw new Error("missing one-click PaddleOCR button");
+    const { host } = await renderSettings(save, initialGlobalSettings, install);
+    const toolsButton = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "OCR 环境检测与下载");
+    if (!(toolsButton instanceof HTMLButtonElement)) throw new Error("missing OCR tools button");
 
     await act(async () => {
-      button.click();
+      toolsButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The environment probe resolves a few microtasks after the dialog opens.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The dialog portals to document.body instead of the page host.
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("本机环境");
+    const installButton = [...(dialog?.querySelectorAll("button") || [])].find((candidate) => candidate.textContent?.trim() === "安装 PaddleOCR");
+    if (!(installButton instanceof HTMLButtonElement)) throw new Error("missing one-click PaddleOCR button");
+
+    await act(async () => {
+      installButton.click();
       await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(install).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain("PaddleOCR 已安装并验证通过");
+    expect(dialog?.textContent).toContain("PaddleOCR 已安装并验证通过");
     expect(host.querySelector<HTMLInputElement>('input[placeholder="python3 或绝对路径"]')?.value).toBe("/user-data/paddleocr-venv/bin/python");
+  });
+
+  it("auto-opens the detection dialog when no local OCR engine is available", async () => {
+    const save = vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings }));
+    const unavailableConfig = {
+      ...config,
+      ocrEngines: config.ocrEngines.map((engine) => ({ ...engine, available: false })),
+      ocrSelection: { id: null, label: null, mode: "auto", reason: "未启用本地 OCR。", available: false, enabled: false, required: false },
+    } as unknown as ConfigData;
+    const { getOcrEnvironment } = await renderSettings(save, initialGlobalSettings, undefined, {
+      config: unavailableConfig,
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("OCR 环境检测与下载");
+    expect(getOcrEnvironment).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the detection dialog closed when local OCR is deliberately disabled", async () => {
+    const save = vi.fn(async () => ({ ok: true as const, data: initialGlobalSettings }));
+    const unavailableConfig = {
+      ...config,
+      ocrEngines: config.ocrEngines.map((engine) => ({ ...engine, available: false })),
+    } as unknown as ConfigData;
+    const disabledSettings = {
+      ...initialGlobalSettings,
+      values: { ...initialGlobalSettings.values, VISIONOCR_ENABLED: "false", PADDLEOCR_ENABLED: "false" },
+    };
+    const { getOcrEnvironment } = await renderSettings(save, disabledSettings, undefined, {
+      config: unavailableConfig,
+    });
+
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(getOcrEnvironment).not.toHaveBeenCalled();
   });
 
   it("treats the PaddleOCR card enable control as a routing choice", async () => {
@@ -181,7 +263,7 @@ describe("global settings layout and OCR routing", () => {
         values: { ...initialGlobalSettings.values, ...request.values },
       },
     }));
-    const host = await renderSettings(save);
+    const { host } = await renderSettings(save);
     const enableFields = [...host.querySelectorAll("label")].filter((label) => label.textContent?.includes("启用模式"));
     const paddleEnable = enableFields.at(-1)?.querySelector("select");
     if (!(paddleEnable instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR enable select");
@@ -224,7 +306,7 @@ describe("global settings layout and OCR routing", () => {
         values: { ...settings.values, ...request.values },
       },
     }));
-    const host = await renderSettings(save, settings);
+    const { host } = await renderSettings(save, settings);
     const enableFields = [...host.querySelectorAll("label")].filter((label) => label.textContent?.includes("启用模式"));
     const paddleEnable = enableFields.at(-1)?.querySelector("select");
     if (!(paddleEnable instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR enable select");
@@ -255,7 +337,7 @@ describe("global settings layout and OCR routing", () => {
         values: { ...initialGlobalSettings.values, ...request.values },
       },
     }));
-    const host = await renderSettings(save);
+    const { host } = await renderSettings(save);
     const presetLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("参数预设"));
     const preset = presetLabel?.querySelector("select");
     if (!(preset instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR preset select");
@@ -307,7 +389,7 @@ describe("global settings layout and OCR routing", () => {
         PADDLEOCR_RECOGNITION_MODEL: "PP-OCRv5_server_rec",
       },
     };
-    const host = await renderSettings(save, settings);
+    const { host } = await renderSettings(save, settings);
     const modelLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("模型版本"));
     const modelSelect = modelLabel?.querySelector("select");
     if (!(modelSelect instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR model version select");
@@ -358,7 +440,7 @@ describe("global settings layout and OCR routing", () => {
         PADDLEOCR_RECOGNITION_MODEL: "local_rec_v6",
       },
     };
-    const host = await renderSettings(save, settings);
+    const { host } = await renderSettings(save, settings);
     const modelLabel = [...host.querySelectorAll("label")].find((label) => label.textContent?.includes("模型版本"));
     const modelSelect = modelLabel?.querySelector("select");
     if (!(modelSelect instanceof HTMLSelectElement)) throw new Error("missing PaddleOCR model version select");
@@ -394,7 +476,7 @@ describe("global settings layout and OCR routing", () => {
         PADDLEOCR_RECOGNITION_MODEL: "",
       },
     };
-    const host = await renderSettings(save, settings);
+    const { host } = await renderSettings(save, settings);
     const detectionLabel = findField(host, "检测模型");
     const recognitionLabel = findField(host, "识别模型");
     const detection = detectionLabel?.querySelector("select");
@@ -461,7 +543,7 @@ describe("global settings layout and OCR routing", () => {
         PADDLEOCR_RECOGNITION_MODEL: "",
       },
     };
-    const host = await renderSettings(save, settings);
+    const { host } = await renderSettings(save, settings);
     const detection = findField(host, "检测模型")?.querySelector<HTMLInputElement>("input[aria-label='自定义检测模型 ID']");
     const recognition = findField(host, "识别模型")?.querySelector<HTMLInputElement>("input[aria-label='自定义识别模型 ID']");
     if (!(detection instanceof HTMLInputElement) || !(recognition instanceof HTMLInputElement)) {

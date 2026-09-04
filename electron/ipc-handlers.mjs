@@ -65,6 +65,7 @@ export function registerIpcHandlers(ipcMain, context) {
     runtimeCustomProviders = [],
     refreshRuntimeSettings,
     paddleOcrInstaller,
+    ocrEnvironment = null,
     libraryActions,
     logger,
     openLogDirectory,
@@ -1093,6 +1094,15 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("check-vision-ocr", async () =>
     checkVision({ env: runtimeEnv() }),
   );
+
+  // The environment snapshot is a read-only machine probe; it carries no
+  // provider credentials and never writes to disk.
+  ipcMain.handle("get-ocr-environment", async () => {
+    if (typeof ocrEnvironment?.snapshot !== "function") {
+      throw new Error("OCR 环境检测不可用，请完全退出 SlateSync 后重试。");
+    }
+    return ocrEnvironment.snapshot();
+  });
 
   // Read-only view over the local application log. The handler degrades to an
   // empty result when logging is not wired (unit contexts, degraded start) so
