@@ -576,7 +576,8 @@ export function CustomProviderSettingsPanel() {
     setDraftDirty(true);
   };
 
-  return <Surface className={`${styles.panel} ${styles.runtimeSettingsPanel}`} data-testid="custom-provider-settings">
+  // 承接全局设置的分区导航：作为 settings-custom-providers 分区的锚点面板。
+  return <Surface as="section" id="settings-custom-providers" className={`${styles.panel} ${styles.helpSection}`} data-testid="custom-provider-settings">
     <div className={styles.sectionHeader}>
       <div>
         <p className={styles.kicker}>连接注册表</p>

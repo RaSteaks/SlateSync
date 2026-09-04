@@ -2,12 +2,13 @@ import { BookOpen, Download, FolderKanban, Import, LayoutDashboard, MapPin, Moni
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import appIconUrl from "../../build/icon.png";
-import { AppShell, Button, ContextMenu, Dialog, Field, Icon, IconButton, Input, Separator, Sidebar, Stack, Text, Toast, Toolbar } from "./design-system";
+import { AppShell, Button, ContextMenu, Dialog, Field, Icon, IconButton, InlineError, Input, Separator, Sidebar, Stack, Text, Toast, Toolbar } from "./design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "./services/api";
 import { createOperationGuard } from "./services/operation-guard";
-import { isEditableShortcutTarget, RECOGNITION_SHORTCUT_EVENT } from "./services/keyboard-shortcuts";
+import { GLOBAL_SETTINGS_SAVE_EVENT, isEditableShortcutTarget, RECOGNITION_SHORTCUT_EVENT } from "./services/keyboard-shortcuts";
+import { isRouteChangeBlocked, saveGlobalSettingsChanges } from "./features/settings/globalSettingsActions";
 import { APPEARANCE_PREFERENCE_KEY, cycleTheme, parseAppearancePreference, resolveTheme, themePreferenceLabel, watchSystemTheme } from "./services/appearance-preference";
-import { useExportStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
+import { useExportStore, useGlobalSettingsStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
 import { validateLibraryName } from "./validation/input-validation";
 import { documentTitle, routeTitle } from "./app/route-title";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
@@ -59,8 +60,18 @@ export function App() {
   const workspaceExportRef = useRef<(() => void) | null>(null);
   const workspaceTransferRef = useRef<(() => Promise<boolean>) | null>(null);
   const [workspaceExportState, setWorkspaceExportState] = useState({ canExport: false, processing: false });
+  // 全局设置的未保存草稿会拦截路由切换；该状态记录被拦截的目标路由，由
+  // 守卫对话框提供“取消 / 放弃 / 保存”三条出路。
+  const [pendingRoute, setPendingRoute] = useState<Parameters<typeof setRoute>[0] | null>(null);
+  const globalSaveState = useGlobalSettingsStore((state) => state.saveState);
+  const globalSaveError = useGlobalSettingsStore((state) => state.saveError);
 
   const navigateTo = useCallback((nextRoute: Parameters<typeof setRoute>[0]) => {
+    // 未保存的全局设置草稿先经守卫确认；留在当前页不消耗导航意图标记。
+    if (isRouteChangeBlocked(useUiStore.getState().route, nextRoute)) {
+      setPendingRoute(nextRoute);
+      return;
+    }
     // An intent token prevents a slower autosave continuation from replacing a
     // route the user selected while the previous navigation was still flushing.
     navigationIntentRef.current += 1;
@@ -192,6 +203,15 @@ export function App() {
         navigateTo("global-settings");
         return;
       }
+      if (event.key === "s") {
+        // 不经 isEditableShortcutTarget：输入框聚焦时同样保存，并抑制浏览器
+        // 自带的“存储页面”。对话框打开时让位给对话框动作；非全局设置页无此事件。
+        event.preventDefault();
+        if (document.querySelector('[role="dialog"]')) return;
+        if (useUiStore.getState().route !== "global-settings") return;
+        window.dispatchEvent(new Event(GLOBAL_SETTINGS_SAVE_EVENT));
+        return;
+      }
       if (event.key !== "Enter" || route !== "workspace" || isEditableShortcutTarget(event.target) || document.querySelector('[role="dialog"]')) return;
       event.preventDefault();
       window.dispatchEvent(new Event(RECOGNITION_SHORTCUT_EVENT));
@@ -316,6 +336,8 @@ export function App() {
   };
 
   const openProject = async (id: string, nextRoute: "workspace" | "project-settings" = "workspace") => {
+    // openProject 直接写路由而非 navigateTo：它只能从项目库触发，而脏草稿
+    // 守卫恰好把“离开全局设置”作为唯一入口，两者不会重叠。
     const navigationIntent = ++navigationIntentRef.current;
     const operationId = projectLoadGuard.start();
     useProjectStore.getState().setError(null);
@@ -370,7 +392,7 @@ export function App() {
     return true;
   };
 
-  const leaveProject = async () => {
+  const performLeaveProject = async () => {
     const navigationIntent = ++navigationIntentRef.current;
     if (useUiStore.getState().route === "projects") return;
     // 离开工作台也走同一保存闸门，确保随后进入项目库时数据已经落盘。
@@ -382,6 +404,16 @@ export function App() {
       || useUiStore.getState().route === "projects"
     ) return;
     releaseWorkspaceForLibrary();
+  };
+
+  const leaveProject = async () => {
+    // 全局设置脏草稿同样保护项目库入口：先确认再走后续清理，否则用户取消时
+    // 工作区 store 已被释放。
+    if (isRouteChangeBlocked(useUiStore.getState().route, "projects")) {
+      setPendingRoute("projects");
+      return;
+    }
+    await performLeaveProject();
   };
 
   const leaveDeletedProject = (projectId: string) => {
@@ -396,6 +428,42 @@ export function App() {
     useMetadataStore.getState().clear();
     useTaskStore.getState().clear();
     navigateTo("projects");
+  };
+
+  // 守卫恢复的是原始导航语义：项目库入口仍需经过自动保存与 workspace 清理，
+  // 其他目标才是普通路由切换。
+  const continuePendingNavigation = async (target: Parameters<typeof setRoute>[0]) => {
+    if (target === "projects") {
+      await performLeaveProject();
+      return;
+    }
+    navigateTo(target);
+  };
+
+  // 全局设置离开守卫对话框的三条出路：取消留在设置页；放弃清除草稿后继续；
+  // 保存成功后继续，失败留在对话框并展示保存错误。保存中的对话框不可取消，
+  // 避免已发出的持久化请求在用户选择放弃后仍完成并跳转。
+  const cancelPendingNavigation = () => {
+    if (useGlobalSettingsStore.getState().saveState === "saving") return;
+    setPendingRoute(null);
+  };
+
+  const discardChangesAndLeave = () => {
+    if (useGlobalSettingsStore.getState().saveState === "saving") return;
+    const target = pendingRoute;
+    if (!target) return;
+    useGlobalSettingsStore.getState().discardDraft();
+    setPendingRoute(null);
+    void continuePendingNavigation(target);
+  };
+
+  const saveChangesAndLeave = async () => {
+    if (useGlobalSettingsStore.getState().saveState === "saving") return;
+    const target = pendingRoute;
+    if (!target) return;
+    if (!(await saveGlobalSettingsChanges())) return;
+    setPendingRoute(null);
+    await continuePendingNavigation(target);
   };
 
   const navigation = <>
@@ -448,9 +516,25 @@ export function App() {
         </form>
       </Dialog>;
 
+  // 被拦截的路由切换以对话框收口；草稿在 store 中保留，取消或失败都不丢编辑。
+  const pendingRouteDialog = pendingRoute && <Dialog
+    open
+    title="有未保存的修改"
+    description="全局设置还有未保存的修改；草稿会保留，回到全局设置后仍可继续编辑。"
+    onClose={cancelPendingNavigation}
+    dismissible={globalSaveState !== "saving"}
+    footer={<Stack direction="row" gap={2} justify="end">
+      <Button variant="ghost" onClick={cancelPendingNavigation} disabled={globalSaveState === "saving"}>取消</Button>
+      <Button variant="danger" onClick={discardChangesAndLeave} disabled={globalSaveState === "saving"}>放弃修改并离开</Button>
+      <Button loading={globalSaveState === "saving"} onClick={() => void saveChangesAndLeave()}>保存并离开</Button>
+    </Stack>}
+  >
+    {globalSaveError && <InlineError message={globalSaveError} />}
+  </Dialog>;
+
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;
   // Keep one Workspace instance mounted while Logs, Help, or either settings page is
   // visible. Its draft, image inputs, CSV Worker and in-flight recognition
   // stay intact; the hidden page is excluded from the accessibility tree.
-  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} registerTransferPreparation={registerWorkspaceTransferPreparation} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => navigateTo("workspace")} onDeleted={leaveDeletedProject} onPrepareTransfer={prepareWorkspaceForTransfer} onProjectImported={releaseWorkspaceForLibrary} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}{route === "help" && <HelpPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
+  return <div data-testid="modern-shell"><AppShell collapsed={sidebarCollapsed} sidebar={sidebar} toolbar={toolbar}><main ref={mainRef} id="main-content" className={styles.appMain} tabIndex={-1} aria-label={routeTitle(route)}>{project && route !== "projects" && <WorkspacePage registerToolbarExport={registerWorkspaceToolbarExport} registerTransferPreparation={registerWorkspaceTransferPreparation} hidden={route !== "workspace"} />}{route === "projects" && <ProjectLibraryPage onOpenProject={(id, nextRoute) => void openProject(id, nextRoute)} onOpenLibrarySettings={() => setLibraryDialog("settings")} />}{route === "project-settings" && <ProjectSettingsPage onBack={() => navigateTo("workspace")} onDeleted={leaveDeletedProject} onPrepareTransfer={prepareWorkspaceForTransfer} onProjectImported={releaseWorkspaceForLibrary} />}{route === "global-settings" && <GlobalSettingsPage />}{route === "logs" && <LogViewerPage />}{route === "help" && <HelpPage />}</main></AppShell>{libraryMenuNode}{libraryDialogNode}{pendingRouteDialog}{toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}</div>;
 }

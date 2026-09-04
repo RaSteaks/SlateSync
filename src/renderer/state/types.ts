@@ -2,6 +2,9 @@ import type {
   AppError,
   ConfigData,
   DirectorySelection,
+  GlobalSettingKey,
+  GlobalSettingsData,
+  GlobalSettingValues,
   LibraryInfo,
   ModelDiscoveryResult,
   OcrSettings,
@@ -158,4 +161,34 @@ export interface ExportSlice {
 export interface SettingsSlice {
   ocr: OcrSettings | null;
   setOcr(ocr: OcrSettings | null): void;
+}
+
+export type GlobalSaveState = "idle" | "saving" | "saved" | "error";
+
+/**
+ * Device-level settings draft that outlives the GlobalSettingsPage mount.
+ * `saved` mirrors the last server snapshot while `draftValues` only stores
+ * keys the user actually moved away from it, so a navigation detour keeps the
+ * edit session and the dirty count stays honest (reverting a field removes it
+ * again instead of storing an inherited default as an override).
+ */
+export interface GlobalSettingsSlice {
+  saved: GlobalSettingsData | null;
+  draftValues: Partial<GlobalSettingValues>;
+  dirtyKeys: ReadonlySet<GlobalSettingKey>;
+  fieldErrors: Partial<Record<GlobalSettingKey, string>>;
+  saveState: GlobalSaveState;
+  saveError: string | null;
+  setDraftValue(key: GlobalSettingKey, value: string): void;
+  setDraftValues(patch: Partial<Record<GlobalSettingKey, string>>): void;
+  clearDirtyKey(key: GlobalSettingKey): void;
+  adoptServerSnapshot(saved: GlobalSettingsData): void;
+  mergeSaved(values: Partial<GlobalSettingValues>, overridesAdd?: readonly GlobalSettingKey[]): void;
+  setKeyConfigured(providerId: string, configured: boolean): void;
+  discardDraft(): void;
+  setFieldError(key: GlobalSettingKey, message: string | null): void;
+  setSaveState(saveState: GlobalSettingsSlice["saveState"]): void;
+  setSaveError(message: string | null): void;
+  /** Test-only full reset; production code uses adopt/discard instead. */
+  clear(): void;
 }

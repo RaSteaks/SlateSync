@@ -1042,3 +1042,16 @@ Worker 边界、验收证据和最终治理交接。
   术语章节渲染与“视频码”关键词筛选回归。
 - 验证：说明页定向 Vitest 3/3、`npm run test:modern`（26 个文件、133/133）、
   `npm run typecheck` 均通过。
+
+## 2026-09-05 全局设置审查修复
+
+- 未保存设置守卫在确认后恢复原始导航语义：进入项目库继续经过工作区自动保存闸门并
+  释放任务、识别、输入、导出与元数据状态，普通辅助路由才直接切换。
+- “保存并离开”请求进行中统一锁定 Escape、遮罩、关闭图标、取消与放弃动作，避免
+  已发出的保存请求与后续取消/放弃选择竞态；共享 Dialog 新增可复用的不可关闭状态。
+- PaddleOCR 按模型版本保存的本地草稿只在持久化设置值快照变化时重置；API Key
+  配置状态等独立元数据更新不再覆盖未保存的自定义模型 ID。
+- 新增路由清理、保存中关闭锁和凭据元数据更新三项回归覆盖；`npm run check`、
+  `npm run typecheck`、Modern Vitest 177/177、Modern 与 Storybook 静态构建、premium
+  strict audit（0 finding）及 `git diff --check` 均通过。Storybook 在受限环境无法写入
+  用户级 settings 文件的提示不影响静态产物成功生成。

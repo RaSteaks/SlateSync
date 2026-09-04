@@ -476,3 +476,38 @@
   .helpSearchRow { grid-template-columns: 1fr; }
   .helpSearchRow > .iconButton { margin: 0; justify-self: end; }
 }
+
+/* ── Global settings shell (appended; existing rules above stay untouched) ── */
+/* 设备级设置页收窄为可读文档列宽，并复用帮助页的 sticky 目录版式。 */
+.settingsPage { width: min(100%, 1160px); }
+/* 分段控件行：不包 Field（避免共享 label 语义注入），自担换行与对齐。 */
+.settingsSegmentedRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ss-space-3); min-width: 0; }
+/* OCR 路由分段与其联动反馈说明。 */
+.ocrRoutingSection { display: grid; min-width: 0; gap: var(--ss-space-2); }
+/* Paddle/Vision 高级面板的分组标题结构。 */
+.settingsFieldGroup { display: grid; gap: var(--ss-space-3); }
+.settingsFieldGroup + .settingsFieldGroup { margin-top: var(--ss-space-4); padding-top: var(--ss-space-4); border-top: 1px solid var(--ss-color-line); }
+.settingsFieldGroupTitle { margin: 0; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+/* 高级面板脏标记：摘要素雅高亮并追加“未保存”后缀。 */
+.settingsDetails[data-dirty="true"] > summary { color: var(--ss-color-warning); }
+.settingsDetails[data-dirty="true"] > summary::after { color: var(--ss-color-warning); content: " · 未保存"; }
+/* 设置目录脏标记：锚点右侧追加警告色圆点。 */
+.helpTocLink[data-dirty="true"]::after { width: 7px; height: 7px; border-radius: 999px; background: var(--ss-color-warning); content: ""; justify-self: end; }
+/* 展开动画只作用于内容体（opacity/translate），不改布局盒尺寸，避免无
+   interpolate-size 的浏览器出现滚动条跳变。 */
+.settingsDetailsBody { display: grid; gap: var(--ss-space-4); }
+.settingsDetails[open] > .settingsDetailsBody { animation: settingsReveal var(--ss-motion-base) var(--ss-ease); }
+@keyframes settingsReveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settingsDetails[open] > .settingsDetailsBody { animation: none; }
+  .settingsDetails::details-content { transition: none; }
+}
+/* 渐进增强：支持 interpolate-size 的浏览器获得真实高度过渡。 */
+@supports (interpolate-size: allow-keywords) {
+  .settingsDetails, .settingsDetails::details-content { interpolate-size: allow-keywords; }
+  .settingsDetails::details-content { overflow: clip; block-size: 0; transition: content-visibility var(--ss-motion-base) allow-discrete, block-size var(--ss-motion-base) var(--ss-ease), opacity var(--ss-motion-base) var(--ss-ease); }
+  .settingsDetails[open]::details-content { block-size: auto; }
+}
