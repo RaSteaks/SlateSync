@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-04",
-  "phase": "SM-03",
+  "updatedAt": "2026-09-05",
+  "phase": "SM-04",
   "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
@@ -18,22 +18,22 @@
     "observationMacroProbe": "passed-outside-command-sandbox",
     "universalBinaryProbe": "passed"
   },
-  "activePackage": ".codex/swift-migration/packages/SM-03.md",
-  "nextPackage": ".codex/swift-migration/packages/SM-04.md",
+  "activePackage": ".codex/swift-migration/packages/SM-04.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-05.md",
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "eed108045704db78f8ae38415f15a3fd0f46d491",
+    "reviewCommit": "9b2a32da66eac33804fc0b208c535a869e1e669a",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-04T13:04:22Z",
-    "evidenceReport": ".codex/swift-migration/reviews/SM-03.md",
+    "approvedAt": "2026-09-04T17:10:33Z",
+    "evidenceReport": ".codex/swift-migration/reviews/SM-04.md",
     "approvable": true,
     "blockers": []
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "65 passed",
+    "swiftTest": "96 passed",
     "xcodeDebugBuild": "passed-arm64-Onone",
     "xcodeTestPlan": "3 passed",
     "buildAndRunVerify": "passed-background-real-process-verification",
@@ -45,17 +45,19 @@
     "nodeTests": "323 passed",
     "modernTests": "118 passed",
     "nativeAbiLifecycle": "passed-electron-and-node",
+    "gateSelfTests": "71 passed",
+    "persistenceContract": "passed-sqlite-project-library-v1",
     "lastDiagnosticGate": {
       "result": "PASS",
       "approvable": false,
-      "reviewCommit": "6a05085711c884530a76d79312d1a5a941ddb476",
-      "evidence": ".codex/gate-results/SM-02/20260903T120556Z-6a05085711c8/result.json"
+      "reviewCommit": "69411f5a956ea1807715b32055cb74e6984e96c0",
+      "evidence": ".codex/gate-results/SM-04/20260904T165800Z-69411f5a956e/result.json"
     },
     "lastFormalGate": {
       "result": "PASS",
       "approvable": true,
-      "reviewCommit": "eed108045704db78f8ae38415f15a3fd0f46d491",
-      "evidence": ".codex/gate-results/SM-03/20260904T125747Z-eed108045704/result.json"
+      "reviewCommit": "9b2a32da66eac33804fc0b208c535a869e1e669a",
+      "evidence": ".codex/gate-results/SM-04/20260904T170557Z-9b2a32da66ea/result.json"
     }
   }
 }
