@@ -6,6 +6,7 @@ import SlateSyncDomain
 public actor ScenarioStore {
     private let database: SQLiteDatabase
     private var didBootstrap = false
+    private var bootstrapTask: Task<Void, any Error>?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -79,7 +80,8 @@ public actor ScenarioStore {
             INSERT INTO scenario_profiles
               (id, schema_version, fingerprint_version, fingerprint, profile_json,
                sample_count, created_at, updated_at, last_used_at)
-            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+            ON CONFLICT(fingerprint_version, fingerprint) DO NOTHING;
             """,
             bindings: [
                 id,
@@ -92,7 +94,15 @@ public actor ScenarioStore {
                 now,
             ]
         )
-        return try await getProfile(id)
+        // A concurrent import of the same normalized profile is idempotent:
+        // whichever insert wins supplies the shared canonical row.
+        guard let stored = try await database.rows(
+            "SELECT * FROM scenario_profiles WHERE fingerprint_version = ? AND fingerprint = ?;",
+            bindings: [String(profile.fingerprintVersion), profile.fingerprint]
+        ).first else {
+            throw SlateSyncError(code: "SCENARIO_INVALID", message: "场记结构导入失败")
+        }
+        return try scenarioData(stored)
     }
 
     /// Persists an SM-05-produced observation and updates the selected profile
@@ -139,8 +149,26 @@ public actor ScenarioStore {
 
     private func bootstrap() async throws {
         guard !didBootstrap else { return }
+        if let bootstrapTask {
+            try await bootstrapTask.value
+            return
+        }
+        // Publish schema initialization before its SQLite await so parallel
+        // first-use imports cannot run multiple bootstrap sequences.
+        let task = Task<Void, any Error> { try await self.performBootstrap() }
+        bootstrapTask = task
+        do {
+            try await task.value
+            didBootstrap = true
+            bootstrapTask = nil
+        } catch {
+            bootstrapTask = nil
+            throw error
+        }
+    }
+
+    private func performBootstrap() async throws {
         try await SQLiteV1.bootstrapProject(database)
-        didBootstrap = true
     }
 
     private func scenarioData(_ row: [String: String?]) throws -> ScenarioData {

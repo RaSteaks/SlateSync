@@ -93,7 +93,9 @@ function assertStoreBoundaries() {
   ].join("\n");
 
   requireCondition(library.includes("public actor ProjectLibraryStore"), "Library 必须由 actor 单写者持有");
+  requireCondition(library.includes("bootstrapTask") && library.includes("performBootstrap"), "Library 首次并发访问缺少 bootstrap 单航班");
   requireCondition(runtime.includes("activeLeases") && runtime.includes("deletingProjects"), "项目删除缺少租约/禁止新操作边界");
+  requireCondition(runtime.includes("transitionWaiters") && runtime.includes("closeTask"), "项目终止与全局关闭缺少独占/单航班边界");
   requireCondition(runtime.includes("try await close(context)") && runtime.includes("library.deleteProject"), "删除前未关闭项目 SQLite owners");
   for (const operation of ["updateTask", "recordScenarioObservation", "loadDiagnostic", "listDiagnostics", "deleteDiagnostic"]) {
     requireCondition(runtime.includes(`public func ${operation}`), `ProjectRuntime 缺少租约化操作 ${operation}`);
@@ -101,30 +103,41 @@ function assertStoreBoundaries() {
   requireCondition(library.includes(".deleting-") && library.includes("moveItem(at: staged, to: projectDirectory)"), "tombstone 或索引失败补偿缺失");
   requireCondition(library.includes("mode: .readOnly") && library.includes("legacy_migration_v1"), "旧版迁移未保持只读源与一次性 marker");
   requireCondition(tasks.includes("INSERT OR IGNORE INTO tasks") && tasks.includes("writeAtomically"), "任务 SQLite/快照兼容迁移缺失");
+  requireCondition(tasks.includes("bootstrapTask") && diagnostics.includes("bootstrapTask") && scenarios.includes("bootstrapTask"), "项目 Store 首次访问缺少 bootstrap 单航班");
   requireCondition(diagnostics.includes("maximumSessionCount = 20") && diagnostics.includes("writeAtomically"), "诊断保留或快照合同漂移");
   requireCondition(scenarios.includes("ScenarioStore") && scenarios.includes("scenario_observations"), "场记结构/观察持久化缺失");
   requireCondition(transfer.includes("sqlite3_backup") || read("Sources/SlateSyncPersistence/SQLiteDatabase.swift").includes("sqlite3_backup"), "导出未使用 SQLite 在线备份");
   requireCondition(transfer.includes("assertNoSymbolicLinks") && transfer.includes("assertSeparate"), "导入导出链接/路径边界缺失");
   requireCondition(transfer.includes("rebindProject") && transfer.includes("diagnostic_sessions"), "导入项目归属换绑不完整");
   requireCondition(activation.includes("settings.libraryPath") && activation.includes("projectRuntime.close()") && activation.includes("library.close()"), "激活 Library 未持久化路径或关闭旧连接");
+  requireCondition(activation.includes("case switching") && activation.includes("preflightLibraryRename"), "Library 激活或改名缺少并发仲裁/写入排空预检");
   requireCondition(startup.includes("settings.libraryPath") && startup.includes("preserveLegacyOnConflict: true"), "启动未读取活动 Library 路径或丢失默认路径冲突语义");
+  requireCondition(startup.includes("openingTask"), "启动并发访问缺少 Library 单航班 opener");
   requireCondition(app.includes("ProjectLibraryStartupService") && app.includes("runtime.machineSettingsStore"), "App composition root 未消费持久化 Library 选择");
   for (const expectedTest of [
     "testRowsRejectsStepFailureInsteadOfReturningPartialResults",
+    "testConcurrentFirstUseSharesOneBootstrapAndDefaultProject",
     "testCopiedV1LibrarySurvivesReadWriteCloseAndReopenWithoutSemanticDrift",
     "testPortableLibraryRenamePreservesSuffixAndOpenSQLiteIdentity",
     "testDeleteRestoresDirectoryWhenLibraryIndexRejectsDeletion",
     "testRuntimeClosesProjectStoresBeforeTombstoneDeletion",
+    "testConcurrentProjectTerminalOperationsKeepExclusiveOwnershipUntilCompletion",
+    "testConcurrentRuntimeCloseCallsShareOneLeaseDrain",
+    "testRuntimeCloseRejectsAcquisitionSuspendedInLibraryBootstrap",
     "testLegacyMigrationIsIdempotentAndLeavesSourceUntouched",
     "testTaskStorePreservesUnknownPayloadAndSnapshotAcrossReopen",
     "testProjectRuntimeExposesCompleteStoreMutationSurface",
     "testDiagnosticsRetainsNewestTwentyRowsAndSnapshots",
     "testScenarioProfileAndObservationRemainProjectScoped",
+    "testConcurrentScenarioImportReturnsOneCanonicalProfile",
     "testOpenProjectPackageRoundTripRebindsOwnershipAndPreservesSource",
     "testArchivedProjectPackageKeepsArchiveStateAcrossImport",
     "testProjectPackageValidationRejectsFutureVersionLinksAndUnsafeDestinations",
     "testOpenLibraryExportUsesStandaloneSQLiteBackups",
     "testLibraryActivationPersistsPathAndClosesOutgoingConnections",
+    "testConcurrentLibraryActivationsAllowExactlyOneRestartTransition",
+    "testActivationRenameDrainsSnapshotWritesBeforeMovingLibrary",
+    "testConcurrentStartupCallsShareOneLibraryAndBootstrap",
     "testStartupWithoutSelectionMigratesKnownLegacyDefault",
     "testTestRootInitializerKeepsDefaultLibraryInsideExplicitIsolation",
     "testStartupReopensConfiguredPortableLibraryAfterActivation",

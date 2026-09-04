@@ -3,6 +3,29 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectLibraryStartupServiceTests: XCTestCase {
+    func testConcurrentStartupCallsShareOneLibraryAndBootstrap() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("library-startup-single-flight")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let settings = MachineSettingsStore(
+            applicationSupportRoot: container.appending(path: "Machine", directoryHint: .isDirectory)
+        )
+        let service = ProjectLibraryStartupService(
+            machineSettings: settings,
+            defaultLibraryParent: container,
+            legacyDefaultRoots: []
+        )
+
+        // The app asks for these independently during its initial refresh. The
+        // startup service must publish one opener before either settings read.
+        async let info = service.libraryInfo()
+        async let projects = service.listProjects()
+        let (openedInfo, openedProjects) = try await (info, projects)
+
+        XCTAssertEqual(openedProjects.map(\.id), [ProjectLibraryStore.defaultProjectID])
+        let activeRoot = try await service.activeLibraryRoot()
+        XCTAssertEqual(activeRoot.path, openedInfo.path)
+    }
+
     func testStartupWithoutSelectionMigratesKnownLegacyDefault() async throws {
         let container = try PersistenceTestSupport.temporaryRoot("library-startup-default")
         defer { try? FileManager.default.removeItem(at: container) }

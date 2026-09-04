@@ -9,6 +9,7 @@ public actor ProjectLibraryStartupService: ProjectLibraryServing {
     private let defaultLibraryParent: URL
     private let legacyDefaultRoots: [URL]
     private var library: ProjectLibraryStore?
+    private var openingTask: Task<ProjectLibraryStore, any Error>?
 
     /// Production follows Electron's macOS paths: settings live in the
     /// product-specific directory while the default Library lives directly in
@@ -72,23 +73,47 @@ public actor ProjectLibraryStartupService: ProjectLibraryServing {
 
     private func activeLibrary() async throws -> ProjectLibraryStore {
         if let library { return library }
+        if let openingTask { return try await openingTask.value }
 
-        var settings = try await machineSettings.load()
-        let resolved = resolveLibraryRoot(configuredPath: settings.libraryPath)
-        if !settings.libraryPath.isEmpty,
-           URL(fileURLWithPath: settings.libraryPath, isDirectory: true).standardizedFileURL != resolved {
-            // Only a known historical default is eligible to reach this path;
-            // arbitrary portable Library selections are never renamed.
-            settings.libraryPath = resolved.path
-            _ = try await machineSettings.save(settings)
+        let settingsStore = machineSettings
+        let parent = defaultLibraryParent
+        let legacyRoots = legacyDefaultRoots
+        // libraryInfo and listProjects are intentionally requested in parallel
+        // by SwiftUI. Publish the shared opener before awaiting settings so both
+        // calls receive the same Library actor and bootstrap transaction.
+        let task = Task<ProjectLibraryStore, any Error> {
+            var settings = try await settingsStore.load()
+            let resolved = Self.resolveLibraryRoot(
+                configuredPath: settings.libraryPath,
+                defaultLibraryParent: parent,
+                legacyDefaultRoots: legacyRoots
+            )
+            if !settings.libraryPath.isEmpty,
+               URL(fileURLWithPath: settings.libraryPath, isDirectory: true).standardizedFileURL != resolved {
+                // Only a known historical default is eligible to reach this
+                // path; arbitrary portable selections are never renamed.
+                settings.libraryPath = resolved.path
+                _ = try await settingsStore.save(settings)
+            }
+            return try ProjectLibraryStore(libraryRoot: resolved)
         }
-
-        let opened = try ProjectLibraryStore(libraryRoot: resolved)
-        library = opened
-        return opened
+        openingTask = task
+        do {
+            let opened = try await task.value
+            library = opened
+            openingTask = nil
+            return opened
+        } catch {
+            openingTask = nil
+            throw error
+        }
     }
 
-    private func resolveLibraryRoot(configuredPath: String) -> URL {
+    private static func resolveLibraryRoot(
+        configuredPath: String,
+        defaultLibraryParent: URL,
+        legacyDefaultRoots: [URL]
+    ) -> URL {
         if !configuredPath.isEmpty {
             let configured = URL(
                 fileURLWithPath: configuredPath,

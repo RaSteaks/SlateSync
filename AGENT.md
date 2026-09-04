@@ -87,6 +87,20 @@
   生产构建与 Node/Electron SQLite ABI 均通过。证据为
   `.codex/gate-results/SM-04/20260904T144246Z-b5eed3db5d2e/result.json`；该结果产生于
   review commit 之前，仅是 `approvable=false` 的诊断证据。
+- 对首个 review commit `b23a83efd9c0fbed611e37b8391e7b14b06b8337` 的代码审查
+  发现 actor 重入会重复 bootstrap、项目 close/delete 标记可被并发调用提前清除、
+  runtime close 非单航班且等待 Library 查询的 acquire 可在关闭后重开 context、
+  Library rename 未先排空快照写入、激活操作可并发提交、
+  Scenario 重复导入可能触发唯一约束，以及传输遍历/Gate UI runner 分类未完全
+  fail-closed。上述问题已修复并补充回归，Owner 已授权生成新的 review-fix
+  commit；旧 commit 的 clean Gate 证据不再可用于最终批准。
+- 修复后的最新 dirty diagnostic Gate 全技术检查 PASS：SwiftPM 96/96、Xcode
+  Test Plan 3/3、Node 323/323、Modern 118/118，Debug/静态/类型/生产构建与
+  Node/Electron SQLite ABI 均通过；证据为
+  `.codex/gate-results/SM-04/20260904T163751Z-b23a83efd9c0/result.json`。该运行因
+  工作树含未提交 review 修复而按设计为 `approvable=false`。新的 review-fix commit
+  已获 Owner 授权；只有新 SHA 的 clean Gate 与最终 Owner 批准都完成后才可推进
+  `CURRENT_STATE.json`。
 
 以下内容保留为已完成 Electron 重构的历史记录，不再授权新的实施边界。
 

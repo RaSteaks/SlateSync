@@ -20,7 +20,9 @@ public actor ProjectRuntime: TaskRepository {
     private var deletingProjects: Set<String> = []
     private var activeLeases: [String: Int] = [:]
     private var leaseWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
-    private var isClosed = false
+    private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var refusesNewOperations = false
+    private var closeTask: Task<Void, any Error>?
 
     public init(
         library: ProjectLibraryStore,
@@ -150,61 +152,81 @@ public actor ProjectRuntime: TaskRepository {
     }
 
     public func closeProject(_ projectID: String) async throws {
+        guard !refusesNewOperations, closeTask == nil else { return }
         let id = try PersistenceIdentifiers.project(projectID)
-        deletingProjects.insert(id)
-        await waitForLeases(of: id)
-        if let context = contexts.removeValue(forKey: id) {
-            try await close(context)
-        }
-        deletingProjects.remove(id)
-    }
-
-    public func deleteProject(_ projectID: String) async throws -> String {
-        let id = try PersistenceIdentifiers.project(projectID)
-        guard id != ProjectLibraryStore.defaultProjectID else {
-            throw SlateSyncError(code: "PROJECT_DEFAULT_PROTECTED", message: "默认项目不能删除")
-        }
-        deletingProjects.insert(id)
+        try beginProjectTransition(id)
+        defer { endProjectTransition(id) }
         await waitForLeases(of: id)
         if let context = contexts.removeValue(forKey: id) {
             do {
                 try await close(context)
             } catch {
-                deletingProjects.remove(id)
+                // A partially closed context cannot be safely reopened. Make
+                // the whole runtime reject new work; close() can still drain
+                // and explicitly close every other retained context.
+                refusesNewOperations = true
                 throw error
             }
         }
-        do {
-            let deleted = try await library.deleteProject(id)
-            deletingProjects.remove(id)
-            return deleted
-        } catch {
-            deletingProjects.remove(id)
-            throw error
+    }
+
+    public func deleteProject(_ projectID: String) async throws -> String {
+        guard !refusesNewOperations, closeTask == nil else {
+            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭")
         }
+        let id = try PersistenceIdentifiers.project(projectID)
+        guard id != ProjectLibraryStore.defaultProjectID else {
+            throw SlateSyncError(code: "PROJECT_DEFAULT_PROTECTED", message: "默认项目不能删除")
+        }
+        try beginProjectTransition(id)
+        defer { endProjectTransition(id) }
+        await waitForLeases(of: id)
+        if let context = contexts.removeValue(forKey: id) {
+            do {
+                try await close(context)
+            } catch {
+                refusesNewOperations = true
+                throw error
+            }
+        }
+        return try await library.deleteProject(id)
     }
 
     public func close() async throws {
-        guard !isClosed else { return }
+        if let closeTask {
+            try await closeTask.value
+            return
+        }
         // Publish the terminal state before the first await so a reentrant
         // caller cannot open a fresh context while shutdown drains leases.
-        isClosed = true
+        refusesNewOperations = true
+        let task = Task<Void, any Error> { try await self.performClose() }
+        closeTask = task
+        try await task.value
+    }
+
+    private func performClose() async throws {
+        // A delete/closeProject that began before shutdown owns its marker
+        // until its Library mutation finishes. Waiting prevents close() from
+        // returning while that terminal operation is still reentrant.
+        await waitForProjectTransitions()
         let ids = Set(contexts.keys)
         deletingProjects.formUnion(ids)
         for id in ids { await waitForLeases(of: id) }
         let values = Array(contexts.values)
         contexts.removeAll()
-        do {
-            for context in values { try await close(context) }
-            deletingProjects.subtract(ids)
-        } catch {
-            deletingProjects.subtract(ids)
-            throw error
+        // Attempt every owner even when an earlier project reports a close
+        // error. This leaves no later project silently retained by shutdown.
+        var firstError: (any Error)?
+        for context in values {
+            do { try await close(context) } catch { firstError = firstError ?? error }
         }
+        deletingProjects.subtract(ids)
+        if let firstError { throw firstError }
     }
 
     private func acquire(_ projectID: String) async throws -> ProjectPersistenceContext {
-        guard !isClosed else {
+        guard !refusesNewOperations, closeTask == nil else {
             throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭")
         }
         let id = try PersistenceIdentifiers.project(projectID)
@@ -213,6 +235,12 @@ public actor ProjectRuntime: TaskRepository {
         }
         let project = try await library.getProject(id, allowArchived: false)
         let libraryPath = try await library.libraryInfo().path
+        // The Library lookups above release this actor. Shutdown may complete
+        // while they are in flight, so recheck the terminal state before a
+        // context or lease can be published after close() has returned.
+        guard !refusesNewOperations, closeTask == nil else {
+            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭")
+        }
         guard !deletingProjects.contains(id) else {
             throw SlateSyncError(code: "PROJECT_DELETING", message: "项目正在删除")
         }
@@ -252,6 +280,28 @@ public actor ProjectRuntime: TaskRepository {
         guard activeLeases[projectID, default: 0] > 0 else { return }
         await withCheckedContinuation { continuation in
             leaseWaiters[projectID, default: []].append(continuation)
+        }
+    }
+
+    private func beginProjectTransition(_ projectID: String) throws {
+        guard !deletingProjects.contains(projectID) else {
+            throw SlateSyncError(code: "PROJECT_DELETING", message: "项目正在删除或关闭")
+        }
+        deletingProjects.insert(projectID)
+    }
+
+    private func endProjectTransition(_ projectID: String) {
+        deletingProjects.remove(projectID)
+        guard deletingProjects.isEmpty else { return }
+        let waiters = transitionWaiters
+        transitionWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
+    private func waitForProjectTransitions() async {
+        guard !deletingProjects.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            transitionWaiters.append(continuation)
         }
     }
 

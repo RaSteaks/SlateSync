@@ -181,4 +181,27 @@ final class ProjectStoresTests: XCTestCase {
         try await first.close()
         try await second.close()
     }
+
+    func testConcurrentScenarioImportReturnsOneCanonicalProfile() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("scenario-import-single-flight")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScenarioStore(
+            projectDirectory: root.appending(path: "project", directoryHint: .isDirectory)
+        )
+        let profile = PersistenceTestSupport.scenarioProfile(fingerprint: "concurrent-profile")
+
+        let imported = try await withThrowingTaskGroup(of: ScenarioData.self) { group in
+            for _ in 0..<16 {
+                group.addTask { try await store.importProfile(profile) }
+            }
+            var values: [ScenarioData] = []
+            for try await value in group { values.append(value) }
+            return values
+        }
+
+        XCTAssertEqual(Set(imported.map(\.id)).count, 1)
+        let stored = try await store.listProfiles()
+        XCTAssertEqual(stored.count, 1)
+        try await store.close()
+    }
 }

@@ -621,11 +621,15 @@ public enum ProjectLibraryTransfer {
 
     private static func backupSQLiteTree(from sourceRoot: URL, to targetRoot: URL) async throws {
         let canonicalRoot = sourceRoot.resolvingSymlinksInPath().standardizedFileURL
+        var traversalError: (any Error)?
         let enumerator = FileManager.default.enumerator(
             at: sourceRoot,
             includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey],
             options: [],
-            errorHandler: { _, _ in false }
+            errorHandler: { _, error in
+                traversalError = error
+                return false
+            }
         )
         while let source = enumerator?.nextObject() as? URL {
             if isTemporary(source.lastPathComponent) {
@@ -655,21 +659,31 @@ public enum ProjectLibraryTransfer {
                 throw error
             }
         }
+        if traversalError != nil {
+            throw transferError("INVALID_PROJECT_PACKAGE", "无法完整读取 SQLite 传输树")
+        }
     }
 
     private static func assertNoSymbolicLinks(in directory: URL, code: String, message: String) throws {
         let rootValues = try directory.resourceValues(forKeys: [.isSymbolicLinkKey])
         guard rootValues.isSymbolicLink != true else { throw transferError(code, message) }
+        var traversalError: (any Error)?
         let enumerator = FileManager.default.enumerator(
             at: directory,
             includingPropertiesForKeys: [.isSymbolicLinkKey],
             options: [],
-            errorHandler: { _, _ in false }
+            errorHandler: { _, error in
+                traversalError = error
+                return false
+            }
         )
         while let entry = enumerator?.nextObject() as? URL {
             if try entry.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
                 throw transferError(code, message)
             }
+        }
+        if traversalError != nil {
+            throw transferError(code, "无法完整检查传输目录")
         }
     }
 

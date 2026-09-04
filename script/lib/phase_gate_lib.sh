@@ -122,24 +122,30 @@ diagnostic_keys = {
 diagnostic_values = [summary.get(key) for key in diagnostic_keys if key in summary]
 diagnostic_text = json.dumps(diagnostic_values, ensure_ascii=False).lower()
 
-code_failure = failed > 0 or re.search(
+code_failure = re.search(
     r"xctassert|assertion|application code (crashed|failed)|uncaught exception|"
     r"fatal error|exc_crash|test(?:s)?[\s_-]+(?:failed|failure)",
     diagnostic_text,
 )
-if code_failure:
-    print("FAIL")
-elif result in {"passed", "success"} and failed == 0:
-    print("PASS")
-elif re.search(
+environment_failure = re.search(
     r"testing was (canceled|cancelled)|runner[\s_-]+(canceled|cancelled)|"
+    r"test runner failed to initialize for ui testing|"
+    r"timed out while enabling automation mode|"
     r"sandbox_apply|sandbox-exec|operation not permitted|permission denied|"
     r"no graphical login session|not authorized to send apple events|"
     r"testing[.]framework.*(?:copy|fail|error|unable)|"
     r"(?:copy|fail|error|unable).*testing[.]framework",
     diagnostic_text,
-):
+)
+if code_failure:
+    print("FAIL")
+elif environment_failure:
     print("BLOCKED_ENV")
+elif failed > 0:
+    # A failed count without infrastructure diagnostics remains fail-closed.
+    print("FAIL")
+elif result in {"passed", "success"} and failed == 0:
+    print("PASS")
 else:
     print("FAIL")
 PY

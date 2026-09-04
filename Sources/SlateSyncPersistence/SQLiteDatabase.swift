@@ -168,6 +168,7 @@ public actor SQLiteDatabase {
         try SecureFilePermissions.prepareDirectory(at: destination.deletingLastPathComponent())
 
         var destinationHandle: OpaquePointer?
+        var removeFailedBackup = false
         let openStatus = sqlite3_open_v2(
             destination.path,
             &destinationHandle,
@@ -181,6 +182,11 @@ public actor SQLiteDatabase {
         }
         defer {
             if let destinationHandle { sqlite3_close(destinationHandle) }
+            if removeFailedBackup {
+                try? FileManager.default.removeItem(at: destination)
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: destination.path + "-wal"))
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: destination.path + "-shm"))
+            }
         }
 
         do {
@@ -218,7 +224,9 @@ public actor SQLiteDatabase {
             try? FileManager.default.removeItem(at: URL(fileURLWithPath: destination.path + "-shm"))
             try SecureFilePermissions.repairFile(at: destination, permissions: 0o600)
         } catch {
-            try? FileManager.default.removeItem(at: destination)
+            // Close the destination handle in defer before removing every
+            // artifact; deleting an open main file can otherwise leave sidecars.
+            removeFailedBackup = true
             throw error
         }
     }

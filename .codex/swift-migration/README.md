@@ -38,10 +38,12 @@ uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
 The SM-01, SM-02 and SM-03 implementations are formally `COMPLETE` in
-`CURRENT_STATE.json`. SM-04 is the active implementation package; its SQLite
-and Project Library work is being frozen in the Owner-authorized dedicated
-review commit. Governance cannot advance until the exact commit has a clean
-`phase_gate.sh` evidence report and explicit Repository Owner approval.
+`CURRENT_STATE.json`. SM-04 is the active implementation package. Review of its
+first dedicated commit found actor-reentrancy, shutdown/activation and Gate
+classification defects; fixes and regressions form the Owner-authorized
+dedicated review-fix change set. Governance cannot advance until that exact
+commit has a clean `phase_gate.sh` evidence report and the Repository Owner
+explicitly approves it.
 
 SM-04 now includes the complete v1 portable transfer boundary: staged Project
 and Library exports use SQLite online backups, imported projects receive fresh
@@ -51,6 +53,13 @@ outgoing connections before the app-level restart. The native App composition
 root consumes that path lazily on relaunch and retains Electron's known-default
 migration/conflict behavior without rewriting portable selections. These changes remain
 subject to the same clean Gate and Owner-approval lifecycle.
+
+SM-04 review hardening makes Library/startup/project-store bootstrap
+single-flight, serializes project terminal operations and runtime close,
+drains snapshot writes before Library rename, admits only one concurrent
+activation, makes duplicate Scenario import idempotent, fails closed on
+transfer traversal errors, and correctly distinguishes UI automation setup
+blocks from product test failures.
 
 Electron, React, Node and cross-platform-era files remain retained as migration
 evidence until SM-09; SM-02 changes only their current macOS product entrypoints.

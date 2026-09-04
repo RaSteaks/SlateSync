@@ -263,4 +263,92 @@ final class ProjectLibraryTransferTests: XCTestCase {
             XCTAssertEqual(error.code, "SQLITE_CLOSED")
         }
     }
+
+    func testConcurrentLibraryActivationsAllowExactlyOneRestartTransition() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("library-activation-single-flight")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let outgoing = try ProjectLibraryStore(
+            libraryRoot: container.appending(path: "Outgoing.slatesync-library", directoryHint: .isDirectory)
+        )
+        _ = try await outgoing.libraryInfo()
+        let firstIncoming = container.appending(path: "First.slatesync-library", directoryHint: .isDirectory)
+        let secondIncoming = container.appending(path: "Second.slatesync-library", directoryHint: .isDirectory)
+        for root in [firstIncoming, secondIncoming] {
+            let incoming = try ProjectLibraryStore(libraryRoot: root)
+            _ = try await incoming.libraryInfo()
+            try await incoming.close()
+        }
+        let coordinator = ProjectLibraryActivationCoordinator(
+            library: outgoing,
+            projectRuntime: ProjectRuntime(library: outgoing),
+            machineSettings: MachineSettingsStore(
+                applicationSupportRoot: container.appending(path: "Machine", directoryHint: .isDirectory)
+            )
+        )
+
+        async let first = activationOutcome(coordinator, selectedURL: firstIncoming)
+        async let second = activationOutcome(coordinator, selectedURL: secondIncoming)
+        let outcomes = await [first, second]
+
+        XCTAssertEqual(outcomes.filter { $0 == "success" }.count, 1)
+        XCTAssertEqual(outcomes.filter { $0 == "LIBRARY_RESTART_PENDING" }.count, 1)
+    }
+
+    func testActivationRenameDrainsSnapshotWritesBeforeMovingLibrary() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("library-activation-rename-drain")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let oldRoot = container.appending(path: "Before.slatesync-library", directoryHint: .isDirectory)
+        let library = try ProjectLibraryStore(libraryRoot: oldRoot)
+        let project = try await library.createProject(name: "写入排空", description: "")
+        let runtime = ProjectRuntime(library: library, writer: TransferDelayedAtomicWriter(delay: 0.2))
+        let settings = MachineSettingsStore(
+            applicationSupportRoot: container.appending(path: "Machine", directoryHint: .isDirectory)
+        )
+        let coordinator = ProjectLibraryActivationCoordinator(
+            library: library,
+            projectRuntime: runtime,
+            machineSettings: settings
+        )
+        async let pendingSave = runtime.saveTask(
+            projectID: project.id,
+            taskID: "rename-task",
+            payload: try PersistenceTestSupport.jsonData(["status": "created"])
+        )
+        try await Task.sleep(for: .milliseconds(30))
+
+        let result = try await coordinator.renameLibrary(to: "After")
+        let savedID = try await pendingSave
+        XCTAssertEqual(savedID, "rename-task")
+        let newRoot = container.appending(path: "After.slatesync-library", directoryHint: .isDirectory)
+        XCTAssertEqual(result.library?.path, newRoot.path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldRoot.path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: newRoot.appending(path: project.relativePath).appending(path: "tasks/rename-task.json").path
+        ))
+        let savedSettings = try await settings.load()
+        XCTAssertEqual(savedSettings.libraryPath, newRoot.path)
+    }
+}
+
+private func activationOutcome(
+    _ coordinator: ProjectLibraryActivationCoordinator,
+    selectedURL: URL
+) async -> String {
+    do {
+        _ = try await coordinator.importLibrary(at: selectedURL)
+        return "success"
+    } catch let error as SlateSyncError {
+        return error.code
+    } catch {
+        return "unexpected-error"
+    }
+}
+
+private struct TransferDelayedAtomicWriter: AtomicFileWriting {
+    let delay: TimeInterval
+
+    func writeAtomically(_ data: Data, to url: URL, permissions: Int) throws {
+        Thread.sleep(forTimeInterval: delay)
+        try FileManagerAtomicFileWriter().writeAtomically(data, to: url, permissions: permissions)
+    }
 }

@@ -5,6 +5,34 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectLibraryStoreTests: XCTestCase {
+    func testConcurrentFirstUseSharesOneBootstrapAndDefaultProject() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("library-bootstrap-single-flight")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let libraryRoot = container.appending(path: "Concurrent.slatesync-library", directoryHint: .isDirectory)
+        let library = try ProjectLibraryStore(libraryRoot: libraryRoot)
+
+        // Exercise the same first-render fan-out as SwiftUI: every call reaches
+        // bootstrap before either the manifest or permanent default row exists.
+        let counts = try await withThrowingTaskGroup(of: Int.self) { group in
+            for index in 0..<24 {
+                group.addTask {
+                    if index.isMultiple(of: 2) {
+                        _ = try await library.libraryInfo()
+                    }
+                    return try await library.listProjects(includeArchived: true).count
+                }
+            }
+            var values: [Int] = []
+            for try await count in group { values.append(count) }
+            return values
+        }
+
+        XCTAssertEqual(counts, Array(repeating: 1, count: 24))
+        let projects = try await library.listProjects(includeArchived: true)
+        XCTAssertEqual(projects.map(\.id), [ProjectLibraryStore.defaultProjectID])
+        try await library.close()
+    }
+
     func testPortableLibraryRenamePreservesSuffixAndOpenSQLiteIdentity() async throws {
         let container = try PersistenceTestSupport.temporaryRoot("library-rename")
         defer { try? FileManager.default.removeItem(at: container) }
@@ -187,6 +215,93 @@ final class ProjectLibraryStoreTests: XCTestCase {
             XCTAssertEqual(error.code, "ENOENT")
         }
         try await runtime.close()
+        try await library.close()
+    }
+
+    func testConcurrentProjectTerminalOperationsKeepExclusiveOwnershipUntilCompletion() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("runtime-terminal-single-owner")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let libraryRoot = container.appending(path: "Terminal.slatesync-library", directoryHint: .isDirectory)
+        let library = try ProjectLibraryStore(libraryRoot: libraryRoot)
+        let project = try await library.createProject(name: "串行终止", description: "")
+        let runtime = ProjectRuntime(library: library, writer: DelayedAtomicWriter(delay: 0.2))
+        async let pendingSave = runtime.saveTask(
+            projectID: project.id,
+            taskID: "terminal-task",
+            payload: try PersistenceTestSupport.jsonData(["status": "created"])
+        )
+        try await Task.sleep(for: .milliseconds(30))
+        async let pendingClose: Void = runtime.closeProject(project.id)
+        try await Task.sleep(for: .milliseconds(30))
+
+        do {
+            _ = try await runtime.deleteProject(project.id)
+            XCTFail("a second terminal operation must not clear the first owner's marker")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "PROJECT_DELETING")
+        }
+
+        let savedID = try await pendingSave
+        XCTAssertEqual(savedID, "terminal-task")
+        try await pendingClose
+        let deletedID = try await runtime.deleteProject(project.id)
+        XCTAssertEqual(deletedID, project.id)
+        try await runtime.close()
+        try await library.close()
+    }
+
+    func testConcurrentRuntimeCloseCallsShareOneLeaseDrain() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("runtime-close-single-flight")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let library = try ProjectLibraryStore(
+            libraryRoot: container.appending(path: "Close.slatesync-library", directoryHint: .isDirectory)
+        )
+        let project = try await library.createProject(name: "关闭排空", description: "")
+        let runtime = ProjectRuntime(library: library, writer: DelayedAtomicWriter(delay: 0.2))
+        async let pendingSave = runtime.saveTask(
+            projectID: project.id,
+            taskID: "close-task",
+            payload: try PersistenceTestSupport.jsonData(["status": "created"])
+        )
+        try await Task.sleep(for: .milliseconds(30))
+        async let firstClose: Void = runtime.close()
+        async let secondClose: Void = runtime.close()
+
+        let savedID = try await pendingSave
+        try await firstClose
+        try await secondClose
+        XCTAssertEqual(savedID, "close-task")
+        do {
+            _ = try await runtime.listTasks(projectID: project.id)
+            XCTFail("a completed single-flight close must keep the runtime terminal")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "PROJECT_RUNTIME_CLOSED")
+        }
+        try await library.close()
+    }
+
+    func testRuntimeCloseRejectsAcquisitionSuspendedInLibraryBootstrap() async throws {
+        let container = try PersistenceTestSupport.temporaryRoot("runtime-close-bootstrap-race")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let library = try ProjectLibraryStore(
+            libraryRoot: container.appending(path: "Bootstrap.slatesync-library", directoryHint: .isDirectory),
+            writer: DelayedAtomicWriter(delay: 0.2)
+        )
+        let runtime = ProjectRuntime(library: library)
+        let pendingList = Task {
+            try await runtime.listTasks(projectID: ProjectLibraryStore.defaultProjectID)
+        }
+        // The delayed manifest write keeps acquire() suspended in its Library
+        // lookup while close() publishes and completes the runtime terminal state.
+        try await Task.sleep(for: .milliseconds(30))
+        try await runtime.close()
+
+        do {
+            _ = try await pendingList.value
+            XCTFail("an acquisition resumed after close must not publish a new context")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "PROJECT_RUNTIME_CLOSED")
+        }
         try await library.close()
     }
 

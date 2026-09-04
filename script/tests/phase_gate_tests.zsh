@@ -95,6 +95,14 @@ print -r -- '{"result":"Failed","failedTests":0,"testsCount":2,"failureText":"Te
   "${fixture_root}/xcode-canceled-summary.json"
 assert_equal "canceled Xcode summary is an environment block" BLOCKED_ENV \
   "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-canceled-summary.json")"
+print -r -- '{"result":"Failed","failedTests":1,"testsCount":1,"failureText":"Test runner failed to initialize for UI testing: Timed out while enabling automation mode"}' > \
+  "${fixture_root}/xcode-ui-automation-timeout.json"
+assert_equal "UI automation initialization timeout overrides failed count" BLOCKED_ENV \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-ui-automation-timeout.json")"
+print -r -- '{"result":"Failed","failedTests":1,"testsCount":2,"failureText":["Timed out while enabling automation mode","XCTAssertEqual failed"]}' > \
+  "${fixture_root}/xcode-ui-timeout-with-assertion.json"
+assert_equal "product assertion wins over UI automation timeout" FAIL \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-ui-timeout-with-assertion.json")"
 print -r -- 'result=Failed failureText=Testing was canceled by Testing.framework' > \
   "${fixture_root}/xcode-environment-failure.log"
 assert_equal "Xcode runner cancellation classification" BLOCKED_ENV \
@@ -202,6 +210,12 @@ run_xcode_test_plan_fixture \
   xcode-nonzero-readable-result-canceled \
   42 \
   '{"result":"Failed","failedTests":0,"testsCount":2,"failureText":"Testing was canceled by Testing.framework"}' \
+  1 \
+  BLOCKED_ENV
+run_xcode_test_plan_fixture \
+  xcode-nonzero-ui-automation-timeout \
+  42 \
+  '{"result":"Failed","failedTests":1,"testsCount":1,"failureText":"Test runner failed to initialize for UI testing: Timed out while enabling automation mode"}' \
   1 \
   BLOCKED_ENV
 run_xcode_test_plan_fixture \

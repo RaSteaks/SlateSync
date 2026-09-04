@@ -11,6 +11,7 @@ public actor ProjectTaskStore {
     private let database: SQLiteDatabase
     private let writer: any AtomicFileWriting
     private var didBootstrap = false
+    private var bootstrapTask: Task<Void, any Error>?
 
     public init(
         projectDirectory: URL,
@@ -128,10 +129,28 @@ public actor ProjectTaskStore {
 
     private func bootstrap() async throws {
         guard !didBootstrap else { return }
+        if let bootstrapTask {
+            try await bootstrapTask.value
+            return
+        }
+        // Concurrent first-use operations share snapshot import and schema
+        // setup instead of replaying the compatibility migration reentrantly.
+        let task = Task<Void, any Error> { try await self.performBootstrap() }
+        bootstrapTask = task
+        do {
+            try await task.value
+            didBootstrap = true
+            bootstrapTask = nil
+        } catch {
+            bootstrapTask = nil
+            throw error
+        }
+    }
+
+    private func performBootstrap() async throws {
         try SecureFilePermissions.prepareDirectory(at: tasksDirectory)
         try await SQLiteV1.bootstrapProject(database)
         try await importSnapshots()
-        didBootstrap = true
     }
 
     private func importSnapshots() async throws {

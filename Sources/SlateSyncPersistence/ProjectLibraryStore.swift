@@ -55,6 +55,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
     private let writer: any AtomicFileWriting
     private var manifest: LibraryV1Manifest?
     private var didBootstrap = false
+    private var bootstrapTask: Task<Void, any Error>?
 
     public init(
         applicationSupportRoot: URL? = nil,
@@ -108,13 +109,50 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
 
     public func bootstrap() async throws {
         guard !didBootstrap else { return }
+        if let bootstrapTask {
+            try await bootstrapTask.value
+            return
+        }
+        // Actor methods are reentrant at every SQLite await. Share one
+        // bootstrap task so simultaneous libraryInfo/listProjects calls cannot
+        // both create the permanent default project or roll back each other's
+        // directory after a uniqueness conflict.
+        let task = Task<Void, any Error> { try await self.performBootstrap() }
+        bootstrapTask = task
+        do {
+            try await task.value
+            didBootstrap = true
+            bootstrapTask = nil
+        } catch {
+            bootstrapTask = nil
+            throw error
+        }
+    }
+
+    /// Validates deterministic rename failures before the project runtime is
+    /// drained. The actual rename repeats every check after that async gap.
+    func preflightLibraryRename(_ nextName: String) async throws {
+        try await bootstrap()
+        let name = try validateLibraryName(nextName)
+        let current = try requiredManifest()
+        guard name != current.name else { return }
+        let suffix = root.lastPathComponent.hasSuffix(Self.libraryExtension)
+            ? Self.libraryExtension
+            : ""
+        let target = root.deletingLastPathComponent()
+            .appending(path: "\(name)\(suffix)", directoryHint: .isDirectory)
+        guard !FileManager.default.fileExists(atPath: target.path) else {
+            throw SlateSyncError(code: "LIBRARY_NAME_CONFLICT", message: "该名称的项目库目录已存在，请选择其他名称")
+        }
+    }
+
+    private func performBootstrap() async throws {
         try SecureFilePermissions.prepareDirectory(at: root)
         try SecureFilePermissions.prepareDirectory(at: projectsRoot)
         try await SQLiteV1.bootstrapLibrary(database)
         try await cleanupStagedProjectDirectories()
         manifest = try loadOrCreateLibraryManifest()
         _ = try await ensureDefaultProject()
-        didBootstrap = true
     }
 
     public func libraryInfo() async throws -> LibraryInfo {
