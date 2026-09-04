@@ -19,6 +19,10 @@ final class SlateSyncUITests: XCTestCase {
     func testLaunchesMainWindowAndProjectLibrary() {
         let app = XCUIApplication()
         app.launchEnvironment["SLATESYNC_TEST_ROOT"] = testRoot.path
+        // Consecutive Gate runs can persist a prior no-window termination in
+        // SwiftUI's restoration domain, which launches only the menu bar.
+        // Disable restoration so this test always exercises WindowGroup creation.
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         // A previous local run can leave the same bundle identifier alive;
         // terminate it so this test always validates a fresh window launch.
         if app.state != .notRunning { app.terminate() }

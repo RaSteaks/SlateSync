@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "seed": "sm05-perf-v1",
+  "rows": 10000,
+  "columns": 12,
+  "matchedPercent": 80,
+  "unmatchedPercent": 10,
+  "repeatedPercent": 5,
+  "invalidPercent": 5,
+  "sparseEditPercent": 1,
+  "outputSha256": "ad23d3d8236478d658cfa72a45b7703ba5f9ffc3eab8ebf27bcd644cbb7ad227"
+}

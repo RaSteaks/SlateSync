@@ -41,7 +41,10 @@ let package = Package(
         ),
         .testTarget(
             name: "SlateSyncWorkflowTests",
-            dependencies: ["SlateSyncDomain", "SlateSyncWorkflow"]
+            dependencies: ["SlateSyncDomain", "SlateSyncPersistence", "SlateSyncWorkflow"],
+            // SM-05 byte goldens are copied as resources so tests never depend
+            // on the invocation directory or a user's real Resolve exports.
+            resources: [.process("Fixtures")]
         ),
     ],
     swiftLanguageModes: [.v6]

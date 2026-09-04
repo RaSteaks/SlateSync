@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    "Metadata/kinefinity-revision-2.txt": "534f8c96fcb88bab95959cb60911a45d592e89ad27cbdbf3fbc54e8aef2167a0",
+    "Scenario/observation.json": "bfd3a093d2bda9df6274b31d70d45ba5c2c988d3a7558a594ade371cc25e0277",
+    "ScannerTree/scanner-tree-manifest.json": "2f66160ad38a38e4561cde0d0383af68d35d1fe57e4ebfc2e46ea9f68241da2c",
+    "Performance/performance-manifest.json": "670032da4f7b4b3da2a8b4ea72f11f09c14f1e677caf15d5e1c0ebfeab400475"
+  }
+}

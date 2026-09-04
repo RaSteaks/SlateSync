@@ -105,6 +105,50 @@ public actor ScenarioStore {
         return try scenarioData(stored)
     }
 
+    /// Applies an SM-05 match as one v1 transaction. The profile row, sample
+    /// count and observation cannot diverge after cancellation or SQL failure.
+    public func applyScenarioMatch(
+        candidate: ScenarioProfile,
+        selectedProfileID: String?,
+        observationPayload: Data
+    ) async throws -> ScenarioMatchCommit {
+        try await bootstrap()
+        try Task.checkCancellation()
+        let now = PersistenceJSON.timestamp()
+        let profileJSON = try PersistenceJSON.string(from: encoder.encode(candidate), errorCode: "SCENARIO_INVALID")
+        let observationJSON = try PersistenceJSON.string(from: observationPayload, errorCode: "SCENARIO_INVALID")
+        let candidateID = "scenario-\(PersistenceJSON.sha256Prefix(candidate.fingerprint, count: 16))"
+        let targetID = try selectedProfileID.map(PersistenceIdentifiers.scenario) ?? candidateID
+        let observationID = "observation-\(PersistenceJSON.sha256Prefix("\(targetID):\(now):\(UUID())", count: 16))"
+        var commands: [SQLiteCommand] = []
+        if selectedProfileID == nil {
+            commands.append(SQLiteCommand(
+                """
+                INSERT INTO scenario_profiles
+                  (id, schema_version, fingerprint_version, fingerprint, profile_json,
+                   sample_count, created_at, updated_at, last_used_at)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                ON CONFLICT(fingerprint_version, fingerprint) DO NOTHING;
+                """,
+                bindings: [candidateID, String(candidate.schemaVersion), String(candidate.fingerprintVersion), candidate.fingerprint, profileJSON, now, now, now]
+            ))
+        }
+        commands.append(SQLiteCommand(
+            "UPDATE scenario_profiles SET sample_count = sample_count + 1, updated_at = ?, last_used_at = ? WHERE id = ?;",
+            bindings: [now, now, targetID]
+        ))
+        commands.append(SQLiteCommand(
+            """
+            INSERT INTO scenario_observations
+              (id, profile_id, fingerprint_version, fingerprint, observation_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """,
+            bindings: [observationID, targetID, String(candidate.fingerprintVersion), candidate.fingerprint, observationJSON, now]
+        ))
+        try await database.transaction(commands)
+        return ScenarioMatchCommit(profile: try await getProfile(targetID), observationID: observationID)
+    }
+
     /// Persists an SM-05-produced observation and updates the selected profile
     /// atomically, matching the v1 scenario store's reuse transaction.
     @discardableResult

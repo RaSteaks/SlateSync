@@ -524,6 +524,24 @@ case "$phase" in
     run_check sm04_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" \
       npm run test:native:abi
     ;;
+  SM-05)
+    run_check sm05_contract true "CSV/metadata/Scenario 兼容、事务与性能合同完整" \
+      node script/tests/sm05_contract.mjs
+    run_check sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
+      env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling
+    run_check sm05_node_compatibility true "Electron CSV/Scenario 兼容基线继续通过" \
+      npm run test:node
+    run_check sm05_modern_compatibility true "Modern Renderer 兼容基线继续通过" \
+      npm run test:modern
+    run_check sm05_static_checks true "Electron/TypeScript 静态检查继续通过" \
+      npm run check
+    run_check sm05_typecheck true "现代 TypeScript 类型检查继续通过" \
+      npm run typecheck
+    run_check sm05_modern_build true "现代 Renderer 生产构建继续通过" \
+      npm run build:modern
+    run_check sm05_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" \
+      npm run test:native:abi
+    ;;
   SM-01) ;;
   *)
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing

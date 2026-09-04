@@ -1,0 +1,25 @@
+{
+  "filename": "episode-01-slate.png",
+  "ocrEngine": "paddleocr",
+  "ocrUsed": true,
+  "pages": [
+    {
+      "pageNumber": 1,
+      "views": [
+        {
+          "width": 1200,
+          "height": 800,
+          "blocks": [
+            { "text": "场次", "confidence": 0.99, "bboxNormalized": [0.05, 0.08, 0.12, 0.12] },
+            { "text": "镜", "confidence": 0.99, "bboxNormalized": [0.2, 0.08, 0.25, 0.12] },
+            { "text": "次", "confidence": 0.99, "bboxNormalized": [0.3, 0.08, 0.35, 0.12] },
+            { "text": "A机", "confidence": 0.99, "bboxNormalized": [0.7, 0.08, 0.78, 0.12] },
+            { "text": "87A", "confidence": 0.95, "bboxNormalized": [0.05, 0.45, 0.12, 0.5] },
+            { "text": "01", "confidence": 0.95, "bboxNormalized": [0.2, 0.45, 0.25, 0.5] },
+            { "text": "02", "confidence": 0.95, "bboxNormalized": [0.3, 0.45, 0.35, 0.5] }
+          ]
+        }
+      ]
+    }
+  ]
+}

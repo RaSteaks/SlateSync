@@ -1,0 +1,5 @@
+# SLATE.TXT Revision 2.0
+Clip Name...........: A004C004_DEMO001
+Sensor FPS..........: 48
+Shot Date...........: 2026-08-04
+Project FPS.........: 24

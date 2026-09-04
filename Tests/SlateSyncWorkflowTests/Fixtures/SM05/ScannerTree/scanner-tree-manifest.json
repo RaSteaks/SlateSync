@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "directories": [
+    "A004C004_DEMO001",
+    "B001C001",
+    "level-1/level-2/A001C002"
+  ],
+  "expectedKeys": ["A:4:4", "A:4:5"],
+  "expectedMetadataKeys": ["A:4:4"],
+  "expectedMissingKeys": ["A:4:5"]
+}

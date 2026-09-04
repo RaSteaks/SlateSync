@@ -1279,3 +1279,85 @@ Worker 边界、验收证据和最终治理交接。
   未提交或推送；测试只使用临时目录/内存 Keychain，不访问真实用户目录或登录钥匙串。
   真实 Security.framework 竞争者及不同 Xcode runner 的环境行为仍是后续验证风险，
   `npm audit` 既有漏洞继续作为独立依赖治理事项。
+
+## 2026-09-05 SM-05 详细施工计划（规划完成，尚未开工）
+
+- 已将 `.codex/swift-migration/packages/SM-05.md` 从阶段摘要细化为 9 个工作包：
+  兼容行为/夹具冻结、Domain 与服务合同、CSV 字节兼容编解码、字段与素材编号规范化、
+  Resolve 合并/稀疏编辑/独立导出、元数据解析与有界目录扫描、Scenario Profile 学习/
+  指纹/相似度/原子匹配，以及后台服务组合、性能门禁和正式阶段验收。
+- 实施顺序设置了逐级停止门禁：先冻结 JavaScript 行为和 SHA-256，再完成 typed contract，
+  依次通过 CSV codec 字节 golden、规范化纯函数、合并/导出 golden、元数据树夹具、
+  Scenario 指纹与 SQLite 原子事务，最后才允许服务集成和 Phase Gate；底层 golden 失败时
+  不得用上层集成掩盖。
+- 测试目录细化为 CSV 8 组、合并/导出 11 组、元数据 10 组、Scenario 12 组，并规定
+  所有文件系统/SQLite 测试只使用 checked-in fixture 与临时目录，不读取真实用户
+  Application Support、Project Library 或媒体卷。Swift fixture 副本必须由
+  `sm05_contract.mjs` 与现有 Node baseline manifest 做长度和哈希一致性审计。
+- 10,000 行 Release 性能样本使用固定 seed：12 列、四机位、80% 匹配、10% 未匹配、
+  5% 重复行、5% 冲突/非法标识、1% 稀疏编辑并混合引号/分隔符/内嵌换行；输出行数、
+  列序、字节长度和 SHA-256 固定。1 次预热后测 5 次，要求 10k 中位数不超过 2 秒、
+  单次不超过 5 秒，且 10k 中位数不超过同源 5k 前缀中位数的 2.5 倍。
+- 边界保持不变：复用 SM-04 v1 SQLite/项目租约，Scenario create/reuse、sample count 和
+  observation 必须在一个既有 schema 事务内提交；本阶段不引入 schema v2，不实现
+  SM-06 媒体/OCR、SM-07 Provider/识别编排、SM-08 UI 或 SM-09 Electron 删除/发布。
+- 本轮只生成计划并记录项目方案，未修改产品代码、`CURRENT_STATE.json` 或
+  `.codex/refactor`，未开始 SM-05 生命周期、未运行阶段 Gate、未提交或推送。
+
+## 2026-09-05 SM-05 工程实施（未提交）
+
+- 已完成 Swift 原生 CSV/metadata/Scenario 后台服务：Resolve CSV 编码、BOM、
+  分隔符、换行、引号和最终换行保真；NFKC/中文数字/场镜次/素材 key 规范化；
+  索引化合并、一对多回填、重复/冲突仲裁、稀疏编辑、相机元数据对账、序列异常与
+  UTF-16LE 独立导出。
+- 已完成 Kinefinity `slate.txt` 注册式解析、dirname/fixed-name 结构学习与只读有界
+  扫描；根目录、深度、文件大小、预期 key、符号链接、取消检查及结果排序均已收紧，
+  测试仅使用 SwiftPM fixture 和临时目录。
+- 已完成 Scenario Profile v1 observation/layout/aliases/regions、稳定 JSON/SHA-256 32 位指纹、
+  六位小数加权相似度、Profile 归一化/提示、阈值/歧义匹配，并在 SM-04 v1 schema 上将
+  create/reuse、sample count、last used 与 observation 写入收敛为一个 SQLite 事务；
+  并发相同观察、失败回滚、关闭重开和跨项目隔离已覆盖。
+- `Tests/SlateSyncWorkflowTests/Fixtures/SM05/coverage.json` 将 CSV-01…08、MRG-01…11、
+  META-01…10、SCN-01…12、PERF-01 与 SVC-01 映射到可执行测试；冻结 CSV 副本
+  逐文件 SHA-256 与 Node baseline 一致。当前 SwiftPM 共 111 项测试全部通过，
+  其中 SM-05 Workflow 17 项。
+- PERF-01 使用固定 10,000 行、12 列、四机位、80% 匹配、10% 未匹配、5% 重复、
+  5% 冲突/非法、1% 稀疏编辑工作负载，输出 SHA-256 为
+  `ad23d3d8236478d658cfa72a45b7703ba5f9ffc3eab8ebf27bcd644cbb7ad227`。Gate 中
+  Release 5k/10k 中位数分别为 0.674611/1.376391 秒，10k 最慢 1.390325 秒，
+  缩放比约 2.040，通过 2.0/5.0/2.5 秒/比例门槛。
+- `./script/phase_gate.sh SM-05 --allow-dirty` 于当时工作区上通过 SwiftPM、
+  Xcode Debug/Test Plan、SM-05 contract、Release 性能、Node/Modern、check/typecheck/build 与
+  native ABI 全部关键检查；最终证据目录为
+  `.codex/gate-results/SM-05/20260904T181344Z-523fd49790a3`。连续 Gate 运行曾暴露 SwiftUI
+  窗口恢复可只启动菜单栏，UI 测试现显式禁用持久化窗口恢复，连续两次 Test Plan 及最终
+  Gate 均通过 3/3。本轮仍保持未提交。因用户明确要求不自动 commit，
+  未生成正式 clean review commit/审查报告，也未更新 `CURRENT_STATE.json`；诊断 Gate
+  因 `--allow-dirty` 正确记录为 `PASS` 且 `approvable=false`，这不代表 Owner 阶段批准。
+
+## 2026-09-05 SM-05 施工复审修复（未提交）
+
+- 已将 GLM 复审与本地逐行复审重新对照 `public/resolve-csv.js`、
+  `lib/scenario/profile.mjs` 和 `lib/scenario/store.mjs`。关闭四类 P2：多 reel 与多素材
+  告警按首现序稳定输出；卡号/视频码不再额外 NFKC；observation JSON 恢复 v1 顶层
+  Profile 键；sidecar、记录分组、两阶段字段规范化及显示名回退恢复 JavaScript 顺序/文本。
+- 同时关闭复审发现的边界：Scenario 匹配经 `ProjectRuntime` 项目租约持久化，平分保持
+  `last_used_at DESC`，similarity 自行归一化；orientation、pageNumber 与 UTF-16 长度规则
+  对齐；CSV 限定合法分隔符且不把 U+2028/U+2029 当换行；合并与独立导出补齐
+  `CSV_NO_EXPORT` 闸口，稀疏编辑改为有序 typed list 并保留原始空白。
+- 新增并冻结 metadata、scanner-tree、Scenario observation、performance 资源及 SHA-256
+  manifest；资源使用唯一文件名以适配 SwiftPM 扁平打包，缺失时测试失败而非 skip。
+  `sm05_contract.mjs` 现在审计所有五类 fixture、关键差分测试和 ProjectRuntime 租约路径。
+- 保留并在 SM-05 包文档记录三项后续边界：扫描根无效时 native 继续 fail-closed；
+  legacy take-status 字符串归一化由 SM-06/07 adapter 衔接；畸形 canonical key 的
+  `localeCompare` 差异不扩展到有效业务 key。
+- 复审后验证：SwiftPM 完整套件 113/113、SM-05 定向 19/19、
+  `node script/tests/sm05_contract.mjs` 与 `git diff --check` 全部通过。未生成 review
+  commit，未更新 `CURRENT_STATE.json` 或 `.codex/refactor`，也未将诊断 dirty Gate
+  解释为阶段批准。
+- 复审修复后的诊断 Gate `./script/phase_gate.sh SM-05 --allow-dirty` 全项 PASS：
+  SwiftPM 113/113、Xcode Test Plan 3/3，Node/Modern/typecheck/build/native ABI 均通过；
+  Release PERF-01 的 5k/10k 中位数为 0.794756/1.575901 秒，10k 峰值 1.597848 秒，
+  缩放比约 1.983。最新证据目录为
+  `.codex/gate-results/SM-05/20260904T194114Z-523fd49790a3`；dirty 模式按设计记录
+  `PASS/approvable=false`，该本地证据不得提交，也不替代 clean review commit 与 Owner 批准。

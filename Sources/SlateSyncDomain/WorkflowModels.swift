@@ -72,9 +72,12 @@ public struct ResolveCSVFormat: Codable, Hashable, Sendable {
         try values.encode(finalNewline, forKey: .finalNewline)
     }
 
-    /// Resolve only accepts the three line endings used by the legacy CSV
-    /// writer; rejecting other strings prevents silent byte-level drift.
+    /// Resolve detection emits comma, semicolon or tab plus the three legacy
+    /// line endings. Reject structural characters before they can corrupt rows.
     public func validate() throws {
+        guard [",", ";", "\t"].contains(delimiter) else {
+            throw SlateSyncError(code: "CSV_FORMAT_INVALID", message: "CSV 分隔符无效")
+        }
         guard ["\r\n", "\n", "\r"].contains(lineEnding) else {
             throw SlateSyncError(code: "CSV_FORMAT_INVALID", message: "CSV 换行符无效")
         }

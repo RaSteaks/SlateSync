@@ -17,6 +17,29 @@ public protocol CSVProcessing: Sendable {
     func encode(_ table: ResolveCSVTable) async throws -> Data
 }
 
+public protocol SlateMetadataScanning: Sendable {
+    func scan(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult
+}
+
+public protocol ScenarioProfileProcessing: Sendable {
+    func profile(from input: ScenarioObservationInput, resolve: ProjectSettings.ResolveSettings) async throws -> ScenarioProfile
+    func normalize(_ profile: ScenarioProfile) async throws -> ScenarioProfile
+    func similarity(_ left: ScenarioProfile, _ right: ScenarioProfile) async throws -> Double
+}
+
+/// Scenario matching persistence is addressed by project so Workflow cannot
+/// retain a raw SQLite store and bypass ProjectRuntime's close/delete leases.
+public protocol ScenarioMatchingPersistence: Sendable {
+    func listScenarios(projectID: String) async throws -> [ScenarioSummary]
+    func loadScenario(projectID: String, scenarioID: String) async throws -> ScenarioData
+    func applyScenarioMatch(
+        projectID: String,
+        candidate: ScenarioProfile,
+        selectedProfileID: String?,
+        observationPayload: Data
+    ) async throws -> ScenarioMatchCommit
+}
+
 public protocol OCRServing: Sendable {
     func recognize(images: [Data]) async throws -> [OCRPageResult]
 }

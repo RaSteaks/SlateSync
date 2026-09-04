@@ -13,7 +13,7 @@ private struct ProjectPersistenceContext: Sendable {
 /// The lease counter closes the actor-reentrancy gap: deletion marks a project
 /// unavailable before waiting for in-flight store calls, then closes all three
 /// SQLite owners before the Library starts its tombstone transaction.
-public actor ProjectRuntime: TaskRepository {
+public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence {
     private let library: ProjectLibraryStore
     private let writer: any AtomicFileWriting
     private var contexts: [String: ProjectPersistenceContext] = [:]
@@ -96,6 +96,23 @@ public actor ProjectRuntime: TaskRepository {
         let context = try await acquire(projectID)
         defer { release(projectID) }
         return try await context.scenarios.importProfile(profile)
+    }
+
+    /// Keeps the complete atomic match write inside the same project lease used
+    /// by every other store operation, so deletion cannot close its database.
+    public func applyScenarioMatch(
+        projectID: String,
+        candidate: ScenarioProfile,
+        selectedProfileID: String?,
+        observationPayload: Data
+    ) async throws -> ScenarioMatchCommit {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.applyScenarioMatch(
+            candidate: candidate,
+            selectedProfileID: selectedProfileID,
+            observationPayload: observationPayload
+        )
     }
 
     @discardableResult
