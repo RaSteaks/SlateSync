@@ -1,0 +1,191 @@
+{
+  "source": "public/csv-background-tasks.js + public/slate-csv-parser.js",
+  "cases": [
+    {
+      "input": "File Name,Scene,Shot,Take,Comments\nA001_C002.mov,1,2,3,_OK\nB010C011.mov,57 / 58,十一,2,保条\nC002C003.mov,5,3,1,NG\n",
+      "parsed": [
+        {
+          "fileName": "A001_C002.mov",
+          "materialKey": "A001C002",
+          "scene": "1",
+          "shot": "2",
+          "take": "3",
+          "comments": "过",
+          "cameraFps": null,
+          "shootDay": null
+        },
+        {
+          "fileName": "B010C011.mov",
+          "materialKey": "B010C011",
+          "scene": "57 / 58",
+          "shot": "十一",
+          "take": "2",
+          "comments": "保",
+          "cameraFps": null,
+          "shootDay": null
+        },
+        {
+          "fileName": "C002C003.mov",
+          "materialKey": "C002C003",
+          "scene": "5",
+          "shot": "3",
+          "take": "1",
+          "comments": "废条",
+          "cameraFps": null,
+          "shootDay": null
+        }
+      ],
+      "records": [
+        {
+          "id": "slate-csv-0",
+          "sourcePage": null,
+          "cardNumber": "A001",
+          "videoCode": "C002",
+          "scene": "1",
+          "shot": "2",
+          "take": "3",
+          "takeStatus": "过",
+          "description": null,
+          "comments": null,
+          "shotSize": null,
+          "cameraPosition": null,
+          "confidence": "high"
+        },
+        {
+          "id": "slate-csv-1",
+          "sourcePage": null,
+          "cardNumber": "B010",
+          "videoCode": "C011",
+          "scene": "57 / 58",
+          "shot": "十一",
+          "take": "2",
+          "takeStatus": "保",
+          "description": null,
+          "comments": null,
+          "shotSize": null,
+          "cameraPosition": null,
+          "confidence": "high"
+        },
+        {
+          "id": "slate-csv-2",
+          "sourcePage": null,
+          "cardNumber": "C002",
+          "videoCode": "C003",
+          "scene": "5",
+          "shot": "3",
+          "take": "1",
+          "takeStatus": "废条",
+          "description": null,
+          "comments": null,
+          "shotSize": null,
+          "cameraPosition": null,
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "input": "﻿文件名,场景,镜次,镜头,备注,摄影机帧率,拍摄日期\r\n\"A003_C021,clip.mov\",一,02,03,好条,23.976,2026-09-06\r\n",
+      "parsed": [
+        {
+          "fileName": "A003_C021,clip.mov",
+          "materialKey": "A003C021",
+          "scene": "一",
+          "shot": "02",
+          "take": "03",
+          "comments": "过",
+          "cameraFps": "23.976",
+          "shootDay": "2026-09-06"
+        }
+      ],
+      "records": [
+        {
+          "id": "slate-csv-0",
+          "sourcePage": null,
+          "cardNumber": "A003",
+          "videoCode": "C021",
+          "scene": "一",
+          "shot": "02",
+          "take": "03",
+          "takeStatus": "过",
+          "description": null,
+          "comments": null,
+          "shotSize": null,
+          "cameraPosition": null,
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "input": "filename,scene,shot,take,comments\nunknown.mov,,5,,arbitrary\nA001C003.mov,,,,\n\n",
+      "parsed": [
+        {
+          "fileName": "unknown.mov",
+          "materialKey": null,
+          "scene": null,
+          "shot": "5",
+          "take": null,
+          "comments": null,
+          "cameraFps": null,
+          "shootDay": null
+        }
+      ],
+      "records": [
+        {
+          "id": "slate-csv-0",
+          "sourcePage": null,
+          "cardNumber": null,
+          "videoCode": null,
+          "scene": null,
+          "shot": "5",
+          "take": null,
+          "takeStatus": null,
+          "description": null,
+          "comments": null,
+          "shotSize": null,
+          "cameraPosition": null,
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "input": "File Name,Scene,Shot,Take,Comments\nA001C001.mov,\"quoted \"\"scene\"\"\",1,2,_KP\n",
+      "parsed": [
+        {
+          "fileName": "A001C001.mov",
+          "materialKey": "A001C001",
+          "scene": "quoted \"scene\"",
+          "shot": "1",
+          "take": "2",
+          "comments": "保",
+          "cameraFps": null,
+          "shootDay": null
+        }
+      ],
+      "records": [
+        {
+          "id": "slate-csv-0",
+          "sourcePage": null,
+          "cardNumber": "A001",
+          "videoCode": "C001",
+          "scene": "quoted \"scene\"",
+          "shot": "1",
+          "take": "2",
+          "takeStatus": "保",
+          "description": null,
+          "comments": null,
+          "shotSize": null,
+          "cameraPosition": null,
+          "confidence": "high"
+        }
+      ]
+    },
+    {
+      "input": "Scene,Shot,Take\n1,2,3\n",
+      "error": "场记 CSV 缺少 File Name 列"
+    },
+    {
+      "input": "File Name,Scene\n",
+      "error": "场记 CSV 为空或缺少数据行"
+    }
+  ]
+}

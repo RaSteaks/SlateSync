@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "samples": 5,
+  "warmups": 1,
+  "projects500": {"coldLoadMsP95": 1500, "selectionRenderMsP95": 120, "visibleRowsMax": 80},
+  "tasks1000": {"warmLoadMsP95": 900, "selectionRenderMsP95": 120, "visibleRowsMax": 100},
+  "csv10000": {"snapshotMsP95": 1200, "farRowEditMsP95": 100, "visibleViewsMax": 300, "minimumScrollFPS": 45, "maximumResidentDeltaBytes": 134217728, "retainedResidentDeltaBytes": 33554432},
+  "release": {"ownerReleaseMsP95": 2000, "timerCountAfterClose": 0}
+}

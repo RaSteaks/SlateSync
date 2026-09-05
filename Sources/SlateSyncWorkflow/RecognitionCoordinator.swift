@@ -204,7 +204,8 @@ public actor RecognitionCoordinator: RecognitionServing {
                                 percent: percent
                             ))
                         }
-                    }
+                    },
+                    preparedDocument: request.preparedDocument
                 )
             } catch { await media.close(); throw error }
             try Task.checkCancellation()

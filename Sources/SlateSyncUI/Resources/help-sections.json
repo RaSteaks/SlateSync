@@ -1,0 +1,50 @@
+[
+  {
+    "id": "quick-start",
+    "title": "快速开始",
+    "symbol": "play.circle",
+    "body": "在项目库新建项目，进入工作台后导入场记单。选择 Provider 和模型，确认本地 OCR 可用后开始识别。",
+    "englishTitle": "Quick start",
+    "englishBody": "Create a project in the library, then import a slate in the workspace. Select a Provider and model, verify local OCR availability, and start recognition."
+  },
+  {
+    "id": "projects",
+    "title": "项目与任务",
+    "symbol": "film.stack",
+    "body": "项目设置只影响当前项目。归档可恢复；永久删除需逐字输入项目名称。切换项目或任务前会先保存编辑。",
+    "englishTitle": "Projects and tasks",
+    "englishBody": "Project settings affect the current project. Archived projects can be restored. Permanent deletion requires the exact project name. Switching projects or tasks first saves pending edits."
+  },
+  {
+    "id": "recognition",
+    "title": "识别与校对",
+    "symbol": "viewfinder",
+    "body": "识别会先在本机处理 PDF 或图像并执行 OCR，再发送必要的图像证据。可随时取消；离开工作台时进度不会丢失。",
+    "englishTitle": "Recognition and review",
+    "englishBody": "PDF and image preparation and OCR run locally before necessary image evidence is sent to the selected Provider. Cancel recognition at any time. Progress stays available when navigating to another page."
+  },
+  {
+    "id": "resolve",
+    "title": "Resolve CSV 与元数据",
+    "symbol": "tablecells",
+    "body": "导入 Resolve CSV 后可直接编辑万行表格。导出保留原分隔符、换行和 BOM 语义。元数据扫描只读取选定的目录。",
+    "englishTitle": "Resolve CSV and metadata",
+    "englishBody": "Import and edit a Resolve CSV, including large tables. Export preserves its delimiter, newline and BOM semantics. Metadata scanning reads only your selected directory."
+  },
+  {
+    "id": "settings",
+    "title": "Provider 与 OCR 设置",
+    "symbol": "gearshape.2",
+    "body": "Provider 凭据保存在 macOS 钥匙串，界面只显示已配置或缺失。Vision 无需下载；Paddle OCR 需要 Python 3.10 或更高版本。",
+    "englishTitle": "Provider and OCR settings",
+    "englishBody": "Provider credentials are stored in macOS Keychain and are never displayed again. Vision needs no download. PaddleOCR requires Python 3.10 or newer and an explicit installation."
+  },
+  {
+    "id": "recovery",
+    "title": "日志与故障恢复",
+    "symbol": "lifepreserver",
+    "body": "失败时先保留当前编辑，再使用重试。运行日志按天保留 7 天，不记录凭据、原始请求或媒体路径。",
+    "englishTitle": "Logs and recovery",
+    "englishBody": "Failures preserve current edits for retry. Local logs retain seven calendar days of sanitized events without credentials, raw payloads or media paths. After a library relocation, quit and reopen the app."
+  }
+]

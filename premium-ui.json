@@ -3,16 +3,21 @@
   "sourceRoots": ["Sources/SlateSyncUI", "SlateSyncApp"],
   "locale": "zh-Hans",
   "canonicalMap": "UX-CONTRACT.md",
-  "requiredCapabilities": ["Select/Listbox", "Form", "Toast", "CRUD"],
+  "requiredCapabilities": ["Table Selection", "Select/Listbox", "Form", "Toast", "CRUD"],
   "ownership": {
+    "Table Selection": "native List/NSTableView with stable typed identity",
     "Select/Listbox": "native",
     "Form": "SwiftUI shared field components",
     "Toast": "SlateSyncUI feedback policy (inline/banner in SM-01)",
-    "CRUD": "feature models backed by domain services"
+    "CRUD": "feature models backed by SlateSyncWorkflow façades"
   },
   "requiredCommands": ["swift", "xcode"],
   "commands": {
     "swift": "swift test",
     "xcode": "xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -destination platform=macOS test"
+  },
+  "evidence": {
+    "crudFullFlow": "SlateSyncUITests/SlateSyncUITests.swift",
+    "failurePaths": "Tests/SlateSyncUIUnitTests/SM08OwnershipTests.swift"
   }
 }

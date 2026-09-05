@@ -18,3 +18,11 @@ decision explicitly replaces them.
 - Project deletion retains the existing tombstone/lease/compensation safety.
 - Automated tests never open the user's default Project Library.
 - Windows is no longer a supported runtime, package or release target.
+
+## Language acceptance scope — Owner decision, 2026-09-06
+
+All phases require Chinese language and Chinese IME acceptance only. Japanese
+and other languages do not require dedicated acceptance coverage. This decision
+supersedes broader language coverage requirements in phase packages. Existing
+file-format aliases, protocol identifiers, Unicode/emoji compatibility, and
+historical executed evidence remain valid and unchanged.

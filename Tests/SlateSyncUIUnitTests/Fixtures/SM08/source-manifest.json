@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "phase": "SM-08",
+  "capturedAt": "2026-09-05",
+  "baselineCommit": "49f09f4de5cf45f7b6714d12bb1e24b872d06a87",
+  "networkRequired": false,
+  "sources": [
+    {
+      "path": "UX-CONTRACT.md",
+      "sha256": "19009c54e195611d13198c0ff1a6bde896eea67309945a830d4bf567ce59f5f7"
+    },
+    {
+      "path": "DESIGN.md",
+      "sha256": "186528730e83ad655eb22038c94abedd31bc9232a484c0974d756a41bdbffe2f"
+    },
+    {
+      "path": "premium-ui.json",
+      "sha256": "8359659d4164646d4947c06bf3e9a8516336aecec90c3da849af816e5a4773c1"
+    },
+    {
+      "path": "src/renderer/App.tsx",
+      "sha256": "f4b168c4a38ea32e420343a16d847a7b87687d44ce3064baba42bb8b087d5fc5"
+    },
+    {
+      "path": "src/renderer/features/projects/ProjectLibraryPage.tsx",
+      "sha256": "fd63e158bf7aad77c3adf3aab09935ce289122fad9e5d03d1709b82851f2e922"
+    },
+    {
+      "path": "src/renderer/features/workspace/WorkspacePage.tsx",
+      "sha256": "b147058ba2e30b4e425edd39af37747fa8f74f59a1dfafc57678d1bbe01b5e58"
+    },
+    {
+      "path": "src/renderer/features/tasks/TaskRail.tsx",
+      "sha256": "a699aa8a83702d1d22ce03c9cc3c5f3158289d4d44b3dbb49dc9a3b348ac1129"
+    },
+    {
+      "path": "src/renderer/features/settings/GlobalSettingsPage.tsx",
+      "sha256": "7ea661fc271de0fc04cd471246d8269774b03d36b05a851067c3eee55ed9f6d5"
+    },
+    {
+      "path": "src/renderer/features/settings/ProjectSettingsPage.tsx",
+      "sha256": "a9c23f511665b689aa496eafea192a441b12211159b3eab0d13a247ccd320213"
+    },
+    {
+      "path": "src/renderer/features/settings/CustomProviderSettingsPanel.tsx",
+      "sha256": "755b0ffc9a488265ff37eabb8f5d42faf48c3c67e7d276fc9c52c5a4f03ecca9"
+    },
+    {
+      "path": "src/renderer/features/help/HelpPage.tsx",
+      "sha256": "4bdff160ce417752d2a097ca1677c0c8d0be806517e41d8bea3e6d91df898c0e"
+    },
+    {
+      "path": "public/resolve-csv.js",
+      "sha256": "24325b22c269e94e6712f2994cc459aa1a4eaed0fed0b33cde030640681fbb5b"
+    },
+    {
+      "path": "electron/paddleocr-installer.mjs",
+      "sha256": "4734f766578c428bbc495296bc9d9d44b838df7dbd6c223d26267af2efcfb33a"
+    },
+    {
+      "path": "requirements-ocr.txt",
+      "sha256": "d2ace10a8d8a06dd39a51e39fe5b0db9df0b334d7464d229532fe075e0d93f17"
+    },
+    {
+      "path": "scripts/paddleocr_runner.py",
+      "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3"
+    }
+  ]
+}

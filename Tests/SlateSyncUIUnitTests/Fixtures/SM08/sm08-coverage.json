@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "APP": [
+      "AppSessionModel",
+      "TerminationCoordinator",
+      "SlateSyncCommands"
+    ],
+    "PRJ": [
+      "ProjectLibraryModel",
+      "ProjectSettingsModel"
+    ],
+    "TSK": [
+      "WorkspaceModel",
+      "WorkspaceAutosave"
+    ],
+    "REC": [
+      "RecognitionModel",
+      "SlateSyncWorkflowFacade"
+    ],
+    "CSV": [
+      "ResolveCSVModel",
+      "EditableCSVTableRepresentable"
+    ],
+    "SET": [
+      "GlobalSettingsModel",
+      "SettingsRootView"
+    ],
+    "LOG": [
+      "LocalLogStore",
+      "LogsModel"
+    ],
+    "A11Y": [
+      "AccessibilityID",
+      "HelpModel"
+    ]
+  },
+  "automated": [
+    "APP-05",
+    "APP-06",
+    "PRJ-03",
+    "PRJ-04",
+    "PRJ-05",
+    "PRJ-07",
+    "TSK-05",
+    "TSK-06",
+    "TSK-07",
+    "REC-06",
+    "CSV-02",
+    "CSV-04",
+    "SET-03",
+    "SET-04",
+    "SET-05",
+    "SET-07",
+    "SET-08",
+    "LOG-01",
+    "LOG-02",
+    "REC-01",
+    "A11Y-05"
+  ],
+  "automatedEvidence": {
+    "APP-05": [
+      "testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"
+    ],
+    "APP-06": [
+      "testConcurrentTerminationRequestsJoinOneLifecycleDrain"
+    ],
+    "PRJ-03": [
+      "testProjectMutationsStopAtFailedWorkspaceBarrier"
+    ],
+    "PRJ-04": [
+      "testProjectMutationsStopAtFailedWorkspaceBarrier"
+    ],
+    "PRJ-05": [
+      "testProjectMutationsStopAtFailedWorkspaceBarrier"
+    ],
+    "PRJ-07": [
+      "testProjectMutationsStopAtFailedWorkspaceBarrier"
+    ],
+    "TSK-05": [
+      "testAutosaveFlushWritesOnlyLatestImmutableSnapshot"
+    ],
+    "TSK-06": [
+      "testAutosaveFailureRetainsSnapshotForRetry",
+      "testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"
+    ],
+    "TSK-07": [
+      "testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"
+    ],
+    "REC-06": [
+      "testResultEditIsCanonicalAndFlushJoinsPendingCommit"
+    ],
+    "CSV-02": [
+      "testCSVModelAcceptsFarRowEditWithoutEagerViewState"
+    ],
+    "CSV-04": [
+      "testCSVModelAcceptsFarRowEditWithoutEagerViewState"
+    ],
+    "SET-03": [
+      "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection"
+    ],
+    "SET-04": [
+      "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection"
+    ],
+    "SET-05": [
+      "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection"
+    ],
+    "SET-07": [
+      "testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment",
+      "testPaddleInstallerRejectsManagedDirectorySymlinkWithoutInstalling",
+      "testPaddleInstallerCancelAndDrainWaitsForInjectedRunner"
+    ],
+    "SET-08": [
+      "testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment"
+    ],
+    "LOG-01": [
+      "testLocalLogStoreUsesPermissionsFiltersAndReadClamp"
+    ],
+    "LOG-02": [
+      "testLocalLogStoreUsesPermissionsFiltersAndReadClamp"
+    ],
+    "A11Y-05": [
+      "testHelpIsFrozenToSixOfflineSearchableSections"
+    ],
+    "REC-01": [
+      "testRecognitionOptionsPersistAndRestoreThroughTaskSnapshot"
+    ]
+  },
+  "manualOrGate": [
+    "APP-01",
+    "APP-02",
+    "APP-03",
+    "APP-04",
+    "PRJ-01",
+    "PRJ-02",
+    "PRJ-06",
+    "PRJ-08",
+    "TSK-01",
+    "TSK-02",
+    "TSK-03",
+    "TSK-04",
+    "TSK-08",
+    "REC-02",
+    "REC-03",
+    "REC-04",
+    "REC-05",
+    "REC-07",
+    "REC-08",
+    "CSV-01",
+    "CSV-03",
+    "CSV-05",
+    "CSV-06",
+    "CSV-07",
+    "CSV-08",
+    "SET-01",
+    "SET-02",
+    "SET-06",
+    "LOG-03",
+    "LOG-04",
+    "A11Y-01",
+    "A11Y-02",
+    "A11Y-03",
+    "A11Y-04",
+    "PERF-01",
+    "PERF-02",
+    "PERF-03",
+    "GOV-01"
+  ],
+  "manualReason": "Compatibility contracts and static ownership run in Gate; window restoration, VoiceOver, marked-text composition, contrast, frame cadence and memory require a signed interactive macOS host or Instruments evidence.",
+  "regressionEvidence": [
+    "SM08OwnershipTests/testAutosaveFlushWritesOnlyLatestImmutableSnapshot",
+    "SM08OwnershipTests/testAutosaveFailureRetainsSnapshotForRetry",
+    "SM08OwnershipTests/testProjectMutationsStopAtFailedWorkspaceBarrier",
+    "SM08OwnershipTests/testHelpIsFrozenToSixOfflineSearchableSections",
+    "SM08OwnershipTests/testCSVModelAcceptsFarRowEditWithoutEagerViewState",
+    "SM08OwnershipTests/testCSVKeyboardNavigationUsesGridOrderAndBounds",
+    "SM08OwnershipTests/testLocalLogStoreUsesPermissionsFiltersAndReadClamp",
+    "SM08OwnershipTests/testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment",
+    "SM08OwnershipTests/testPaddleInstallerRejectsManagedDirectorySymlinkWithoutInstalling",
+    "SM08OwnershipTests/testPaddleInstallerCancelAndDrainWaitsForInjectedRunner",
+    "SM08OwnershipTests/testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails",
+    "SM08OwnershipTests/testConcurrentTerminationRequestsJoinOneLifecycleDrain",
+    "SM08OwnershipTests/testSettingsDiscoveryAndProbeUseOfflineFacadeProjection",
+    "SM08OwnershipTests/testResultEditIsCanonicalAndFlushJoinsPendingCommit",
+    "SM08OwnershipTests/testMixedResultAndPromptEditsPersistTheLatestCompleteSnapshot",
+    "SM08OwnershipTests/testCloseJoinsPendingEnqueueBeforeClosingWriter",
+    "SM08OwnershipTests/testReopeningSameProjectDoesNotDiscardFailedDraft",
+    "SM08OwnershipTests/testCSVCommitPersistsThroughWorkspaceAndRejectsPreviousTable",
+    "SM08OwnershipTests/testRecognitionOptionsPersistAndRestoreThroughTaskSnapshot",
+    "SM08OwnershipTests/testMetadataMatchingUsesCanonicalResolveMaterialKeys",
+    "SM08OwnershipTests/testRealSQLiteProjectAndTaskScaleLoad",
+    "SM08OwnershipTests/testProjectOwnershipRejectsSecondWriterAndReleasesOnlyItsOwner",
+    "SM08OwnershipTests/testCredentialRefreshRetainsUnrelatedSettingsDraft",
+    "SM08OwnershipTests/testInvalidSettingsNeverReachTolerantPersistence",
+    "SM08OwnershipTests/testPrivacyIsEnforcedAtLogSinkAndReadBoundary",
+    "SM08OwnershipTests/testPaddleInstallerRejectsNestedSymlinkBeforeVenvMutation",
+    "SM08OwnershipTests/testRealInstallerRunnerTimeoutReapsTERMResistantChild",
+    "SM08OwnershipTests/testRealInstallerRunnerTaskCancellationReapsTERMResistantChild",
+    "SM08OwnershipTests/testRealInstallerRunnerDrainsNoisyChildWithoutStarvingTimeout",
+    "SM08OwnershipTests/testTerminationJoinsLibraryMutationBeforeClosingLifecycle",
+    "SM08OwnershipTests/testLibraryMutationKeepsBarrierThroughCrossWindowReconciliation",
+    "SM08OwnershipTests/testCSVDrainJoinsDecoderAndRejectsLatePublication",
+    "SM08OwnershipTests/testSettingsDrainWaitsForCredentialAcknowledgement",
+    "SM08OwnershipTests/testMetadataPersistsAndResetsWithTaskSelection",
+    "SM08OwnershipTests/testBundledHelpChineseHashAndNoResults",
+    "SM08OwnershipTests/testLogRetentionBadUTF8NewestFirstAndHardCap",
+    "SM08OwnershipTests/testLocalSlateCSVMatchesRetainedWorkerOracle",
+    "SM08OwnershipTests/testNativeRecognitionPatchPreservesMediaCSVAndMetadata",
+    "SM08OwnershipTests/testFiveSampleProjectAndTaskNativeListScale",
+    "SM08OwnershipTests/testLateProjectOpenCannotOverrideNewerHelpNavigation",
+    "SM08OwnershipTests/testReconciliationInvalidatesPendingProjectNavigation",
+    "SM08OwnershipTests/testInputAdmissionBlocksPickerAndDropDuringRecognition",
+    "SM08OwnershipTests/testCSVDuplicateCommitDoesNotPublishAnotherSnapshot",
+    "SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners",
+    "SM08NativeSurfaceTests/testNativeCSVMarkedTextDoesNotCommitAndFlushRetainsComposition",
+    "SM08NativeSurfaceTests/testWindowCloseVetoRetainsWindowUntilRetrySucceeds",
+    "SM08NativeSurfaceTests/testNativeCSVReplacesRowsWhenIdentityChangesAtSameRevision"
+  ]
+}

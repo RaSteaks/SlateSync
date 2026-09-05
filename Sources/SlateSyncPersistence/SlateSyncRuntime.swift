@@ -196,6 +196,22 @@ public actor SlateSyncRuntime: SettingsServing {
         await bootstrap(retryFailedMigration: true)
     }
 
+    /// Re-resolves non-secret configuration after the Settings façade commits
+    /// an atomic GlobalConfigStore snapshot. Credential migration state is
+    /// retained and never rerun merely because a preference changed.
+    public func refreshConfiguration() async -> SlateSyncRuntimeSnapshot {
+        snapshot = SlateSyncRuntimeSnapshot(
+            isBootstrapped: false,
+            configuration: snapshot.configuration,
+            machineSettings: snapshot.machineSettings,
+            globalConfigVersion: snapshot.globalConfigVersion,
+            environmentFileLoaded: snapshot.environmentFileLoaded,
+            migration: snapshot.migration,
+            lastError: snapshot.lastError
+        )
+        return await bootstrap()
+    }
+
     public func value(for key: String) async -> String? {
         _ = await bootstrap()
         guard let typedKey = GlobalSettingKey(rawValue: key) else { return nil }

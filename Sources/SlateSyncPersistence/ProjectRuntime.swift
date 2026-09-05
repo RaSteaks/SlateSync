@@ -195,6 +195,7 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
                 // A partially closed context cannot be safely reopened. Make
                 // the whole runtime reject new work; close() can still drain
                 // and explicitly close every other retained context.
+                contexts[id] = context
                 refusesNewOperations = true
                 throw error
             }
@@ -216,6 +217,8 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
             do {
                 try await close(context)
             } catch {
+                // Preserve the failed owner for terminal close() to retry.
+                contexts[id] = context
                 refusesNewOperations = true
                 throw error
             }
@@ -233,7 +236,13 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
         refusesNewOperations = true
         let task = Task<Void, any Error> { try await self.performClose() }
         closeTask = task
-        try await task.value
+        do { try await task.value }
+        catch {
+            // Keep admission closed, but permit a later shutdown retry to
+            // release owners whose close failed instead of caching failure.
+            closeTask = nil
+            throw error
+        }
     }
 
     private func performClose() async throws {
@@ -244,13 +253,17 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
         let ids = Set(contexts.keys)
         deletingProjects.formUnion(ids)
         for id in ids { await waitForLeases(of: id) }
-        let values = Array(contexts.values)
+        let values = contexts
         contexts.removeAll()
         // Attempt every owner even when an earlier project reports a close
         // error. This leaves no later project silently retained by shutdown.
         var firstError: (any Error)?
-        for context in values {
-            do { try await close(context) } catch { firstError = firstError ?? error }
+        for (id, context) in values {
+            do { try await close(context) }
+            catch {
+                contexts[id] = context
+                firstError = firstError ?? error
+            }
         }
         deletingProjects.subtract(ids)
         if let firstError { throw firstError }

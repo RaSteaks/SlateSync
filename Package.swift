@@ -24,10 +24,10 @@ let package = Package(
             name: "SlateSyncUI",
             dependencies: [
                 "SlateSyncDomain",
-                "SlateSyncPersistence",
-                "SlateSyncMedia",
                 "SlateSyncWorkflow",
-            ]
+            ],
+            // Help is installed in the native resource bundle, never fetched.
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "SlateSyncDomainTests",
@@ -51,6 +51,13 @@ let package = Package(
             dependencies: ["SlateSyncDomain", "SlateSyncPersistence", "SlateSyncWorkflow"],
             // SM-05 byte goldens are copied as resources so tests never depend
             // on the invocation directory or a user's real Resolve exports.
+            resources: [.process("Fixtures")]
+        ),
+        .testTarget(
+            name: "SlateSyncUIUnitTests",
+            dependencies: ["SlateSyncDomain", "SlateSyncPersistence", "SlateSyncUI", "SlateSyncWorkflow"],
+            // SM-08 fixture manifests freeze scale inputs without touching the
+            // user's real Application Support, Library, logs, or Keychain.
             resources: [.process("Fixtures")]
         ),
     ],

@@ -37,6 +37,7 @@ public struct LegacyMigrationReport: Codable, Hashable, Sendable {
 /// Each project keeps an independent `project.sqlite`; the Library database is
 /// only a registry and never becomes a second store for project settings/tasks.
 public actor ProjectLibraryStore: ProjectLibraryServing {
+    private var isClosed = false
     public static let libraryFormatVersion = 1
     public static let projectFormatVersion = 1
     public static let defaultLibraryName = "Local SlateSync Library"
@@ -522,8 +523,11 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
     }
 
     public func close() async throws {
+        // Retried application shutdown may revisit an already closed Library.
+        guard !isClosed else { return }
         try await database.checkpoint()
         try await database.close()
+        isClosed = true
     }
 
     private func ensureDefaultProject() async throws -> ProjectData {

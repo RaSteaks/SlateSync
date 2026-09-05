@@ -441,6 +441,19 @@ done
 assert_failure "SM-06 cannot skip directly to SM-09" gate_validate_phase_state "${fixture_root}/sm06-state.json" SM-09
 assert_success "SM-06 fixture and executed-evidence negative tests" node "${project_root}/script/tests/sm06_contract.mjs" --self-test
 assert_success "SM-07 source, oracle, coverage and admission negative tests" node "${project_root}/script/tests/sm07_contract.mjs" --self-test
+assert_success "SM-08 source, fixture, coverage and admission negative tests" node "${project_root}/script/tests/sm08_contract.mjs" --self-test
+cat > "${fixture_root}/sm08-state.json" <<'JSON'
+{
+  "phase": "SM-07",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-07.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-08.md"
+}
+JSON
+assert_success "SM-07 completion admits SM-08" gate_validate_phase_state \
+  "${fixture_root}/sm08-state.json" SM-08
+assert_failure "SM-07 cannot skip directly to SM-09" gate_validate_phase_state \
+  "${fixture_root}/sm08-state.json" SM-09
 assert_success "SM-05 retains negative admission assertions" node --input-type=module -e '
   import assert from "node:assert/strict";
   process.argv.push("--technical-only");

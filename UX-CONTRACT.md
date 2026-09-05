@@ -6,10 +6,11 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
+| Table Selection | Native `List`/`NSTableView` selection | `ProjectLibraryView`, `TaskRailView`, and `EditableCSVTableRepresentable` | Single stable project/task/CSV row identity | UI workflow plus 500/1,000/10k scale tests |
 | Select/Listbox | Native SwiftUI `Picker` | `SettingsRootView` | System menu or segmented style when the value set is bounded | Keyboard and VoiceOver behavior remains platform-owned |
 | Form | Shared SwiftUI form composition | `CreateProjectSheet` and `SettingsRootView` | Sheet form or Settings form | Visible labels, default/cancel actions and focus order in UI tests |
 | Toast | SlateSyncUI feedback policy | Error banner in `ProjectLibraryView` | Inline or persistent banner until the shared transient surface is introduced | No screen-local transient toast in SM-01 |
-| CRUD | Feature model backed by domain service | `ProjectLibraryModel` and `ProjectLibraryServing` | SM-01 permits create/list only; later mutations require their phase Gate | SwiftPM persistence test plus Xcode composition/UI tests |
+| CRUD | Feature model backed by workflow façade | `ProjectLibraryModel`, `ProjectSettingsModel`, and UI workflow protocols | SM-08 project/task/settings mutations; views never open Persistence directly | SwiftPM ownership tests plus Xcode workflow/UI tests |
 | Navigation | `NavigationSplitView` shell | `AppRootView` and `SidebarView` | Dedicated macOS Settings scene for global settings | App-launch UI test and native keyboard navigation |
 
 ## Navigation and scenes
@@ -63,6 +64,9 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 ## Accessibility and locale
 
+- All migration phases require Chinese language and Chinese IME acceptance only.
+  Other languages do not require dedicated acceptance coverage. Existing file-format
+  aliases and Unicode compatibility remain part of data compatibility.
 - Target WCAG 2.2 AA and native macOS keyboard conventions.
 - All icon-only actions have Chinese accessibility labels and help tooltips.
 - Theme follows system by default, respects increased contrast and reduced motion.

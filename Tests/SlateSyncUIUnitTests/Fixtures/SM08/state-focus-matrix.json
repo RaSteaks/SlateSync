@@ -1,0 +1,10 @@
+{
+  "loading": {"primaryAction": null, "focus": "current-owner"},
+  "empty": {"primaryAction": "create-or-import", "focus": "primary-action"},
+  "error-retry": {"primaryAction": "retry", "focus": "error-summary"},
+  "busy-cancel": {"primaryAction": "cancel", "focus": "progress"},
+  "validation": {"primaryAction": "correct-input", "focus": "first-invalid-field"},
+  "unsaved-flush-failed": {"primaryAction": "retry-save", "focus": "original-editor"},
+  "archived": {"primaryAction": "restore", "focus": "project-row"},
+  "completed": {"primaryAction": "review-result", "focus": "result-heading"}
+}

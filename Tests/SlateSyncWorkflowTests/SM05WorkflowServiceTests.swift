@@ -4,6 +4,23 @@ import SlateSyncDomain
 @testable import SlateSyncWorkflow
 
 final class SM05WorkflowServiceTests: XCTestCase {
+    func testResolveMaterialKeyProjectionMatchesMetadataScanContract() async throws {
+        let table = ResolveCSVTable(
+            headers: ["File Name", "Reel Name", "Clip Name"],
+            rows: [
+                ["A001C002.mov", "A001", "C002"],
+                ["A001C001.mov", "A001", "C001"],
+                ["unmatched.mov", "", ""],
+            ],
+            format: .init()
+        )
+        let services = SM05WorkflowServices()
+        // The UI metadata model must receive the same canonical ordering used
+        // by Resolve merge, including duplicate/invalid rows being excluded.
+        let keys = try await services.resolveMaterialKeys(in: table)
+        XCTAssertEqual(keys, ["A:1:1", "A:1:2"])
+    }
+
     func testFacadeReturnsImmutableArtifactAndRetryAfterCancellation() async throws {
         let source = Data("File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\n".utf8)
         let records = [ResolveSlateRecord(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "2", take: "3", takeStatus: .passed)]

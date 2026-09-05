@@ -138,7 +138,10 @@ public actor ManagedOCRProcess: OCRProcessTransport {
                 if ProcessInfo.processInfo.systemUptime >= grace { _ = Darwin.kill(child.processIdentifier, SIGKILL) }
                 try? await Task.sleep(for: .milliseconds(5))
             }
-            child.waitUntilExit()
+            // Foundation has already observed termination when isRunning
+            // becomes false. A second synchronous waitUntilExit on a Swift
+            // executor thread can stall its private run loop after that event
+            // was delivered elsewhere. Keep cleanup entirely asynchronous.
         }
         for pipe in [input,output,errorOutput].compactMap({ $0 }) {
             try? pipe.fileHandleForReading.close(); try? pipe.fileHandleForWriting.close()

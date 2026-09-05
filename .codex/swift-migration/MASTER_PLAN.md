@@ -5,6 +5,9 @@ SwiftPM libraries hold reusable application code while `SlateSync.xcodeproj`
 owns the app bundle, shared scheme, unit tests, UI tests, Run, Debug, Profile and
 Archive workflows.
 
+Language acceptance for every phase is Chinese only, including Chinese IME.
+The 2026-09-06 Owner decision in `COMPATIBILITY_CONTRACT.md` governs this scope.
+
 ## Phases
 
 | Phase | Outcome |

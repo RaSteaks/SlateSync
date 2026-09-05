@@ -1,52 +1,134 @@
+import SlateSyncDomain
 import SwiftUI
 
 public struct AppRootView: View {
-    @Bindable private var navigation: AppNavigationModel
-    private let projects: ProjectLibraryModel
+    @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("density") private var density = "comfortable"
+    @Bindable private var session: AppSessionModel
+    @Bindable private var projects: ProjectLibraryModel
+    private let workspace: WorkspaceModel
+    private let recognition: RecognitionModel
+    private let csv: ResolveCSVModel
+    private let metadata: MetadataScanModel
+    private let media: MediaInputModel
+    private let projectSettings: ProjectSettingsModel
+    private let logs: LogsModel
+    private let help: HelpModel
+    private let termination: TerminationCoordinator
 
-    public init(navigation: AppNavigationModel, projects: ProjectLibraryModel) {
-        self.navigation = navigation
+    public init(
+        session: AppSessionModel,
+        projects: ProjectLibraryModel,
+        workspace: WorkspaceModel,
+        recognition: RecognitionModel,
+        csv: ResolveCSVModel,
+        metadata: MetadataScanModel,
+        media: MediaInputModel,
+        projectSettings: ProjectSettingsModel,
+        logs: LogsModel,
+        help: HelpModel,
+        termination: TerminationCoordinator
+    ) {
+        self.session = session
         self.projects = projects
+        self.workspace = workspace
+        self.recognition = recognition
+        self.csv = csv
+        self.metadata = metadata
+        self.media = media
+        self.projectSettings = projectSettings
+        self.logs = logs
+        self.help = help
+        self.termination = termination
     }
 
     public var body: some View {
         NavigationSplitView {
-            SidebarView(selection: $navigation.selection)
+            SidebarView(selection: routeBinding)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
         } detail: {
             detail
         }
         .tint(SlateSyncTheme.accent)
-    }
-
-    @ViewBuilder
-    private var detail: some View {
-        switch navigation.selection {
-        case .projects:
-            ProjectLibraryView(model: projects) { _ in navigation.selection = .workspace }
-        case .workspace:
-            PlaceholderFeatureView(
-                title: "工作台",
-                symbol: "rectangle.3.group",
-                message: "场记输入、识别、校对和 CSV 回填将在迁移阶段接入。"
-            )
-        case .projectSettings:
-            PlaceholderFeatureView(title: "项目设置", symbol: "slider.horizontal.3", message: "项目级 Provider、格式和迁移设置。")
-        case .logs:
-            PlaceholderFeatureView(title: "运行日志", symbol: "doc.text.magnifyingglass", message: "原生日志读取与诊断会在工作流迁移阶段接入。")
-        case .help:
-            PlaceholderFeatureView(title: "帮助", symbol: "questionmark.circle", message: "SlateSync 使用说明与故障恢复入口。")
+        .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
+        .controlSize(density == "compact" ? .small : .regular)
+        .safeAreaInset(edge: .top) { sessionError }
+        .focusedSceneValue(\.slateSyncActions, focusedActions)
+        .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning)
+        .safeAreaInset(edge: .bottom) {
+            if termination.restartRequired { Text("项目库已更新，请退出并重新打开 SlateSync。").padding(12) }
+            // Recognition remains window-owned across Library/Logs/Help routes.
+            // Its status and recovery message must not disappear with a tab.
+            if recognition.operation.isRunning {
+                HStack { ProgressView().controlSize(.small); Text(recognition.progress?.message ?? "正在处理场记…"); Spacer(); Button("取消") { recognition.cancel() } }.padding(10)
+            } else if case .failed(let error) = recognition.operation {
+                Label(error.message, systemImage: "exclamationmark.triangle").padding(10)
+            } else if case .succeeded(let message) = recognition.operation {
+                Text(message).font(.caption).padding(8)
+            }
         }
     }
-}
-private struct PlaceholderFeatureView: View {
-    let title: String
-    let symbol: String
-    let message: String
 
-    var body: some View {
-        ContentUnavailableView(title, systemImage: symbol, description: Text(message))
-            .navigationTitle(title)
-            .accessibilityIdentifier("feature.\(title)")
+    @ViewBuilder private var detail: some View {
+        switch session.route {
+        case .projects:
+            ProjectLibraryView(
+                model: projects,
+                onOpen: { project in Task { await session.openProject(project) } },
+                onSettings: { project in Task { await session.showProjectSettings(project) } }
+            )
+        case .workspace:
+            WorkspaceView(workspace: workspace, recognition: recognition, csv: csv, metadata: metadata, media: media)
+        case .projectSettings:
+            ProjectSettingsView(
+                model: projectSettings,
+                recognition: recognition,
+                projectID: session.projectID
+            )
+        case .logs:
+            LogsView(model: logs, recognition: recognition)
+        case .help:
+            HelpView(model: help)
+        }
+    }
+
+    private var routeBinding: Binding<SidebarDestination> {
+        Binding(
+            get: { session.route },
+            set: { destination in Task { await session.navigate(to: destination) } }
+        )
+    }
+
+    private var focusedActions: SlateSyncFocusedActions {
+        // Menu commands do not inherit the disabled state of the content
+        // view. Withdraw their closures while an application barrier is held.
+        if termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning {
+            return SlateSyncFocusedActions(newProject: nil, newTask: nil, save: nil, cancelRecognition: nil)
+        }
+        return SlateSyncFocusedActions(
+            newProject: {
+                Task {
+                    await session.navigate(to: .projects)
+                    if session.route == .projects { projects.showsCreateSheet = true }
+                }
+            },
+            newTask: session.projectID == nil ? nil : { Task { await workspace.createTask() } },
+            save: session.route == .workspace ? { Task { try? await workspace.flush() } } : nil,
+            cancelRecognition: recognition.operation.isRunning ? { recognition.cancel() } : nil
+        )
+    }
+
+    @ViewBuilder private var sessionError: some View {
+        if let error = session.navigationError ?? termination.error {
+            HStack {
+                Label(error.message, systemImage: "exclamationmark.triangle")
+                Spacer()
+                Button("重试保存") { Task { await workspace.retryAutosave() } }
+                Button("关闭") { session.clearError() }
+            }
+            .padding(10)
+            .background(.bar)
+            .accessibilityElement(children: .combine)
+        }
     }
 }

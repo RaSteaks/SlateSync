@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "phase": "SM-08",
+  "locale": "zh-Hans",
+  "clock": "2026-09-05T00:00:00Z",
+  "uuidSeed": "slatesync-sm08-v1",
+  "applicationSupport": "explicit-temporary-root-only",
+  "fixtures": [
+    {"id": "projects-500", "count": 500, "generator": "deterministic-indexed-project"},
+    {"id": "tasks-1000", "count": 1000, "generator": "deterministic-indexed-task"},
+    {"id": "resolve-csv-10000", "count": 10000, "generator": "deterministic-indexed-row"}
+  ],
+  "edgeCases": ["zh-Hans", "emoji", "long-field", "empty", "duplicate-filename", "mixed-take-status", "IME"]
+}

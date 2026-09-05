@@ -1,0 +1,4 @@
+# Frozen offline installer fixture. Tests inject a process runner and never
+# resolve or download these packages.
+paddlepaddle==3.3.1
+paddleocr==3.7.0

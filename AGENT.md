@@ -1,5 +1,138 @@
 # SlateSync 当前项目方案
 
+## 2026-09-06 SM-08 正式收尾（当前有效）
+
+- 用户已要求继续完成 SM-08 剩余阶段，并明确所有后续测试在后台进行；因此本轮不再启动或操作前台应用，不把未执行的原生窗口、IME、VoiceOver、明暗色和最小窗口验收伪记为 PASS。
+- 已补齐后台可验证的功能缺口：识别选项通过任务快照保存/恢复，metadata 扫描使用 CSV canonical material key，CSV 键盘顺序/边界有单元回归；窗口 close coordinator 的成功许可会在复用到新窗口时重置。
+- 后台非原生 Swift 回归退出码为 0（日志含 210 条测试记录；原生窗口 surface 与五样本 native list 测试按约束跳过）；识别选项、metadata canonical key、CSV 键盘、真实 SQLite 规模加载均通过。
+- Gate helper 后台自测为 82 passed / 0 failed（`/private/tmp/slatesync-sm08-phase-gate-selftest-final.log`）；这只证明 Gate 辅助逻辑，不等于运行了完整 SM-08 Gate。
+- 兼容矩阵后台检查均通过：Node 324/324、Modern 25 files/118 tests、静态检查、TypeScript typecheck、Modern production build、Node/Electron SQLite ABI（137/148 modules，SQLite 3.53.2）；原始日志见本轮背景验证记录。
+- 真实 SQLite 规模证据：500 个项目、1,000 个任务，1 次 warm-up 加 5 次样本；项目列表 291.21–310.09 ms，任务列表 10.31–10.70 ms，均低于 1,500/900 ms 预算。原始指标在 `/private/tmp/slatesync-sm08-metrics/real-sqlite-scale.json`。
+- 后台 Debug 构建、Release 构建和 Archive 均成功；当前 Archive `/private/tmp/slatesync-sm08-release-20260906-final.xcarchive` 为 universal arm64/x86_64、ad hoc runtime 签名，无 Developer ID Team ID，因此仅完成本地包完整性验证，不宣称 notarization/distribution 通过。
+- 前台约束生效前的最新 XCUI 记录 `/private/tmp/slatesync-sm08-ui-rerun-20260906.xcresult` 为 5 项中 3 项通过、2 项关闭后的窗口计数等待超时；Help 导航已通过，main close 修复随后又有更新，Settings 关闭尚未在后台条件下重新验证。该记录保留为历史诊断，不作为当前 PASS。
+- 当前结论为 `BLOCKED_ENV`，不是 `COMPLETE`：原生 UI/A11y/IME/完整窗口生命周期证据、clean Gate、独立 `reviews/SM-08.md`、Owner approval 尚未齐备；`CURRENT_STATE.json` 继续保持 SM-07 `COMPLETE`，不启动 SM-09。
+
+## 2026-09-06 本轮目标结束条件调整（历史目标，已被上方要求覆盖）
+
+- 用户明确允许“代码构建完成，可以停止并完成当前目标”。本轮以代码构建完成交付，
+  停止继续 UI 冒烟；不把这次目标结束解释为完整 SM-08 阶段验收通过。
+- 当前 App 代码已由 Xcode Debug 编译、链接并启动测试，构建成功；最后 UI 运行报告
+  `/private/tmp/slatesync-sm08-window-ui-retry.xcresult` 为 2 通过、3 失败，尚有帮助导航、
+  多窗口关闭和 Settings 交互断言待查。失败原始记录保留，不标记 PASS。
+- 当前专项回归为 43 项通过；完整 Swift 回归此前为 205 项、1 项专用离线 Paddle
+  跳过、0 失败。当前所有修改仍未提交，未执行正式 clean Gate/Owner 阶段批准。
+- 构建和非界面测试可后台执行；原生 XCUI 冒烟会操作前台窗口，不能称为无干扰后台测试。
+  后续如继续 GUI 验收，宜使用独立 macOS 登录会话或专用测试主机。
+
+## 2026-09-06 全阶段语言验收范围（用户明确调整）
+
+- 所有阶段仅要求中文语言与中文输入法验收；取消日文及其他语言的专项覆盖要求。
+- IME 测试使用中文拼音组合输入和中文提交结果，继续验证候选转换期间不得误保存、
+  取消或切换。通用 Unicode、emoji 与既有文件格式/字段别名兼容测试继续保留。
+- 此范围调整适用于当前和后续阶段；历史已执行证据保持原样，不据此宣称阶段完成。
+
+## 2026-09-06 SM-08 验收续进（仍在实施）
+
+- 原生 CSV IME 改为 `zhongwen` 组合输入→“中文”提交；Help 搜索验收改用中文。
+  迁移顶层 contract/master plan 与 SM-08 package 已同步用户的全阶段语言范围决定。
+- 1,000-task List 去除 ForEach 内条件行结构，使用单一可复用行投影；同一五样本
+  测量中选择耗时从约 160–170 ms 降到 23–24 ms，保留原定 120 ms 上限。
+- 实际 NSTableView 新增同 revision 不同 tableID 切换回归，避免新结果显示旧行；
+  debounce/flush 去重与 CSV canonical 同值去重防止误报 CSV_CHANGED。
+- 独立审查推动补齐文件拖放/迟到 picker 的 model admission、导航 request generation、
+  Workspace 单一身份投影。识别/库变更/退出冻结下 media/metadata 不再启动新输入。
+- 日志事件使用固定 allowlist；安装器输出 drain 分批返回取消/超时检查，真实 noisy
+  TERM-resistant 子进程测试验证返回时 ESRCH。每次代码修改均补充相应所有权注释。
+- 完整 Swift 回归 `/private/tmp/slatesync-sm08-full-swift-current.log`：205 项、
+  1 项专用离线 Paddle 环境跳过、0 失败。后续上述修复由 43 项 SM08 专项通过覆盖，
+  日志为 `/private/tmp/slatesync-sm08-current-regression-tests.log`，正式 Gate 仍须整轮重跑。
+- CSV 指标已包含五样本滚动/驻留内存、关闭后 retained delta 与 2 秒 owner 释放；
+  取内存失败现在直接失败，不能把 sentinel 相减当成零开销。
+- Gate 扩展 qualified XCTest 名称，并强制核对 43 项专项实际 PASS；静态负例自测通过。
+  这些专项不能替代剩余 manualOrGate 的逐项证据，尚未生成全部原生证据报告。
+- WindowGroup 增加稳定 main ID；新建窗口改用 ⌘⌥N，避免与新建任务 ⌘N 冲突。
+  新增双窗口、关闭最后窗口后新建与独立 Settings UI 测试；初轮发现测试计数/异步关闭
+  等待问题，已修正并单独重跑，结果待回填。
+
+## 2026-09-06 SM-08 complete 目标续作（当前有效，实施与审查中）
+
+- 当前权威准入为 SM-07 `COMPLETE`，review SHA 为
+  `49f09f4de5cf45f7b6714d12bb1e24b872d06a87`。用户本轮明确要求推进 SM-08
+  至 complete；以下旧章节中的 SM-07 approval pending 仅为历史记录。
+- 接续已有未提交实现，发现现有 13 个专项用例不足以证明完整阶段：特别是
+  `manualOrGate` 清单尚无逐项执行证据，不能据此宣布完成。
+- 保存整改：结果与提示词共用单一有序快照队列，250/500 ms 仅改变同一 writer
+  的 debounce；关闭先 join enqueue，同项目重开先 flush。CSV 表格编辑已接入
+  TaskData 与同一 writer，路由/关闭先提交仍聚焦的 AppKit cell，marked text 阻断切换。
+- 生命周期整改：原 `onDisappear` 已晚于关闭且吞掉错误，改用窄的
+  `WindowLifecycleBridge`/`NSWindowDelegate` 代理 veto/retry。该额外零尺寸
+  representable 仅定位所属 SwiftUI window，不创建窗口或承载业务 UI；属于
+  CSV 之外必要的 lifecycle 适配例外，应在 Gate allowlist 显式逐文件审计。
+- Recognition 的订阅与请求共用 single-flight runtime factory；取消先取消捕获的
+  request，再等待 service 与 observer 排空。完成后刷新持久化 task，防止旧草稿覆盖
+  识别结果。Metadata 取消保留句柄并串行等待被替换的 scan。
+- UI 错误与 local-log sink/read 使用 Domain `ProductPrivacy` 统一最终脱敏。
+  Global Settings 重开、凭据保存与 probe 刷新保留未提交草稿；Provider 回调使用
+  request token，删除/修改先失效 token 再等待取消。
+- 测试根现在同时隔离文件系统、Keychain、进程环境与 UserDefaults；隔离 App
+  禁用真实 Provider/安装器外部操作。原生 UI 三项端到端测试通过（项目库启动、
+  新建项目进入工作台、离线 Help）；Swift 专项 36 项已通过，后续新增验收仍在运行。
+- 独立审查已发现并推动修复跨窗口库变更/退出竞态、reconciliation 错误解锁、
+  CSV decode/merge 迟到结果、设置凭据/安装后保存未 drain、结果编辑提交时序。
+  库变更覆盖所有窗口；部分 close 失败保留 owner 供退出重试，UI 保持冻结。
+- Recognition result 与 CSV 复用同一原生 cell editor。测试实际挂载 NSTableView，
+  发现并修复首次附着 scroll view 之前创建万行控件的问题。五次初步测量为
+  约 51–54 ms 装载、156 个可见 cell；marked text 与窗口保存失败重试测试通过。
+  帧率/内存与项目/任务 List 的五次正式样本另行记录，不能用数组测试替代。
+- 本地场记 CSV parser/record projection 新增保留 Worker 的 differential oracle；
+  本地结果与远端结果共用 canonical editor/autosave/SM05 Resolve merger。
+  NativeRecognitionPersistence 对已存在任务使用 patch，保留媒体/CSV/metadata。
+  Scenario 选项来自 project runtime；Help 为 bundle-local 中英文 6 节与 SHA256。
+- 完整 Swift 回归发现既有 OCR Process 在已退出后再次 waitUntilExit 的 run-loop
+  等待问题；改为等待 isRunning=false 后异步释放，需重新完成 SM06 资源/取消回归。
+- 性能 manifest 原缺少可执行内存上限；在第一次内存测量前补充 CSV resident delta
+  128 MiB 与释放后 retained delta 32 MiB，现有时间/帧率/控件数预算不变。
+- `sm08_contract` 现在要求逐 ID、source fingerprint、原始 artifact SHA 的原生证据。
+  严格设计静态审计无违规，但不能替代视觉/A11y 运行验收。正式 clean SHA Gate、
+  全部验收证据和最后独立审查尚未完成，当前不写 `COMPLETE`，不启动 SM-09。
+
+## 2026-09-05 SM-08 原生 UI 施工（进行中，未提交）
+
+- 已建立 `UIWorkflowContracts` 和单一 `SlateSyncWorkflowFacade`：UI 目标只依赖
+  Domain/Workflow，由 composition root 组合 Project Library、任务、CSV、metadata、
+  OCR/Provider、全局设置与本地日志，视图不直接打开 SQLite、Keychain、
+  URLSession 或 Process。每个 `WindowGroup` 保持独立 session/workspace/
+  recognition owner，Settings 和应用级 lifecycle 才共享。
+- 已接通 Project Library 的 active/archive/create/import/export/rename/relocate/exact-name
+  delete，所有 Library 变更与导出均先经过同一 Workspace flush barrier。Workspace
+  任务 rail 与 500 ms 单一 autosave writer 将 route/project/task switch 统一收敛到
+  可等待 barrier；失败时保留原 route、selection 和 immutable draft，macOS
+  context menu 按其所属 row ID 删除，不误删当前选中项。
+- Recognition 操作跨 route 存活，Provider/model 只从 Workflow 投影的已配置/
+  可用项中选择，识别前先 flush，权限 URL 覆盖整个操作生命期。Resolve CSV
+  使用唯一允许的 `NSTableView` bridge，通过 stable row/column/revision 值编辑
+  10,000 行表格，cell commit 固定为 250 ms，delegate 在 teardown 时解绑。
+- 全局 Settings 已分为 General/Providers/Recognition/OCR/Advanced，自定义
+  Provider 支持完整 CRUD、revision 递增、transport/JSON/image detail、手动模型、
+  discovery/probe 与取消。凭据只在 view-local secure field 短暂存在，保存后清空
+  且不进入 observable model、日志或错误。
+  Paddle installer 使用 bundle 内固定 `paddlepaddle==3.3.1`/
+  `paddleocr==3.7.0`，固定 5/20/35/90/100% stages、30 分钟 timeout、single-flight、
+  sanitized environment、受管路径/symlink 拒绝与 TERM→2 秒→KILL。
+- Persistence 的 actor-owned JSONL 日志使用每日文件、0700/0600、`flock`、
+  7 日保留、默认 500/上限 2,000 和 3 秒 UI polling；写入前统一脱敏，坏行按
+  degraded 跳过。Help 为恰好 6 个 bundle-local 中文 section，无 WebView/网络/分析。
+- `SlateSyncUIUnitTests` 使用临时根、fake process 和无网络 fixture，13 项专项测试已覆盖
+  autosave latest/retry、route/Library mutation failure barrier、并发 terminate join、10k 末行编辑、
+  recognition result flush、Provider 创建/修订/discovery/probe、日志权限/filter、6-section Help
+  和 Paddle 固定阶段/环境/symlink/cancel-drain。`sm08_contract.mjs`
+  将源文件 SHA、500/1,000/10,000 fixture、全部验收 ID、已执行测试、模块
+  依赖和 AppKit allowlist 纳入 fail-closed Gate；`phase_gate.sh SM-08` 同时保留
+  Swift/Xcode/Release/Archive/隔离启动及 Electron/Modern/Node/ABI 兼容矩阵。
+- 本轮实现检查点已提交；仍未修改 `CURRENT_STATE.json`，该提交不是
+  SM-08 formal review commit，也不将 diagnostic/后台证据解释为 COMPLETE。待全部验证
+  收敛后，仍需 clean Gate、独立 review 与 Owner approval 才能进阶 SM-09。
+
 ## 2026-09-05 SM-08 / SM-09 详细施工包（规划完成，尚未开工）
 
 - 已将 `.codex/swift-migration/packages/SM-08.md` 从阶段摘要细化为 WP-0～WP-9：

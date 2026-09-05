@@ -199,6 +199,10 @@ public struct NativeRecognitionRequest: Sendable {
     public let legacyRequest: Data?
     public let maximumRequestBytes: Int
     public let cacheEnabled: Bool
+    /// Optional native UI handoff of validated SM-06 pages, also used when
+    /// reopening v1 task imageDataGroups. Existing raw-input callers retain
+    /// their original preparation/OCR/budget behavior.
+    public let preparedDocument: PreparedDocument?
 
     public init(
         projectID: String,
@@ -211,7 +215,8 @@ public struct NativeRecognitionRequest: Sendable {
         slateCSVRecords: [SlateCsvRecord] = [],
         legacyRequest: Data? = nil,
         maximumRequestBytes: Int = 80 * 1024 * 1024,
-        cacheEnabled: Bool = true
+        cacheEnabled: Bool = true,
+        preparedDocument: PreparedDocument? = nil
     ) {
         self.projectID = projectID
         self.input = input
@@ -224,5 +229,6 @@ public struct NativeRecognitionRequest: Sendable {
         self.legacyRequest = legacyRequest
         self.maximumRequestBytes = maximumRequestBytes
         self.cacheEnabled = cacheEnabled
+        self.preparedDocument = preparedDocument
     }
 }

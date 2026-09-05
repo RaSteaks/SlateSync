@@ -26,7 +26,7 @@ public actor MediaOCRWorkflow {
     public init(preparation: any MediaPreparing = MediaPreparationService(), compression: any MediaRecompressing = MediaPreparationService(), ocr: LocalOCRService) {
         self.preparation = preparation; self.compression = compression; self.ocr = ocr
     }
-    public func run(input: MediaInput, session requestedSession: String, accuracy: MediaAccuracy = .high, options: MediaPreparationOptions = .init(), cacheEnabled: Bool = true, legacyRequest: Data? = nil, maxRequestBytes: Int = 80 * 1024 * 1024, measure: (@Sendable (PreparedDocument) throws -> Int)? = nil, progress: MediaProgressSink? = nil, consume: Consumer? = nil) async throws -> MediaOCRArtifact {
+    public func run(input: MediaInput, session requestedSession: String, accuracy: MediaAccuracy = .high, options: MediaPreparationOptions = .init(), cacheEnabled: Bool = true, legacyRequest: Data? = nil, maxRequestBytes: Int = 80 * 1024 * 1024, measure: (@Sendable (PreparedDocument) throws -> Int)? = nil, progress: MediaProgressSink? = nil, consume: Consumer? = nil, preparedDocument: PreparedDocument? = nil) async throws -> MediaOCRArtifact {
         if let legacyRequest { try PreparedDocument.rejectLegacyPDF(in: legacyRequest) }
         guard !closed else { throw MediaFailure.closed }
         generation += 1
@@ -44,7 +44,14 @@ public actor MediaOCRWorkflow {
         let operation = MediaOperation(), preparation = preparation, compression = compression, ocr = ocr
         let task = Task {
             try operation.check()
-            let retained = try await preparation.prepare(input, options: options, operation: operation, progress: progress)
+            // A native preview can hand off its already prepared pages without
+            // rasterizing the original file again. It still passes the same
+            // validation, selection, request budget, OCR and cancellation path.
+            let retained: PreparedDocument
+            if let preparedDocument {
+                try preparedDocument.validate()
+                retained = preparedDocument
+            } else { retained = try await preparation.prepare(input, options: options, operation: operation, progress: progress) }
             try operation.check()
             var selected = retained.selected(accuracy)
             if let measure { selected = try await MediaRequestBudget.fit(selected, maxRequestBytes: maxRequestBytes, compressor: compression, operation: operation, measure: measure) }
