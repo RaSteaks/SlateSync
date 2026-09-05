@@ -329,22 +329,24 @@ export function GlobalSettingsPage() {
     {/* 分区导航由侧栏「全局设置」的下拉子列表承担；页面只保留分区锚点，
         helpContent 提供单列堆叠与分区间距。 */}
     <div className={styles.helpContent}>
-      <Surface as="section" id="settings-general" className={styles.helpSection} aria-label="密钥与外观">
+      <Surface as="section" id="settings-general" className={`${styles.helpSection} ${styles.settingsGeneral}`} aria-label="密钥与外观">
         <div className={styles.settingsOverviewGrid} data-testid="settings-overview-grid">
           <Surface className={styles.panel}>
             <div className={styles.sectionHeader}><div><p className={styles.kicker}>Provider</p><h2 className={styles.sectionTitle}>访问密钥与接口</h2></div><KeyRound size={19} aria-hidden="true" /></div>
             <Text tone="muted" size="sm">密钥保存在独立的本机凭据文件，保存后不会回显；Base URL 等普通参数写入全局配置。</Text>
-            <div className={styles.formGrid} style={{ marginTop: 18 }}>
+            {/* Container queries only reflow these stable fields; resizing must
+                preserve the draft, selection and an active IME composition. */}
+            <div className={styles.settingsCredentialsForm}>
               <Field label="Provider"><Select disabled={writeBusy} value={providerId} onChange={(event) => handleProviderChange(event.target.value)}>{config?.providers.filter((item) => !item.id.startsWith("openai-compatible:")).map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field>
               <Field label="API Key" hint={providerKeyConfigured ? "已保存密钥；输入新值可替换，留空并保存可清除应用覆盖。" : "密钥只在 Main 进程中使用，不会显示在页面或项目数据里。"}>
                 <div className={styles.secretInputRow}>
                   <Input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" spellCheck={false} disabled={writeBusy || !provider || !KEY_PROVIDERS.has(provider.id)} placeholder={providerKeyConfigured ? "已配置 · 输入新 Key 可替换" : "粘贴 API Key"} />
-                  <Button type="button" size="sm" variant="ghost" aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowApiKey((visible) => !visible)} disabled={writeBusy || !provider || !KEY_PROVIDERS.has(provider.id)}>{showApiKey ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}{showApiKey ? "隐藏" : "显示"}</Button>
+                  <Button type="button" size="sm" variant="ghost" className={styles.secretVisibilityButton} aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowApiKey((visible) => !visible)} disabled={writeBusy || !provider || !KEY_PROVIDERS.has(provider.id)}>{showApiKey ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}{showApiKey ? "隐藏" : "显示"}</Button>
                 </div>
               </Field>
               {providerBaseUrlKey && <TextSettingField settingKey={providerBaseUrlKey} label="Base URL" hint="只支持 http(s)，不能包含账号、密码、查询参数或片段。" spellCheck={false} />}
               {provider?.id === "openrouter" && <TextSettingField settingKey="OPENROUTER_SITE_URL" label="OpenRouter 应用标识 URL" hint="会作为 HTTP-Referer 发送；可留空。" spellCheck={false} />}
-              <Stack direction="row" justify="between" align="center" className={styles.formFieldFull}>
+              <Stack direction="row" justify="between" align="center" wrap className={styles.settingsCredentialActions}>
                 <Text tone={keyState === "error" ? "danger" : "subtle"} size="xs">{keyState === "saved" ? "密钥已保存" : provider?.requiredEnv?.join(" / ") || ""}</Text>
                 <Button onClick={() => void saveKey()} disabled={writeBusy} loading={keyState === "saving"} startIcon={<Save size={15} />}>保存密钥</Button>
               </Stack>

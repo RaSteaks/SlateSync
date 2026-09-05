@@ -2,10 +2,10 @@
 
 ## 当前任务
 
-2026-09-05：按已确认方案完成现代 Renderer 的 8 项交互修复。任务与识别互斥、
-全局保存锁、项目设置草稿守卫优先；Provider 异步隔离、多行模型文本、弹窗错误、
-模型键盘选择与重复分区定位同步完成。保留进入本轮前已有的侧栏导航改动。
-窗口双栏、侧栏收起占位及浅色对比度等布局与视觉问题延期，未纳入本轮修复。
+2026-09-05：按已确认方案修复现代 Renderer 的三项延期布局问题：全局设置自适应
+单双栏、侧栏收起分区占位、浅色分段按钮对比度。三项代码与浏览器验收均已完成。
+已完成的 8 项交互修复继续保留，并随布局变更复跑；不修改 IPC、Shared Contract、
+数据库、算法或 Electron 最小窗口尺寸，不增加依赖。
 
 ## 既有架构实施记录
 
@@ -1122,3 +1122,48 @@ Worker 边界、验收证据和最终治理交接。
   当前父项也会产生新的定位请求，不再保留旧分区位置。
 - 对应组件测试覆盖工作区操作权的禁用/恢复，以及父导航和快捷键的页面顶部焦点；
   隔离 Chromium 的 `file-preparation-lock` 与 `repeat-section-navigation` 同步覆盖真实交互。
+
+## 2026-09-05 布局与视觉修复验收
+
+- 全局设置的“密钥与外观”分区使用命名容器，以内容区宽度 960px 切换单列/等宽双列；
+  窄时保持密钥在前、外观在后。密钥卡片内 Provider、API Key、Base URL、应用标识 URL
+  始终各占整行；显示/隐藏按钮通过专属类维持至少 66px 宽。长说明及保存反馈可以换行，
+  页面自然增高，不修改其他表单网格或 960×600 原生最小窗口。
+- GlobalSettingsSidebarNav 新增可选 collapsed（默认 false）与 parentTriggerRef。
+  手动收起或视口 ≤920px 时，子列表完整 display:none，不保留布局/Tab/无障碍树占位；
+  展开恢复高亮与脏点，不发送新的定位请求。Chromium 在媒体查询通知前可能先把隐藏
+  子项焦点移至 body，因此只为这次隐藏导致的失焦保留焦点归属，并回到父入口；主动
+  移焦、普通表单编辑或用户手动 blur 不触发回焦。监听器随组件卸载/依赖变化清理。
+- 共享 SegmentedControl 可用未选中文字使用既有 ink-muted，悬停使用 ink/surface-hover；
+  选中、focus-visible、disabled 保留共享语义。未改 ink-subtle 和任何主题 token 数值，
+  主题、密度与 OCR 统一生效；新增 SegmentedStates Storybook 状态示例。
+- 已更新 DESIGN.md 与 UX-CONTRACT.md，沿用现有忽略规则；关键规范与验收数据同步在此
+  记录。保留此前全部交互修复；无新依赖，无 IPC、Shared Contract、数据库或算法改动。
+
+### 浏览器证据
+
+- `node test-support/refactor/interaction-browser.cjs`：12/12 流程通过，页面异常 0；原有
+  9 条交互流程与新增 `settings-responsive-layout`、`settings-sidebar-collapse`、
+  `segmented-contrast` 同轮运行，继续使用内存网关和无头 Chromium，不访问真实库/Provider。
+- 960×600、1280×800、1440×900、1920×1080 × 两种密度 × 侧栏展开/收起，共 16 组：
+  API Key 输入框最小 389.75px，页面横向溢出 0。960px 窗口、标准密度、侧栏展开时
+  输入框为 467.97px。容器内容宽度 959/960px 分别验证单列/双列，均满足 240px 输入宽度。
+- 浏览器验证稳定 DOM、输入值与选区保留，并用 CDP 中文组合输入跨越窗口/密度/侧栏变化；
+  长 URL、长配置提示、密钥保存失败后重试成功均通过实际控件几何断言。
+- 手动收起及 920/641/640/320px 窄屏下子列表高度为 0；“说明”紧随父入口，无额外空白。
+  验证隐藏子项回焦、Tab 跳过子项、表单/收展按钮焦点保留、主动 blur 不抢焦点、脏点与
+  高亮恢复、重复分区点击滚动/聚焦；921px 恢复展开列表。
+- 深色/浅色/跟随系统深色/跟随系统浅色 × 两种密度，共 72 个控件样本的常态、悬停、
+  键盘焦点状态最低对比度 5.352965947:1；分段控件局部 axe 对比度违规 0，禁用状态
+  不接受悬停/提交，外观控件继续可用。
+- 证据路径：`/tmp/slatesync-interaction-browser/results.json`、`layout-evidence.json`
+  及同目录截图；测试实现位于 `test-support/refactor/layout-browser-checks.cjs`。
+
+### 最终检查
+
+- `test:modern`：31 个文件、191 项测试通过；`typecheck`、`check`、`build:modern`、
+  `build:storybook` 通过；新增浏览器脚本 `node --check` 通过；`git diff --check` 通过。
+- 严格 UI 静态审查：0 finding，记录在 `/tmp/slatesync-layout-ui-audit.json`。
+- DESIGN.md lint：0 error；26 条既有语义 token 命名/未在 frontmatter 组件中引用的提示
+  保留，运行时 CSS 仍是 token 权威。构建保留大 chunk 提示；Storybook 用户级设置写入
+  被沙盒阻止，但静态构建成功。这些提示不影响本轮三项布局验收。

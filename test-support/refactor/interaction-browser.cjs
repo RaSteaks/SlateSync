@@ -5,6 +5,7 @@ const { mkdir, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const { fixture } = require('./ui-interaction-fixture.cjs');
+const { layoutChecks } = require('./layout-browser-checks.cjs');
 const root = path.resolve(__dirname, '../..');
 const output = process.env.SLATESYNC_UI_OUTPUT || '/tmp/slatesync-interaction-browser';
 const port = Number(process.env.SLATESYNC_UI_PORT || 5287);
@@ -312,6 +313,9 @@ async function main() {
       assert.equal(await page.evaluate(async () => (await import('/state/slate-store.ts')).useSlateStore.getState().filename), null);
       assert.equal(await page.evaluate(() => [...window.__review.tasks.values()].some(task => task.customPrompt === '离开前最后修改')), true);
     });
+    // Share the isolated browser/gateway with geometry, focus and contrast
+    // regressions so layout work also runs all nine interaction flows above.
+    await layoutChecks({ page, test, nav, output });
     assert.deepEqual(failures, [], 'browser page errors');
   } finally {
     if (browser) await browser.close();

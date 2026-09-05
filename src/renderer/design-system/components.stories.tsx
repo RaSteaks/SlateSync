@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { AlertTriangle, CheckCircle2, FileText, Moon, Plus, Sun } from "lucide-react";
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Badge, Button, Checkbox, Dialog, EmptyState, Field, Icon, IconButton, InlineError, Input, Progress, SegmentedControl, Select, Spinner, Stack, StatusIndicator, Surface, Text, Textarea } from "./index";
 
 const meta = { title: "Foundations / Controls", component: Button, tags: ["autodocs"] } satisfies Meta<typeof Button>;
@@ -21,6 +21,33 @@ export const Feedback: Story = {
 
 export const StateMatrix: Story = {
   render: () => <div data-theme="light" data-density="compact"><Stack gap={5}><Text as="h2" size="lg" weight="bold">Light / compact interaction states</Text><Stack direction="row" gap={2} wrap><Button onClick = {focusStoryControl} autoFocus>Focus / hover</Button><Button disabled>Disabled</Button><Button disabled loading>Loading</Button><Button onClick = {focusStoryControl} variant="danger">Danger</Button></Stack><Field label="Long text" hint="焦点环、placeholder 与辅助说明使用同一语义边界"><Input placeholder="这是一个较长的输入提示，用于检查窄屏与高密度下的截断行为" /></Field><InlineError message="这是一个可恢复错误状态；操作应保留上下文并给出下一步。" onRetry={() => undefined} /><Surface><EmptyState title="空状态" description="Empty state 保持可读、可聚焦，并在 reduced-motion 下不依赖动画。" action={<Button onClick = {focusStoryControl} variant="secondary">开始添加</Button>} /></Surface></Stack></div>,
+};
+
+export const SegmentedStates: Story = {
+  render: function Render() {
+    const [theme, setTheme] = useState<"light" | "dark">("light");
+    const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+    useEffect(() => {
+      // Runtime tokens are rooted on html. Restore the previous attributes so
+      // this interactive contrast story does not recolor subsequent stories.
+      const root = document.documentElement;
+      const previousTheme = root.getAttribute("data-theme");
+      const previousDensity = root.getAttribute("data-density");
+      root.dataset.theme = theme;
+      root.dataset.density = density;
+      return () => {
+        if (previousTheme === null) root.removeAttribute("data-theme"); else root.setAttribute("data-theme", previousTheme);
+        if (previousDensity === null) root.removeAttribute("data-density"); else root.setAttribute("data-density", previousDensity);
+      };
+    }, [theme, density]);
+    return <Stack gap={4}>
+      <Text as="h2" size="lg" weight="bold">分段按钮状态</Text>
+      <Text tone="muted" size="sm">切换主题和密度，检查未选中、选中、悬停、键盘焦点和禁用状态。</Text>
+      <Stack direction="row" wrap><SegmentedControl label="主题" value={theme} options={[{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }]} onChange={setTheme} /></Stack>
+      <Stack direction="row" wrap><SegmentedControl label="信息密度" value={density} options={[{ value: "comfortable", label: "标准" }, { value: "compact", label: "紧凑" }]} onChange={setDensity} /></Stack>
+      <Stack direction="row" wrap><SegmentedControl label="禁用的信息密度" disabled value={density} options={[{ value: "comfortable", label: "标准" }, { value: "compact", label: "紧凑" }]} onChange={setDensity} /></Stack>
+    </Stack>;
+  },
 };
 
 export const Empty: Story = { render: () => <Surface><EmptyState icon={FileText} title="没有载入 CSV" description="选择 Resolve 导出的 CSV 后，这里会显示虚拟化预览。" action={<Button onClick = {focusStoryControl}>载入文件</Button>} /></Surface> };

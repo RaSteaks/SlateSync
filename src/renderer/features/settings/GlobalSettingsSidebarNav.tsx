@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { useGlobalSettingsStore, type SettingsSectionId } from "../../state";
 import type { GlobalSettingKey } from "../../../shared/contracts/index.js";
 import { PADDLE_ADVANCED_KEYS, VISION_ADVANCED_KEYS } from "./globalSettingsModel";
@@ -59,8 +60,53 @@ function SettingsSubNavItem({ id, label, active, onSelect }: { id: SettingsSecti
  * selecting an item scrolls the page to the section (the shell owns the
  * scroll), and a warning dot marks sections with unsaved drafts.
  */
-export function GlobalSettingsSidebarNav({ activeSection, onSelect }: { activeSection: SettingsSectionId | null; onSelect: (id: SettingsSectionId) => void }) {
-  return <div className={styles.navSubList} role="group" aria-label="全局设置分区导航">
+export function GlobalSettingsSidebarNav({ activeSection, onSelect, collapsed = false, parentTriggerRef }: {
+  activeSection: SettingsSectionId | null;
+  onSelect: (id: SettingsSectionId) => void;
+  collapsed?: boolean;
+  parentTriggerRef?: RefObject<HTMLButtonElement | null>;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const focusedWithinRef = useRef(false);
+
+  useLayoutEffect(() => {
+    // CSS owns visibility in both shell modes. Only rescue focus from a child
+    // that is being hidden; never turn a sidebar resize into page navigation.
+    const restoreParentFocus = () => {
+      const activeElement = document.activeElement;
+      // Chromium can blur a CSS-hidden child to body before delivering the
+      // media-query event. Retain ownership only for that visibility blur.
+      const shouldRestore = listRef.current?.contains(activeElement)
+        || (focusedWithinRef.current && activeElement === document.body);
+      focusedWithinRef.current = false;
+      if (shouldRestore) {
+        parentTriggerRef?.current?.focus({ preventScroll: true });
+      }
+    };
+    if (collapsed) restoreParentFocus();
+    if (typeof window.matchMedia !== "function") return;
+    // Match the shell's existing icon-rail breakpoint, including its top-bar mode.
+    const narrowSidebar = window.matchMedia("(max-width: 920px)");
+    const onNarrowChange = () => { if (narrowSidebar.matches) restoreParentFocus(); };
+    onNarrowChange();
+    narrowSidebar.addEventListener("change", onNarrowChange);
+    return () => narrowSidebar.removeEventListener("change", onNarrowChange);
+  }, [collapsed, parentTriggerRef]);
+
+  return <div
+    ref={listRef}
+    className={styles.navSubList}
+    data-collapsed={collapsed || undefined}
+    role="group"
+    aria-label="全局设置分区导航"
+    onFocusCapture={() => { focusedWithinRef.current = true; }}
+    onBlurCapture={(event) => {
+      if (event.currentTarget.contains(event.relatedTarget)) return;
+      // A deliberate move to another control (or a visible child's blur to
+      // body) releases ownership. It must not be rescued by a later resize.
+      if (event.relatedTarget || getComputedStyle(event.currentTarget).display !== "none") focusedWithinRef.current = false;
+    }}
+  >
     {SETTINGS_SECTIONS.map((section) => (
       <SettingsSubNavItem
         key={section.id}
