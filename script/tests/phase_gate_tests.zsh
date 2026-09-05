@@ -440,6 +440,7 @@ PY
 done
 assert_failure "SM-06 cannot skip directly to SM-09" gate_validate_phase_state "${fixture_root}/sm06-state.json" SM-09
 assert_success "SM-06 fixture and executed-evidence negative tests" node "${project_root}/script/tests/sm06_contract.mjs" --self-test
+assert_success "SM-07 source, oracle, coverage and admission negative tests" node "${project_root}/script/tests/sm07_contract.mjs" --self-test
 assert_success "SM-05 retains negative admission assertions" node --input-type=module -e '
   import assert from "node:assert/strict";
   process.argv.push("--technical-only");

@@ -138,11 +138,25 @@ public struct RecognitionProgress: Codable, Hashable, Sendable {
     public var completed: Int
     public var total: Int
     public var message: String
+    public var percent: Int?
+    public var pageNumber: Int?
+    public var warning: String?
 
-    public init(phase: String, completed: Int, total: Int, message: String) {
+    public init(
+        phase: String,
+        completed: Int,
+        total: Int,
+        message: String,
+        percent: Int? = nil,
+        pageNumber: Int? = nil,
+        warning: String? = nil
+    ) {
         self.phase = phase
         self.completed = completed
         self.total = total
         self.message = message
+        self.percent = percent
+        self.pageNumber = pageNumber
+        self.warning = warning
     }
 }

@@ -105,7 +105,9 @@ public enum CustomProviderValidator {
         return name
     }
 
-    private static func normalizeBaseURL(_ value: String) throws -> String {
+    /// Exposes the same canonical Base URL boundary to the SM-07 registry so
+    /// built-in overrides and persisted custom endpoints cannot drift apart.
+    public static func normalizeBaseURL(_ value: String) throws -> String {
         guard let normalized = HTTPURLNormalizer.normalize(
             value,
             trailingSlashPolicy: .removeAll

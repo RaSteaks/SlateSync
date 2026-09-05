@@ -13,7 +13,7 @@ private struct ProjectPersistenceContext: Sendable {
 /// The lease counter closes the actor-reentrancy gap: deletion marks a project
 /// unavailable before waiting for in-flight store calls, then closes all three
 /// SQLite owners before the Library starts its tombstone transaction.
-public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence {
+public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, RecognitionPersistence {
     private let library: ProjectLibraryStore
     private let writer: any AtomicFileWriting
     private var contexts: [String: ProjectPersistenceContext] = [:]
@@ -59,6 +59,20 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence {
             PersistenceJSON.data(from: object, errorCode: "TASK_INVALID"),
             taskID: taskID
         )
+    }
+
+    /// Recognition reads the canonical project/settings snapshot through the
+    /// same lease boundary used by task, scenario, and diagnostic writes.
+    public func recognitionProject(projectID: String) async throws -> ProjectData {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return context.project
+    }
+
+    public func touchRecognitionActivity(projectID: String) async throws {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        _ = try await library.touchProjectActivity(context.project.id)
     }
 
     public func updateTask(projectID: String, taskID: String, patch: Data) async throws -> String {

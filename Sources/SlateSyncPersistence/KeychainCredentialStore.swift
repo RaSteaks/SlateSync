@@ -436,7 +436,7 @@ public struct CredentialMigrationReport: Codable, Hashable, Sendable {
 /// Compensation is a single-call transaction with backend ownership markers
 /// and advisory locks; it does not claim absolute atomicity against clients
 /// that bypass those coordination rules.
-public actor KeychainCredentialStore {
+public actor KeychainCredentialStore: ProviderCredentialReading {
     public static let service = "com.slatesync.app.provider-key"
 
     private let backend: any KeychainBackend
@@ -457,6 +457,19 @@ public actor KeychainCredentialStore {
             throw SlateSyncError(code: "KEYCHAIN", message: "Keychain 凭据格式无效")
         }
         return value
+    }
+
+    /// SM-07's transport-facing name makes the secret boundary explicit while
+    /// retaining the existing value(providerID:) API for settings migration.
+    public func credential(for providerID: String) async throws -> String? {
+        try await value(providerID: providerID)
+    }
+
+    /// Configuration checks expose only a Boolean; the raw credential remains
+    /// inside this actor and is never copied into provider/model summaries.
+    public func isCredentialConfigured(for providerID: String) async throws -> Bool {
+        guard let value = try await value(providerID: providerID) else { return false }
+        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     public func setValue(_ value: String?, providerID: String) async throws {

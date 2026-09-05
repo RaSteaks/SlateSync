@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "phase": "SM-07",
+  "baselineCommit": "d65a6063fe801e2e2b3b8173defa257b24812844",
+  "oracleCapturedFromRetainedBaseline": true,
+  "networkRequired": false,
+  "sources": [
+    {"path":"lib/ai-client.mjs","bytes":55830,"sha256":"94243a91ac14726d253c0c372c9bdebf48c910f88562bcdc2d4cf58f9ef7b31a"},
+    {"path":"lib/provider-registry.mjs","bytes":17535,"sha256":"910324ca0b7280f90bb6f39ada8f758102b056cca90a3c00a2689db412ddd22d"},
+    {"path":"lib/model-discovery.mjs","bytes":27930,"sha256":"09d2387f8029611e43640078a9011a7ed24e09e07091bb9a6f39757818321af8"},
+    {"path":"lib/model-capabilities.mjs","bytes":17346,"sha256":"4182d24462436f38a57ed245b9d54d8706d7327d4d3d161d2675b462454844bd"},
+    {"path":"lib/schema.mjs","bytes":23868,"sha256":"ccd3ad8bf485cd326aacd728bd97b0eeb3ded287bee838a60c050ca34bd860f3"},
+    {"path":"lib/http-timeout.mjs","bytes":2369,"sha256":"8caf17c7e008e9ccf238a65f4b48e973650756532cba998e5318c8edf626ad31"},
+    {"path":"lib/custom-provider.mjs","bytes":8169,"sha256":"355e78180f29337f429a550b9188534d0945f4e86e4c09cb8dce4e7c7c406612"},
+    {"path":"lib/config.mjs","bytes":17675,"sha256":"f879d022e63ce2b114abd7cdc394516762b7852eb91154075c65b85e2daf696e"},
+    {"path":"lib/model-catalog.mjs","bytes":24047,"sha256":"6502b932473136ac7a2bb1c23903e76ecf168201c800cbcbb328e0dfca5c1c4b"},
+    {"path":"lib/scenario/profile.mjs","bytes":15531,"sha256":"e65d01b864ef401814d50571bdd26bd12c04963c39901d766dbb979cae474956"},
+    {"path":"electron/ipc-handlers.mjs","bytes":70071,"sha256":"e1c9c83c914a2eb42283e2f229b1e53e7fd80f9e9c9af20521fc9454a8313025"},
+    {"path":"electron/env-loader.mjs","bytes":2726,"sha256":"33d2fd3266b0da39439e181c6f97f1cdfcf7651d4b38431a534b25d57cb0bada"}
+  ],
+  "canonicalOracles": {
+    "systemPrompt": {"bytes":8056,"sha256":"d186b8dcfdca3ac9cefb738cea19d3088240691ded895e033a5385b7f35b8326"},
+    "auditPrompt": {"bytes":2220,"sha256":"f9914fbbb5308b932f763cba9823b40de15681f1dc6df3c82a70a49f40768c94"},
+    "reviewPrompt": {"bytes":2636,"sha256":"f16ffa2dc3db30a1dcb75354de4e003fa53f00c419d291be3655266bac99d732"},
+    "fullSchemaCanonicalJSON": {"bytes":3638,"sha256":"c4972a5d82bc4ce0ef93885af5c21e96ba0c53ee716f157c6883f31d87f27d60"},
+    "coreSchemaCanonicalJSON": {"bytes":2923,"sha256":"da8ef9fa078efca75c6bdd3632ac584950b7052c02edad53826b5866186d827c"},
+    "syntheticProbePNG": {"bytes":247,"sha256":"8064d346edadc53cc946b892f54a446396e1fe200e3f8c42e69a0ea60c6f5784","marker":"ss-7q"}
+  },
+  "frozenPolicies": {
+    "maximumResponseBytes": 16777216,
+    "redirect": "Follow URLSession redirects; Foundation strips Authorization on a cross-origin redirect, verified by deterministic URLProtocol coverage.",
+    "pageFailure": "Cancel sibling page tasks and await task-group drain before returning the first stable page error.",
+    "secrets": "Credentials are read only while constructing request headers and are absent from transport requests, DTOs, fixtures and logs."
+  }
+}

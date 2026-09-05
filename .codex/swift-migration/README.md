@@ -1,7 +1,7 @@
 # SlateSync Swift migration authority
 
 Updated: 2026-09-05
-Current phase: **SM-05 COMPLETE; SM-06 implementation in progress**
+Current phase: **SM-06 COMPLETE; SM-07 implementation IN_PROGRESS**
 Target: **native macOS 15.0+, arm64 + x86_64**
 
 This directory is the current authority for replacing the Electron application
@@ -37,25 +37,33 @@ the Icon Composer app icon, and the deterministic build-and-run script. Debug
 uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
-SM-01 through SM-05 are formally complete. `CURRENT_STATE.json` records
-SM-05 COMPLETE at the approved review commit
-`7c36f642632401ac21ff97316f1f3a9c1e8e6530`; SM-06 is the separately authorized
-implementation package. SM-04 supplies the v1 Library/SQLite ownership and
-portable transfer boundary. SM-05 supplies byte-compatible CSV, metadata and
-Scenario v1 behavior.
+SM-01 through SM-06 are formally complete. `CURRENT_STATE.json` records
+SM-06 COMPLETE at the approved review commit
+`3ba200cafad758b10ad51c08eace5024bcffa90e`. SM-04 supplies the v1
+Library/SQLite ownership and portable transfer boundary, SM-05 supplies
+byte-compatible CSV, metadata and Scenario v1 behavior, and SM-06 supplies the
+native media/OCR handoff.
 
 SM-06 implements native image/PDF preparation, full/detail JPEG views,
 immutable request compression, built-in Vision and the explicit legacy helper
 adapter, supervised Paddle processes, OCR policy/cache/evidence, and a local
 Workflow handoff. It retains the shared Python runner in App resources and
 verifies real inference offline with explicitly supplied runtime/model fixtures.
-Provider transport/orchestration, the workspace UI and distribution remain
-SM-07 through SM-09 responsibilities. Scenario v1 is unchanged; legacy
-TakeStatus string conversion belongs to the SM-07 adapter.
+SM-07 implementation now supplies the secret-safe Provider registry,
+URLSession transport, discovery/probes, exact prompts/schemas, response
+normalization, bounded page/high-accuracy pipeline, and OCR-first recognition
+coordinator with progress/cancel/persistence lifetime. Workspace UI and
+distribution remain SM-08 and SM-09 responsibilities. Scenario v1 remains
+unchanged; legacy TakeStatus strings cross one SM-07 adapter.
 
-Implementation and diagnostic evidence are recorded in `reviews/SM-06.md`.
-SM-06 remains IN_PROGRESS until a dedicated review commit, a clean Gate on
-that exact SHA and explicit Owner approval complete the admission workflow.
+SM-06 implementation and formal evidence are recorded in `reviews/SM-06.md`.
+The separately authorized SM-07 code construction is complete and its latest
+dirty diagnostic Gate passed every technical check at
+`.codex/gate-results/SM-07/20260905T122916Z-d65a6063fe80/`. This remains an
+implementation result, not phase approval: `CURRENT_STATE.json` deliberately
+stays at the formally approved SM-06 COMPLETE boundary until SM-07 has a
+dedicated review commit, exact-SHA clean Gate evidence, review report, and
+explicit Owner approval.
 
 Electron, React, Node and cross-platform-era files remain retained as migration
 evidence until SM-09; SM-02 changes only their current macOS product entrypoints.

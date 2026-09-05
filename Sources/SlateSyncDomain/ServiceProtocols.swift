@@ -65,6 +65,46 @@ public protocol RecognitionServing: Sendable {
     func cancel(projectID: String) async
 }
 
+/// Provider credentials remain machine-local and are read only by the
+/// transport while it constructs an Authorization header. Callers can ask for
+/// configuration state without receiving the credential bytes.
+public protocol ProviderCredentialReading: Sendable {
+    func credential(for providerID: String) async throws -> String?
+    func isCredentialConfigured(for providerID: String) async throws -> Bool
+}
+
+/// A monotonic clock keeps discovery TTLs and request deadlines deterministic
+/// in tests without exposing URLSession tasks across actor boundaries.
+public protocol ProviderClock: Sendable {
+    func nowMilliseconds() -> Double
+    func sleep(milliseconds: Int) async throws
+}
+
+public struct SystemProviderClock: ProviderClock {
+    public init() {}
+    public func nowMilliseconds() -> Double { ProcessInfo.processInfo.systemUptime * 1_000 }
+    public func sleep(milliseconds: Int) async throws {
+        try await Task.sleep(for: .milliseconds(milliseconds))
+    }
+}
+
+/// Transport requests identify a provider and endpoint purpose but never
+/// carry an API key. This is the only public network seam used by discovery,
+/// probes, and recognition tests.
+public protocol ProviderHTTPTransporting: Sendable {
+    func send(_ request: ProviderTransportRequest) async throws -> ProviderTransportResponse
+    func close() async
+}
+
+/// ProjectRuntime implements this address-only tail. Workflow never retains a
+/// raw SQLite store or a project directory beyond the runtime's lease.
+public protocol RecognitionPersistence: Sendable {
+    func recognitionProject(projectID: String) async throws -> ProjectData
+    func saveTask(projectID: String, taskID: String?, payload: Data) async throws -> String
+    func saveDiagnostic(projectID: String, sessionID: String?, payload: Data) async throws -> String
+    func touchRecognitionActivity(projectID: String) async throws
+}
+
 public protocol SettingsServing: Sendable {
     func value(for key: String) async -> String?
     func setValue(_ value: String?, for key: String) async throws

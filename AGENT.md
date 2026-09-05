@@ -1,6 +1,66 @@
 # SlateSync 当前项目方案
 
-## 2026-09-05 SM-06 媒体与 OCR 实施（当前有效，IN_PROGRESS）
+## 2026-09-05 SM-07 Provider 与识别实施（IN_PROGRESS）
+
+- 用户已单独授权 SM-07 代码施工。已在 Domain 建立 secret-free Provider/
+  recognition 执行值、稳定错误和单一 TakeStatus adapter；Persistence
+  通过 `RecognitionPersistence` 继续使用 ProjectRuntime 租约写入 task、
+  diagnostic 和活动时间。
+- Workflow 已实现五个 Provider 与固定模型 catalog、revision-aware registry、
+  15 秒/5 分钟模型发现、项目无关的冻结 PNG 视觉探针、Responses/Chat
+  payload 及 schema→object→prompt 窄降级。实时价格只用于派生公开
+  value 评级，原始 price/cost 不离开发现边界。
+- `URLSessionProviderTransport` 由 actor 单一持有 session/task/deadline；只在
+  header 构建时读取 Keychain，timeout 才重试，完整 body 与 headers 共用
+  deadline，cancel/close 等待排空。URLProtocol 实测确认跨 origin redirect
+  不携带 Authorization；response body 安全上限冻结为 16 MiB。
+- 三个中文 system prompt 与 full/core schema 已与保留 JS oracle 逐字/
+  canonical JSON SHA-256 对齐。已接通结果容错规范化、跨页继承、
+  sandwiched/dropped-shot-tens 修复、高精度 primary＋audit＋定向
+  review 以及有界逐页并发。
+- `RecognitionCoordinator` 已接通 SM-06 OCR-first 媒体、Scenario 选择、
+  UTF-8 请求预算、单调进度、全局 fail-fast limiter、按项目取消、
+  持久化尾段和 single-flight close；原始 PDF 在 prepare/OCR/network/
+  persistence 任何副作前拒绝。
+- `Fixtures/SM07` 已冻结 12 个旧源 SHA、prompt/schema/探针哈希、
+  redirect/页失败策略和 57 个验收 ID。SM-07 contract 已接入统一 Gate，
+  Gate 自测已扩展为 79 项并通过。
+- 实施收尾验证为 SwiftPM 167 项（0 失败、1 项按设计跳过），SM-07
+  专项 28 项；其中独立验证错误视觉 marker 必须失败，主动取消探针
+  batch 必须排空请求且不落库。Xcode 共享 Test Plan、SM-05 技术回归、Electron/Modern
+  兼容、TypeScript 静态/类型/构建和 Node SQLite ABI 均通过。最新
+  dirty diagnostic Gate 为 `PASS/approvable=false`，证据目录为
+  `.codex/gate-results/SM-07/20260905T122916Z-d65a6063fe80/`。
+- 治理状态依旧保留 `CURRENT_STATE.json` 中已批准的 SM-06 COMPLETE。
+  当前代码施工与 dirty Gate 已收尾；dedicated review commit、精确 SHA
+  clean Gate、review report 和 Owner 最终批准仍是 SM-07 转 `COMPLETE`
+  的必要条件。
+
+## 2026-09-05 SM-07 Provider 与识别详细施工包（历史规划记录）
+
+- 已将 `.codex/swift-migration/packages/SM-07.md` 从两行阶段摘要细化为 WP-0～WP-9：
+  行为/fixture 冻结、Domain 与 TakeStatus adapter、Provider registry、URLSession
+  transport、模型发现/能力探针、prompt/schema/payload、结果规范化、高精度逐页复核、
+  OCR-first 总编排/持久化和正式 Gate。
+- 准入以 `CURRENT_STATE.json` 和 `reviews/SM-06.md` 为准：SM-06 已正式 COMPLETE，
+  审查提交为 `3ba200cafad758b10ad51c08eace5024bcffa90e`。迁移 README 中旧的
+  SM-06 IN_PROGRESS 文字已同步为完成状态。
+- 施工包冻结五个内建/兼容 Provider、Responses 与 Chat Completions payload、15 秒
+  discovery、5 分钟 cache、30 秒合成视觉探针、180 秒单次模型 timeout、默认一次
+  timeout retry、逐页并发 2、全局 fail-fast 并发 1，以及结构化输出降级条件。
+- 三个中文 system prompt、full/core schema、custom/CSV/Scenario 拼接顺序、字段/状态
+  规范化、高精度 primary＋audit＋target review、跨页继承和两类序列修复均要求在写
+  Swift 前生成独立 oracle，不能以 strict Codable 或 URLSession 默认行为改掉兼容语义。
+- SM-07 直接消费 SM-06 的图片/OCR evidence，拒绝原始 PDF；legacy `_OK`、`_KP`、
+  `过`、`保`、`ng`、`x`、`×` 等在单一 adapter 转为 `TakeStatus`，不修改 SM-05
+  merger 的 CSV 真相。
+- 所有 transport、discovery、probe、timeout、retry、fallback、取消、迟到响应和
+  persistence await-boundary 使用 deterministic URLProtocol/fakes 与临时 Library 验收；
+  正式 Gate 不需要真实 Provider key 或公网，也不得访问用户默认 Library。
+- 本节保留了当时“只生成施工包”的历史记录；后续实施授权和
+  实际进度以上方 IN_PROGRESS 章节为准。
+
+## 2026-09-05 SM-06 媒体与 OCR 实施（已正式完成，COMPLETE）
 
 - 用户已授权按 SM-06 施工包实施。Domain 增加图片/页面/OCR evidence、配置、
   deadline、取消和进程协议；Media 负责原生 PDFKit/ImageIO/CoreGraphics、
@@ -31,9 +91,9 @@
 - Review 提交前审计确认 PDF fixture 的 xref 尾随空格属于冻结二进制内容；根目录
   `.gitattributes` 将 `*.pdf` 标记为 binary，避免文本清理破坏 manifest 哈希。
 - 详细结果、模型/fixture 哈希及资源测量见 `.codex/swift-migration/reviews/SM-06.md`。
-  本次退出 3、`approvable=false`，实现尚未提交；专用 review commit、精确 SHA 的
-  clean Gate 与 Owner 批准仍是后续准入步骤，`CURRENT_STATE.json` 保持 SM-05
-  COMPLETE，`.codex/refactor/` 历史不变。
+  后续正式 Gate 已在 review commit `3ba200cafad758b10ad51c08eace5024bcffa90e`
+  通过并获 Owner 批准；`CURRENT_STATE.json` 已记录 SM-06 COMPLETE。上方 dirty
+  Gate 仅作为实施期诊断历史保留，`.codex/refactor/` 历史不变。
 
 ## 2026-09-05 SM-06 具体施工包（规划完成，尚未开工）
 

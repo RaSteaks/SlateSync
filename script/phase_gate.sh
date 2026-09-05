@@ -572,6 +572,18 @@ case "$phase" in
     run_check sm06_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
     run_check sm06_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
     ;;
+  SM-07)
+    run_check sm07_contract true "Provider/发现/探针/Prompt/识别编排的冻结 oracle、57 项实际执行覆盖与资源边界完整" \
+      node script/tests/sm07_contract.mjs --swift-log "${result_dir}/swift_test.log"
+    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
+      node script/tests/sm05_contract.mjs --technical-only
+    run_check sm07_node_compatibility true "Electron Provider/识别兼容基线继续通过" npm run test:node
+    run_check sm07_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
+    run_check sm07_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
+    run_check sm07_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
+    run_check sm07_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
+    run_check sm07_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
+    ;;
   SM-01) ;;
   *)
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing
