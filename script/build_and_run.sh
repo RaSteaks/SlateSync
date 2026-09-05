@@ -53,10 +53,21 @@ test -d "$app_path"
 test -x "$app_executable"
 # Automated Gate runs launch without activating the app, while the normal Run
 # action preserves the expected foreground development experience.
+typeset -a launch_environment=() launch_arguments=()
+if [[ -n "${SLATESYNC_TEST_ROOT:-}" ]]; then
+  # Pass the isolation root explicitly through LaunchServices, independently
+  # of the terminal's inherited launch environment.
+  launch_environment=(--env "SLATESYNC_TEST_ROOT=${SLATESYNC_TEST_ROOT}")
+fi
+if (( verify_only )); then
+  # Match the existing UI test's fresh-window policy. A saved menu-bar-only
+  # session otherwise never constructs ProjectLibraryView or its load task.
+  launch_arguments=(--args -ApplePersistenceIgnoreState YES)
+fi
 if (( background_launch )); then
-  /usr/bin/open -g -n "$app_path"
+  /usr/bin/open -g -n "$app_path" "${launch_environment[@]}" "${launch_arguments[@]}"
 else
-  /usr/bin/open -n "$app_path"
+  /usr/bin/open -n "$app_path" "${launch_environment[@]}" "${launch_arguments[@]}"
 fi
 
 # `open` returns before LaunchServices finishes spawning the process. Polling

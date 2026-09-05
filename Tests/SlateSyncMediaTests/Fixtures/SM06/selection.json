@@ -1,0 +1,4226 @@
+[
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "true",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "fallback"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "fallback"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "false",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "auto",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "explicit"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "true"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "false"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": null,
+      "mode": "disabled"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "auto"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": false,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "paddleocr",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": false,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": false,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": false,
+      "required": true,
+      "available": false
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  },
+  {
+    "raw": {
+      "VISIONOCR_ENABLED": "unknown",
+      "PADDLEOCR_ENABLED": "auto"
+    },
+    "vision": {
+      "id": "vision",
+      "enabled": false,
+      "required": true,
+      "available": true
+    },
+    "paddle": {
+      "id": "paddleocr",
+      "enabled": true,
+      "required": true,
+      "available": true
+    },
+    "expected": {
+      "id": "vision",
+      "mode": "required"
+    }
+  }
+]

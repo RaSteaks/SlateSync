@@ -139,6 +139,13 @@ print -r -- 'SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV XCTest XCTAssertEqu
   "${fixture_root}/xcode-blocked-assertion-mixed.log"
 assert_equal "assertion takes precedence over blocked environment marker" FAIL \
   "$(gate_classify_failure "${fixture_root}/xcode-blocked-assertion-mixed.log" 1)"
+print -r -- '** TEST FAILED **
+SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV' > "${fixture_root}/xcode-blocked-banner.log"
+assert_equal "generic Xcode banner respects parsed environment evidence" BLOCKED_ENV \
+  "$(gate_classify_failure "${fixture_root}/xcode-blocked-banner.log" 1)"
+print -r -- 'Test Case smoke failed' >> "${fixture_root}/xcode-blocked-banner.log"
+assert_equal "executed test failure still outranks environment evidence" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-blocked-banner.log" 1)"
 
 # Exercise the complete xcodebuild -> xcresult summary path with command
 # fixtures. This catches status-handling regressions that pure classifier tests
@@ -178,6 +185,9 @@ print -r -- "$derived_data" > "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
 print -r -- "$result_bundle" >> "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
 mkdir -p "$result_bundle"
 print -r -- "fixture xcodebuild status=${SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS}"
+if (( SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS != 0 )); then
+  print -r -- "** TEST FAILED **"
+fi
 exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
 ' > "${bin_dir}/xcodebuild"
   print -r -- '#!/bin/zsh
@@ -415,5 +425,27 @@ assert_failure "critical check cannot use Owner waiver" gate_evidence_replacemen
 assert_success "non-critical check may use bounded Owner waiver" gate_evidence_replacement \
   "${fixture_root}/evidence.json" SM-01 reviewed-sha xcode_test_plan false
 
+# New phase boundaries augment the old negative state tests; they do not relax
+# SM-05's own admission assertions when its technical lane is reused by SM-06.
+for completed_phase in SM-05 SM-06; do
+  next_phase=SM-06
+  [[ "$completed_phase" == SM-06 ]] && next_phase=SM-07
+  python3 - "${fixture_root}/sm06-state.json" "$completed_phase" "$next_phase" <<'PY'
+import json,sys
+path,phase,next_phase=sys.argv[1:]
+with open(path,'w') as f:
+    json.dump({'phase':phase,'lifecycleState':'COMPLETE','activePackage':f'.codex/swift-migration/packages/{phase}.md','nextPackage':f'.codex/swift-migration/packages/{next_phase}.md'},f)
+PY
+  assert_success "${completed_phase} admits SM-06 boundary" gate_validate_phase_state "${fixture_root}/sm06-state.json" SM-06
+done
+assert_failure "SM-06 cannot skip directly to SM-09" gate_validate_phase_state "${fixture_root}/sm06-state.json" SM-09
+assert_success "SM-06 fixture and executed-evidence negative tests" node "${project_root}/script/tests/sm06_contract.mjs" --self-test
+assert_success "SM-05 retains negative admission assertions" node --input-type=module -e '
+  import assert from "node:assert/strict";
+  process.argv.push("--technical-only");
+  const {assertAdmissionBoundary} = await import("./script/tests/sm05_contract.mjs");
+  assert.throws(()=>assertAdmissionBoundary({phase:"SM-06",lifecycleState:"COMPLETE"}));
+  assert.throws(()=>assertAdmissionBoundary({phase:"SM-05",lifecycleState:"IN_PROGRESS"}));
+'
 print -r -- "Gate helper tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

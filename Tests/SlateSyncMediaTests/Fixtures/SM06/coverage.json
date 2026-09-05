@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "coverage": {
+    "MED-01": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testInputByteBoundaryRegularFileAndCancellation",
+        "SlateSyncMediaTests/MediaPreparationTests/testRasterKindsOrientationAlphaAndRepeatedHeaders"
+      ]
+    },
+    "MED-02": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testInputByteBoundaryRegularFileAndCancellation",
+        "SlateSyncMediaTests/MediaPreparationTests/testRasterKindsOrientationAlphaAndRepeatedHeaders"
+      ]
+    },
+    "MED-03": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testInputByteBoundaryRegularFileAndCancellation",
+        "SlateSyncMediaTests/MediaPreparationTests/testRasterKindsOrientationAlphaAndRepeatedHeaders"
+      ]
+    },
+    "MED-04": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testPDFPageLimitsBoxesRotationAndErrors"
+      ]
+    },
+    "MED-05": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testPDFPageLimitsBoxesRotationAndErrors"
+      ]
+    },
+    "MED-06": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testIndependentGeometryOracles"
+      ]
+    },
+    "MED-07": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testRasterKindsOrientationAlphaAndRepeatedHeaders",
+        "SlateSyncMediaTests/MediaPreparationTests/testSelectionCompressionUTF8BudgetAndLegacyPDF"
+      ]
+    },
+    "MED-08": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testSelectionCompressionUTF8BudgetAndLegacyPDF"
+      ]
+    },
+    "MED-09": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaPreparationTests/testInputByteBoundaryRegularFileAndCancellation"
+      ]
+    },
+    "VIS-01": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testVisionNormalizationMatchesExtractedHelper"
+      ]
+    },
+    "VIS-02": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testVisionNormalizationMatchesExtractedHelper"
+      ]
+    },
+    "VIS-03": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testVisionEffectiveConfigurationBoundedQueueAndExternalBridge",
+        "SlateSyncMediaTests/OCRContractTests/testPaddleSettingsAndSelectionOracles"
+      ]
+    },
+    "VIS-04": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testRealVisionSmokeAndExplicitMissingBinary"
+      ]
+    },
+    "VIS-05": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testVisionDeadlineCancellationAndLateCompletion"
+      ]
+    },
+    "PAD-01": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testPaddleSettingsAndSelectionOracles"
+      ]
+    },
+    "PAD-02": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testSingleWarmupConfigurationSwitchAndBundleEnvironment"
+      ]
+    },
+    "PAD-09": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testSingleWarmupConfigurationSwitchAndBundleEnvironment"
+      ]
+    },
+    "PAD-03": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testFragmentedUnicodeLogsAndStderrAreDrained"
+      ]
+    },
+    "PAD-04": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testMalformedWrongIDDuplicateOversizeAndEOF"
+      ]
+    },
+    "PAD-05": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testQueuedCancellationAndDeadlineDoNotKillActiveWorker"
+      ]
+    },
+    "PAD-06": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testActiveCancellationTermKillAndTimeoutWarmup"
+      ]
+    },
+    "PAD-07": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testOneShotRecoveryAndForceCloseGeneration",
+        "SlateSyncMediaTests/PaddleProcessTests/testActiveCancellationTermKillAndTimeoutWarmup"
+      ]
+    },
+    "PAD-08": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testOneShotRecoveryAndForceCloseGeneration",
+        "SlateSyncMediaTests/PaddleProcessTests/testActiveCancellationTermKillAndTimeoutWarmup"
+      ]
+    },
+    "PAD-10": {
+      "lane": "paddle",
+      "tests": [
+        "SlateSyncMediaTests/PaddleProcessTests/testOfflineActualPaddlePrewarmTwiceAndClose"
+      ]
+    },
+    "OCR-01": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testPaddleSettingsAndSelectionOracles"
+      ]
+    },
+    "OCR-02": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRPolicyTests/testRequiredOptionalDisabledAndCancellationPolicies"
+      ]
+    },
+    "OCR-03": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRPolicyTests/testRequiredOptionalDisabledAndCancellationPolicies"
+      ]
+    },
+    "OCR-04": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRPolicyTests/testStructuredKeysLRUEvictionAndClearGeneration"
+      ]
+    },
+    "OCR-05": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRPolicyTests/testStructuredKeysLRUEvictionAndClearGeneration",
+        "SlateSyncMediaTests/OCRPolicyTests/testCacheDisabledSessionIsolationAndClearDuringCompletion"
+      ]
+    },
+    "OCR-06": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/OCRContractTests/testEvidenceUTF16GoldensAndDecimalTies"
+      ]
+    },
+    "INT-01": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncWorkflowTests/MediaOCRWorkflowTests/testOCRFirstHandoffOptionalDegradationAndDirectPDFRejection",
+        "SlateSyncWorkflowTests/MediaOCRWorkflowTests/testRequiredAndCancellationHaveZeroDownstreamThenRetry"
+      ]
+    },
+    "INT-02": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncWorkflowTests/MediaOCRWorkflowTests/testScenarioEvidenceAdapterPreservesV1Fingerprint"
+      ]
+    },
+    "INT-03": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncWorkflowTests/MediaOCRWorkflowTests/testProjectSwitchCacheIsolationAndCloseDrain",
+        "SlateSyncWorkflowTests/MediaOCRWorkflowTests/testRequiredAndCancellationHaveZeroDownstreamThenRetry"
+      ]
+    },
+    "RES-01": {
+      "lane": "swift",
+      "tests": [
+        "SlateSyncMediaTests/MediaResourceTests/testTwentyPagesThreeRoundsDrainOwnedResources"
+      ]
+    },
+    "GOV-01": {
+      "lane": "selftest",
+      "tests": [
+        "script/tests/sm06_contract.mjs --self-test",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    }
+  }
+}

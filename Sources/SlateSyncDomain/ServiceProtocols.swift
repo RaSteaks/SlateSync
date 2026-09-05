@@ -44,6 +44,22 @@ public protocol OCRServing: Sendable {
     func recognize(images: [Data]) async throws -> [OCRPageResult]
 }
 
+/// SM-06 public boundaries carry immutable bytes/evidence, never framework or
+/// database objects. Network orchestration remains the responsibility of SM-07.
+public protocol MediaPreparing: Sendable {
+    func prepare(_ input: MediaInput, options: MediaPreparationOptions, operation: MediaOperation, progress: MediaProgressSink?) async throws -> PreparedDocument
+}
+public protocol MediaRecompressing: Sendable {
+    func recompress(_ document: PreparedDocument, profile: ImageCompressionProfile, operation: MediaOperation) async throws -> PreparedDocument
+}
+public protocol LocalOCREngine: Sendable {
+    func recognize(_ document: PreparedDocument, operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult
+    func close() async
+}
+public protocol OCRCapabilityProbing: Sendable {
+    func isAvailable() async -> Bool
+}
+
 public protocol RecognitionServing: Sendable {
     func progress(for projectID: String) async -> AsyncStream<RecognitionProgress>
     func cancel(projectID: String) async

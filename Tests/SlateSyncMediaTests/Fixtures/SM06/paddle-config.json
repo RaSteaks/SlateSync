@@ -1,0 +1,1054 @@
+[
+  {
+    "raw": {},
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "",
+      "recognitionModel": "",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN": ""
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "",
+      "recognitionModel": "",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_MODEL_VERSION": "pp-ocrv5"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "PP-OCRv5_server_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "performance",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "performance",
+      "presetLabel": "性能（质量优先）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "performance",
+      "profileLabel": "性能（质量优先）",
+      "detectionModel": "PP-OCRv6_medium_det",
+      "recognitionModel": "PP-OCRv6_medium_rec",
+      "recognitionBatchSize": 4,
+      "minimumConfidence": 0.05,
+      "maxBlocksPerView": 0,
+      "textDetLimitSideLen": 1280
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "balanced",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "balanced",
+      "presetLabel": "平衡（推荐）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡（推荐）",
+      "detectionModel": "PP-OCRv6_small_det",
+      "recognitionModel": "PP-OCRv6_small_rec",
+      "recognitionBatchSize": 8,
+      "minimumConfidence": 0.1,
+      "maxBlocksPerView": 256,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "fast",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "fast",
+      "presetLabel": "快速（低延迟）",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速（低延迟）",
+      "detectionModel": "PP-OCRv6_tiny_det",
+      "recognitionModel": "PP-OCRv6_tiny_rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.25,
+      "maxBlocksPerView": 64,
+      "textDetLimitSideLen": 736
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "fast",
+      "profileLabel": "快速",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "custom",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "fast",
+      "profileLabel": "快速",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv5",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv5",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "PP-OCRv5_mobile_det",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "fast",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "fast",
+      "profileLabel": "快速",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "balanced",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "balanced",
+      "profileLabel": "平衡",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "accurate",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  },
+  {
+    "raw": {
+      "PADDLEOCR_PRESET": "unknown",
+      "PADDLEOCR_MODEL_VERSION": "PP-OCRv6",
+      "PADDLEOCR_PROFILE": "unknown",
+      "PADDLEOCR_DETECTION_MODEL": "PP-OCRv5_mobile_det",
+      "PADDLEOCR_RECOGNITION_MODEL": "local-rec",
+      "PADDLEOCR_RECOGNITION_BATCH_SIZE": "0x10",
+      "PADDLEOCR_MIN_CONFIDENCE": "0.4",
+      "PADDLEOCR_MAX_BLOCKS_PER_VIEW": "99"
+    },
+    "expected": {
+      "preset": "custom",
+      "presetLabel": "自定义",
+      "modelVersion": "PP-OCRv6",
+      "profile": "accurate",
+      "profileLabel": "高精度",
+      "detectionModel": "",
+      "recognitionModel": "local-rec",
+      "recognitionBatchSize": 16,
+      "minimumConfidence": 0.4,
+      "maxBlocksPerView": 99,
+      "textDetLimitSideLen": 960
+    }
+  }
+]

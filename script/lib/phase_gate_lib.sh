@@ -55,7 +55,7 @@ gate_classify_failure() {
   # Real assertions, crashes, and failed tests outrank every marker. A runner
   # can emit environment text after an application has already failed.
   if rg -qi \
-    'XCTAssert[A-Za-z0-9_]*[[:space:]]+failed|assertion[[:space:]]+(failed|failure)|failedTests[[:space:]]*=[[:space:]]*[1-9]|test(s)?[[:space:]]+(failed|failure)|application code (crashed|failed)|uncaught exception|fatal error|EXC_CRASH|signal[[:space:]]+[0-9]+' \
+    'XCTAssert[A-Za-z0-9_]*[[:space:]]+failed|assertion[[:space:]]+(failed|failure)|failedTests[[:space:]]*=[[:space:]]*[1-9]|Test Case .+ failed|application code (crashed|failed)|uncaught exception|fatal error|EXC_CRASH|signal[[:space:]]+[0-9]+' \
     "$log_path"; then
     print -r -- "FAIL"
     return 0
@@ -70,6 +70,14 @@ gate_classify_failure() {
   fi
   if rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV' "$log_path"; then
     print -r -- "BLOCKED_ENV"
+    return 0
+  fi
+
+  # Xcode emits "** TEST FAILED **" even if its UI runner never initialized.
+  # Only the parsed xcresult can disambiguate that banner. Without a summary
+  # marker, generic failure text still fails closed before environment hints.
+  if rg -qi 'test(s)?[[:space:]]+(failed|failure)' "$log_path"; then
+    print -r -- "FAIL"
     return 0
   fi
 

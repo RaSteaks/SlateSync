@@ -1,0 +1,3 @@
+# Frozen PDF fixtures are binary inputs. Treating their xref records as text
+# creates false trailing-whitespace findings and risks byte-changing cleanup.
+*.pdf binary

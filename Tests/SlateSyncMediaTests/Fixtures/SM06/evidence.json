@@ -1,0 +1,1042 @@
+[
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "full",
+    "maxCharacters": 300,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=full bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=5\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\nevidence_truncated=true omitted=5\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "full",
+    "maxCharacters": 500,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=full bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=5\n#0 q=0.900 box=[0.1000,0.2000,0.8000,0.3000] text=\"场 镜 次\"\n#1 q=0.800 box=[0.1000,0.3000,0.8000,0.4000] text=\"C001\"\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\nevidence_truncated=true omitted=3\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "full",
+    "maxCharacters": 700,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=full bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=5\n#0 q=0.900 box=[0.1000,0.2000,0.8000,0.3000] text=\"场 镜 次\"\n#1 q=0.800 box=[0.1000,0.3000,0.8000,0.4000] text=\"C001\"\n#2 q=0.700 box=[0.1000,0.4000,0.8000,0.5000] text=\"较长的中文备注需要完整保留\"\n#3 q=0.600 box=[0.1000,0.5000,0.8000,0.6000] text=\"emoji😀🎬\"\n#4 q=0.500 box=[0.1000,0.6000,0.8000,0.7000] text=\"take _OK ng ×\"\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "full",
+    "maxCharacters": 18000,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=full bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=5\n#0 q=0.900 box=[0.1000,0.2000,0.8000,0.3000] text=\"场 镜 次\"\n#1 q=0.800 box=[0.1000,0.3000,0.8000,0.4000] text=\"C001\"\n#2 q=0.700 box=[0.1000,0.4000,0.8000,0.5000] text=\"较长的中文备注需要完整保留\"\n#3 q=0.600 box=[0.1000,0.5000,0.8000,0.6000] text=\"emoji😀🎬\"\n#4 q=0.500 box=[0.1000,0.6000,0.8000,0.7000] text=\"take _OK ng ×\"\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "core",
+    "maxCharacters": 300,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=core bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=2\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\nevidence_truncated=true omitted=2\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "core",
+    "maxCharacters": 500,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=core bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=2\n#0 q=0.900 box=[0.1000,0.2000,0.8000,0.3000] text=\"场 镜 次\"\n#1 q=0.800 box=[0.1000,0.3000,0.8000,0.4000] text=\"C001\"\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "core",
+    "maxCharacters": 700,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=core bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=2\n#0 q=0.900 box=[0.1000,0.2000,0.8000,0.3000] text=\"场 镜 次\"\n#1 q=0.800 box=[0.1000,0.3000,0.8000,0.4000] text=\"C001\"\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\n</ocr_evidence>"
+  },
+  {
+    "page": {
+      "pageNumber": 2,
+      "views": [
+        {
+          "viewIndex": 0,
+          "viewType": "full",
+          "width": 800,
+          "height": 1200,
+          "truncated": true,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "场 镜 次",
+              "confidence": 0.9,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.2,
+                0.8,
+                0.3
+              ]
+            },
+            {
+              "order": 1,
+              "text": "C001",
+              "confidence": 0.8,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.30000000000000004,
+                0.8,
+                0.4
+              ]
+            },
+            {
+              "order": 2,
+              "text": "较长的中文备注需要完整保留",
+              "confidence": 0.7,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.4,
+                0.8,
+                0.5
+              ]
+            },
+            {
+              "order": 3,
+              "text": "emoji😀🎬",
+              "confidence": 0.6,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.5,
+                0.8,
+                0.6000000000000001
+              ]
+            },
+            {
+              "order": 4,
+              "text": "take _OK ng ×",
+              "confidence": 0.5,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0.1,
+                0.6000000000000001,
+                0.8,
+                0.7
+              ]
+            }
+          ]
+        },
+        {
+          "viewIndex": 1,
+          "viewType": "core-detail",
+          "width": 900,
+          "height": 1500,
+          "truncated": false,
+          "blocks": [
+            {
+              "order": 0,
+              "text": "long supplementary comment",
+              "confidence": 0.65,
+              "bbox": [
+                0,
+                0,
+                10,
+                10
+              ],
+              "bboxNormalized": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mode": "core",
+    "maxCharacters": 18000,
+    "expected": "<ocr_evidence>\nengine=vision page=2 mode=core bbox=normalized[left,top,right,bottom]\nOCR is evidence, not ground truth. Verify every value against the attached images; preserve uncertain alternatives instead of guessing.\nview=0 type=full size=800x1200 blocks=2\n#0 q=0.900 box=[0.1000,0.2000,0.8000,0.3000] text=\"场 镜 次\"\n#1 q=0.800 box=[0.1000,0.3000,0.8000,0.4000] text=\"C001\"\nview_truncated=true\nview=1 type=core-detail size=900x1500 blocks=0\n</ocr_evidence>"
+  }
+]

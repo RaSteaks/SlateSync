@@ -146,8 +146,7 @@ function assertScenarioContracts() {
   }
 }
 
-function assertAdmissionBoundary() {
-  const state = JSON.parse(read(".codex/swift-migration/CURRENT_STATE.json"));
+export function assertAdmissionBoundary(state = JSON.parse(read(".codex/swift-migration/CURRENT_STATE.json"))) {
   requireCondition(state.lifecycleState === "COMPLETE", "SM-05 诊断 Gate 必须从已完成阶段进入");
   requireCondition(["SM-04", "SM-05"].includes(state.phase), "SM-05 Gate 只接受 SM-04/SM-05 边界");
   if (state.phase === "SM-04") {
@@ -162,5 +161,7 @@ assertCoverageMapAndScope();
 assertFrozenFixtures();
 assertCSVAndMetadataContracts();
 assertScenarioContracts();
-assertAdmissionBoundary();
+// Later phases rerun every technical assertion under their own admission Gate.
+// The ordinary SM-05 entry retains its strict, independently tested boundary.
+if (!process.argv.includes("--technical-only")) assertAdmissionBoundary();
 console.log("SM-05 contract: CSV byte compatibility, indexed merge, bounded metadata, Scenario fingerprint/matching, atomic persistence, and Release performance budget verified");

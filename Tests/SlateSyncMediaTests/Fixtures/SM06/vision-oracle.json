@@ -1,0 +1,546 @@
+[
+  {
+    "cap" : 0,
+    "expected" : {
+      "blocks" : [
+        {
+          "bbox" : [
+            80,
+            50,
+            400,
+            100
+          ],
+          "bboxNormalized" : [
+            0.1,
+            0.05,
+            0.5,
+            0.1
+          ],
+          "confidence" : 0.9,
+          "order" : 0,
+          "text" : "title"
+        },
+        {
+          "bbox" : [
+            40,
+            120,
+            200,
+            160
+          ],
+          "bboxNormalized" : [
+            0.05,
+            0.12,
+            0.25,
+            0.16
+          ],
+          "confidence" : 0.8,
+          "order" : 1,
+          "text" : "left"
+        },
+        {
+          "bbox" : [
+            40,
+            120,
+            200,
+            160
+          ],
+          "bboxNormalized" : [
+            0.05,
+            0.12,
+            0.25,
+            0.16
+          ],
+          "confidence" : 0.8,
+          "order" : 2,
+          "text" : "tie"
+        },
+        {
+          "bbox" : [
+            560,
+            110,
+            720,
+            150
+          ],
+          "bboxNormalized" : [
+            0.7,
+            0.11,
+            0.9,
+            0.15
+          ],
+          "confidence" : 0.8,
+          "order" : 3,
+          "text" : "right"
+        },
+        {
+          "bbox" : [
+            0,
+            910,
+            800,
+            1000
+          ],
+          "bboxNormalized" : [
+            0,
+            0.91,
+            1,
+            1
+          ],
+          "confidence" : 0.75,
+          "order" : 4,
+          "text" : "bottom 😀"
+        }
+      ],
+      "durationMs" : 0,
+      "height" : 1000,
+      "truncated" : false,
+      "viewIndex" : 0,
+      "viewType" : "full",
+      "width" : 800
+    },
+    "observations" : [
+      {
+        "box" : {
+          "height" : 0.05,
+          "width" : 0.4,
+          "x" : 0.1,
+          "y" : 0.9
+        },
+        "confidence" : 0.9,
+        "text" : " title "
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.7,
+          "y" : 0.85
+        },
+        "confidence" : 0.8,
+        "text" : "right"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "left"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "tie"
+      },
+      {
+        "box" : {
+          "height" : 0.1,
+          "width" : 1.04,
+          "x" : -0.02,
+          "y" : -0.01
+        },
+        "confidence" : 0.75,
+        "text" : "bottom 😀"
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 1,
+        "text" : "   "
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 0.09,
+        "text" : "low"
+      }
+    ]
+  },
+  {
+    "cap" : 1,
+    "expected" : {
+      "blocks" : [
+        {
+          "bbox" : [
+            40,
+            120,
+            200,
+            160
+          ],
+          "bboxNormalized" : [
+            0.05,
+            0.12,
+            0.25,
+            0.16
+          ],
+          "confidence" : 0.8,
+          "order" : 0,
+          "text" : "tie"
+        }
+      ],
+      "durationMs" : 0,
+      "height" : 1000,
+      "truncated" : true,
+      "viewIndex" : 0,
+      "viewType" : "full",
+      "width" : 800
+    },
+    "observations" : [
+      {
+        "box" : {
+          "height" : 0.05,
+          "width" : 0.4,
+          "x" : 0.1,
+          "y" : 0.9
+        },
+        "confidence" : 0.9,
+        "text" : " title "
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.7,
+          "y" : 0.85
+        },
+        "confidence" : 0.8,
+        "text" : "right"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "left"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "tie"
+      },
+      {
+        "box" : {
+          "height" : 0.1,
+          "width" : 1.04,
+          "x" : -0.02,
+          "y" : -0.01
+        },
+        "confidence" : 0.75,
+        "text" : "bottom 😀"
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 1,
+        "text" : "   "
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 0.09,
+        "text" : "low"
+      }
+    ]
+  },
+  {
+    "cap" : 2,
+    "expected" : {
+      "blocks" : [
+        {
+          "bbox" : [
+            80,
+            50,
+            400,
+            100
+          ],
+          "bboxNormalized" : [
+            0.1,
+            0.05,
+            0.5,
+            0.1
+          ],
+          "confidence" : 0.9,
+          "order" : 0,
+          "text" : "title"
+        },
+        {
+          "bbox" : [
+            0,
+            910,
+            800,
+            1000
+          ],
+          "bboxNormalized" : [
+            0,
+            0.91,
+            1,
+            1
+          ],
+          "confidence" : 0.75,
+          "order" : 1,
+          "text" : "bottom 😀"
+        }
+      ],
+      "durationMs" : 0,
+      "height" : 1000,
+      "truncated" : true,
+      "viewIndex" : 0,
+      "viewType" : "full",
+      "width" : 800
+    },
+    "observations" : [
+      {
+        "box" : {
+          "height" : 0.05,
+          "width" : 0.4,
+          "x" : 0.1,
+          "y" : 0.9
+        },
+        "confidence" : 0.9,
+        "text" : " title "
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.7,
+          "y" : 0.85
+        },
+        "confidence" : 0.8,
+        "text" : "right"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "left"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "tie"
+      },
+      {
+        "box" : {
+          "height" : 0.1,
+          "width" : 1.04,
+          "x" : -0.02,
+          "y" : -0.01
+        },
+        "confidence" : 0.75,
+        "text" : "bottom 😀"
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 1,
+        "text" : "   "
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 0.09,
+        "text" : "low"
+      }
+    ]
+  },
+  {
+    "cap" : 4,
+    "expected" : {
+      "blocks" : [
+        {
+          "bbox" : [
+            80,
+            50,
+            400,
+            100
+          ],
+          "bboxNormalized" : [
+            0.1,
+            0.05,
+            0.5,
+            0.1
+          ],
+          "confidence" : 0.9,
+          "order" : 0,
+          "text" : "title"
+        },
+        {
+          "bbox" : [
+            40,
+            120,
+            200,
+            160
+          ],
+          "bboxNormalized" : [
+            0.05,
+            0.12,
+            0.25,
+            0.16
+          ],
+          "confidence" : 0.8,
+          "order" : 1,
+          "text" : "left"
+        },
+        {
+          "bbox" : [
+            560,
+            110,
+            720,
+            150
+          ],
+          "bboxNormalized" : [
+            0.7,
+            0.11,
+            0.9,
+            0.15
+          ],
+          "confidence" : 0.8,
+          "order" : 2,
+          "text" : "right"
+        },
+        {
+          "bbox" : [
+            0,
+            910,
+            800,
+            1000
+          ],
+          "bboxNormalized" : [
+            0,
+            0.91,
+            1,
+            1
+          ],
+          "confidence" : 0.75,
+          "order" : 3,
+          "text" : "bottom 😀"
+        }
+      ],
+      "durationMs" : 0,
+      "height" : 1000,
+      "truncated" : true,
+      "viewIndex" : 0,
+      "viewType" : "full",
+      "width" : 800
+    },
+    "observations" : [
+      {
+        "box" : {
+          "height" : 0.05,
+          "width" : 0.4,
+          "x" : 0.1,
+          "y" : 0.9
+        },
+        "confidence" : 0.9,
+        "text" : " title "
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.7,
+          "y" : 0.85
+        },
+        "confidence" : 0.8,
+        "text" : "right"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "left"
+      },
+      {
+        "box" : {
+          "height" : 0.04,
+          "width" : 0.2,
+          "x" : 0.05,
+          "y" : 0.84
+        },
+        "confidence" : 0.8,
+        "text" : "tie"
+      },
+      {
+        "box" : {
+          "height" : 0.1,
+          "width" : 1.04,
+          "x" : -0.02,
+          "y" : -0.01
+        },
+        "confidence" : 0.75,
+        "text" : "bottom 😀"
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 1,
+        "text" : "   "
+      },
+      {
+        "box" : {
+          "height" : 1,
+          "width" : 1,
+          "x" : 0,
+          "y" : 0
+        },
+        "confidence" : 0.09,
+        "text" : "low"
+      }
+    ]
+  }
+]

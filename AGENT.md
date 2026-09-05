@@ -1,5 +1,65 @@
 # SlateSync 当前项目方案
 
+## 2026-09-05 SM-06 媒体与 OCR 实施（当前有效，IN_PROGRESS）
+
+- 用户已授权按 SM-06 施工包实施。Domain 增加图片/页面/OCR evidence、配置、
+  deadline、取消和进程协议；Media 负责原生 PDFKit/ImageIO/CoreGraphics、
+  Vision 和受管 Paddle；Workflow 提供无网络的 OCR-first 组合与 Scenario adapter。
+- 保留 20 MiB、20 页、整页＋两张重复表头局部 JPEG、三档不可变压缩、0.94
+  完整 UTF-8 请求预算，以及旧 JS 的几何、设置、LTRB、UTF-16 evidence 行为。
+  原始 PDF 与下游图片 DTO 分离；历史 `pdfDataUrl` 在下游调用前拒绝。
+- Vision 默认内建、串行处理视图；显式 binary 使用旧协议。Paddle 复用未改写的
+  Python runner，实行单 worker、单次预热、共享排队/恢复 deadline、generation
+  和 TERM→1000 ms→KILL→退出等待。取消/关闭等待实际资源排空，不回填缓存。
+- 每引擎 8 项 LRU 按会话、页面/视图分组、顺序、图片和有效配置隔离；required
+  OCR 失败阻断，optional 明确降级，取消终止。Scenario v1 指纹保持不变；
+  `_OK`、`_KP`、`过`、`保`、`ng`、`x`、`×` 的 TakeStatus 映射留给 SM-07。
+- 已冻结旧 JS/Swift helper 来源哈希、独立 oracle、媒体样本及 35 个验收 ID。
+  Gate 检查真实测试日志、夹具完整性、旧阶段技术回归和批准前后的合法阶段状态。
+  Xcode 资源复用同一 runner 文件，离线 Paddle 验收实际使用 App bundle 内的副本。
+- 用户明确提供另一个工作区的 `.venv-paddleocr`，并确认同级 `.paddlex-cache`。
+  所需 v5 模型已复制到独立临时目录，源 runtime/cache 只读；运行时 HOME/cwd/cache
+  显式隔离，由操作系统禁止网络，不安装依赖、不下载模型。v6 命名 preset 仅按
+  仓库冻结参数验证，未声称已有 v6 模型实测。
+- 最终 dirty Gate 为技术 PASS：27 项检查通过，SwiftPM 139 项（通用运行 138
+  通过，专用离线 Paddle 补跑 1 项通过）、Xcode 3/3、Node 323/323、Modern
+  118/118、Gate self-tests 78/78；真实 App、Universal Release/Archive 与 ABI
+  验证均通过。证据目录为 `.codex/gate-results/SM-06/20260905T074810Z-0429abf0980a/`。
+- Gate 另修复 Xcode 通用失败横幅覆盖已解析环境分类的问题；真实断言仍优先。
+  后台 `--verify` 显式注入临时数据根，并沿用 UI 测试的忽略窗口恢复参数，
+  避免旧菜单栏会话使项目库视图从未加载。普通启动方式保持现有行为。
+- Review 提交前审计确认 PDF fixture 的 xref 尾随空格属于冻结二进制内容；根目录
+  `.gitattributes` 将 `*.pdf` 标记为 binary，避免文本清理破坏 manifest 哈希。
+- 详细结果、模型/fixture 哈希及资源测量见 `.codex/swift-migration/reviews/SM-06.md`。
+  本次退出 3、`approvable=false`，实现尚未提交；专用 review commit、精确 SHA 的
+  clean Gate 与 Owner 批准仍是后续准入步骤，`CURRENT_STATE.json` 保持 SM-05
+  COMPLETE，`.codex/refactor/` 历史不变。
+
+## 2026-09-05 SM-06 具体施工包（规划完成，尚未开工）
+
+以下保留原始规划记录；当前进度以上方实施章节为准。
+
+- 已将 `.codex/swift-migration/packages/SM-06.md` 从阶段摘要细化为 WP-0～WP-8：
+  行为/夹具冻结、Domain 与依赖协议、原生 PDF/图片解码、裁剪/多视图/压缩、Vision、
+  Paddle 受管进程、OCR 选择/降级/缓存/evidence、Workflow 组合与正式 Gate。
+- 准入读取 `CURRENT_STATE.json` 和 `reviews/SM-05.md`：SM-05 已正式 COMPLETE，
+  审查提交为 `7c36f642632401ac21ff97316f1f3a9c1e8e6530`。下方早期章节及迁移
+  README 中的 SM-03/04 进度仅是旧记录，不能覆盖当前审批状态。
+- 施工包冻结现有 20 MiB 输入、20 页 PDF、整页＋两张重复表头局部 JPEG、几何参数、
+  三档压缩、0.94 请求预算、OCR 参数/坐标/evidence、自动 timeout 和每引擎 8 项 LRU；
+  几何/JSON/evidence 做精确差分，跨框架 PDF/JPEG 栅格按预先冻结的内容/容差验收。
+- 原生 Vision 默认内建运行，显式 `VISIONOCR_BINARY` 保留兼容适配；Paddle 继续复用
+  Python runner，由 Swift 管理 single-flight 预热、串行 worker、共享 deadline、
+  generation、TERM/KILL/退出等待和故障 one-shot 恢复。取消不允许恢复或下游降级。
+- 交付测试覆盖媒体、Vision、Paddle 进程、OCR 策略/缓存、组合、资源和治理负向案例；
+  fake 进程回归与真实 Vision/离线 Paddle 分开验收，真实环境缺失记 BLOCKED_ENV。
+  所有测试根、Python/runtime/model cache 显式隔离，不自动下载模型或访问用户数据。
+- SM-06 输出只包含页面图片与 OCR evidence；原始 PDF 不进入下游。Scenario adapter
+  保留 SM-05 v1 坐标/指纹；legacy take-status 文本转枚举明确交给 SM-07 adapter。
+- 本轮仅生成施工文档，未修改产品代码、测试、`CURRENT_STATE.json` 或历史证据，
+  未启动阶段实现、未运行阶段 Gate、未提交或推送。后续须经实施、专用 review commit、
+  clean Gate 和 Owner 批准，才可宣布 SM-06 COMPLETE。
+
 ## 2026-09-03 原生 Swift 重写
 
 - 当前权威方案迁移到 `.codex/swift-migration/README.md`；

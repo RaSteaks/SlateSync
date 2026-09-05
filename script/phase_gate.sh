@@ -487,7 +487,16 @@ run_check sm01_foundation_contract true "五模块、macOS 15、Swift 6 与 Xcod
 run_check sm01_scope_contract true "SM-01 范围、历史基线与生成物边界完整" \
   sm01_scope_contract_check
 run_check swift_build true "SwiftPM Debug 构建通过" swift build
-run_check swift_test true "SwiftPM 核心测试通过" swift test
+swift_test_check() {
+  if [[ "$phase" == SM-06 ]]; then
+    # Native-rendered review images are artifacts, never acceptance goldens.
+    mkdir -p "${result_dir}/media-artifacts" || return 1
+    SM06_ARTIFACT_ROOT="${result_dir}/media-artifacts" swift test
+  else
+    swift test
+  fi
+}
+run_check swift_test true "SwiftPM 核心测试通过" swift_test_check
 run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   xcodebuild -quiet \
   -project SlateSync.xcodeproj \
@@ -498,6 +507,14 @@ run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   build
 run_check xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
   xcode_test_plan_check
+
+sm06_offline_paddle_check() {
+  local resources="${result_dir}/DerivedData/Debug/Build/Products/Debug/SlateSync.app/Contents/Resources"
+  # The actual bundle must carry the shared runner byte-for-byte. Inference
+  # uses this read-only resource with an unrelated, injected cwd/model cache.
+  cmp scripts/paddleocr_runner.py "${resources}/paddleocr_runner.py" || return 1
+  SM06_BUNDLE_RESOURCES="$resources" ./script/tests/sm06_offline_paddle.sh
+}
 
 case "$phase" in
   SM-02)
@@ -542,15 +559,28 @@ case "$phase" in
     run_check sm05_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" \
       npm run test:native:abi
     ;;
+  SM-06)
+    run_check sm06_offline_paddle true "原生 bundle runner、隔离离线 Paddle 预热/两次推理/关闭通过" sm06_offline_paddle_check
+    run_check sm06_contract true "媒体/OCR 冻结夹具、实际执行覆盖与阶段准入合同完整" \
+      node script/tests/sm06_contract.mjs --swift-log "${result_dir}/swift_test.log" --paddle-log "${result_dir}/sm06_offline_paddle.log"
+    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
+      node script/tests/sm05_contract.mjs --technical-only
+    run_check sm06_node_compatibility true "Electron 媒体/OCR 兼容基线继续通过" npm run test:node
+    run_check sm06_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
+    run_check sm06_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
+    run_check sm06_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
+    run_check sm06_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
+    run_check sm06_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
+    ;;
   SM-01) ;;
   *)
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing
     ;;
 esac
 
-# SM-02 changes the native run and release authority, so the executable checks
-# established by SM-01 remain mandatory instead of degrading to source scans.
-if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]]; then
+# SM-02 and SM-06 retain SM-01's real executable/artifact checks. Keep the
+# original SM-01/02 admission expression intact for their frozen contract.
+if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || [[ "$phase" == "SM-06" ]]; then
   run_check sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
     sm01_debug_settings_check
   run_check sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \

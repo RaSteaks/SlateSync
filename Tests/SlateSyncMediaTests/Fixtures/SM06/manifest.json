@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "0429abf0980a02eb3db3834210e75344e5dc2b99",
+  "sources": [
+    {
+      "path": "public/image-preprocess.js",
+      "bytes": 4054,
+      "sha256": "b8186c8afe284dab23ac7208325a9c0e79d5402f49987b1fbbf25bf0c89af4fd"
+    },
+    {
+      "path": "public/recognition-request.js",
+      "bytes": 1808,
+      "sha256": "6ea0bc1c69c41f412147703ef2c7ee90902bf4fadcd515737c898a4261a95857"
+    },
+    {
+      "path": "src/renderer/workers/preparation.worker.ts",
+      "bytes": 10979,
+      "sha256": "482adbd3d9c2280d28c42772360422c0b93d4a23477ef564a06a30482858c316"
+    },
+    {
+      "path": "src/renderer/features/workspace/WorkspacePage.tsx",
+      "bytes": 64519,
+      "sha256": "b147058ba2e30b4e425edd39af37747fa8f74f59a1dfafc57678d1bbe01b5e58"
+    },
+    {
+      "path": "src/renderer/validation/input-validation.ts",
+      "bytes": 2417,
+      "sha256": "d1426e2a0ea01e4f5c5321d2fde9f24d45bd859c91e1cee857ee54a6f0d21281"
+    },
+    {
+      "path": "lib/config.mjs",
+      "bytes": 17675,
+      "sha256": "f879d022e63ce2b114abd7cdc394516762b7852eb91154075c65b85e2daf696e"
+    },
+    {
+      "path": "scripts/vision_ocr.swift",
+      "bytes": 11473,
+      "sha256": "7e65a0b4c9a86fa1eba0264ff6ea12ad4737c801e6721ad58cd9118f15063296"
+    },
+    {
+      "path": "lib/ocr/vision.mjs",
+      "bytes": 21161,
+      "sha256": "714ce587c407b6274ef0fa96e7cf106644bb994cc56190eaf32a281b035becf3"
+    },
+    {
+      "path": "lib/ocr/paddleocr.mjs",
+      "bytes": 51115,
+      "sha256": "e22b30ee3ec9a95c36f7d0767e190b2af401a9c5cd7466a87ee80ec69f29b7b9"
+    },
+    {
+      "path": "scripts/paddleocr_runner.py",
+      "bytes": 18698,
+      "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3"
+    },
+    {
+      "path": "lib/ocr/selection.mjs",
+      "bytes": 3007,
+      "sha256": "0db47b44a91abc77d40c86e03aeb2b66de1effdb7bdb4c89074def1ca6e846e5"
+    },
+    {
+      "path": "lib/ocr/cancellation.mjs",
+      "bytes": 715,
+      "sha256": "0745db2c9ad644978082cb682a9bf001257d5419c0ea8397ab3daf52a5233e45"
+    },
+    {
+      "path": "lib/ocr/runtime-paths.mjs",
+      "bytes": 1736,
+      "sha256": "9561a49a8cb1802843d89ddb217c1507ad37c97535d0683bad7ae6331cd59d14"
+    },
+    {
+      "path": "lib/ocr/child-environment.mjs",
+      "bytes": 2134,
+      "sha256": "dcf3af303c6c847cc6f0182be85e611f2c8f7e8f77783777803fcd3b07dc6f7f"
+    },
+    {
+      "path": "test/fixtures/fake-paddleocr-runner.py",
+      "bytes": 2583,
+      "sha256": "d88af8f4d698f879e3653c76e1640a9674e40ac55bf92494ced39e6b7d63ec2d"
+    }
+  ],
+  "files": {
+    "geometry.json": {
+      "bytes": 11958,
+      "sha256": "c4ec46d20d7abc6c683c9181dcb9dfedff46771bc7a3e757172cd1213406ab22"
+    },
+    "paddle-config.json": {
+      "bytes": 33479,
+      "sha256": "4ded5e6ff80a75c5bbc8a79ac9c0e531f9ef575e298ca656d050904d38333081"
+    },
+    "selection.json": {
+      "bytes": 78534,
+      "sha256": "13bd391cf3ca2269d5c58a977f86a326ee17842ba7efe0d542f70a9919e4f328"
+    },
+    "evidence.json": {
+      "bytes": 27046,
+      "sha256": "303075a8326e638b7be57dae195cfa087e346c577ab90cc91741c4234d3dec31"
+    },
+    "broken.pdf": {
+      "bytes": 23,
+      "sha256": "5870df335041bbe3acb086b9263f67447fc34ebaba0e6fd6dcdb76b1c99a4799"
+    },
+    "crop.pdf": {
+      "bytes": 1058,
+      "sha256": "2ae86fd8dc31249dfaeb11ef62b6c1360006e7387c57b3f357dfa07b67af794b"
+    },
+    "empty.pdf": {
+      "bytes": 311,
+      "sha256": "c1770c29539e4267a02e8d2257ff36d606f3e72701f923c90ef73fb2b6058b9d"
+    },
+    "locked.pdf": {
+      "bytes": 1429,
+      "sha256": "b609d966dd3a480a609e286958ff3079d9264741577f90680247573c553e677c"
+    },
+    "pages-1.pdf": {
+      "bytes": 1457,
+      "sha256": "aafb365654c8076e50dcd53925906462c5c6e9f5022712685b48fdc5713f2b2b"
+    },
+    "pages-20.pdf": {
+      "bytes": 11913,
+      "sha256": "b671c040ef2ab81e6f619a27ee20d8d914310fa568f28926f6e45abd7bb25a1e"
+    },
+    "pages-21.pdf": {
+      "bytes": 12467,
+      "sha256": "55eb0c39f840fbfdf9367667305b25edff8b6acc15299d4d90a84df6e83a9309"
+    },
+    "rotated.pdf": {
+      "bytes": 1032,
+      "sha256": "ea33c24abd00bcb4618018fe3cb0f58fe6a1cb3eda5166ca91fcbee508e69073"
+    },
+    "slate-alpha.png": {
+      "bytes": 66744,
+      "sha256": "b49de7072c5f8e1160b394640f457026ac22485ff120bc7e08b97f3afc518313"
+    },
+    "slate-exif6.jpg": {
+      "bytes": 172874,
+      "sha256": "150e4731c3f38b78463a4178af837b657ccd7e15136e11d9c9aae23fdf3a4497"
+    },
+    "slate.jpg": {
+      "bytes": 172838,
+      "sha256": "6e12317617b63c706da92ddb96fe0bc8e52bcfa96d2c5baa6989fb5caf5bd6cc"
+    },
+    "slate.webp": {
+      "bytes": 8494,
+      "sha256": "92118c7d638ecb8669b3fe7397213e6863f7c742d8bb9e2a095708ba1fc5e6a2"
+    },
+    "tiny.png": {
+      "bytes": 69,
+      "sha256": "e878950f8091ec010cf5cc723bdea027a8539cf7147cfea199c2f666232dcd4e"
+    },
+    "vision-oracle.json": {
+      "bytes": 10105,
+      "sha256": "1a24e5b14f6f835533c5e5d13605ac6b7c0a95701bfae974492e969ecad6ca58"
+    },
+    "sm06-fake-runner.py": {
+      "bytes": 3539,
+      "sha256": "63596c7bd99780c96e735c632ca8f674865e63b162c7edc0ab9a33d0701afcea"
+    },
+    "huge-bounds.pdf": {
+      "bytes": 445,
+      "sha256": "a0dbbaaa1a08bf0406ed30e62f1fd94a2c07eb31f64551f95576c049c2c207d5"
+    },
+    "invalid-bounds.pdf": {
+      "bytes": 431,
+      "sha256": "456fb5694bfa01dee44f86168c93edd6b65c55dd0a9f1b111e080790e8a31d01"
+    }
+  },
+  "rasterAcceptance": {
+    "frozenBeforeNativeImplementation": true,
+    "geometry": "Exact dimensions, crop/media intersection, quarter-turn rotation, page and view order. JPEG bytes are not cross-framework goldens.",
+    "markers": "Synthetic solid color patches sampled at central 50% of each patch; dominant channel >= 180 and other channels <= 80; white alpha background channels >= 240. Samples avoid antialiased edges.",
+    "pixelBudget": "No additional product rejection limit. Decoders subsample to <= 3000 per axis; check all finite bounds and integer products before allocation. Analysis <= 512 wide. One source page at a time.",
+    "orientation": "EXIF orientation 6 is clockwise; PDF /Rotate 90 is clockwise. Red top-left/blue bottom-right source markers must follow the independent rotated geometry."
+  },
+  "workflowFiles": [
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM06/sm06-integration.jpg",
+      "bytes": 172838,
+      "sha256": "6e12317617b63c706da92ddb96fe0bc8e52bcfa96d2c5baa6989fb5caf5bd6cc"
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM06/sm06-integration.pdf",
+      "bytes": 1457,
+      "sha256": "aafb365654c8076e50dcd53925906462c5c6e9f5022712685b48fdc5713f2b2b"
+    }
+  ]
+}

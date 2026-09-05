@@ -1,7 +1,7 @@
 # SlateSync Swift migration authority
 
-Updated: 2026-09-04
-Current phase: **SM-03 COMPLETE; SM-04 implementation in progress**
+Updated: 2026-09-05
+Current phase: **SM-05 COMPLETE; SM-06 implementation in progress**
 Target: **native macOS 15.0+, arm64 + x86_64**
 
 This directory is the current authority for replacing the Electron application
@@ -37,29 +37,25 @@ the Icon Composer app icon, and the deterministic build-and-run script. Debug
 uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
-The SM-01, SM-02 and SM-03 implementations are formally `COMPLETE` in
-`CURRENT_STATE.json`. SM-04 is the active implementation package. Review of its
-first dedicated commit found actor-reentrancy, shutdown/activation and Gate
-classification defects; fixes and regressions form the Owner-authorized
-dedicated review-fix change set. Governance cannot advance until that exact
-commit has a clean `phase_gate.sh` evidence report and the Repository Owner
-explicitly approves it.
+SM-01 through SM-05 are formally complete. `CURRENT_STATE.json` records
+SM-05 COMPLETE at the approved review commit
+`7c36f642632401ac21ff97316f1f3a9c1e8e6530`; SM-06 is the separately authorized
+implementation package. SM-04 supplies the v1 Library/SQLite ownership and
+portable transfer boundary. SM-05 supplies byte-compatible CSV, metadata and
+Scenario v1 behavior.
 
-SM-04 now includes the complete v1 portable transfer boundary: staged Project
-and Library exports use SQLite online backups, imported projects receive fresh
-ownership across database rows and snapshots, unsafe external trees are
-rejected, and active-Library changes persist the selected path and drain all
-outgoing connections before the app-level restart. The native App composition
-root consumes that path lazily on relaunch and retains Electron's known-default
-migration/conflict behavior without rewriting portable selections. These changes remain
-subject to the same clean Gate and Owner-approval lifecycle.
+SM-06 implements native image/PDF preparation, full/detail JPEG views,
+immutable request compression, built-in Vision and the explicit legacy helper
+adapter, supervised Paddle processes, OCR policy/cache/evidence, and a local
+Workflow handoff. It retains the shared Python runner in App resources and
+verifies real inference offline with explicitly supplied runtime/model fixtures.
+Provider transport/orchestration, the workspace UI and distribution remain
+SM-07 through SM-09 responsibilities. Scenario v1 is unchanged; legacy
+TakeStatus string conversion belongs to the SM-07 adapter.
 
-SM-04 review hardening makes Library/startup/project-store bootstrap
-single-flight, serializes project terminal operations and runtime close,
-drains snapshot writes before Library rename, admits only one concurrent
-activation, makes duplicate Scenario import idempotent, fails closed on
-transfer traversal errors, and correctly distinguishes UI automation setup
-blocks from product test failures.
+Implementation and diagnostic evidence are recorded in `reviews/SM-06.md`.
+SM-06 remains IN_PROGRESS until a dedicated review commit, a clean Gate on
+that exact SHA and explicit Owner approval complete the admission workflow.
 
 Electron, React, Node and cross-platform-era files remain retained as migration
 evidence until SM-09; SM-02 changes only their current macOS product entrypoints.

@@ -40,6 +40,13 @@ let package = Package(
             resources: [.process("Fixtures")]
         ),
         .testTarget(
+            name: "SlateSyncMediaTests",
+            dependencies: ["SlateSyncDomain", "SlateSyncMedia"],
+            // Unique SM-06 names keep frozen oracles and offline media fixtures
+            // deterministic even when SwiftPM flattens processed resources.
+            resources: [.process("Fixtures")]
+        ),
+        .testTarget(
             name: "SlateSyncWorkflowTests",
             dependencies: ["SlateSyncDomain", "SlateSyncPersistence", "SlateSyncWorkflow"],
             // SM-05 byte goldens are copied as resources so tests never depend
