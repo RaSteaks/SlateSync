@@ -23,6 +23,8 @@ import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateCsvFile } from "../../validation/input-validation";
 import { CsvVirtualTable } from "../csv/CsvVirtualTable";
 import { RecognitionResultPanel } from "../recognition/RecognitionResultPanel";
+import { acquireWorkspaceOperation, isRecognitionBusy, isWorkspaceBusy } from "../../services/workspace-operation";
+import { useProviderModels } from "../recognition/useProviderModels";
 import { ModelSelect } from "../recognition/ModelSelect";
 import { groupModelOptions } from "../recognition/model-options";
 import { useRecognitionDraft } from "../recognition/use-recognition-draft";
@@ -146,20 +148,23 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   const metadata = useMetadataStore(useShallow((state) => ({ result: state.result, scanning: state.scanning })));
   const { draft, dirty: draftDirty, replace: replaceDraft, patch: patchDraft, setModelFallback, markClean: markDraftClean } = useRecognitionDraft();
   const { providerId, modelId, accuracyMode, scenarioId, customPrompt } = draft;
-  const [models, setModels] = useState<readonly import("../../../shared/contracts/index.js").ModelData[]>([]);
+  const { models, discovered: modelsDiscovered } = useProviderModels(providerId);
   const [error, setError] = useState<string | null>(null);
-  const [switchingTask, setSwitchingTask] = useState(false);
+  const workspaceOperation = useTaskStore((state) => state.operation);
+  const switchingTask = Boolean(workspaceOperation && !["recognition", "merge"].includes(workspaceOperation.kind));
+  const recognitionBusy = recognition.running || workspaceOperation?.kind === "recognition";
+  const taskActionsBlocked = Boolean(workspaceOperation) || recognition.running;
   const [previewSelection, setPreviewSelection] = useState<{ page: number; source: string } | null>(null);
   const previewWheelDeltaRef = useRef(0);
   const previewWheelLockedRef = useRef(false);
   const previewWheelUnlockTimerRef = useRef<number | null>(null);
-  const taskSwitchInFlightRef = useRef(false);
   const slatePanelRef = useRef<SlateInputPanelHandle>(null);
   const slatePreviewRef = useRef<HTMLDivElement>(null);
   const lastPreviewGroupsRef = useRef<readonly (readonly string[])[] | null>(null);
   const slateCsvInputRef = useRef<HTMLInputElement>(null);
   const resolveCsvInputRef = useRef<HTMLInputElement>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [deleteTaskError, setDeleteTaskError] = useState<string | null>(null);
   const operationGuard = useMemo(() => createOperationGuard(), []);
   const taskListGuard = useMemo(() => createOperationGuard(), []);
   const taskLoadGuard = useMemo(() => createOperationGuard(), []);
@@ -170,7 +175,8 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   const runRecognitionRef = useRef<() => void>(() => undefined);
   const exportCsvRef = useRef<() => void>(() => undefined);
   const cancelRequestedRef = useRef(false);
-  const recognitionInFlightRef = useRef(false);
+  const cancelSettledRef = useRef<Promise<void> | null>(null);
+  const recognitionLeaseRef = useRef<ReturnType<typeof acquireWorkspaceOperation>>(null);
   const previousRouteRef = useRef<ReturnType<typeof useUiStore.getState>["route"] | null>(null);
   projectIdRef.current = project?.id || null;
 
@@ -422,7 +428,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!draftDirty && !autosave.hasPending() && !useRecognitionStore.getState().running) return;
+      if (!draftDirty && !autosave.hasPending() && !isWorkspaceBusy()) return;
       event.preventDefault();
       event.returnValue = "";
       void autosave.flush();
@@ -476,7 +482,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     taskLoadGuard.invalidate();
     void autosave.flush();
     const preserveRecognitionForLogViewer = useUiStore.getState().route === "logs"
-      && (useRecognitionStore.getState().running || recognitionInFlightRef.current);
+      && isRecognitionBusy();
     if (preserveRecognitionForLogViewer) {
       // Logs is a read-only detour. Keep every route-owned input and the
       // worker alive so returning to Workspace can render the same task while
@@ -496,6 +502,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
   useEffect(() => {
     if (!project) return;
+    let active = true;
     // Initialize once per project identity. Settings-page saves and global
     // config refreshes may replace these objects while this instance is hidden;
     // they must not clear the user's retained workspace projection.
@@ -518,9 +525,14 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       useSlateStore.getState().clearInput();
       useExportStore.getState().clear();
       useMetadataStore.getState().clear();
-      void getCsvWorkerService().clear();
+      // Strict-mode/unmount cleanup can terminate this initialization request.
+      // Consume the rejection, and report failures only to its live project.
+      void getCsvWorkerService().clear().catch((cause) => {
+        if (active && projectIdRef.current === project.id) setError(appErrorFromUnknown(cause).message);
+      });
     }
     return () => {
+      active = false;
       taskListGuard.invalidate();
       taskLoadGuard.invalidate();
       void autosave.flush();
@@ -528,22 +540,9 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   }, [autosave, previewGuard, project?.id, replaceDraft, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
-    if (!providerId) return;
-    let active = true;
-    void (async () => {
-      try {
-        const result = await unwrap(await getSlateSync().recognition.getModels({ providerId, forceRefresh: false }));
-        if (!active) return;
-        setModels(result.models);
-        // Only seed a genuinely new task. A saved/removed model must remain
-        // visible as a stale reference until the user explicitly remaps it.
-        if (!modelId) setModelFallback(result.models[0]?.id || "");
-      } catch {
-        if (active) setModels(config?.models.filter((model) => model.providers.includes(providerId)) || []);
-      }
-    })();
-    return () => { active = false; };
-  }, [config?.models, modelId, providerId, setModelFallback]);
+    // Discovery only seeds an empty draft; it never remaps a saved/removed ID.
+    if (modelsDiscovered && !modelId) setModelFallback(models[0]?.id || "");
+  }, [models, modelsDiscovered, modelId, setModelFallback]);
 
   const applyTask = useCallback(async (taskId: string, task: TaskData) => {
     const csvWorker = getCsvWorkerService();
@@ -627,7 +626,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     // A running request already has its complete in-memory projection. Only
     // reload after it stops, otherwise a draft snapshot from Main could erase
     // the live progress/result while the user is back on the Workspace route.
-    if (recognition.running) return undefined;
+    if (taskActionsBlocked) return undefined;
     if (!taskId) {
       useRecognitionStore.getState().clearWorkspaceHandoff();
       return undefined;
@@ -638,19 +637,25 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       try {
         const task = await unwrap(await getSlateSync().tasks.load({ projectId: project.id, id: taskId }));
         const currentRecognition = useRecognitionStore.getState();
-        if (!active || currentRecognition.running || !currentRecognition.resumeOnWorkspace || currentRecognition.taskId !== taskId) return;
-        if (task.result || task.editedRecords?.length) {
-          await applyTask(taskId, task);
-        } else {
-          // Preserve a failed/canceled in-memory result when Main only has the
-          // original draft, but still make the handoff one-shot.
-          useTaskStore.getState().setActive(taskId, task);
-          useTaskStore.getState().setSaveState("saved");
-          useRecognitionStore.getState().clearWorkspaceHandoff();
-        }
-        // The restored detail is authoritative; refresh the rail so its
-        // summary/status cannot remain the pre-handoff draft projection.
-        await refreshTasks(project.id);
+        if (!active || isWorkspaceBusy() || currentRecognition.running || !currentRecognition.resumeOnWorkspace || currentRecognition.taskId !== taskId) return;
+        // Acquire immediately before restoring: the initial read may race a
+        // shortcut, and applyTask also awaits worker cleanup/preview work.
+        const owner = acquireWorkspaceOperation("switch", project.id);
+        if (!owner) return;
+        try {
+          if (task.result || task.editedRecords?.length) {
+            await applyTask(taskId, task);
+          } else {
+            // Preserve a failed/canceled in-memory result when Main only has
+            // the original draft, but still make the handoff one-shot.
+            useTaskStore.getState().setActive(taskId, task);
+            useTaskStore.getState().setSaveState("saved");
+            useRecognitionStore.getState().clearWorkspaceHandoff();
+          }
+          // The restored detail is authoritative; refresh the rail so its
+          // summary/status cannot remain the pre-handoff draft projection.
+          await refreshTasks(project.id);
+        } finally { owner.release(); }
       } catch (nextError) {
         if (!active) return;
         useRecognitionStore.getState().clearWorkspaceHandoff();
@@ -658,33 +663,24 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       }
     })();
     return () => { active = false; };
-  }, [project, recognition.projectId, recognition.resumeOnWorkspace, recognition.running, recognition.taskId, refreshTasks]);
+  }, [project, recognition.projectId, recognition.resumeOnWorkspace, recognition.running, recognition.taskId, taskActionsBlocked, refreshTasks]);
 
   const refreshWorkspaceAfterRouteReturn = useCallback(async (projectId: string) => {
-    // Finish the same autosave queue before re-reading Main; otherwise a fast
-    // settings/logs round-trip could replace the user's newest local edits with
-    // an older persisted task snapshot.
-    if (!(await autosave.flush())) {
-      if (useTaskStore.getState().saveState === "error") setError("工作台快照保存失败，暂不刷新当前任务。");
-      return;
-    }
-    const currentRecognition = useRecognitionStore.getState();
-    if (currentRecognition.running) {
-      // A live request already owns the freshest detail in the global store;
-      // only the task rail needs the authoritative Main-side summary.
+    const owner = acquireWorkspaceOperation("switch", projectId);
+    if (!owner) { await refreshTasks(projectId); return; }
+    try {
+      if (!(await autosave.flush())) {
+        if (useTaskStore.getState().saveState === "error") setError("工作台快照保存失败，暂不刷新当前任务。");
+        return;
+      }
+      const activeTaskId = useTaskStore.getState().activeId || autosave.getLastSavedTaskId();
+      if (activeTaskId) {
+        const task = await unwrap(await getSlateSync().tasks.load({ projectId, id: activeTaskId }));
+        if (!owner.isCurrent() || useUiStore.getState().route !== "workspace" || projectIdRef.current !== projectId) return;
+        await applyTask(activeTaskId, task);
+      }
       await refreshTasks(projectId);
-      return;
-    }
-
-    const activeTaskId = useTaskStore.getState().activeId || autosave.getLastSavedTaskId();
-    if (activeTaskId) {
-      const task = await unwrap(await getSlateSync().tasks.load({ projectId, id: activeTaskId }));
-      if (useUiStore.getState().route !== "workspace" || projectIdRef.current !== projectId || useRecognitionStore.getState().running) return;
-      // Rehydrate the detail projection after the detour so completed edits and
-      // any task data written by Main during the detour are immediately visible.
-      await applyTask(activeTaskId, task);
-    }
-    await refreshTasks(projectId);
+    } finally { owner.release(); }
   }, [applyTask, autosave, refreshTasks, setError]);
 
   useEffect(() => {
@@ -698,51 +694,47 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   }, [project?.id, refreshWorkspaceAfterRouteReturn, route, setError]);
 
   const loadTask = async (taskId: string) => {
-    if (!project || switchingTask || taskSwitchInFlightRef.current || taskId === useTaskStore.getState().activeId) return;
-    // Operation guards and this ref serialize the normal millisecond-scale
-    // switch without forcing a redundant full-workspace busy render. Longer
-    // destructive new/delete flows still expose the visible switching state.
-    taskSwitchInFlightRef.current = true;
+    if (!project || taskId === useTaskStore.getState().activeId) return;
+    const owner = acquireWorkspaceOperation("switch", project.id);
+    if (!owner) return;
     setError(null);
     try {
       if (!(await autosave.flush())) throw new Error("当前任务保存失败；请重试保存后再切换任务。");
       const operationId = taskLoadGuard.start();
       const task = await unwrap(await getSlateSync().tasks.load({ projectId: project.id, id: taskId }));
-      if (!taskLoadGuard.isCurrent(operationId) || projectIdRef.current !== project.id) return;
+      if (!owner.isCurrent() || !taskLoadGuard.isCurrent(operationId) || projectIdRef.current !== project.id) return;
       await applyTask(taskId, task);
-    } catch (nextError) {
-      setError(appErrorFromUnknown(nextError).message);
-    } finally {
-      taskSwitchInFlightRef.current = false;
-    }
+    } catch (nextError) { setError(appErrorFromUnknown(nextError).message); }
+    finally { owner.release(); }
   };
 
   const newTask = async () => {
-    if (switchingTask) return;
-    setSwitchingTask(true);
+    if (!project) return;
+    const owner = acquireWorkspaceOperation("new", project.id);
+    if (!owner) return;
     setError(null);
     try {
       if (!(await autosave.flush())) throw new Error("当前任务保存失败；请重试保存后再新建任务。");
+      if (!owner.isCurrent() || projectIdRef.current !== project.id) return;
       taskLoadGuard.invalidate();
       await clearWorkspaceData();
       autosave.reset();
       useTaskStore.getState().setActive(null, null);
-    } catch (nextError) {
-      setError(appErrorFromUnknown(nextError).message);
-    } finally {
-      setSwitchingTask(false);
-    }
+    } catch (nextError) { setError(appErrorFromUnknown(nextError).message); }
+    finally { owner.release(); }
   };
 
   const deleteTask = async () => {
     const taskId = deleteTaskId;
     if (!project || !taskId) return;
-    setSwitchingTask(true);
-    setError(null);
+    const owner = acquireWorkspaceOperation("delete", project.id);
+    if (!owner) return;
+    setDeleteTaskError(null);
     try {
       const deletingActive = useTaskStore.getState().activeId === taskId;
       if (deletingActive && !(await autosave.flush())) throw new Error("当前任务保存失败；请先重试保存再删除。");
       await unwrap(await getSlateSync().tasks.delete({ projectId: project.id, id: taskId }));
+      if (!owner.isCurrent() || projectIdRef.current !== project.id) return;
       if (deletingActive) {
         await clearWorkspaceData();
         autosave.reset();
@@ -751,11 +743,8 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       setDeleteTaskId(null);
       await refreshTasks(project.id);
       setToast({ tone: "success", message: "任务已删除" });
-    } catch (nextError) {
-      setError(appErrorFromUnknown(nextError).message);
-    } finally {
-      setSwitchingTask(false);
-    }
+    } catch (nextError) { setDeleteTaskError(appErrorFromUnknown(nextError).message); }
+    finally { owner.release(); }
   };
 
   const onEdit = useCallback((key: `${number}:${number}`, value: string) => {
@@ -764,6 +753,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   }, [autosave, captureTask]);
 
   const loadResolveCsv = async (file: File) => {
+    if (isWorkspaceBusy() || useExportStore.getState().processing) return;
     // A directory scan in flight is keyed to the current CSV; loading another
     // one now would let the stale scan land on the wrong table.
     if (metadata.scanning) {
@@ -772,6 +762,8 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     }
     const validation = validateCsvFile(file, "resolve");
     if (!validation.ok) { setError(validation.message); return; }
+    const owner = project && acquireWorkspaceOperation("input", project.id);
+    if (!owner) return;
     setError(null);
     useExportStore.getState().setProcessing(true);
     try {
@@ -791,12 +783,16 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       setError(appError.message);
     } finally {
       useExportStore.getState().setProcessing(false);
+      owner.release();
     }
   };
 
   const loadSlateCsv = async (file: File) => {
+    if (isWorkspaceBusy() || useExportStore.getState().processing) return;
     const validation = validateCsvFile(file, "slate");
     if (!validation.ok) { setError(validation.message); return; }
+    const owner = project && acquireWorkspaceOperation("input", project.id);
+    if (!owner) return;
     setError(null);
     useExportStore.getState().setProcessing(true);
     try {
@@ -809,17 +805,22 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       setError(appError.message);
     } finally {
       useExportStore.getState().setProcessing(false);
+      owner.release();
     }
   };
 
-  const slateCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running, onFile: loadSlateCsv });
+  const slateCsvDrop = useFileDrop({ disabled: exportState.processing || taskActionsBlocked, onFile: loadSlateCsv });
   // Loading a Resolve CSV must be blocked while a directory scan is in flight:
   // the scan is keyed to the current CSV and would otherwise land as stale
   // results after the store is cleared for the newly loaded file.
-  const resolveCsvDrop = useFileDrop({ disabled: exportState.processing || recognition.running || metadata.scanning, onFile: loadResolveCsv });
+  const resolveCsvDrop = useFileDrop({ disabled: exportState.processing || taskActionsBlocked || metadata.scanning, onFile: loadResolveCsv });
 
   const selectMetadataDirectory = async () => {
-    if (!exportState.table || !project) return;
+    if (!exportState.table || !project || isWorkspaceBusy() || useExportStore.getState().processing) return;
+    // Include the native directory picker in the lease; another task must not
+    // receive metadata from a picker/scan that started in this task.
+    const owner = acquireWorkspaceOperation("input", project.id);
+    if (!owner) return;
     try {
       const directory = await unwrap(await getSlateSync().files.selectDirectory());
       if (!directory) return;
@@ -842,6 +843,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       useMetadataStore.getState().setError(appErrorFromUnknown(nextError));
     } finally {
       useMetadataStore.getState().setScanning(false);
+      owner.release();
     }
   };
 
@@ -927,17 +929,24 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   };
 
   const runRecognition = async () => {
-    if (!project) return;
+    if (!project || isWorkspaceBusy() || slate.preparing || exportState.processing) return;
     // Local Slate CSV merge deliberately precedes provider validation: this
     // path must remain usable on an offline machine with no API credentials.
-    if (!slate.imageDataGroups.length && exportState.slateCsvRecords?.length) { await mergeSlateCsv(); return; }
+    if (!slate.imageDataGroups.length && exportState.slateCsvRecords?.length) {
+      const owner = acquireWorkspaceOperation("merge", project.id);
+      if (!owner) return;
+      try { await mergeSlateCsv(); } finally { owner.release(); }
+      return;
+    }
     if (!providerId || !modelId) return;
     if (!slate.imageDataGroups.length) return;
     setError(null);
     cancelRequestedRef.current = false;
     // Cover the short preparation/autosave window before the global store is
     // marked running; a log detour during that window must not release inputs.
-    recognitionInFlightRef.current = true;
+    const owner = acquireWorkspaceOperation("recognition", project.id);
+    if (!owner) return;
+    recognitionLeaseRef.current = owner;
     let activeOperationId: number | null = null;
     try {
       if (!(await autosave.flush())) throw new Error("当前任务保存失败；请重试保存后再开始识别。");
@@ -945,6 +954,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       // mounted Workspace and can still be null after a log detour.
       const persistedTaskId = autosave.getLastSavedTaskId() || useTaskStore.getState().activeId;
       const request = await buildRecognitionRequest(persistedTaskId);
+      if (!owner.isCurrent() || projectIdRef.current !== project.id) return;
       const operationId = operationGuard.start();
       activeOperationId = operationId;
       invalidateResolvePreview();
@@ -954,7 +964,10 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       const api = getSlateSync();
       {
         const result = await unwrap(await api.recognition.run(request));
-        if (result.projectId !== project.id) return;
+        // Main cancellation may finish after the run response. Publish the
+        // terminal UI state only after its cancellation decision is known.
+        if (cancelSettledRef.current) await cancelSettledRef.current;
+        if (!owner.isCurrent() || result.projectId !== project.id) return;
         useRecognitionStore.getState().complete(operationId, result);
         await refreshResolvePreview();
         // A route change invalidates workspace-owned mutations, but the
@@ -971,6 +984,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
         setToast({ tone: "success", message: `识别完成 · ${result.result.records.length} 条记录` });
       }
     } catch (nextError) {
+      if (cancelSettledRef.current) await cancelSettledRef.current;
       const appError = appErrorFromUnknown(nextError);
       const operationId = activeOperationId ?? useRecognitionStore.getState().operationId;
       if (cancelRequestedRef.current || appError.code === "RECOGNITION_CANCELED" || appError.message.includes("识别已停止")) {
@@ -979,16 +993,22 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
         return;
       }
       if (useRecognitionStore.getState().operationId === operationId) useRecognitionStore.getState().fail(operationId, appError);
-      if (workspaceMountedRef.current && operationGuard.isCurrent(operationId)) setError(appError.message);
+      if (workspaceMountedRef.current && owner.isCurrent()) setError(appError.message);
     } finally {
-      recognitionInFlightRef.current = false;
+      owner.release();
+      if (recognitionLeaseRef.current === owner) recognitionLeaseRef.current = null;
       useSlateStore.getState().setPreparing(false);
     }
   };
 
   const stopRecognition = async () => {
-    if (!project || !recognition.running || recognition.phase === "stopping") return;
-    const operationId = useRecognitionStore.getState().operationId;
+    const current = useRecognitionStore.getState();
+    if (!project || !current.running || current.phase === "stopping") return;
+    const operationId = current.operationId;
+    const owner = recognitionLeaseRef.current;
+    let resolveCancel!: () => void;
+    cancelSettledRef.current = new Promise<void>((resolve) => { resolveCancel = resolve; });
+    owner?.retain();
     cancelRequestedRef.current = true;
     useRecognitionStore.getState().requestCancel(operationId);
     try {
@@ -1006,6 +1026,10 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       cancelRequestedRef.current = false;
       useRecognitionStore.getState().cancelRequestFailed(operationId);
       setError(appErrorFromUnknown(nextError).message);
+    } finally {
+      cancelSettledRef.current = null;
+      resolveCancel();
+      owner?.release();
     }
   };
 
@@ -1021,7 +1045,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
   const exportCsv = async () => {
     const records = useRecognitionStore.getState().records;
-    if (!project || !records.length) return;
+    if (!project || !records.length || isWorkspaceBusy() || useExportStore.getState().processing) return;
     useExportStore.getState().setProcessing(true);
     setError(null);
     try {
@@ -1046,8 +1070,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     project &&
       recognition.records.length &&
       !exportState.processing &&
-      !recognition.running &&
-      !switchingTask,
+      !taskActionsBlocked,
   );
   // Keep the parent toolbar callback stable while this ref follows the latest
   // draft, project, metadata, table edits, and export error handling closure.
@@ -1072,7 +1095,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   // pending/failed probes must never fall through to an unverified request.
   const staleModel = Boolean(modelId && !selectableModels.some((model) => model.id === modelId));
   const canMergeLocal = Boolean(!slate.imageDataGroups.length && exportState.slateCsvRecords?.length);
-  const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId && !staleProvider && !staleModel)) && !recognition.running && !slate.preparing && !switchingTask);
+  const canRecognize = Boolean((canMergeLocal || (slate.imageDataGroups.length && provider?.configured && modelId && !staleProvider && !staleModel)) && !taskActionsBlocked && !slate.preparing);
 
   return (
     <div className={styles.page} hidden={hidden}>
@@ -1085,7 +1108,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       {staleModel && <div style={{ marginBottom: 16 }}><InlineError message="已保存的模型不可用或探针已失效，请重新选择。" /></div>}
       <div className={styles.workspaceGrid}>
         <div className={styles.workspaceLeft}>
-          <Surface className={styles.panel}><TaskRail onSelect={(id) => void loadTask(id)} onRefresh={() => void refreshTasks()} onNew={() => void newTask()} onDelete={setDeleteTaskId} onRetrySave={() => void autosave.retry()} switching={switchingTask} /></Surface>
+          <Surface className={styles.panel}><TaskRail onSelect={(id) => void loadTask(id)} onRefresh={() => void refreshTasks()} onNew={() => void newTask()} onDelete={(id) => { if (!isWorkspaceBusy()) { setDeleteTaskError(null); setDeleteTaskId(id); } }} onRetrySave={() => void autosave.retry()} switching={taskActionsBlocked} /></Surface>
           <SlateInputPanel ref={slatePanelRef} onInputChanged={() => autosave.markDirty(captureTask())} />
           {/* Keep optional sources together before recognition so the user can
               finish all supporting-data choices before starting the job. */}
@@ -1095,29 +1118,29 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
             <Stack direction="row" gap={2} align="center" wrap style={{ marginTop: 14 }}>
               {/* Both CSV sources use the same outlined affordance so neither
                   input is visually mistaken for an unbounded text action. */}
-              <span className={styles.fileDropTarget} data-dragging={slateCsvDrop.dragging || undefined} {...slateCsvDrop.dropProps}><input ref={slateCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" onClick={() => slateCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></span>
-              <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden disabled={exportState.processing || recognition.running || metadata.scanning} onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" disabled={exportState.processing || recognition.running || metadata.scanning} onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
+              <span className={styles.fileDropTarget} data-dragging={slateCsvDrop.dragging || undefined} {...slateCsvDrop.dropProps}><input ref={slateCsvInputRef} disabled={exportState.processing || taskActionsBlocked} type="file" accept=".csv,text/csv" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadSlateCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" disabled={exportState.processing || taskActionsBlocked} onClick={() => slateCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>场记 CSV</Button></span>
+              <span className={styles.fileDropTarget} data-dragging={resolveCsvDrop.dragging || undefined} {...resolveCsvDrop.dropProps}><input ref={resolveCsvInputRef} type="file" accept=".csv,text/csv" hidden disabled={exportState.processing || taskActionsBlocked || metadata.scanning} onChange={(event) => { const file = event.target.files?.[0]; if (file) void loadResolveCsv(file); event.currentTarget.value = ""; }} /><Button type="button" variant="secondary" size="sm" disabled={exportState.processing || taskActionsBlocked || metadata.scanning} onClick={() => resolveCsvInputRef.current?.click()} startIcon={<FileSpreadsheet size={14} />}>Resolve CSV</Button></span>
               {exportState.slateCsvRecords && <Badge tone="accent">场记 CSV · {exportState.slateCsvRecords.length} 条</Badge>}
               {exportState.table && <Badge tone="success">Resolve CSV · {exportState.table.rows.length} 行</Badge>}
             </Stack>
-            {exportState.slateCsvRecords && <Button variant="ghost" size="sm" style={{ marginTop: 8 }} onClick={() => useExportStore.getState().setSlateCsvRecords(null, null)}>移除场记 CSV</Button>}
+            {exportState.slateCsvRecords && <Button variant="ghost" size="sm" style={{ marginTop: 8 }} disabled={taskActionsBlocked} onClick={() => { if (!isWorkspaceBusy()) useExportStore.getState().setSlateCsvRecords(null, null); }}>移除场记 CSV</Button>}
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--ss-color-line)" }}>
               <Text as="h3" size="sm" weight="medium">素材元数据回填</Text>
               <Text tone="muted" size="sm" style={{ marginTop: 5 }}>从素材目录回填帧率和拍摄日。</Text>
-              <Stack direction="row" gap={2} align="center" style={{ marginTop: 14 }}><Button variant="secondary" size="sm" disabled={!exportState.table || metadata.scanning} loading={metadata.scanning} onClick={() => void selectMetadataDirectory()} startIcon={<FolderSearch size={14} />}>选择素材目录</Button>{metadata.result && <Badge tone="success">{metadata.result.metadata.length} 个元数据</Badge>}</Stack>
+              <Stack direction="row" gap={2} align="center" style={{ marginTop: 14 }}><Button variant="secondary" size="sm" disabled={!exportState.table || metadata.scanning || exportState.processing || taskActionsBlocked} loading={metadata.scanning} onClick={() => void selectMetadataDirectory()} startIcon={<FolderSearch size={14} />}>选择素材目录</Button>{metadata.result && <Badge tone="success">{metadata.result.metadata.length} 个元数据</Badge>}</Stack>
               {metadata.result?.warnings.length ? <Text tone="warning" size="xs" style={{ marginTop: 10 }}>{metadata.result.warnings[0]}</Text> : null}
             </div>
           </Surface>
           <Surface className={styles.panel}>
             <div className={styles.sectionHeader}><div><p className={styles.kicker}>02 / 识别</p><h2 className={styles.sectionTitle}>识别设置</h2></div><Play size={18} aria-hidden="true" /></div>
             <div className={styles.grid}>
-              <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">选择 Provider</option>{staleProvider && <option value={providerId}>{providerId} · 接口已移除</option>}{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
-              <Field label="模型"><ModelSelect value={modelId} groups={modelGroups} onChange={(nextModelId) => { patchDraft({ modelId: nextModelId }); markDirtyAfterRender(); }} disabled={recognition.running} placeholder="选择视觉模型" /></Field>
-              <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { patchDraft({ accuracyMode: event.target.value as "high" | "standard" }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次识别</option></Select></Field>
-              <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { patchDraft({ scenarioId: event.target.value }); markDirtyAfterRender(); }} disabled={recognition.running}><option value="">自动识别</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>
-              <Field label="识别提示" hint="可选"><Textarea className="resize-none" value={customPrompt} onChange={(event) => { patchDraft({ customPrompt: event.target.value }); markDirtyAfterRender(); }} maxLength={2000} showCount disabled={recognition.running} placeholder={settings.customPrompt || "补充文字或机位约定"} /></Field>
+              <Field label="Provider"><Select value={providerId} onChange={(event) => { patchDraft({ providerId: event.target.value, modelId: "" }); markDirtyAfterRender(); }} disabled={taskActionsBlocked}><option value="">选择 Provider</option>{staleProvider && <option value={providerId}>{providerId} · 接口已移除</option>}{config?.providers.map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? "" : " · 未配置"}</option>)}</Select></Field>
+              <Field label="模型"><ModelSelect key={providerId} value={modelId} groups={modelGroups} onChange={(nextModelId) => { patchDraft({ modelId: nextModelId }); markDirtyAfterRender(); }} disabled={taskActionsBlocked} placeholder="选择视觉模型" /></Field>
+              <Field label="识别模式"><Select value={accuracyMode} onChange={(event) => { patchDraft({ accuracyMode: event.target.value as "high" | "standard" }); markDirtyAfterRender(); }} disabled={taskActionsBlocked}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次识别</option></Select></Field>
+              <Field label="场记结构"><Select value={scenarioId} onChange={(event) => { patchDraft({ scenarioId: event.target.value }); markDirtyAfterRender(); }} disabled={taskActionsBlocked}><option value="">自动识别</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field>
+              <Field label="识别提示" hint="可选"><Textarea className="resize-none" value={customPrompt} onChange={(event) => { patchDraft({ customPrompt: event.target.value }); markDirtyAfterRender(); }} maxLength={2000} showCount disabled={taskActionsBlocked} placeholder={settings.customPrompt || "补充文字或机位约定"} /></Field>
               <Stack direction="row" gap={2} align="center">
-                <Button size="lg" onClick={() => void runRecognition()} disabled={!canRecognize} loading={(recognition.running && recognition.phase !== "stopping") || slate.preparing} startIcon={<Play size={16} />}>{canMergeLocal ? "从场记 CSV 生成结果" : "开始识别"}</Button>
+                <Button size="lg" onClick={() => void runRecognition()} disabled={!canRecognize} loading={(recognitionBusy && recognition.phase !== "stopping") || slate.preparing} startIcon={<Play size={16} />}>{canMergeLocal ? "从场记 CSV 生成结果" : "开始识别"}</Button>
                 <Button variant="danger" size="lg" onClick={() => void stopRecognition()} disabled={!recognition.running || recognition.phase === "stopping"} loading={recognition.phase === "stopping"} startIcon={<Square size={14} />}>停止</Button>
               </Stack>
               {!provider?.configured && !canMergeLocal && <Text tone="warning" size="xs">未配置 Provider 密钥。可前往全局设置，或载入场记 CSV。</Text>}
@@ -1127,7 +1150,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
         <div className={styles.workspaceMain}>
           <Surface className={styles.panel}>
-            <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>预览</p><h2 className={styles.sectionTitle}>场记单</h2>{slate.imageDataGroups.length > 0 && <Text tone="subtle" size="xs" style={{ marginTop: 4 }}>点击页面可放大查看</Text>}</div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} 页` : "未载入"}</Text>{slate.filename && <Button variant="ghost" size="sm" onClick={() => slatePanelRef.current?.openPicker()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
+            <Stack direction="row" justify="between" align="center"><div><p className={styles.kicker}>预览</p><h2 className={styles.sectionTitle}>场记单</h2>{slate.imageDataGroups.length > 0 && <Text tone="subtle" size="xs" style={{ marginTop: 4 }}>点击页面可放大查看</Text>}</div><Stack direction="row" gap={2} align="center"><Text tone="subtle" size="xs" mono>{slate.pageCount ? `${slate.pageCount} 页` : "未载入"}</Text>{slate.filename && <Button variant="ghost" size="sm" disabled={taskActionsBlocked} onClick={() => slatePanelRef.current?.openPicker()} startIcon={<Upload size={14} />}>替换</Button>}</Stack></Stack>
             {slate.imageDataGroups.length ? <div ref={slatePreviewRef} tabIndex={-1} aria-label="场记单预览" className={styles.preview} style={{ marginTop: 14 }}><div className={styles.previewPages}>{previewPages.map(({ page, source }) => {
               const pageLabel = `${slate.filename || "场记单"} 第 ${page + 1} 页`;
               return <button type="button" className={styles.previewPageButton} key={`${slate.filename}-${page}`} aria-label={`放大查看${pageLabel}`} onClick={() => selectPreviewPage(page)}>
@@ -1149,7 +1172,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
               {/* CSV selection lives in the optional-input surface; this panel
                   stays focused on previewing and editing the merged result. */}
               <div><p className={styles.kicker}>03 / CSV</p><h2 className={styles.sectionTitle}>回填预览</h2></div>
-              {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" onClick={() => { previewGuard.invalidate(); void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
+              {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" disabled={taskActionsBlocked || exportState.processing} onClick={() => { if (isWorkspaceBusy()) return; previewGuard.invalidate(); void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
             </div>
             {exportState.error && <InlineError message={exportState.error.message} />}
             {(exportState.previewTable || exportState.table) && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.previewTable || exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
@@ -1161,12 +1184,14 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
       <Dialog
         open={Boolean(deleteTaskId)}
+        dismissible={!switchingTask}
         title="删除任务？"
         description="此操作不可撤销。"
         onClose={() => !switchingTask && setDeleteTaskId(null)}
-        footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" onClick={() => setDeleteTaskId(null)} disabled={switchingTask}>取消</Button><Button variant="danger" onClick={() => void deleteTask()} loading={switchingTask}>确认删除</Button></Stack>}
+        footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" onClick={() => setDeleteTaskId(null)} disabled={switchingTask}>取消</Button><Button variant="danger" onClick={() => void deleteTask()} disabled={taskActionsBlocked && !switchingTask} loading={switchingTask}>确认删除</Button></Stack>}
       >
         <Text tone="muted" size="sm">只删除当前选中的任务。</Text>
+        {deleteTaskError && <InlineError message={deleteTaskError} />}
       </Dialog>
 
       <Dialog

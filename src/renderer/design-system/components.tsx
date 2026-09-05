@@ -122,10 +122,10 @@ export function Checkbox({ label, ...props }: InputHTMLAttributes<HTMLInputEleme
   return <label className={styles.checkbox}><input type="checkbox" {...props} /><span>{label}</span></label>;
 }
 
-export function SegmentedControl<T extends string>({ value, options, onChange, label, className }: { value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; label: string; className?: string | undefined }) {
+export function SegmentedControl<T extends string>({ value, options, onChange, label, className, disabled = false }: { disabled?: boolean; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; label: string; className?: string | undefined }) {
   // Optional className lets narrow rows wrap the segments without changing the
   // shared group semantics (role="group" + aria-pressed buttons).
-  return <div className={classes(styles.segmented, className)} role="group" aria-label={label}>{options.map((option) => <button key={option.value} type="button" className={styles.segmentedButton} data-active={value === option.value} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
+  return <div className={classes(styles.segmented, className)} role="group" aria-label={label}>{options.map((option) => <button key={option.value} type="button" className={styles.segmentedButton} data-active={value === option.value} aria-pressed={value === option.value} disabled={disabled} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
 }
 
 export function Badge({ tone = "neutral", children, icon: IconComponent, className, ...props }: { tone?: Tone; children: ReactNode; icon?: LucideIcon; className?: string | undefined } & HTMLAttributes<HTMLSpanElement>) {
@@ -178,6 +178,12 @@ export function Dialog({ open, title, description, onClose, children, footer, si
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   wasOpenRef.current = open;
+  useLayoutEffect(() => () => {
+    // Conditional dialogs unmount instead of receiving open=false. Restore
+    // their opener too, provided it still belongs to the current page.
+    const opener = restoreRef.current;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }, []);
   useLayoutEffect(() => {
     if (!open) {
       // The portal is already absent in this layout phase, so restoring here
@@ -191,6 +197,8 @@ export function Dialog({ open, title, description, onClose, children, footer, si
     const focusable = () => dialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
     focusable()?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
+      // An inner picker handles Escape before the modal; never close both.
+      if (event.defaultPrevented) return;
       if (event.key === "Escape" && dismissibleRef.current) { event.preventDefault(); onCloseRef.current(); return; }
       if (event.key !== "Tab" || !dialogRef.current) return;
       const nodes = [...dialogRef.current.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")].filter((node) => !node.hasAttribute("disabled"));

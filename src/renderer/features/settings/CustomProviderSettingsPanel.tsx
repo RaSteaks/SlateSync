@@ -296,6 +296,9 @@ function ModelRow({ model }: { model: ModelData }) {
   </article>;
 }
 
+// Compare editor text, not parsed IDs: empty lines are meaningful until submit.
+const draftFingerprint = (draft: ProviderDraft, manualModelText: string) => JSON.stringify({ ...draft, manualModelIds: undefined, clearApiKey: Boolean(draft.clearApiKey), replaceApiKey: Boolean(draft.replaceApiKey), manualModelText });
+
 /** Machine-level custom endpoint CRUD and two-stage model capability checks. */
 export function CustomProviderSettingsPanel() {
   const setConfig = useProjectStore((state) => state.setConfig);
@@ -306,7 +309,12 @@ export function CustomProviderSettingsPanel() {
   const [dialog, setDialog] = useState<"new" | "edit" | "discard" | null>(null);
   const [discardTarget, setDiscardTarget] = useState<"new" | "edit">("new");
   const [draft, setDraft] = useState<ProviderDraft>(EMPTY_DRAFT);
-  const [draftDirty, setDraftDirty] = useState(false);
+  // Keep raw text until submit so Enter and IME composition preserve the caret.
+  const [manualModelText, setManualModelText] = useState("");
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  const [draftBaseline, setDraftBaseline] = useState(() => draftFingerprint(EMPTY_DRAFT, ""));
+  const draftDirty = draftFingerprint(draft, manualModelText) !== draftBaseline;
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -322,6 +330,14 @@ export function CustomProviderSettingsPanel() {
   const probeActiveRef = useRef(false);
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+
+  useEffect(() => {
+    if (busy || !dialogError || !dialog || dialog === "discard") return;
+    const labels = dialogError.includes("名称") ? "接口名称" : dialogError.includes("URL") ? "Base URL" : null;
+    if (!labels) return;
+    const fields = document.querySelectorAll<HTMLLabelElement>("#custom-provider-form label");
+    for (const field of fields) if (field.textContent?.startsWith(labels)) { field.querySelector("input")?.focus(); break; }
+  }, [busy, dialog, dialogError]);
 
   const loadProviders = async () => {
     setProvidersLoading(true);
@@ -378,7 +394,8 @@ export function CustomProviderSettingsPanel() {
   }, [pendingModels]);
 
   const refreshConfig = async () => {
-    try { setConfig(await unwrap(await getSlateSync().app.getConfig())); } catch { /* settings mutation already succeeded */ }
+    // Callers distinguish a committed registry write from a failed refresh.
+    setConfig(await unwrap(await getSlateSync().app.getConfig()));
   };
 
   const invalidateAsyncState = () => {
@@ -396,7 +413,9 @@ export function CustomProviderSettingsPanel() {
 
   const openNew = () => {
     setDraft({ ...EMPTY_DRAFT, manualModelIds: [] });
-    setDraftDirty(false);
+    setManualModelText("");
+    setDialogError(null);
+    setDraftBaseline(draftFingerprint(EMPTY_DRAFT, ""));
     setShowKey(false);
     setError(null);
     setDialog("new");
@@ -404,7 +423,9 @@ export function CustomProviderSettingsPanel() {
 
   const openEdit = () => {
     if (!selected) return;
-    setDraft({
+    setManualModelText(selected.manualModelIds.join("\n"));
+    setDialogError(null);
+    const nextDraft: ProviderDraft = {
       id: selected.id,
       name: selected.name,
       baseUrl: selected.baseUrl,
@@ -413,8 +434,9 @@ export function CustomProviderSettingsPanel() {
       imageDetail: selected.imageDetail,
       manualModelIds: [...selected.manualModelIds],
       apiKey: "",
-    });
-    setDraftDirty(false);
+    };
+    setDraft(nextDraft);
+    setDraftBaseline(draftFingerprint(nextDraft, selected.manualModelIds.join("\n")));
     setShowKey(false);
     setError(null);
     setDialog("edit");
@@ -427,13 +449,15 @@ export function CustomProviderSettingsPanel() {
   };
 
   const saveDraft = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    setError(null);
+    setDialogError(null);
     try {
       const api = getSlateSync();
       const request: ProviderDraft = {
         ...draft,
-        manualModelIds: String((draft.manualModelIds || []).join("\n")).split(/[\n,]/).map((id) => id.trim()).filter(Boolean),
+        manualModelIds: manualModelText.split(/[\n,]/).map((id) => id.trim()).filter(Boolean),
       };
       // The Main handler requires an existing ID for edits; never trust a
       // renderer draft's optional field to target an arbitrary provider.
@@ -448,7 +472,6 @@ export function CustomProviderSettingsPanel() {
       setProviders((previous) => dialog === "edit" ? previous.map((item) => item.id === saved.id ? saved : item) : [...previous, saved]);
       setSelectedId(saved.id);
       setDialog(null);
-      setDraftDirty(false);
       // A connection/manual-model edit increments Main's revision and
       // invalidates the prior discovery. Clear the local projection too so an
       // old model list cannot look selectable while the user decides to scan
@@ -456,26 +479,27 @@ export function CustomProviderSettingsPanel() {
       invalidateAsyncState();
       setSearch("");
       setToast({ tone: "success", message: dialog === "edit" ? "自定义接口已更新" : "自定义接口已添加" });
-      await refreshConfig();
+      try { await refreshConfig(); } catch { setError("接口已保存；配置刷新失败，请稍后重新打开应用。"); }
     } catch (cause) {
-      setError(appErrorFromUnknown(cause).message);
-    } finally { setBusy(false); }
+      setDialogError(appErrorFromUnknown(cause).message);
+    } finally { busyRef.current = false; setBusy(false); }
   };
 
   const deleteProvider = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || busyRef.current) return;
+    busyRef.current = true;
     invalidateAsyncState();
     setBusy(true);
-    setError(null);
+    setDialogError(null);
     try {
       await unwrap(await getSlateSync().settings.deleteCustomProvider({ id: deleteTarget.id, confirm: true }));
       setProviders((previous) => previous.filter((item) => item.id !== deleteTarget.id));
       setSelectedId((previous) => previous === deleteTarget.id ? "" : previous);
       setDeleteTarget(null);
       setToast({ tone: "success", message: "接口已删除；项目中的旧引用已保留并需要重新选择" });
-      await refreshConfig();
-    } catch (cause) { setError(appErrorFromUnknown(cause).message); }
-    finally { setBusy(false); }
+      try { await refreshConfig(); } catch { setError("接口已删除；配置刷新失败，请稍后重新打开应用。"); }
+    } catch (cause) { setDialogError(appErrorFromUnknown(cause).message); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   const discover = async (forceRefresh = false) => {
@@ -561,6 +585,7 @@ export function CustomProviderSettingsPanel() {
   }, [selectedId]);
 
   const updateDraft = <K extends keyof ProviderDraft>(key: K, value: ProviderDraft[K]) => {
+    if (busyRef.current) return;
     setDraft((previous) => ({
       ...previous,
       [key]: value,
@@ -573,7 +598,6 @@ export function CustomProviderSettingsPanel() {
           : { replaceApiKey: false }
         : {}),
     }));
-    setDraftDirty(true);
   };
 
   // 承接全局设置的分区导航：作为 settings-custom-providers 分区的锚点面板。
@@ -603,7 +627,7 @@ export function CustomProviderSettingsPanel() {
         probeBusy={probeBusy}
         probeProgress={probeProgress}
         onEdit={openEdit}
-        onDelete={() => setDeleteTarget(selected)}
+        onDelete={() => { setDialogError(null); setDeleteTarget(selected); }}
         onDiscover={() => void discover(true)}
         onSearchChange={setSearch}
         onClearSearch={() => setSearch("")}
@@ -614,19 +638,20 @@ export function CustomProviderSettingsPanel() {
         onRetryModel={(modelId) => void retryModel(modelId)}
       />
     </div>
-    {dialog && <Dialog open title={dialog === "discard" ? "放弃未保存更改？" : dialog === "new" ? "新增自定义接口" : "编辑自定义接口"} description={dialog === "discard" ? "当前表单仍有未保存内容。" : "连接信息保存到本机全局配置；密钥不会进入普通配置文件。"} onClose={() => { if (dialog === "discard") setDialog(discardTarget); else closeDialog(); }} size="wide" footer={dialog === "discard" ? <Stack direction="row" justify="end" gap={2}><Button variant="ghost" onClick={() => setDialog(discardTarget)}>继续编辑</Button><Button variant="danger" onClick={() => { setDialog(null); setDraftDirty(false); }}>放弃更改</Button></Stack> : <Stack direction="row" justify="end" gap={2}><Button variant="ghost" onClick={closeDialog} disabled={busy}>取消</Button><Button type="submit" form="custom-provider-form" loading={busy}>保存接口</Button></Stack>}>
+    {dialog && <Dialog open dismissible={!busy} title={dialog === "discard" ? "放弃未保存更改？" : dialog === "new" ? "新增自定义接口" : "编辑自定义接口"} description={dialog === "discard" ? "当前表单仍有未保存内容。" : "连接信息保存到本机全局配置；密钥不会进入普通配置文件。"} onClose={() => { if (dialog === "discard") setDialog(discardTarget); else closeDialog(); }} size="wide" footer={dialog === "discard" ? <Stack direction="row" justify="end" gap={2}><Button variant="ghost" onClick={() => setDialog(discardTarget)}>继续编辑</Button><Button variant="danger" onClick={() => { setDialog(null); }}>放弃更改</Button></Stack> : <Stack direction="row" justify="end" gap={2}><Button variant="ghost" onClick={closeDialog} disabled={busy}>取消</Button><Button type="submit" form="custom-provider-form" loading={busy}>保存接口</Button></Stack>}>
+      {dialogError && <InlineError message={dialogError} />}
       {dialog === "discard" ? <Text tone="warning">关闭对话框不会自动保存。选择“继续编辑”返回当前表单。</Text> : <form id="custom-provider-form" className={styles.formGrid} noValidate onSubmit={(event) => { event.preventDefault(); void saveDraft(); }}>
-        <Field label="接口名称" hint="1–60 字符，忽略大小写后不能重复。"><Input autoFocus value={draft.name} onChange={(event) => updateDraft("name", event.target.value)} /></Field>
-        <Field label="Base URL" hint="http(s)，不能包含账号、查询参数或片段。"><Input value={draft.baseUrl} onChange={(event) => updateDraft("baseUrl", event.target.value)} spellCheck={false} /></Field>
-        <Field label="请求协议"><Select value={draft.transport} onChange={(event) => updateDraft("transport", event.target.value as ProviderDraft["transport"])}><option value="chat-completions">Chat Completions</option><option value="responses">Responses</option></Select></Field>
-        <Field label="JSON 模式"><Select value={draft.jsonMode} onChange={(event) => updateDraft("jsonMode", event.target.value as ProviderDraft["jsonMode"])}><option value="json_schema">JSON Schema</option><option value="json_object">JSON Object</option><option value="prompt">Prompt 约束</option></Select></Field>
-        <Field label="图片细节"><Select value={draft.imageDetail} onChange={(event) => updateDraft("imageDetail", event.target.value as ProviderDraft["imageDetail"])}><option value="auto">自动</option><option value="low">低</option><option value="high">高</option><option value="original">原始</option></Select></Field>
-        <Field label="API Key" hint={dialog === "edit" ? "留空保留现有 Key；清除使用下方独立动作。" : "留空表示无鉴权接口。"}><div className={styles.secretInputRow}><Input type={showKey ? "text" : "password"} value={draft.apiKey} onChange={(event) => updateDraft("apiKey", event.target.value)} autoComplete="new-password" spellCheck={false} /><Button type="button" size="sm" variant="ghost" aria-label={showKey ? "隐藏 API Key" : "显示 API Key"} title={showKey ? "隐藏 API Key" : "显示 API Key"} aria-pressed={showKey} onClick={() => setShowKey((previous) => !previous)}>{showKey ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}</Button></div></Field>
-        <Field label="手动模型 ID" hint="每行一个；无法读取 /models 时会进入待验证。"><Textarea className="resize-none" value={(draft.manualModelIds || []).join("\n")} onChange={(event) => updateDraft("manualModelIds", event.target.value.split(/[\n,]/).map((id) => id.trim()).filter(Boolean))} placeholder="vendor/vision-model" spellCheck={false} rows={3} /></Field>
-        {dialog === "edit" && <Stack direction="row" justify="between" align="center" className={styles.formFieldFull}><Text tone="subtle" size="xs">修改 Base URL、协议、JSON 模式、模型 ID 或 Key 会让旧探针结果失效。</Text><Button type="button" size="sm" variant="ghost" onClick={() => { updateDraft("apiKey", ""); updateDraft("clearApiKey", true); updateDraft("replaceApiKey", true); }}>清除现有 Key</Button></Stack>}
+        <Field label="接口名称" hint="1–60 字符，忽略大小写后不能重复。"><Input disabled={busy} autoFocus value={draft.name} onChange={(event) => updateDraft("name", event.target.value)} /></Field>
+        <Field label="Base URL" hint="http(s)，不能包含账号、查询参数或片段。"><Input disabled={busy} value={draft.baseUrl} onChange={(event) => updateDraft("baseUrl", event.target.value)} spellCheck={false} /></Field>
+        <Field label="请求协议"><Select disabled={busy} value={draft.transport} onChange={(event) => updateDraft("transport", event.target.value as ProviderDraft["transport"])}><option value="chat-completions">Chat Completions</option><option value="responses">Responses</option></Select></Field>
+        <Field label="JSON 模式"><Select disabled={busy} value={draft.jsonMode} onChange={(event) => updateDraft("jsonMode", event.target.value as ProviderDraft["jsonMode"])}><option value="json_schema">JSON Schema</option><option value="json_object">JSON Object</option><option value="prompt">Prompt 约束</option></Select></Field>
+        <Field label="图片细节"><Select disabled={busy} value={draft.imageDetail} onChange={(event) => updateDraft("imageDetail", event.target.value as ProviderDraft["imageDetail"])}><option value="auto">自动</option><option value="low">低</option><option value="high">高</option><option value="original">原始</option></Select></Field>
+        <Field label="API Key" hint={dialog === "edit" ? "留空保留现有 Key；清除使用下方独立动作。" : "留空表示无鉴权接口。"}><div className={styles.secretInputRow}><Input disabled={busy} type={showKey ? "text" : "password"} value={draft.apiKey} onChange={(event) => updateDraft("apiKey", event.target.value)} autoComplete="new-password" spellCheck={false} /><Button disabled={busy} type="button" size="sm" variant="ghost" aria-label={showKey ? "隐藏 API Key" : "显示 API Key"} title={showKey ? "隐藏 API Key" : "显示 API Key"} aria-pressed={showKey} onClick={() => setShowKey((previous) => !previous)}>{showKey ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}</Button></div></Field>
+        <Field label="手动模型 ID" hint="每行一个；无法读取 /models 时会进入待验证。"><Textarea disabled={busy} className="resize-none" value={manualModelText} onChange={(event) => { if (!busyRef.current) { setManualModelText(event.target.value); } }} placeholder="vendor/vision-model" spellCheck={false} rows={3} /></Field>
+        {dialog === "edit" && <Stack direction="row" justify="between" align="center" className={styles.formFieldFull}><Text tone="subtle" size="xs">修改 Base URL、协议、JSON 模式、模型 ID 或 Key 会让旧探针结果失效。</Text><Button disabled={busy} type="button" size="sm" variant="ghost" onClick={() => { updateDraft("apiKey", ""); updateDraft("clearApiKey", true); updateDraft("replaceApiKey", true); }}>清除现有 Key</Button></Stack>}
       </form>}
     </Dialog>}
-    {deleteTarget && <Dialog open title="删除自定义接口？" description="项目数据库不会被批量修改；引用该接口的项目会显示需要重新选择。" onClose={() => setDeleteTarget(null)} footer={<Stack direction="row" justify="end" gap={2}><Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={busy}>取消</Button><Button variant="danger" onClick={() => void deleteProvider()} loading={busy}>确认删除</Button></Stack>}><Text tone="warning">将删除「{deleteTarget.name}」的配置、密钥和能力缓存。</Text></Dialog>}
+    {deleteTarget && <Dialog open dismissible={!busy} title="删除自定义接口？" description="项目数据库不会被批量修改；引用该接口的项目会显示需要重新选择。" onClose={() => { if (!busyRef.current) setDeleteTarget(null); }} footer={<Stack direction="row" justify="end" gap={2}><Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={busy}>取消</Button><Button variant="danger" onClick={() => void deleteProvider()} loading={busy}>确认删除</Button></Stack>}>{dialogError && <InlineError message={dialogError} />}<Text tone="warning">将删除「{deleteTarget.name}」的配置、密钥和能力缓存。</Text></Dialog>}
   </Surface>;
 }
 

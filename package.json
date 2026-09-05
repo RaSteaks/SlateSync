@@ -66,14 +66,15 @@
     "lucide-react": "1.33.0",
     "pdfjs-dist": "^5.6.205",
     "react": "19.2.6",
+    "react-aria-components": "1.21.1",
     "react-dom": "19.2.6",
     "undici": "^8.10.0",
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@emnapi/core": "1.11.3",
     "@emnapi/runtime": "1.11.3",
-    "@electron/rebuild": "^4.2.0",
     "@playwright/test": "1.62.1",
     "@storybook/addon-a11y": "10.5.10",
     "@storybook/react-vite": "10.5.10",

@@ -2,11 +2,18 @@ import { create } from "zustand";
 import type { GlobalSettingKey, GlobalSettingValues, GlobalSettingsData } from "../../shared/contracts/index.js";
 import type { GlobalSettingsSlice } from "./types";
 
+/** UI disabled state and programmatic edits use exactly the same write gate. */
+export function isGlobalSettingLocked(state: GlobalSettingsSlice, key?: GlobalSettingKey): boolean {
+  return state.saveState === "saving" || state.mutationOwner === "global"
+    || (key === "PADDLEOCR_PYTHON" && (state.mutationOwner === "ocr" || state.mutationOwner === "install"));
+}
+
 function applyDraftValue(
   state: GlobalSettingsSlice,
   key: GlobalSettingKey,
   value: string,
 ): Partial<GlobalSettingsSlice> {
+  if (isGlobalSettingLocked(state, key)) return state;
   const savedValue = state.saved?.values[key];
   const nextDraftValues = { ...state.draftValues };
   const nextDirtyKeys = new Set(state.dirtyKeys);
@@ -29,6 +36,7 @@ function applyDraftValue(
 }
 
 const initialState = {
+  mutationOwner: null as GlobalSettingsSlice["mutationOwner"],
   saved: null,
   draftValues: {} as Partial<GlobalSettingValues>,
   dirtyKeys: new Set<GlobalSettingKey>() as ReadonlySet<GlobalSettingKey>,
@@ -40,8 +48,14 @@ const initialState = {
 // Module-level singleton on purpose: the page header and the App-level route
 // guard read this store without a mounted GlobalSettingsPage, and the draft
 // survives route detours by design. Tests must reset it via clear().
-export const useGlobalSettingsStore = create<GlobalSettingsSlice>((set) => ({
+export const useGlobalSettingsStore = create<GlobalSettingsSlice>((set, get) => ({
   ...initialState,
+  beginMutation: (mutationOwner) => {
+    if (get().mutationOwner || get().saveState === "saving") return false;
+    set({ mutationOwner });
+    return true;
+  },
+  endMutation: (owner) => set((state) => state.mutationOwner === owner ? { mutationOwner: null } : state),
   setDraftValue: (key, value) => set((state) => applyDraftValue(state, key, value)),
   setDraftValues: (patch) => set((state) => {
     let next: Partial<GlobalSettingsSlice> = {};
@@ -94,7 +108,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsSlice>((set) => ({
       },
     };
   }),
-  discardDraft: () => set({
+  discardDraft: () => set((state) => state.mutationOwner || state.saveState === "saving" ? state : {
     draftValues: {},
     dirtyKeys: new Set(),
     fieldErrors: {},

@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectData, SlateSyncApi } from "../../../src/shared/contracts/index.js";
 import { ProjectSettingsPage } from "../../../src/renderer/features/settings/ProjectSettingsPage";
-import { useProjectStore, useRecognitionStore, useUiStore } from "../../../src/renderer/state";
+import { useProjectStore, useRecognitionStore, useSettingsStore, useTaskStore, useUiStore } from "../../../src/renderer/state";
 
 // Keep React's concurrent scheduler assertions deterministic in jsdom.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,6 +32,9 @@ afterEach(() => {
     host.remove();
   }
   useProjectStore.setState({ config: null, projects: [], current: null, scenarios: [], error: null });
+  // Project drafts now outlive the page and must be reset between fixtures.
+  useSettingsStore.getState().clearProject();
+  useTaskStore.setState({ operation: null });
   useRecognitionStore.getState().reset();
   useUiStore.setState({ toast: null });
   Object.defineProperty(window, "slateSync", { configurable: true, value: undefined });
@@ -214,6 +217,28 @@ describe("project package settings actions", () => {
     expect(buttonNamed("导入项目").disabled).toBe(true);
     expect(buttonNamed("导出项目").disabled).toBe(true);
     expect(importProject).not.toHaveBeenCalled();
+  });
+
+  it("explains and disables package transfer while another workspace operation owns the lease", async () => {
+    const importProject = vi.fn(async () => ({
+      ok: true as const,
+      data: { canceled: true as const },
+    }));
+    const host = await renderPage({ importProject });
+
+    let operationId: number | null = null;
+    act(() => { operationId = useTaskStore.getState().beginOperation("input", project.id); });
+
+    expect(operationId).not.toBeNull();
+    expect(host.textContent).toContain("当前任务处理完成后，才能导入或导出项目");
+    expect(buttonNamed("导入项目").disabled).toBe(true);
+    expect(buttonNamed("导出项目").disabled).toBe(true);
+    buttonNamed("导入项目").click();
+    expect(importProject).not.toHaveBeenCalled();
+
+    act(() => { if (operationId !== null) useTaskStore.getState().endOperation(operationId); });
+    expect(buttonNamed("导入项目").disabled).toBe(false);
+    expect(buttonNamed("导出项目").disabled).toBe(false);
   });
 
   it("does not open the picker when workspace preparation fails", async () => {

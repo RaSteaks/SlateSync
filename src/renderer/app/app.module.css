@@ -400,6 +400,12 @@
 .modelPickerOption:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: -2px; }
 .modelPickerOptionLabel { min-width: 0; overflow-wrap: anywhere; }
 .modelPickerOptionCheck { flex: 0 0 auto; margin-left: auto; color: var(--ss-color-accent); }
+/* React Aria adds semantic cells; retain the existing picker geometry and
+   focus tokens while the primitive owns keyboard navigation. */
+.modelPickerTreeDialog, .modelPickerTree { outline: none; }
+.modelPickerOption > [role="gridcell"], .modelPickerGroupHeader > [role="gridcell"] { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+.modelPickerGroupToggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.modelPickerOption[data-focus-visible], .modelPickerGroupHeader[data-focus-visible-within] { outline: 2px solid var(--ss-color-accent); outline-offset: -2px; }
 .modelPickerEmpty { padding: 12px 10px; color: var(--ss-color-ink-subtle); font-size: .78rem; text-align: center; }
 /* Log filters stay compact on desktop and become a readable two-column form
    on narrow screens without changing the shared Field/Select semantics. */
@@ -478,7 +484,7 @@
 }
 
 /* ── Global settings shell (appended; existing rules above stay untouched) ── */
-/* 设备级设置页收窄为可读文档列宽，并复用帮助页的 sticky 目录版式。 */
+/* 设备级设置页收窄为可读的修改列宽；分区导航由侧栏下拉子列表承担。 */
 .settingsPage { width: min(100%, 1160px); }
 /* 分段控件行：不包 Field（避免共享 label 语义注入），自担换行与对齐。 */
 .settingsSegmentedRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ss-space-3); min-width: 0; }
@@ -491,8 +497,17 @@
 /* 高级面板脏标记：摘要素雅高亮并追加“未保存”后缀。 */
 .settingsDetails[data-dirty="true"] > summary { color: var(--ss-color-warning); }
 .settingsDetails[data-dirty="true"] > summary::after { color: var(--ss-color-warning); content: " · 未保存"; }
-/* 设置目录脏标记：锚点右侧追加警告色圆点。 */
-.helpTocLink[data-dirty="true"]::after { width: 7px; height: 7px; border-radius: 999px; background: var(--ss-color-warning); content: ""; justify-self: end; }
+/* 侧栏「全局设置」分区子导航：仅在进入该路由时下拉展开，作为页内锚点的
+   唯一入口；分区存在未保存修改时在子项文字后追加警告色圆点。子列表沿用
+   侧栏共享中轴（缩进对齐导航文字），折叠侧栏时整体隐藏。 */
+.navSubList { display: grid; gap: 2px; margin: 2px 0 var(--ss-space-2) calc(var(--ss-sidebar-icon-track) - 10px); }
+.appShell[data-collapsed="true"] .navSubList { display: none; }
+.navSubItem { display: flex; min-width: 0; min-height: 30px; align-items: center; padding: 0 8px; border: 1px solid transparent; border-radius: var(--ss-radius-md); color: var(--ss-color-ink-subtle); background: transparent; font: inherit; font-size: .76rem; line-height: 1.3; text-align: left; cursor: pointer; transition: color var(--ss-motion-base) var(--ss-ease), background var(--ss-motion-base) var(--ss-ease), border-color var(--ss-motion-base) var(--ss-ease); }
+.navSubItem:hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
+.navSubItem[data-active="true"] { color: var(--ss-color-ink); border-color: color-mix(in srgb, var(--ss-color-accent) 24%, transparent); background: var(--ss-color-accent-soft); }
+.navSubItem:focus-visible { outline: 2px solid var(--ss-color-accent); outline-offset: 2px; }
+.navSubItem span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.navSubItem[data-dirty="true"] span::after { width: 6px; height: 6px; margin-left: 6px; border-radius: 999px; background: var(--ss-color-warning); content: ""; display: inline-block; vertical-align: middle; }
 /* 展开动画只作用于内容体（opacity/translate），不改布局盒尺寸，避免无
    interpolate-size 的浏览器出现滚动条跳变。 */
 .settingsDetailsBody { display: grid; gap: var(--ss-space-4); }
@@ -504,6 +519,7 @@
 @media (prefers-reduced-motion: reduce) {
   .settingsDetails[open] > .settingsDetailsBody { animation: none; }
   .settingsDetails::details-content { transition: none; }
+  .navSubItem { transition: none; }
 }
 /* 渐进增强：支持 interpolate-size 的浏览器获得真实高度过渡。 */
 @supports (interpolate-size: allow-keywords) {

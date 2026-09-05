@@ -9,6 +9,7 @@ import type {
   ModelDiscoveryResult,
   OcrSettings,
   ProjectData,
+  ProjectSettings,
   ProjectSummary,
   ProgressData,
   RecognitionData,
@@ -25,6 +26,8 @@ import type {
 export type Route = "projects" | "workspace" | "project-settings" | "global-settings" | "logs" | "help";
 export type Theme = "system" | "dark" | "light";
 export type Density = "comfortable" | "compact";
+/** Anchor sections of the Global Settings page, addressed by the sidebar sub-nav. */
+export type SettingsSectionId = "settings-general" | "settings-custom-providers" | "settings-ocr" | "settings-runtime";
 
 export interface ProjectSlice {
   config: ConfigData | null;
@@ -52,9 +55,13 @@ export interface UiSlice {
   sidebarCollapsed: boolean;
   toast: { message: string; tone: "neutral" | "accent" | "success" | "warning" | "danger" } | null;
   dialog: "new-project" | "ocr" | null;
+  /** Global-settings section the sidebar sub-nav scrolled to; null = page top. */
+  settingsSection: SettingsSectionId | null;
+  settingsSectionRequest: number;
   setRoute(route: Route): void;
   setTheme(theme: Theme): void;
   setDensity(density: Density): void;
+  setSettingsSection(section: SettingsSectionId | null): void;
   hydrateAppearance(appearance: { readonly theme: Theme; readonly density: Density }): void;
   toggleSidebar(): void;
   setToast(toast: UiSlice["toast"]): void;
@@ -122,6 +129,10 @@ export interface MetadataSlice {
 }
 
 export interface TaskSlice {
+  /** A synchronous lease covers preparation, requests and their final cleanup. */
+  operation: { id: number; kind: WorkspaceOperationKind; projectId: string } | null;
+  beginOperation(kind: WorkspaceOperationKind, projectId: string): number | null;
+  endOperation(id: number): void;
   items: readonly TaskListItem[];
   /** Project ID represented by items; null means no project list has been loaded. */
   loadedProjectId: string | null;
@@ -158,9 +169,23 @@ export interface ExportSlice {
   clear(): void;
 }
 
+export type WorkspaceOperationKind = "recognition" | "merge" | "input" | "new" | "switch" | "delete" | "transfer";
+
+export type ProjectSettingsDraft = { name: string; description: string; settings: ProjectSettings };
+
 export interface SettingsSlice {
   ocr: OcrSettings | null;
   setOcr(ocr: OcrSettings | null): void;
+  projectId: string | null;
+  baseline: ProjectSettingsDraft | null;
+  draft: ProjectSettingsDraft | null;
+  dirty: boolean;
+  saving: boolean;
+  saveError: string | null;
+  hydrateProject(projectId: string, draft: ProjectSettingsDraft): void;
+  patchProject(patch: Partial<ProjectSettingsDraft>): void;
+  discardProject(): void;
+  clearProject(): void;
 }
 
 export type GlobalSaveState = "idle" | "saving" | "saved" | "error";
@@ -173,6 +198,10 @@ export type GlobalSaveState = "idle" | "saving" | "saved" | "error";
  * again instead of storing an inherited default as an override).
  */
 export interface GlobalSettingsSlice {
+  /** Independent endpoints that write the same settings snapshot serialize here. */
+  mutationOwner: "global" | "key" | "ocr" | "install" | null;
+  beginMutation(owner: NonNullable<GlobalSettingsSlice["mutationOwner"]>): boolean;
+  endMutation(owner: NonNullable<GlobalSettingsSlice["mutationOwner"]>): void;
   saved: GlobalSettingsData | null;
   draftValues: Partial<GlobalSettingValues>;
   dirtyKeys: ReadonlySet<GlobalSettingKey>;

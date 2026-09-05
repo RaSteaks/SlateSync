@@ -9,9 +9,8 @@ import styles from "../../app/app.module.css";
 import { CustomProviderSettingsPanel } from "./CustomProviderSettingsPanel";
 import { OcrEnvironmentDialog } from "./OcrEnvironmentDialog";
 import { OcrStatusPanel } from "./OcrStatusPanel";
-import { GlobalSettingsSectionNav } from "./GlobalSettingsSectionNav";
 import { NumericSettingField, SelectSettingField, TextSettingField } from "./NumericSettingField";
-import { saveGlobalSettingsChanges, isGlobalSettingsDirty } from "./globalSettingsActions";
+import { saveGlobalSettingsChanges, isGlobalSettingsDirty, refreshSettingsConfig } from "./globalSettingsActions";
 import { ocrPreferenceFromValues } from "./globalSettingsModel";
 import type { PaddleOcrInstallState } from "./ocrEngineStatus";
 
@@ -50,6 +49,8 @@ export function GlobalSettingsPage() {
   // field's subtree, never the page shell.
   const saved = useGlobalSettingsStore((state) => state.saved);
   const dirtyCount = useGlobalSettingsStore((state) => state.dirtyKeys.size);
+  const mutationOwner = useGlobalSettingsStore((state) => state.mutationOwner);
+  const writeBusy = mutationOwner !== null;
   const saveState = useGlobalSettingsStore((state) => state.saveState);
   const saveError = useGlobalSettingsStore((state) => state.saveError);
   const hasFieldErrors = useGlobalSettingsStore((state) => Object.keys(state.fieldErrors).length > 0);
@@ -156,7 +157,7 @@ export function GlobalSettingsPage() {
   // Closing the window with unsaved settings drafts asks for confirmation.
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isGlobalSettingsDirty()) return;
+      if (!isGlobalSettingsDirty() && useGlobalSettingsStore.getState().saveState !== "saving") return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -177,7 +178,7 @@ export function GlobalSettingsPage() {
   };
 
   const saveKey = async () => {
-    if (!provider || !KEY_PROVIDERS.has(provider.id)) return;
+    if (!provider || !KEY_PROVIDERS.has(provider.id) || !useGlobalSettingsStore.getState().beginMutation("key")) return;
     setKeyState("saving");
     setActionError(null);
     try {
@@ -185,16 +186,16 @@ export function GlobalSettingsPage() {
       const savedKey = await unwrap(await api.settings.saveProviderKey({ provider: provider.id, apiKey: apiKey.trim() }));
       setApiKey("");
       setShowApiKey(false);
-      setConfig(await unwrap(await api.app.getConfig()));
       // Keep unsaved endpoint/OCR edits in the draft store while updating only
       // the provider readiness flag returned by the key-save operation.
       useGlobalSettingsStore.getState().setKeyConfigured(provider.id, savedKey.configured);
+      const refreshed = await refreshSettingsConfig();
       setKeyState("saved");
-      setToast({ tone: "success", message: "Provider 配置已保存；密钥不会回显" });
+      setToast({ tone: refreshed ? "success" : "warning", message: refreshed ? "Provider 配置已保存；密钥不会回显" : "密钥已保存；运行配置刷新失败，请稍后重新打开应用。" });
     } catch (error) {
       setKeyState("error");
       setActionError(appErrorFromUnknown(error).message);
-    }
+    } finally { useGlobalSettingsStore.getState().endMutation("key"); }
   };
 
   // The capability probe stays in Main so endpoint details, API keys and
@@ -213,6 +214,7 @@ export function GlobalSettingsPage() {
   };
 
   const checkAndSaveOcr = useCallback(async () => {
+    if (!useGlobalSettingsStore.getState().beginMutation("ocr")) return;
     setActionError(null);
     setPaddleCheck(null);
     setOcrState("checking");
@@ -229,13 +231,13 @@ export function GlobalSettingsPage() {
       // The verified path was persisted by its own endpoint; fold it into the
       // snapshot and clear any draft of the same key.
       useGlobalSettingsStore.getState().mergeSaved({ PADDLEOCR_PYTHON: savedOcr.pythonPath }, ["PADDLEOCR_PYTHON"]);
-      setConfig(await unwrap(await api.app.getConfig()));
+      const refreshed = await refreshSettingsConfig();
       setOcrState("saved");
-      setToast({ tone: "success", message: "OCR 环境已验证并保存" });
+      setToast({ tone: refreshed ? "success" : "warning", message: refreshed ? "OCR 环境已验证并保存" : "OCR 环境已保存；运行配置刷新失败，请稍后重新打开应用。" });
     } catch (error) {
       setOcrState("idle");
       setActionError(appErrorFromUnknown(error).message);
-    }
+    } finally { useGlobalSettingsStore.getState().endMutation("ocr"); }
   }, [setConfig, setOcr, setToast]);
 
   const checkVision = useCallback(async () => {
@@ -254,7 +256,7 @@ export function GlobalSettingsPage() {
   }, [setToast]);
 
   const installPaddleOcr = useCallback(async () => {
-    if (paddleInstallState === "installing") return;
+    if (paddleInstallState === "installing" || !useGlobalSettingsStore.getState().beginMutation("install")) return;
     setPaddleInstallState("installing");
     setPaddleInstallProgress({ stage: "detect-python", percent: 0, message: "正在准备 PaddleOCR 安装…" });
     setPaddleInstallError(null);
@@ -268,15 +270,15 @@ export function GlobalSettingsPage() {
       // A one-click install intentionally owns this path: leaving an old
       // manual path dirty would make the successful installation unreachable.
       useGlobalSettingsStore.getState().mergeSaved({ PADDLEOCR_PYTHON: installed.pythonPath }, ["PADDLEOCR_PYTHON"]);
-      setConfig(await unwrap(await api.app.getConfig()));
+      const refreshed = await refreshSettingsConfig();
       setPaddleInstallProgress({ stage: "completed", percent: 100, message: "PaddleOCR 已安装并验证通过。" });
       setPaddleInstallState("installed");
-      setToast({ tone: "success", message: "PaddleOCR 已安装并验证通过" });
+      setToast({ tone: refreshed ? "success" : "warning", message: refreshed ? "PaddleOCR 已安装并验证通过" : "PaddleOCR 已安装；运行配置刷新失败，请稍后重新打开应用。" });
     } catch (error) {
       const appError = appErrorFromUnknown(error);
       setPaddleInstallError(appError.message);
       setPaddleInstallState(appError.code === "PADDLEOCR_INSTALL_CANCELED" ? "canceled" : "error");
-    }
+    } finally { useGlobalSettingsStore.getState().endMutation("install"); }
   }, [paddleInstallState, setConfig, setOcr, setToast]);
 
   const cancelPaddleOcrInstall = useCallback(async () => {
@@ -289,7 +291,7 @@ export function GlobalSettingsPage() {
       await unwrap(await api.settings.cancelPaddleOcrInstall());
     } catch (error) {
       setPaddleInstallError(appErrorFromUnknown(error).message);
-      setPaddleInstallState("error");
+      // A failed cancel leaves the installation alive and its write lease held.
     }
   }, [paddleInstallState]);
 
@@ -305,124 +307,123 @@ export function GlobalSettingsPage() {
     <div className={styles.pageHeader}>
       <div>
         <p className={styles.eyebrow}>设备设置</p>
-        <h1 className={styles.heading}>全局设置</h1>
+        <h1 id="global-settings-heading" className={styles.heading}>全局设置</h1>
       </div>
       <div className={styles.pageActions}>
         {dirtyCount > 0 && <Badge tone="warning" data-testid="settings-dirty-chip">{dirtyCount} 项未保存</Badge>}
         <Button
           data-testid="global-settings-save"
           loading={saveState === "saving"}
-          disabled={hasFieldErrors}
+          disabled={hasFieldErrors || writeBusy}
           onClick={() => void saveGlobalSettingsChanges()}
           startIcon={<Save size={15} />}
         >{dirtyCount > 0 ? `保存修改（${dirtyCount} 项未保存）` : "保存全局配置"}</Button>
-        <Button variant="ghost" data-testid="global-settings-discard" disabled={dirtyCount === 0 || saveState === "saving"} onClick={() => useGlobalSettingsStore.getState().discardDraft()}>放弃更改</Button>
-        <Button variant="ghost" disabled={saveState === "saving"} onClick={() => setResetDialogOpen(true)} startIcon={<RotateCcw size={15} />}>恢复环境默认</Button>
+        <Button variant="ghost" data-testid="global-settings-discard" disabled={dirtyCount === 0 || writeBusy || saveState === "saving"} onClick={() => useGlobalSettingsStore.getState().discardDraft()}>放弃更改</Button>
+        <Button variant="ghost" disabled={writeBusy || saveState === "saving"} onClick={() => setResetDialogOpen(true)} startIcon={<RotateCcw size={15} />}>恢复环境默认</Button>
       </div>
     </div>
 
     {saveError && <InlineError message={saveError} />}
     {actionError && <InlineError message={actionError} />}
 
-    <div className={styles.helpLayout}>
-      <GlobalSettingsSectionNav />
-      <div className={styles.helpContent}>
-        <Surface as="section" id="settings-general" className={styles.helpSection} aria-label="密钥与外观">
-          <div className={styles.settingsOverviewGrid} data-testid="settings-overview-grid">
-            <Surface className={styles.panel}>
-              <div className={styles.sectionHeader}><div><p className={styles.kicker}>Provider</p><h2 className={styles.sectionTitle}>访问密钥与接口</h2></div><KeyRound size={19} aria-hidden="true" /></div>
-              <Text tone="muted" size="sm">密钥保存在独立的本机凭据文件，保存后不会回显；Base URL 等普通参数写入全局配置。</Text>
-              <div className={styles.formGrid} style={{ marginTop: 18 }}>
-                <Field label="Provider"><Select value={providerId} onChange={(event) => handleProviderChange(event.target.value)}>{config?.providers.filter((item) => !item.id.startsWith("openai-compatible:")).map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field>
-                <Field label="API Key" hint={providerKeyConfigured ? "已保存密钥；输入新值可替换，留空并保存可清除应用覆盖。" : "密钥只在 Main 进程中使用，不会显示在页面或项目数据里。"}>
-                  <div className={styles.secretInputRow}>
-                    <Input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" spellCheck={false} disabled={!provider || !KEY_PROVIDERS.has(provider.id)} placeholder={providerKeyConfigured ? "已配置 · 输入新 Key 可替换" : "粘贴 API Key"} />
-                    <Button type="button" size="sm" variant="ghost" aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowApiKey((visible) => !visible)} disabled={!provider || !KEY_PROVIDERS.has(provider.id)}>{showApiKey ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}{showApiKey ? "隐藏" : "显示"}</Button>
-                  </div>
-                </Field>
-                {providerBaseUrlKey && <TextSettingField settingKey={providerBaseUrlKey} label="Base URL" hint="只支持 http(s)，不能包含账号、密码、查询参数或片段。" spellCheck={false} />}
-                {provider?.id === "openrouter" && <TextSettingField settingKey="OPENROUTER_SITE_URL" label="OpenRouter 应用标识 URL" hint="会作为 HTTP-Referer 发送；可留空。" spellCheck={false} />}
-                <Stack direction="row" justify="between" align="center" className={styles.formFieldFull}>
-                  <Text tone={keyState === "error" ? "danger" : "subtle"} size="xs">{keyState === "saved" ? "密钥已保存" : provider?.requiredEnv?.join(" / ") || ""}</Text>
-                  <Button onClick={() => void saveKey()} loading={keyState === "saving"} startIcon={<Save size={15} />}>保存密钥</Button>
-                </Stack>
-              </div>
-            </Surface>
-
-            <Surface className={styles.panel}>
-              <div className={styles.sectionHeader}><div><p className={styles.kicker}>外观</p><h2 className={styles.sectionTitle}>工作台外观</h2></div><Monitor size={18} aria-hidden="true" /></div>
-              <Stack direction="column" gap={3} style={{ marginTop: 14 }}>
-                <div>
-                  <Text tone="subtle" size="xs">主题</Text>
-                  <div className={styles.settingsSegmentedRow}>
-                    <SegmentedControl label="主题" value={theme} options={THEME_SEGMENTS} onChange={setTheme} />
-                  </div>
-                </div>
-                <div>
-                  <Text tone="subtle" size="xs">信息密度</Text>
-                  <div className={styles.settingsSegmentedRow}>
-                    <SegmentedControl label="信息密度" value={density} options={DENSITY_SEGMENTS} onChange={setDensity} />
-                  </div>
-                </div>
-                <Text tone="subtle" size="xs">外观立即生效，无需保存。</Text>
-              </Stack>
-            </Surface>
-          </div>
-
-          {provider?.id === "openai-compatible" && <Surface className={`${styles.panel} ${styles.runtimeSettingsPanel}`} tone="accent" style={{ marginTop: "var(--ss-layout-gap)" }}>
-            <div className={styles.sectionHeader}><div><p className={styles.kicker}>兼容接口</p><h2 className={styles.sectionTitle}>模型与响应格式</h2></div><Braces size={19} aria-hidden="true" /></div>
-            <Text tone="muted" size="sm">Key、Base URL 与模型 ID 都需要配置；其他选项决定兼容服务商接受哪一种请求格式。</Text>
+    {/* 分区导航由侧栏「全局设置」的下拉子列表承担；页面只保留分区锚点，
+        helpContent 提供单列堆叠与分区间距。 */}
+    <div className={styles.helpContent}>
+      <Surface as="section" id="settings-general" className={styles.helpSection} aria-label="密钥与外观">
+        <div className={styles.settingsOverviewGrid} data-testid="settings-overview-grid">
+          <Surface className={styles.panel}>
+            <div className={styles.sectionHeader}><div><p className={styles.kicker}>Provider</p><h2 className={styles.sectionTitle}>访问密钥与接口</h2></div><KeyRound size={19} aria-hidden="true" /></div>
+            <Text tone="muted" size="sm">密钥保存在独立的本机凭据文件，保存后不会回显；Base URL 等普通参数写入全局配置。</Text>
             <div className={styles.formGrid} style={{ marginTop: 18 }}>
-              <TextSettingField settingKey="OPENAI_COMPATIBLE_MODEL" label="模型 ID" placeholder="your-vision-model" spellCheck={false} />
-              <SelectSettingField settingKey="OPENAI_COMPATIBLE_API_MODE" label="请求接口" fallback="chat-completions" options={[{ value: "chat-completions", label: "Chat Completions" }, { value: "responses", label: "Responses" }]} />
-              <SelectSettingField settingKey="OPENAI_COMPATIBLE_JSON_MODE" label="JSON 模式" fallback="json_object" options={[{ value: "json_schema", label: "JSON Schema" }, { value: "json_object", label: "JSON Object" }, { value: "prompt", label: "Prompt 约束" }]} />
-              <SelectSettingField settingKey="OPENAI_COMPATIBLE_IMAGE_DETAIL" label="图片细节" fallback="high" options={[{ value: "auto", label: "自动" }, { value: "low", label: "低" }, { value: "high", label: "高" }, { value: "original", label: "原始" }]} />
+              <Field label="Provider"><Select disabled={writeBusy} value={providerId} onChange={(event) => handleProviderChange(event.target.value)}>{config?.providers.filter((item) => !item.id.startsWith("openai-compatible:")).map((item) => <option key={item.id} value={item.id}>{item.label}{item.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field>
+              <Field label="API Key" hint={providerKeyConfigured ? "已保存密钥；输入新值可替换，留空并保存可清除应用覆盖。" : "密钥只在 Main 进程中使用，不会显示在页面或项目数据里。"}>
+                <div className={styles.secretInputRow}>
+                  <Input type={showApiKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" spellCheck={false} disabled={writeBusy || !provider || !KEY_PROVIDERS.has(provider.id)} placeholder={providerKeyConfigured ? "已配置 · 输入新 Key 可替换" : "粘贴 API Key"} />
+                  <Button type="button" size="sm" variant="ghost" aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowApiKey((visible) => !visible)} disabled={writeBusy || !provider || !KEY_PROVIDERS.has(provider.id)}>{showApiKey ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}{showApiKey ? "隐藏" : "显示"}</Button>
+                </div>
+              </Field>
+              {providerBaseUrlKey && <TextSettingField settingKey={providerBaseUrlKey} label="Base URL" hint="只支持 http(s)，不能包含账号、密码、查询参数或片段。" spellCheck={false} />}
+              {provider?.id === "openrouter" && <TextSettingField settingKey="OPENROUTER_SITE_URL" label="OpenRouter 应用标识 URL" hint="会作为 HTTP-Referer 发送；可留空。" spellCheck={false} />}
               <Stack direction="row" justify="between" align="center" className={styles.formFieldFull}>
-                <Text tone={jsonSchemaResult?.supported ? "success" : "subtle"} size="xs">{jsonSchemaResult ? `${jsonSchemaResult.transport} · HTTP ${jsonSchemaResult.status || "未知"}` : "尚未检测接口能力"}</Text>
-                <Button onClick={() => void checkCompatibleJsonSchema()} loading={jsonSchemaState === "checking"} disabled={!provider.configured} startIcon={<Braces size={15} />}>测试 JSON Schema</Button>
+                <Text tone={keyState === "error" ? "danger" : "subtle"} size="xs">{keyState === "saved" ? "密钥已保存" : provider?.requiredEnv?.join(" / ") || ""}</Text>
+                <Button onClick={() => void saveKey()} disabled={writeBusy} loading={keyState === "saving"} startIcon={<Save size={15} />}>保存密钥</Button>
               </Stack>
             </div>
-            {jsonSchemaResult && <Text tone={jsonSchemaResult.supported ? "success" : "warning"} size="sm" style={{ marginTop: 12 }}><Icon icon={jsonSchemaResult.supported ? CheckCircle2 : Braces} size={15} /> {jsonSchemaResult.message}</Text>}
-            {jsonSchemaError && <div style={{ marginTop: 12 }}><InlineError message={jsonSchemaError} /></div>}
-          </Surface>}
-        </Surface>
+          </Surface>
 
-        <CustomProviderSettingsPanel />
+          <Surface className={styles.panel}>
+            <div className={styles.sectionHeader}><div><p className={styles.kicker}>外观</p><h2 className={styles.sectionTitle}>工作台外观</h2></div><Monitor size={18} aria-hidden="true" /></div>
+            <Stack direction="column" gap={3} style={{ marginTop: 14 }}>
+              <div>
+                <Text tone="subtle" size="xs">主题</Text>
+                <div className={styles.settingsSegmentedRow}>
+                  <SegmentedControl label="主题" value={theme} options={THEME_SEGMENTS} onChange={setTheme} />
+                </div>
+              </div>
+              <div>
+                <Text tone="subtle" size="xs">信息密度</Text>
+                <div className={styles.settingsSegmentedRow}>
+                  <SegmentedControl label="信息密度" value={density} options={DENSITY_SEGMENTS} onChange={setDensity} />
+                </div>
+              </div>
+              <Text tone="subtle" size="xs">外观立即生效，无需保存。</Text>
+            </Stack>
+          </Surface>
+        </div>
 
-        <OcrStatusPanel
-          config={config}
-          ocr={ocr}
-          paddleCheck={paddleCheck}
-          ocrState={ocrState}
-          checkAndSaveOcr={checkAndSaveOcr}
-          visionCheck={visionCheck}
-          visionCheckState={visionCheckState}
-          checkVision={checkVision}
-          paddleInstallState={paddleInstallState}
-          paddleInstallProgress={paddleInstallProgress}
-          paddleInstallError={paddleInstallError}
-          installPaddleOcr={installPaddleOcr}
-          cancelPaddleOcrInstall={cancelPaddleOcrInstall}
-          openEnvironmentDialog={() => setOcrDialogOpen(true)}
-        />
-
-        <Surface as="section" id="settings-runtime" className={styles.helpSection} aria-label="运行参数">
-          <div className={styles.sectionHeader}><div><p className={styles.kicker}>运行参数</p><h2 className={styles.sectionTitle}>识别与存储</h2></div><Gauge size={19} aria-hidden="true" /></div>
-          <Text tone="muted" size="sm">这些参数会即时作用于后续任务；清空某个字段即可回退到 .env 或内置默认值。</Text>
+        {provider?.id === "openai-compatible" && <Surface className={`${styles.panel} ${styles.runtimeSettingsPanel}`} tone="accent" style={{ marginTop: "var(--ss-layout-gap)" }}>
+          <div className={styles.sectionHeader}><div><p className={styles.kicker}>兼容接口</p><h2 className={styles.sectionTitle}>模型与响应格式</h2></div><Braces size={19} aria-hidden="true" /></div>
+          <Text tone="muted" size="sm">Key、Base URL 与模型 ID 都需要配置；其他选项决定兼容服务商接受哪一种请求格式。</Text>
           <div className={styles.formGrid} style={{ marginTop: 18 }}>
-            <NumericSettingField settingKey="MAX_BODY_MB" label="请求体上限（MB）" fallback="80" min="20" max="200" step="1" />
-            <NumericSettingField settingKey="MODEL_REQUEST_TIMEOUT_MS" label="模型请求超时（毫秒）" hint="30000–3600000。" fallback="180000" min="30000" max="3600000" step="1000" />
-            <NumericSettingField settingKey="MODEL_REQUEST_MAX_RETRIES" label="超时重试次数" hint="0–3。" fallback="1" min="0" max="3" step="1" />
-            <NumericSettingField settingKey="MODEL_PAGE_CONCURRENCY" label="并行提交页数" hint="1–6。服务商限流时可降为 1。" fallback="2" min="1" max="6" step="1" />
-            <NumericSettingField settingKey="MAX_CONCURRENT_RECOGNITIONS" label="并行识别任务数" hint="1–16。调低可减少本机资源占用。" fallback="1" min="1" max="16" step="1" />
-            <TextSettingField settingKey="SLATESYNC_CONFIG_PATH" label="工作流配置路径" hint="开发环境读取；修改后下次启动生效。" fallback="slatesync.config.json" spellCheck={false} />
-            <TextSettingField settingKey="PADDLE_PDX_CACHE_HOME" label="Paddle 模型缓存路径" hint="留空使用应用默认缓存目录。" placeholder="应用默认" spellCheck={false} />
+            <TextSettingField settingKey="OPENAI_COMPATIBLE_MODEL" label="模型 ID" placeholder="your-vision-model" spellCheck={false} />
+            <SelectSettingField settingKey="OPENAI_COMPATIBLE_API_MODE" label="请求接口" fallback="chat-completions" options={[{ value: "chat-completions", label: "Chat Completions" }, { value: "responses", label: "Responses" }]} />
+            <SelectSettingField settingKey="OPENAI_COMPATIBLE_JSON_MODE" label="JSON 模式" fallback="json_object" options={[{ value: "json_schema", label: "JSON Schema" }, { value: "json_object", label: "JSON Object" }, { value: "prompt", label: "Prompt 约束" }]} />
+            <SelectSettingField settingKey="OPENAI_COMPATIBLE_IMAGE_DETAIL" label="图片细节" fallback="high" options={[{ value: "auto", label: "自动" }, { value: "low", label: "低" }, { value: "high", label: "高" }, { value: "original", label: "原始" }]} />
+            <Stack direction="row" justify="between" align="center" className={styles.formFieldFull}>
+              <Text tone={jsonSchemaResult?.supported ? "success" : "subtle"} size="xs">{jsonSchemaResult ? `${jsonSchemaResult.transport} · HTTP ${jsonSchemaResult.status || "未知"}` : "尚未检测接口能力"}</Text>
+              <Button onClick={() => void checkCompatibleJsonSchema()} loading={jsonSchemaState === "checking"} disabled={!provider.configured} startIcon={<Braces size={15} />}>测试 JSON Schema</Button>
+            </Stack>
           </div>
-          <div className={styles.settingsSaveRow}>
-            <Text tone="subtle" size="xs">已覆盖 {saved?.overrides.length ?? 0} 项非敏感配置</Text>
-          </div>
-        </Surface>
-      </div>
+          {jsonSchemaResult && <Text tone={jsonSchemaResult.supported ? "success" : "warning"} size="sm" style={{ marginTop: 12 }}><Icon icon={jsonSchemaResult.supported ? CheckCircle2 : Braces} size={15} /> {jsonSchemaResult.message}</Text>}
+          {jsonSchemaError && <div style={{ marginTop: 12 }}><InlineError message={jsonSchemaError} /></div>}
+        </Surface>}
+      </Surface>
+
+      <CustomProviderSettingsPanel />
+
+      <OcrStatusPanel
+        config={config}
+        ocr={ocr}
+        paddleCheck={paddleCheck}
+        ocrState={ocrState}
+        checkAndSaveOcr={checkAndSaveOcr}
+        visionCheck={visionCheck}
+        visionCheckState={visionCheckState}
+        checkVision={checkVision}
+        paddleInstallState={paddleInstallState}
+        paddleInstallProgress={paddleInstallProgress}
+        paddleInstallError={paddleInstallError}
+        installPaddleOcr={installPaddleOcr}
+        cancelPaddleOcrInstall={cancelPaddleOcrInstall}
+        openEnvironmentDialog={() => setOcrDialogOpen(true)}
+      />
+
+      <Surface as="section" id="settings-runtime" className={styles.helpSection} aria-label="运行参数">
+        <div className={styles.sectionHeader}><div><p className={styles.kicker}>运行参数</p><h2 className={styles.sectionTitle}>识别与存储</h2></div><Gauge size={19} aria-hidden="true" /></div>
+        <Text tone="muted" size="sm">这些参数会即时作用于后续任务；清空某个字段即可回退到 .env 或内置默认值。</Text>
+        <div className={styles.formGrid} style={{ marginTop: 18 }}>
+          <NumericSettingField settingKey="MAX_BODY_MB" label="请求体上限（MB）" fallback="80" min="20" max="200" step="1" />
+          <NumericSettingField settingKey="MODEL_REQUEST_TIMEOUT_MS" label="模型请求超时（毫秒）" hint="30000–3600000。" fallback="180000" min="30000" max="3600000" step="1000" />
+          <NumericSettingField settingKey="MODEL_REQUEST_MAX_RETRIES" label="超时重试次数" hint="0–3。" fallback="1" min="0" max="3" step="1" />
+          <NumericSettingField settingKey="MODEL_PAGE_CONCURRENCY" label="并行提交页数" hint="1–6。服务商限流时可降为 1。" fallback="2" min="1" max="6" step="1" />
+          <NumericSettingField settingKey="MAX_CONCURRENT_RECOGNITIONS" label="并行识别任务数" hint="1–16。调低可减少本机资源占用。" fallback="1" min="1" max="16" step="1" />
+          <TextSettingField settingKey="SLATESYNC_CONFIG_PATH" label="工作流配置路径" hint="开发环境读取；修改后下次启动生效。" fallback="slatesync.config.json" spellCheck={false} />
+          <TextSettingField settingKey="PADDLE_PDX_CACHE_HOME" label="Paddle 模型缓存路径" hint="留空使用应用默认缓存目录。" placeholder="应用默认" spellCheck={false} />
+        </div>
+        <div className={styles.settingsSaveRow}>
+          <Text tone="subtle" size="xs">已覆盖 {saved?.overrides.length ?? 0} 项非敏感配置</Text>
+        </div>
+      </Surface>
     </div>
 
     <OcrEnvironmentDialog

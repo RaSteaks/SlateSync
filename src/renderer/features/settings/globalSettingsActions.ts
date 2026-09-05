@@ -1,6 +1,6 @@
 import type { GlobalSettingsPatch } from "../../../shared/contracts/index.js";
-import { appErrorFromUnknown, requireGlobalSettingsApi, unwrap } from "../../services/api";
-import { useGlobalSettingsStore, useProjectStore, useUiStore, type Route } from "../../state";
+import { appErrorFromUnknown, getSlateSync, requireGlobalSettingsApi, unwrap } from "../../services/api";
+import { useGlobalSettingsStore, useProjectStore, useSettingsStore, useUiStore, type Route } from "../../state";
 import { GLOBAL_NUMERIC_RANGES, GLOBAL_TIMEOUT_RANGES, validateGlobalSettingValue } from "../../validation/global-settings-validation";
 
 /** Dirty drafts live in a module store, so any shell surface can read them. */
@@ -9,12 +9,17 @@ export function isGlobalSettingsDirty(): boolean {
 }
 
 /**
- * Route-change gate for unsaved global settings drafts. Navigating inside the
+ * Route-change gate for either settings draft. Navigating inside the
  * page (including the Cmd+, shortcut to the current route) never blocks; any
  * detour away from the page while dirty does.
  */
 export function isRouteChangeBlocked(current: Route, next: Route): boolean {
-  return current === "global-settings" && next !== "global-settings" && isGlobalSettingsDirty();
+  if (current === next) return false;
+  if (current === "project-settings") {
+    const state = useSettingsStore.getState();
+    return state.dirty || state.saving;
+  }
+  return current === "global-settings" && (isGlobalSettingsDirty() || useGlobalSettingsStore.getState().saveState === "saving");
 }
 
 /** Re-validate every dirty numeric field; returns the invalid count. */
@@ -50,6 +55,10 @@ export async function saveGlobalSettingsChanges(reset = false): Promise<boolean>
       return false;
     }
   }
+  if (!store.beginMutation("global")) {
+    useUiStore.getState().setToast({ tone: "warning", message: "配置正在写入，请等待当前操作完成。" });
+    return false;
+  }
   store.setSaveState("saving");
   store.setSaveError(null);
   try {
@@ -67,12 +76,14 @@ export async function saveGlobalSettingsChanges(reset = false): Promise<boolean>
       const saved = await unwrap(await api.settings.saveGlobalSettings({ values: patch }));
       useGlobalSettingsStore.getState().adoptServerSnapshot(saved);
     }
-    useProjectStore.getState().setConfig(await unwrap(await api.app.getConfig()));
+    // Persistence is already committed. A capability refresh failure must not
+    // suggest that retrying the write is necessary or resurrect old drafts.
+    const refreshed = await refreshSettingsConfig();
     const result = useGlobalSettingsStore.getState().saved;
     useGlobalSettingsStore.getState().setSaveState("saved");
     useUiStore.getState().setToast({
-      tone: "success",
-      message: result?.restartRequired
+      tone: refreshed ? "success" : "warning",
+      message: !refreshed ? "全局配置已保存；运行配置刷新失败，请稍后重新打开应用。" : result?.restartRequired
         ? "全局配置已保存；工作流路径将在下次启动生效"
         : reset
           ? "已恢复 .env 与内置默认值"
@@ -83,5 +94,12 @@ export async function saveGlobalSettingsChanges(reset = false): Promise<boolean>
     useGlobalSettingsStore.getState().setSaveState("error");
     useGlobalSettingsStore.getState().setSaveError(appErrorFromUnknown(error).message);
     return false;
-  }
+  } finally { useGlobalSettingsStore.getState().endMutation("global"); }
+}
+
+export async function refreshSettingsConfig(): Promise<boolean> {
+  try {
+    useProjectStore.getState().setConfig(await unwrap(await getSlateSync().app.getConfig()));
+    return true;
+  } catch { return false; }
 }

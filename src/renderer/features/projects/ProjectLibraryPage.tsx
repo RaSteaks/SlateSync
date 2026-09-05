@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore, FolderKanban, Plus, RefreshCw, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, EmptyState, Field, Icon, IconButton, InlineError, Input, Stack, Surface, Text } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
 import { createOperationGuard } from "../../services/operation-guard";
@@ -26,9 +26,14 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
   const dialog = useUiStore((state) => state.dialog);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const creatingRef = useRef(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const refreshGuard = useMemo(() => createOperationGuard(), []);
+
+  useEffect(() => { if (dialog === "new-project") { setCreateError(null); setNameError(null); } }, [dialog]);
 
   const refresh = async () => {
     const operationId = refreshGuard.start();
@@ -56,9 +61,13 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
 
   const createProject = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (creatingRef.current) return;
     const validation = validateProjectName(name);
-    if (!validation.ok) { setNameError(validation.message); return; }
+    if (!validation.ok) { setNameError(validation.message); nameInputRef.current?.focus(); return; }
+    // Reserve synchronously: a second submit may arrive before React renders.
+    creatingRef.current = true;
     setActionBusy("create");
+    setCreateError(null);
     try {
       const project = await unwrap(await getSlateSync().projects.create({ name: name.trim(), description: description.trim() }));
       setProjects([...useProjectStore.getState().projects, project]);
@@ -68,8 +77,9 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
       setNameError(null);
       onOpenProject(project.id, "workspace");
     } catch (nextError) {
-      setError(appErrorFromUnknown(nextError));
+      setCreateError(appErrorFromUnknown(nextError).message);
     } finally {
+      creatingRef.current = false;
       setActionBusy(null);
     }
   };
@@ -108,10 +118,11 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
       {active.length === 0 ? <EmptyState icon={FolderKanban} title="还没有项目" description="创建项目后即可开始识别场记。" action={<Button onClick={() => setDialog("new-project")} disabled={Boolean(actionBusy)} startIcon={<Plus size={16} />}>创建第一个项目</Button>} /> : <div className={styles.cardGrid}>{active.map((project) => <ProjectCard key={project.id} project={project} current={project.id === current?.id} busy={actionBusy === `archive:${project.id}`} disabled={Boolean(actionBusy)} onOpen={() => onOpenProject(project.id, "workspace")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, false)} />)}</div>}
     </Surface>
     {archived.length > 0 && <Surface className={styles.panel} style={{ marginTop: 16 }}><div className={styles.sectionHeader}><div><p className={styles.kicker}>归档</p><h2 className={styles.sectionTitle}>已归档项目</h2></div><Text tone="muted" size="sm">恢复后可继续编辑。</Text></div><div className={styles.cardGrid}>{archived.map((project) => <ProjectCard key={project.id} project={project} current={false} busy={actionBusy === `archive:${project.id}`} disabled={Boolean(actionBusy)} onOpen={() => onOpenProject(project.id, "project-settings")} onSettings={() => onOpenProject(project.id, "project-settings")} onArchive={() => void archive(project.id, true)} />)}</div></Surface>}
-    <Dialog open={dialog === "new-project"} title="新建项目" description="输入名称即可创建。" onClose={() => { setDialog(null); setNameError(null); }} footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" onClick={() => { setDialog(null); setNameError(null); }}>取消</Button><Button type="submit" form="new-project-form" loading={actionBusy === "create"}>创建项目</Button></Stack>}>
+    <Dialog dismissible={actionBusy !== "create"} open={dialog === "new-project"} title="新建项目" description="输入名称即可创建。" onClose={() => { if (!creatingRef.current) { setDialog(null); setNameError(null); } }} footer={<Stack direction="row" gap={2} justify="end"><Button variant="ghost" disabled={actionBusy === "create"} onClick={() => { setDialog(null); setNameError(null); }}>取消</Button><Button type="submit" form="new-project-form" loading={actionBusy === "create"}>创建项目</Button></Stack>}>
+      {createError && <InlineError message={createError} />}
       <form id="new-project-form" noValidate onSubmit={createProject} className={styles.grid}>
-        <div className={styles.formField}><Field label="项目名称" error={nameError || undefined}><Input autoFocus required value={name} onChange={(event) => { setName(event.target.value); if (nameError) setNameError(null); }} onBlur={() => { if (name) { const validation = validateProjectName(name); setNameError(validation.ok ? null : validation.message); } }} placeholder="例如：纪录片 · 第 01 集" /></Field></div>
-        <div className={styles.formField}><Field label="描述"><Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="可选" /></Field></div>
+        <div className={styles.formField}><Field label="项目名称" error={nameError || undefined}><Input ref={nameInputRef} disabled={actionBusy === "create"} autoFocus required value={name} onChange={(event) => { setName(event.target.value); if (nameError) setNameError(null); }} onBlur={() => { if (name) { const validation = validateProjectName(name); setNameError(validation.ok ? null : validation.message); } }} placeholder="例如：纪录片 · 第 01 集" /></Field></div>
+        <div className={styles.formField}><Field label="描述"><Input disabled={actionBusy === "create"} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="可选" /></Field></div>
       </form>
     </Dialog>
   </div>;

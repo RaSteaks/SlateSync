@@ -1,4 +1,9 @@
 import { useGlobalSettingsStore } from "../../state";
+import { isGlobalSettingLocked } from "../../state/global-settings-store";
+
+export function useSettingLocked(key?: GlobalSettingKey) {
+  return useGlobalSettingsStore((state) => isGlobalSettingLocked(state, key));
+}
 import { Field, Input, Select } from "../../design-system";
 import type { GlobalSettingKey } from "../../../shared/contracts/index.js";
 import { GLOBAL_TIMEOUT_RANGES, validateGlobalSettingValue } from "../../validation/global-settings-validation";
@@ -49,6 +54,7 @@ export type NumericSettingFieldProps = SettingFieldBaseProps & {
 };
 
 export function NumericSettingField({ settingKey, label, hint, fallback, placeholder, disabled, overrideValue, min, max, step }: NumericSettingFieldProps) {
+  const locked = useSettingLocked(settingKey);
   const storedValue = useFieldValue(settingKey, fallback);
   const error = useFieldError(settingKey);
   // Timeout keys accept the literal "auto", so they stay free-text inputs.
@@ -63,7 +69,7 @@ export function NumericSettingField({ settingKey, label, hint, fallback, placeho
       step={step}
       value={showValue}
       placeholder={placeholder}
-      disabled={disabled}
+      disabled={disabled || locked}
       onChange={(event) => commitValue(settingKey, event.target.value)}
       onBlur={() => { if (overrideValue === undefined) validateOnBlur(settingKey, storedValue); }}
     />
@@ -71,13 +77,14 @@ export function NumericSettingField({ settingKey, label, hint, fallback, placeho
 }
 
 export function TextSettingField({ settingKey, label, hint, fallback, placeholder, disabled, spellCheck }: SettingFieldBaseProps) {
+  const locked = useSettingLocked(settingKey);
   const value = useFieldValue(settingKey, fallback);
   const error = useFieldError(settingKey);
   return <Field label={label} hint={hint} error={error}>
     <Input
       value={value}
       placeholder={placeholder}
-      disabled={disabled}
+      disabled={disabled || locked}
       spellCheck={spellCheck}
       onChange={(event) => commitValue(settingKey, event.target.value)}
       onBlur={() => useGlobalSettingsStore.getState().setFieldError(settingKey, null)}
@@ -86,9 +93,10 @@ export function TextSettingField({ settingKey, label, hint, fallback, placeholde
 }
 
 export function SelectSettingField({ settingKey, label, hint, fallback, options, disabled }: SettingFieldBaseProps & { options: ReadonlyArray<{ value: string; label: string }> }) {
+  const locked = useSettingLocked(settingKey);
   const value = useFieldValue(settingKey, fallback);
   return <Field label={label} hint={hint}>
-    <Select value={value} disabled={disabled} onChange={(event) => commitValue(settingKey, event.target.value)}>
+    <Select value={value} disabled={disabled || locked} onChange={(event) => commitValue(settingKey, event.target.value)}>
       {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </Select>
   </Field>;

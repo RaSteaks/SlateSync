@@ -7,6 +7,7 @@ import {
   ocrRoutingFeedback,
   type OcrPreference,
 } from "./globalSettingsModel";
+import { useSettingLocked } from "./NumericSettingField";
 import styles from "../../app/app.module.css";
 
 /**
@@ -15,6 +16,7 @@ import styles from "../../app/app.module.css";
  * exactly those keys, and explains the pending save outcome inline.
  */
 export function OcrRoutingSection() {
+  const locked = useSettingLocked();
   // Four raw-value selectors: only a change to one of the routing keys
   // re-renders this subtree.
   const visionEnabled = useGlobalSettingsStore((state) => state.draftValues.VISIONOCR_ENABLED ?? state.saved?.values.VISIONOCR_ENABLED ?? "auto");
@@ -47,6 +49,7 @@ export function OcrRoutingSection() {
     <div className={styles.settingsSegmentedRow}>
       <SegmentedControl
         label="首选 OCR 引擎"
+        disabled={locked}
         value={preference}
         options={OCR_ROUTING_SEGMENTS}
         onChange={applyPreference}

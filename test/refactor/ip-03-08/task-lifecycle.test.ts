@@ -135,7 +135,8 @@ describe("workspace task lifecycle", () => {
   it("refreshes the task rail after restoring a log handoff", async () => {
     const source = await readFile(workspaceSource, "utf8");
 
-    expect(source).toContain("await applyTask(taskId, task);\n        } else {");
+    // Whitespace is independent of the lease wrapping the restore.
+    expect(source).toMatch(/await applyTask\(taskId, task\);\s*} else \{/);
     expect(source).toContain("await refreshTasks(project.id);");
   });
 

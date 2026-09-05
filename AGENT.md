@@ -2,6 +2,13 @@
 
 ## 当前任务
 
+2026-09-05：按已确认方案完成现代 Renderer 的 8 项交互修复。任务与识别互斥、
+全局保存锁、项目设置草稿守卫优先；Provider 异步隔离、多行模型文本、弹窗错误、
+模型键盘选择与重复分区定位同步完成。保留进入本轮前已有的侧栏导航改动。
+窗口双栏、侧栏收起占位及浅色对比度等布局与视觉问题延期，未纳入本轮修复。
+
+## 既有架构实施记录
+
 执行 `.codex/refactor/packages/IP-03-08-C02.md`，关闭
 `reviews/FINAL-IP-03-08.md` 的全部阻塞项，并完成整个 post-IP-02 架构
 变更。当前工作不是新阶段；它只修正现代 Renderer 的兼容性、生命周期、
@@ -1055,3 +1062,63 @@ Worker 边界、验收证据和最终治理交接。
   `npm run typecheck`、Modern Vitest 177/177、Modern 与 Storybook 静态构建、premium
   strict audit（0 finding）及 `git diff --check` 均通过。Storybook 在受限环境无法写入
   用户级 settings 文件的提示不影响静态产物成功生成。
+
+## 2026-09-05 UI 交互修复
+
+1. `task-store` 保存同步操作权；识别从自动保存、素材压缩到 run/cancel 最终清理
+   都持有操作权，重复请求不会重新进入；任务新建/切换/删除、文件准备/CSV 载入、
+   素材目录扫描及返回项目库复用同一入口。迟到任务恢复在取得操作权后才应用。
+2. `global-settings-store` 统一全局保存、恢复默认、密钥/OCR/安装写回；控件与
+   store 同时锁定，失败保留输入；持久化成功后的能力刷新失败单独提示。
+3. `settings-store` 保存项目 ID、基线、草稿、脏状态、保存状态和错误。页面与
+   Cmd/Ctrl+S、应用离开守卫共用返回 `Promise<boolean>` 的保存函数；同项目
+   配置刷新不冲掉脏草稿，改回原值即洁净。进入项目库仍自动保存并清理工作台。
+4. `useProviderModels` 由 Provider ID + 请求序号隔离乱序成功/失败和卸载响应；
+   回退目录仅来自当前 Provider，不覆盖用户后来选择的模型。
+5. 自定义接口手动模型 ID 保留原始多行文本及编辑基线，提交时才分割/trim/过滤。
+6. 新建项目、接口编辑及相关删除确认内联展示独立错误；失败保留弹窗与输入，
+   请求期间禁止重复提交与关闭。共享 Dialog 补齐条件卸载时的触发器焦点恢复。
+7. `ModelSelect` 锁定 `react-aria-components` 1.21.1，接入 Tree + Popover，
+   沿用现有样式与调用接口。库管理树导航/字符定位/单选，适配层处理提交、
+   Escape 及 Tab 的表单焦点顺序；浏览不提交，失效目录不接受旧选项。
+8. 分区高亮与导航请求计数分开；每次显式点击均滚动并聚焦分区标题，普通
+   store 更新不改变焦点。同步更新 `UX-CONTRACT.md` 的层级单选变体及并发契约。
+
+### 交互回归证据
+
+| 缺陷 | 行为证据 |
+|---|---|
+| 1 识别/任务互斥 | `interaction-state.test.ts`；浏览器 `recognition-lifetime-lock`、`file-preparation-lock`，可控 autosave/run/cancel/prepare 延迟与失败 |
+| 2 全局保存输入锁 | `global-settings.test.tsx`、`interaction-state.test.ts`；浏览器 `global-save-lock` |
+| 3 项目草稿/离开保护 | `project-settings-guard.test.tsx`、`project-settings.test.tsx`；浏览器 `project-draft-guard` |
+| 4 Provider 乱序 | `provider-models.test.tsx`；浏览器 `provider-response-order` |
+| 5 原始多行模型文本 | `custom-provider-settings.test.tsx`；浏览器 `manual-model-text-and-error` |
+| 6 弹窗失败恢复 | `custom-provider-settings.test.tsx`、项目设置组件测试；浏览器 `project-create-retry` 等失败重试 |
+| 7 键盘模型选择 | `model-select.test.tsx`；浏览器 `picker-keyboard`，含嵌套 Escape、Tab、左右折叠、重复确认、两种宽度与局部 axe |
+| 8 重复分区定位 | `app-navigation-guard.test.tsx`；浏览器 `repeat-section-navigation` |
+
+- 可复跑浏览器脚本：`node test-support/refactor/interaction-browser.cjs`（需本机 Chrome），
+  通过 `SLATESYNC_UI_OUTPUT` 和 `SLATESYNC_UI_PORT` 调整临时产物位置/端口。
+- 浏览器只使用模拟网关和内存项目，不接触默认 Library，不启动前台 Electron，
+  不执行真实 OCR/Provider 请求。IPC、Shared Contract、数据库和 CSV 算法/语义未改。
+- 验收命令：`test:modern`、`typecheck`、`check`、`build:modern`、`build:storybook`、
+  premium strict UI audit（`--no-write`）、`git diff --check`；最终结果记录在本节下方。
+
+### 最终验收结果
+
+- `test:modern`：31 个测试文件、191 项测试通过。
+- `typecheck`、`check`、`build:modern`、`build:storybook`：通过。
+- premium strict UI audit：0 finding；`git diff --check`：通过。
+- 隔离 Chromium：9 条流程通过，页面未处理异常为 0；模型选择器局部 axe 为 0
+  violation。真实 Provider/OCR 与前台 Electron 不在这组模拟交互回归范围内。
+- 构建保留大 chunk 提示；Storybook 尝试写入用户级设置被沙盒阻止，但静态构建成功。
+- `UX-CONTRACT.md` 已更新，沿用仓库现有忽略规则；关键交互契约与证据同步记入本文件。
+
+### 审查意见修复
+
+- 项目包导入/导出现在订阅全局工作区操作权；忙碌期间按钮呈禁用态并就近说明原因，
+  事件处理器仍同步复查操作权，避免渲染间隙产生无反馈点击。
+- 全局设置父导航与 Cmd/Ctrl+, 统一清空分区目标，并滚动、聚焦页面标题；重复激活
+  当前父项也会产生新的定位请求，不再保留旧分区位置。
+- 对应组件测试覆盖工作区操作权的禁用/恢复，以及父导航和快捷键的页面顶部焦点；
+  隔离 Chromium 的 `file-preparation-lock` 与 `repeat-section-navigation` 同步覆盖真实交互。

@@ -256,4 +256,61 @@ describe("app shell navigation guard for global settings drafts", () => {
     expect(api.settings.saveGlobalSettings).toHaveBeenCalledTimes(1);
     expect(useGlobalSettingsStore.getState().dirtyKeys.size).toBe(0);
   });
+
+  it("exposes settings sections as a sidebar dropdown with dirty dots", async () => {
+    installApi();
+    seedDirtyDraft(); // MAX_BODY_MB is a runtime-section key.
+    useUiStore.setState({ route: "global-settings" });
+    const host = await renderApp();
+
+    // The dropdown mounts only while the global-settings route is active.
+    const group = host.querySelector('[aria-label="全局设置分区导航"]');
+    expect(group).not.toBeNull();
+    const findSubItem = (label: string) =>
+      [...(group?.querySelectorAll("button") || [])].find((candidate) => candidate.textContent?.trim() === label);
+    expect(findSubItem("运行参数")?.getAttribute("data-dirty")).toBe("true");
+    expect(findSubItem("密钥与外观")?.getAttribute("data-dirty")).toBeNull();
+
+    await act(async () => {
+      findSubItem("本地 OCR")?.click();
+      await Promise.resolve();
+    });
+    expect(useUiStore.getState().settingsSection).toBe("settings-ocr");
+
+    // Repeating a section click is an action even when its selected ID matches.
+    const target = host.querySelector<HTMLElement>("#settings-ocr")!;
+    target.scrollIntoView = vi.fn();
+    await act(async () => { findSubItem("本地 OCR")?.click(); });
+    expect(target.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(target.querySelector("h2"));
+
+    // The parent item is also a destination: repeating it returns focus and
+    // scroll to the page heading instead of only clearing the active subitem.
+    const pageHeading = host.querySelector<HTMLElement>("#global-settings-heading")!;
+    pageHeading.scrollIntoView = vi.fn();
+    await act(async () => { findNavItem(host, "全局设置").click(); });
+    expect(useUiStore.getState().settingsSection).toBeNull();
+    expect(pageHeading.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(pageHeading);
+
+    // Leaving the route unmounts the dropdown; a dirty draft must go through
+    // the guard dialog, so discard before navigating away here.
+    act(() => { useGlobalSettingsStore.getState().discardDraft(); });
+    await act(async () => {
+      findNavItem(host, "说明").click();
+      await settle();
+    });
+    expect(useUiStore.getState().route).toBe("help");
+    expect(host.querySelector('[aria-label="全局设置分区导航"]')).toBeNull();
+
+    // Cmd/Ctrl+, shares the same parent destination and must not restore the
+    // previously selected subsection when reopening Global Settings.
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", metaKey: true, bubbles: true, cancelable: true }));
+      await settle();
+    });
+    expect(useUiStore.getState().route).toBe("global-settings");
+    expect(useUiStore.getState().settingsSection).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector("#global-settings-heading"));
+  });
 });

@@ -840,3 +840,26 @@ describe("global settings save orchestration", () => {
     expect(feedback?.textContent).toContain("保存后将显式启用 Apple Vision OCR");
   });
 });
+
+describe("global settings pending input protection", () => {
+  it("disables draft controls and OCR presets while leaving appearance available", async () => {
+    let finish!: (value: unknown) => void;
+    const save = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+    const { host } = await renderSettings(save);
+    act(() => useGlobalSettingsStore.getState().setDraftValue("MAX_BODY_MB", "100"));
+    act(() => findSaveButton(host).click());
+    const numeric = [...host.querySelectorAll<HTMLInputElement>("input")].find(input => input.value === "100")!;
+    expect(numeric.disabled).toBe(true);
+    const routing = host.querySelector('[aria-label="首选 OCR 引擎"]')!;
+    expect([...routing.querySelectorAll("button")].every(button => button.disabled)).toBe(true);
+    const preset = findField(host, "参数预设")?.querySelector("select");
+    expect(preset).toBeInstanceOf(HTMLSelectElement);
+    expect(preset?.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="主题"] button')?.disabled).toBe(false);
+    await act(async () => { finish({ ok: false, error: { code: "TEST", message: "模拟网络失败" } }); });
+    expect(numeric.disabled).toBe(false);
+    expect(numeric.value).toBe("100");
+    expect(useGlobalSettingsStore.getState().dirtyKeys.has("MAX_BODY_MB")).toBe(true);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("模拟网络失败");
+  });
+});

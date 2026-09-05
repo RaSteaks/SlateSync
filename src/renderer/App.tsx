@@ -6,14 +6,17 @@ import { AppShell, Button, ContextMenu, Dialog, Field, Icon, IconButton, InlineE
 import { appErrorFromUnknown, getSlateSync, unwrap } from "./services/api";
 import { createOperationGuard } from "./services/operation-guard";
 import { GLOBAL_SETTINGS_SAVE_EVENT, isEditableShortcutTarget, RECOGNITION_SHORTCUT_EVENT } from "./services/keyboard-shortcuts";
+import { saveProjectSettingsChanges } from "./features/settings/projectSettingsActions";
+import { acquireWorkspaceOperation, isWorkspaceBusy } from "./services/workspace-operation";
 import { isRouteChangeBlocked, saveGlobalSettingsChanges } from "./features/settings/globalSettingsActions";
 import { APPEARANCE_PREFERENCE_KEY, cycleTheme, parseAppearancePreference, resolveTheme, themePreferenceLabel, watchSystemTheme } from "./services/appearance-preference";
-import { useExportStore, useGlobalSettingsStore, useMetadataStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore, useUiStore } from "./state";
+import { useExportStore, useGlobalSettingsStore, useMetadataStore, useProjectStore, useRecognitionStore, useSettingsStore, useSlateStore, useTaskStore, useUiStore } from "./state";
 import { validateLibraryName } from "./validation/input-validation";
 import { documentTitle, routeTitle } from "./app/route-title";
 import { ProjectLibraryPage } from "./features/projects/ProjectLibraryPage";
 import { HelpPage } from "./features/help/HelpPage";
 import { GlobalSettingsPage } from "./features/settings/GlobalSettingsPage";
+import { GlobalSettingsSidebarNav } from "./features/settings/GlobalSettingsSidebarNav";
 import { LogViewerPage } from "./features/logs/LogViewerPage";
 import { ProjectSettingsPage } from "./features/settings/ProjectSettingsPage";
 import { WorkspacePage, type RegisterWorkspaceToolbarExport, type RegisterWorkspaceTransferPreparation } from "./features/workspace/WorkspacePage";
@@ -39,6 +42,9 @@ export function App() {
   const setRoute = useUiStore((state) => state.setRoute);
   const setToast = useUiStore((state) => state.setToast);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const settingsSectionRequest = useUiStore((state) => state.settingsSectionRequest);
+  const settingsSection = useUiStore((state) => state.settingsSection);
+  const setSettingsSection = useUiStore((state) => state.setSettingsSection);
   const project = useProjectStore((state) => state.current);
   const library = useProjectStore((state) => state.library);
   const setError = useProjectStore((state) => state.setError);
@@ -64,10 +70,18 @@ export function App() {
   // 守卫对话框提供“取消 / 放弃 / 保存”三条出路。
   const [pendingRoute, setPendingRoute] = useState<Parameters<typeof setRoute>[0] | null>(null);
   const globalSaveState = useGlobalSettingsStore((state) => state.saveState);
+  const globalMutationOwner = useGlobalSettingsStore((state) => state.mutationOwner);
   const globalSaveError = useGlobalSettingsStore((state) => state.saveError);
+  const projectSaving = useSettingsStore((state) => state.saving);
+  const projectSaveError = useSettingsStore((state) => state.saveError);
+  const guardSaving = route === "project-settings" ? projectSaving : globalSaveState === "saving";
+  const guardWriteBusy = guardSaving || (route === "global-settings" && globalMutationOwner !== null);
+  const guardError = route === "project-settings" ? projectSaveError : globalSaveError;
+  const isGuardSaving = () => useUiStore.getState().route === "project-settings"
+    ? useSettingsStore.getState().saving : useGlobalSettingsStore.getState().saveState === "saving";
 
   const navigateTo = useCallback((nextRoute: Parameters<typeof setRoute>[0]) => {
-    // 未保存的全局设置草稿先经守卫确认；留在当前页不消耗导航意图标记。
+    // 未保存的项目/全局设置草稿先经守卫确认；留在当前页不消耗导航意图标记。
     if (isRouteChangeBlocked(useUiStore.getState().route, nextRoute)) {
       setPendingRoute(nextRoute);
       return;
@@ -77,6 +91,13 @@ export function App() {
     navigationIntentRef.current += 1;
     setRoute(nextRoute);
   }, [setRoute]);
+
+  const openGlobalSettings = useCallback(() => {
+    // `null` is the explicit parent destination: every activation requests
+    // page-top focus even when Global Settings is already the current route.
+    setSettingsSection(null);
+    navigateTo("global-settings");
+  }, [navigateTo, setSettingsSection]);
 
   // The workspace owns export semantics; the shell only hosts its stable
   // trigger in the sticky toolbar and mirrors the current busy/disabled state.
@@ -146,6 +167,20 @@ export function App() {
   }, [route]);
 
   useEffect(() => {
+    if (route !== "global-settings") return;
+    const target = settingsSection
+      ? document.getElementById(settingsSection)
+      : document.getElementById("global-settings-heading");
+    if (!target) return;
+    // A repeated click is a fresh request. Ordinary draft renders never move
+    // focus; the null parent request deliberately targets the page heading.
+    const heading = settingsSection ? target.querySelector<HTMLElement>("h2") || target : target;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+    target.scrollIntoView?.();
+  }, [route, settingsSection, settingsSectionRequest]);
+
+  useEffect(() => {
     let active = true;
     void (async () => {
       try {
@@ -196,20 +231,23 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!event.metaKey && !event.ctrlKey) return;
+      if ((!event.metaKey && !event.ctrlKey) || event.isComposing || event.defaultPrevented) return;
       if (event.key === ",") {
         event.preventDefault();
-        useUiStore.getState().setDialog(null);
-        navigateTo("global-settings");
+        if (document.querySelector('[role="dialog"]')) return;
+        openGlobalSettings();
         return;
       }
       if (event.key === "s") {
         // 不经 isEditableShortcutTarget：输入框聚焦时同样保存，并抑制浏览器
-        // 自带的“存储页面”。对话框打开时让位给对话框动作；非全局设置页无此事件。
+        // 自带的“存储页面”。对话框打开时让位给对话框动作；两类设置共用保存入口。
         event.preventDefault();
         if (document.querySelector('[role="dialog"]')) return;
-        if (useUiStore.getState().route !== "global-settings") return;
-        window.dispatchEvent(new Event(GLOBAL_SETTINGS_SAVE_EVENT));
+        if (useUiStore.getState().route === "project-settings") {
+          void saveProjectSettingsChanges();
+        } else if (useUiStore.getState().route === "global-settings") {
+          window.dispatchEvent(new Event(GLOBAL_SETTINGS_SAVE_EVENT));
+        }
         return;
       }
       if (event.key !== "Enter" || route !== "workspace" || isEditableShortcutTarget(event.target) || document.querySelector('[role="dialog"]')) return;
@@ -218,7 +256,7 @@ export function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [navigateTo, route]);
+  }, [openGlobalSettings, route]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -274,9 +312,9 @@ export function App() {
     }
   };
 
-  const prepareWorkspaceForTransfer = async () => {
+  const prepareWorkspaceForTransfer = async (owner?: ReturnType<typeof acquireWorkspaceOperation>) => {
     // 所有项目库传输都先经过同一条识别/自动保存闸门，避免导出旧草稿。
-    if (useRecognitionStore.getState().running) {
+    if (isWorkspaceBusy() && !owner?.isCurrent()) {
       setToast({ tone: "warning", message: "识别进行中，完成后才能操作项目库" });
       return false;
     }
@@ -286,7 +324,7 @@ export function App() {
     if (!saved) {
       setToast({ tone: "danger", message: "当前任务保存失败，请重试保存后再操作项目库" });
     }
-    return saved;
+    return saved && (!isWorkspaceBusy() || Boolean(owner?.isCurrent()));
   };
 
   // 点击菜单中的路径行时复制完整路径到剪贴板。
@@ -355,6 +393,7 @@ export function App() {
       // publish both subscriptions in one commit so no intermediate frame can
       // show the new project on the old Library route (or vice versa).
       flushSync(() => {
+        useSettingsStore.getState().clearProject();
         useProjectStore.getState().setCurrent(loaded);
         useProjectStore.getState().setScenarios(scenarios);
         // Mark the project represented by the opening read so Workspace does
@@ -385,6 +424,7 @@ export function App() {
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
     useTaskStore.getState().clear();
+    useSettingsStore.getState().clearProject();
     // Match the retained compatibility route: the Library may show which
     // project was current, while workspace-owned data is already released.
     // Reopening still reloads full project authority from Main.
@@ -395,15 +435,17 @@ export function App() {
   const performLeaveProject = async () => {
     const navigationIntent = ++navigationIntentRef.current;
     if (useUiStore.getState().route === "projects") return;
-    // 离开工作台也走同一保存闸门，确保随后进入项目库时数据已经落盘。
-    if (!(await prepareWorkspaceForTransfer())) return;
-    // A later workspace/settings/logs click cancels this continuation; do not
-    // clear the newly selected route or its workspace-owned stores.
-    if (
-      navigationIntentRef.current !== navigationIntent
-      || useUiStore.getState().route === "projects"
-    ) return;
-    releaseWorkspaceForLibrary();
+    const owner = acquireWorkspaceOperation("transfer", useProjectStore.getState().current?.id || "library");
+    if (!owner) {
+      setToast({ tone: "warning", message: "任务处理中，请等待完成或先停止识别。" });
+      return;
+    }
+    try {
+      if (!(await prepareWorkspaceForTransfer(owner))) return;
+      if (navigationIntentRef.current !== navigationIntent) return;
+      releaseWorkspaceForLibrary();
+    } finally { owner.release(); }
+
   };
 
   const leaveProject = async () => {
@@ -417,6 +459,7 @@ export function App() {
   };
 
   const leaveDeletedProject = (projectId: string) => {
+    useSettingsStore.getState().clearProject();
     projectLoadGuard.invalidate();
     const projectState = useProjectStore.getState();
     projectState.setProjects(projectState.projects.filter((item) => item.id !== projectId));
@@ -440,28 +483,34 @@ export function App() {
     navigateTo(target);
   };
 
-  // 全局设置离开守卫对话框的三条出路：取消留在设置页；放弃清除草稿后继续；
+  // 两类设置离开守卫对话框的三条出路：取消留在设置页；放弃清除草稿后继续；
   // 保存成功后继续，失败留在对话框并展示保存错误。保存中的对话框不可取消，
   // 避免已发出的持久化请求在用户选择放弃后仍完成并跳转。
   const cancelPendingNavigation = () => {
-    if (useGlobalSettingsStore.getState().saveState === "saving") return;
+    if (isGuardSaving()) return;
     setPendingRoute(null);
   };
 
   const discardChangesAndLeave = () => {
-    if (useGlobalSettingsStore.getState().saveState === "saving") return;
+    if (isGuardSaving()) return;
+    if (useUiStore.getState().route === "global-settings" && useGlobalSettingsStore.getState().mutationOwner) return;
     const target = pendingRoute;
     if (!target) return;
-    useGlobalSettingsStore.getState().discardDraft();
+    if (useUiStore.getState().route === "project-settings") useSettingsStore.getState().discardProject();
+    else useGlobalSettingsStore.getState().discardDraft();
     setPendingRoute(null);
     void continuePendingNavigation(target);
   };
 
   const saveChangesAndLeave = async () => {
-    if (useGlobalSettingsStore.getState().saveState === "saving") return;
+    if (isGuardSaving()) return;
+    if (useUiStore.getState().route === "global-settings" && useGlobalSettingsStore.getState().mutationOwner) return;
     const target = pendingRoute;
     if (!target) return;
-    if (!(await saveGlobalSettingsChanges())) return;
+    const origin = useUiStore.getState().route;
+    const sourceProjectId = useProjectStore.getState().current?.id;
+    const saved = origin === "project-settings" ? await saveProjectSettingsChanges() : await saveGlobalSettingsChanges();
+    if (!saved || useUiStore.getState().route !== origin || useProjectStore.getState().current?.id !== sourceProjectId) return;
     setPendingRoute(null);
     await continuePendingNavigation(target);
   };
@@ -471,7 +520,7 @@ export function App() {
     <button type="button" className={styles.navItem} data-active={route === "projects"} data-collapsed={sidebarCollapsed || undefined} title="项目库" onClick={leaveProject} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setLibraryMenu({ open: true, x: event.clientX, y: event.clientY }); }}><Icon icon={FolderKanban} size={18} /><span>项目库</span></button>
     {project && <><div className={`${styles.navSection} ${styles.navSectionCurrent}`} data-collapsed={sidebarCollapsed || undefined}><span>当前项目</span><span className={styles.navSectionProject} title={project.name}>{project.name}</span></div><button type="button" className={styles.navItem} data-active={route === "workspace"} data-collapsed={sidebarCollapsed || undefined} title="工作台" onClick={() => navigateTo("workspace")}><Icon icon={LayoutDashboard} size={18} /><span>工作台</span></button><button type="button" className={styles.navItem} data-active={route === "project-settings"} data-collapsed={sidebarCollapsed || undefined} title="项目设置" onClick={() => navigateTo("project-settings")}><Icon icon={SlidersHorizontal} size={18} /><span>项目设置</span></button></>}
     <div style={{ flex: 1 }} />
-    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => navigateTo("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={() => navigateTo("global-settings")}><Icon icon={Settings} size={18} /><span>全局设置</span></button><button type="button" className={styles.navItem} data-active={route === "help"} data-collapsed={sidebarCollapsed || undefined} title="说明" onClick={() => navigateTo("help")}><Icon icon={BookOpen} size={18} /><span>说明</span></button>
+    <div className={styles.navSection} data-collapsed={sidebarCollapsed || undefined}>系统</div><button type="button" className={styles.navItem} data-active={route === "logs"} data-collapsed={sidebarCollapsed || undefined} title="日志" onClick={() => navigateTo("logs")}><Icon icon={ScrollText} size={18} /><span>日志</span></button><button type="button" className={styles.navItem} data-active={route === "global-settings"} data-collapsed={sidebarCollapsed || undefined} title="全局设置" onClick={openGlobalSettings}><Icon icon={Settings} size={18} /><span>全局设置</span></button>{route === "global-settings" && <GlobalSettingsSidebarNav activeSection={settingsSection} onSelect={setSettingsSection} />}<button type="button" className={styles.navItem} data-active={route === "help"} data-collapsed={sidebarCollapsed || undefined} title="说明" onClick={() => navigateTo("help")}><Icon icon={BookOpen} size={18} /><span>说明</span></button>
   </>;
 
   // The App Icon is the shell-level home action. Reusing leaveProject keeps
@@ -520,16 +569,17 @@ export function App() {
   const pendingRouteDialog = pendingRoute && <Dialog
     open
     title="有未保存的修改"
-    description="全局设置还有未保存的修改；草稿会保留，回到全局设置后仍可继续编辑。"
+    description={route === "project-settings" ? "项目设置还有未保存的修改，请保存或放弃后离开。" : "全局设置还有未保存的修改；草稿会保留，请保存或放弃后离开。"}
     onClose={cancelPendingNavigation}
-    dismissible={globalSaveState !== "saving"}
+    dismissible={!guardSaving}
     footer={<Stack direction="row" gap={2} justify="end">
-      <Button variant="ghost" onClick={cancelPendingNavigation} disabled={globalSaveState === "saving"}>取消</Button>
-      <Button variant="danger" onClick={discardChangesAndLeave} disabled={globalSaveState === "saving"}>放弃修改并离开</Button>
-      <Button loading={globalSaveState === "saving"} onClick={() => void saveChangesAndLeave()}>保存并离开</Button>
+      <Button variant="ghost" onClick={cancelPendingNavigation} disabled={guardSaving}>取消</Button>
+      <Button variant="danger" onClick={discardChangesAndLeave} disabled={guardWriteBusy}>放弃修改并离开</Button>
+      <Button loading={guardSaving} disabled={guardWriteBusy} onClick={() => void saveChangesAndLeave()}>保存并离开</Button>
     </Stack>}
   >
-    {globalSaveError && <InlineError message={globalSaveError} />}
+    {guardError && <InlineError message={guardError} />}
+    {guardWriteBusy && !guardSaving && <Text tone="muted" size="sm">请等待当前配置写入完成后再保存或放弃修改。</Text>}
   </Dialog>;
 
   if (booting) return <div data-testid="modern-shell" className={styles.bootScreen}><div><Text as="p" size="lg" weight="bold">正在准备 SlateSync</Text><Text tone="subtle" size="sm">正在读取项目…</Text></div></div>;

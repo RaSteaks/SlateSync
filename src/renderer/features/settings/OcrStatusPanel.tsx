@@ -29,7 +29,7 @@ import {
 } from "./globalSettingsModel";
 import { engineStatus, engineStatusLabel, engineStatusTone, type PaddleOcrInstallState } from "./ocrEngineStatus";
 import { OcrRoutingSection } from "./OcrRoutingSection";
-import { NumericSettingField, TextSettingField } from "./NumericSettingField";
+import { NumericSettingField, TextSettingField, useSettingLocked } from "./NumericSettingField";
 
 // Per-card draft subscription: each card only re-renders when one of its own
 // keys changes, so typing in the Paddle panel never repaints the Vision card
@@ -66,6 +66,7 @@ interface VisionEngineCardProps {
 }
 
 const VisionEngineCard = memo(function VisionEngineCard({ vision, selected, visionCheck, visionCheckState, checkVision }: VisionEngineCardProps) {
+  const locked = useSettingLocked();
   const values = useAdvancedValues(VISION_ADVANCED_KEYS);
   const dirty = useCardDirty(VISION_ADVANCED_KEYS);
 
@@ -89,15 +90,15 @@ const VisionEngineCard = memo(function VisionEngineCard({ vision, selected, visi
         <div className={styles.settingsFieldGroup}>
           <p className={styles.settingsFieldGroupTitle}>路由</p>
           <div className={styles.formGrid}>
-            <Field label="必需模式" hint="开启后 Vision 不可用会阻止识别。"><Select value={values.VISIONOCR_REQUIRED || "false"} onChange={(event) => setDraftValue("VISIONOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
+            <Field label="必需模式" hint="开启后 Vision 不可用会阻止识别。"><Select disabled={locked} value={values.VISIONOCR_REQUIRED || "false"} onChange={(event) => setDraftValue("VISIONOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
           </div>
         </div>
         <div className={styles.settingsFieldGroup}>
           <p className={styles.settingsFieldGroupTitle}>识别</p>
           <div className={styles.formGrid}>
             <TextSettingField settingKey="VISIONOCR_LANGUAGE" label="识别语言" hint="可填写逗号分隔的语言，如 zh-Hans,en-US。" fallback="zh-Hans" />
-            <Field label="识别精度"><Select value={values.VISIONOCR_RECOGNITION_LEVEL || "accurate"} onChange={(event) => setDraftValue("VISIONOCR_RECOGNITION_LEVEL", event.target.value)}><option value="accurate">高精度</option><option value="fast">快速</option></Select></Field>
-            <Field label="语言校正"><Select value={values.VISIONOCR_USE_LANGUAGE_CORRECTION || "true"} onChange={(event) => setDraftValue("VISIONOCR_USE_LANGUAGE_CORRECTION", event.target.value)}><option value="true">启用</option><option value="false">关闭</option></Select></Field>
+            <Field label="识别精度"><Select disabled={locked} value={values.VISIONOCR_RECOGNITION_LEVEL || "accurate"} onChange={(event) => setDraftValue("VISIONOCR_RECOGNITION_LEVEL", event.target.value)}><option value="accurate">高精度</option><option value="fast">快速</option></Select></Field>
+            <Field label="语言校正"><Select disabled={locked} value={values.VISIONOCR_USE_LANGUAGE_CORRECTION || "true"} onChange={(event) => setDraftValue("VISIONOCR_USE_LANGUAGE_CORRECTION", event.target.value)}><option value="true">启用</option><option value="false">关闭</option></Select></Field>
             <NumericSettingField settingKey="VISIONOCR_MIN_CONFIDENCE" label="最低置信度" hint="0–1，低于此值的文字块不会作为证据。" fallback="0.10" min="0" max="1" step="0.01" />
             <NumericSettingField settingKey="VISIONOCR_MAX_BLOCKS_PER_VIEW" label="每个视图最多文字块" hint="0 表示不限制。" fallback="0" min="0" max="10000" step="1" />
           </div>
@@ -135,6 +136,8 @@ interface PaddleEngineCardProps {
 }
 
 const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr, paddleCheck, ocrState, checkAndSaveOcr }: PaddleEngineCardProps) {
+  const locked = useSettingLocked();
+  const writeBusy = useGlobalSettingsStore((state) => state.mutationOwner !== null);
   const values = useAdvancedValues(PADDLE_ADVANCED_KEYS);
   const dirty = useCardDirty(PADDLE_ADVANCED_KEYS);
   const savedValues = useGlobalSettingsStore((state) => state.saved?.values ?? null);
@@ -169,6 +172,7 @@ const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr,
   const paddleUsesV6Models = paddleEffective.modelVersion === "PP-OCRv6";
 
   const setPaddlePreset = (nextPreset: PaddlePreset) => {
+    if (locked) return;
     if (nextPreset === "custom" && preset !== "custom") {
       // Materialize the visible preset before entering custom mode so the
       // editor never jumps back to unrelated stale values from the last save.
@@ -188,7 +192,7 @@ const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr,
   };
 
   const setPaddleModelVersion = (nextVersion: PaddleModelVersion) => {
-    if (preset !== "custom") return;
+    if (locked || preset !== "custom") return;
     const currentVersion = paddleModelVersionFromValues(values);
     paddleModelDraftsRef.current[currentVersion] = paddleModelDraftFromValues(values);
     const restored = paddleModelDraftsRef.current[nextVersion] || { detectionModel: "", recognitionModel: "" };
@@ -205,6 +209,7 @@ const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr,
   };
 
   const setPaddleField = (key: Exclude<GlobalSettingKey, "PADDLEOCR_PRESET">, value: string) => {
+    if (locked) return;
     if (preset === "custom") {
       const modelKey = key === "PADDLEOCR_DETECTION_MODEL"
         ? "detectionModel"
@@ -252,30 +257,30 @@ const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr,
         <div className={styles.settingsFieldGroup}>
           <p className={styles.settingsFieldGroupTitle}>路由</p>
           <div className={styles.formGrid}>
-            <Field label="必需模式" hint="开启后 PaddleOCR 不可用会阻止识别。"><Select value={values.PADDLEOCR_REQUIRED || "false"} onChange={(event) => setDraftValue("PADDLEOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
+            <Field label="必需模式" hint="开启后 PaddleOCR 不可用会阻止识别。"><Select disabled={locked} value={values.PADDLEOCR_REQUIRED || "false"} onChange={(event) => setDraftValue("PADDLEOCR_REQUIRED", event.target.value)}><option value="false">可选</option><option value="true">必需</option></Select></Field>
           </div>
         </div>
         <div className={styles.settingsFieldGroup}>
           <p className={styles.settingsFieldGroupTitle}>模型</p>
           <div className={styles.formGrid}>
-            <Field label="参数预设" hint="命名预设会同时切换 PP-OCRv6 模型、批量、检测边长和输出过滤；自定义保留手动参数。"><Select value={preset} onChange={(event) => setPaddlePreset(event.target.value as PaddlePreset)}><option value="custom">自定义</option><option value="performance">性能（质量优先）</option><option value="balanced">平衡（推荐）</option><option value="fast">快速（低延迟）</option></Select></Field>
-            <Field label="模型版本" hint="切换版本会隔离检测/识别模型覆盖；切回时恢复本次未保存的版本草稿。"><Select value={paddleEffective.modelVersion} onChange={(event) => setPaddleModelVersion(event.target.value as PaddleModelVersion)} disabled={preset !== "custom"}>{PADDLE_MODEL_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
-            <Field label="兼容性能档" hint="仅自定义模式使用；用于兼容已有 PP-OCRv5 配置。"><Select value={paddleEffective.profile || "balanced"} onChange={(event) => setPaddleField("PADDLEOCR_PROFILE", event.target.value)} disabled={preset !== "custom"}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>
+            <Field label="参数预设" hint="命名预设会同时切换 PP-OCRv6 模型、批量、检测边长和输出过滤；自定义保留手动参数。"><Select disabled={locked} value={preset} onChange={(event) => setPaddlePreset(event.target.value as PaddlePreset)}><option value="custom">自定义</option><option value="performance">性能（质量优先）</option><option value="balanced">平衡（推荐）</option><option value="fast">快速（低延迟）</option></Select></Field>
+            <Field label="模型版本" hint="切换版本会隔离检测/识别模型覆盖；切回时恢复本次未保存的版本草稿。"><Select value={paddleEffective.modelVersion} onChange={(event) => setPaddleModelVersion(event.target.value as PaddleModelVersion)} disabled={locked || preset !== "custom"}>{PADDLE_MODEL_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></Field>
+            <Field label="兼容性能档" hint="仅自定义模式使用；用于兼容已有 PP-OCRv5 配置。"><Select value={paddleEffective.profile || "balanced"} onChange={(event) => setPaddleField("PADDLEOCR_PROFILE", event.target.value)} disabled={locked || preset !== "custom"}><option value="fast">快速</option><option value="balanced">平衡</option><option value="accurate">高精度</option></Select></Field>
             <Field label="检测模型" htmlFor="paddle-detection-model-select" hint={paddleUsesV6Models ? "PP-OCRv6 可选择 medium、small 或 tiny；也可输入自定义模型 ID。" : "PP-OCRv5 自定义模型可手动填写；留空使用当前版本默认模型。"}>
               {paddleUsesV6Models
                 ? <div className={styles.paddleModelControl}>
-                  <Select id="paddle-detection-model-select" aria-describedby="paddle-detection-model-select-hint" value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} disabled={preset !== "custom"}>{paddleV6DetectionModels.map((option) => <option key={option.value || "default"} value={option.value}>{option.label}</option>)}</Select>
-                  <Input aria-describedby="paddle-detection-model-select-hint" value={paddleV6DetectionIsCustom ? paddleEffective.detectionModel : ""} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="输入自定义模型 ID（可选）" aria-label="自定义检测模型 ID" disabled={preset !== "custom"} />
+                  <Select id="paddle-detection-model-select" aria-describedby="paddle-detection-model-select-hint" value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} disabled={locked || preset !== "custom"}>{paddleV6DetectionModels.map((option) => <option key={option.value || "default"} value={option.value}>{option.label}</option>)}</Select>
+                  <Input aria-describedby="paddle-detection-model-select-hint" value={paddleV6DetectionIsCustom ? paddleEffective.detectionModel : ""} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="输入自定义模型 ID（可选）" aria-label="自定义检测模型 ID" disabled={locked || preset !== "custom"} />
                 </div>
-                : <Input id="paddle-detection-model-select" value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="使用默认" disabled={preset !== "custom"} />}
+                : <Input id="paddle-detection-model-select" value={paddleEffective.detectionModel} onChange={(event) => setPaddleField("PADDLEOCR_DETECTION_MODEL", event.target.value)} placeholder="使用默认" disabled={locked || preset !== "custom"} />}
             </Field>
             <Field label="识别模型" htmlFor="paddle-recognition-model-select" hint={paddleUsesV6Models ? "PP-OCRv6 可选择 medium、small 或 tiny；也可输入自定义模型 ID。" : "PP-OCRv5 自定义模型可手动填写；留空使用当前版本默认模型。"}>
               {paddleUsesV6Models
                 ? <div className={styles.paddleModelControl}>
-                  <Select id="paddle-recognition-model-select" aria-describedby="paddle-recognition-model-select-hint" value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} disabled={preset !== "custom"}>{paddleV6RecognitionModels.map((option) => <option key={option.value || "default"} value={option.value}>{option.label}</option>)}</Select>
-                  <Input aria-describedby="paddle-recognition-model-select-hint" value={paddleV6RecognitionIsCustom ? paddleEffective.recognitionModel : ""} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="输入自定义模型 ID（可选）" aria-label="自定义识别模型 ID" disabled={preset !== "custom"} />
+                  <Select id="paddle-recognition-model-select" aria-describedby="paddle-recognition-model-select-hint" value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} disabled={locked || preset !== "custom"}>{paddleV6RecognitionModels.map((option) => <option key={option.value || "default"} value={option.value}>{option.label}</option>)}</Select>
+                  <Input aria-describedby="paddle-recognition-model-select-hint" value={paddleV6RecognitionIsCustom ? paddleEffective.recognitionModel : ""} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="输入自定义模型 ID（可选）" aria-label="自定义识别模型 ID" disabled={locked || preset !== "custom"} />
                 </div>
-                : <Input id="paddle-recognition-model-select" value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="使用默认" disabled={preset !== "custom"} />}
+                : <Input id="paddle-recognition-model-select" value={paddleEffective.recognitionModel} onChange={(event) => setPaddleField("PADDLEOCR_RECOGNITION_MODEL", event.target.value)} placeholder="使用默认" disabled={locked || preset !== "custom"} />}
             </Field>
           </div>
         </div>
@@ -284,10 +289,10 @@ const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr,
           <div className={styles.formGrid}>
             <TextSettingField settingKey="PADDLEOCR_LANGUAGE" label="识别语言" fallback="ch" />
             <TextSettingField settingKey="PADDLEOCR_DEVICE" label="计算设备" fallback="cpu" />
-            <NumericSettingField settingKey="PADDLEOCR_RECOGNITION_BATCH_SIZE" label="识别批量大小" fallback="" min="1" max="64" step="1" placeholder="使用性能档" disabled={preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.recognitionBatchSize : undefined} />
-            <NumericSettingField settingKey="PADDLEOCR_MIN_CONFIDENCE" label="最低置信度" hint="0–1；低于此值的文字块不会作为证据。" fallback="0.10" min="0" max="1" step="0.01" disabled={preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.minimumConfidence : undefined} />
-            <NumericSettingField settingKey="PADDLEOCR_MAX_BLOCKS_PER_VIEW" label="每个视图最多文字块" hint="0 表示不限制；限制时仍均匀覆盖整页。" fallback="0" min="0" max="10000" step="1" disabled={preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.maxBlocksPerView : undefined} />
-            <NumericSettingField settingKey="PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN" label="检测最长边" hint="320–4096；越小通常越快，但小字细节可能减少。" fallback="" min="320" max="4096" step="1" placeholder="Paddle 默认" disabled={preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.textDetLimitSideLen : undefined} />
+            <NumericSettingField settingKey="PADDLEOCR_RECOGNITION_BATCH_SIZE" label="识别批量大小" fallback="" min="1" max="64" step="1" placeholder="使用性能档" disabled={locked || preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.recognitionBatchSize : undefined} />
+            <NumericSettingField settingKey="PADDLEOCR_MIN_CONFIDENCE" label="最低置信度" hint="0–1；低于此值的文字块不会作为证据。" fallback="0.10" min="0" max="1" step="0.01" disabled={locked || preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.minimumConfidence : undefined} />
+            <NumericSettingField settingKey="PADDLEOCR_MAX_BLOCKS_PER_VIEW" label="每个视图最多文字块" hint="0 表示不限制；限制时仍均匀覆盖整页。" fallback="0" min="0" max="10000" step="1" disabled={locked || preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.maxBlocksPerView : undefined} />
+            <NumericSettingField settingKey="PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN" label="检测最长边" hint="320–4096；越小通常越快，但小字细节可能减少。" fallback="" min="320" max="4096" step="1" placeholder="Paddle 默认" disabled={locked || preset !== "custom"} overrideValue={preset !== "custom" ? paddleEffective.textDetLimitSideLen : undefined} />
           </div>
         </div>
         <div className={styles.settingsFieldGroup}>
@@ -300,7 +305,7 @@ const PaddleEngineCard = memo(function PaddleEngineCard({ paddle, selected, ocr,
         {preset === "fast" && <Text tone="warning" size="sm">快速预设使用 tiny 模型和更高置信度门槛；复杂手写、低置信度文字可能减少。</Text>}
         <Stack direction="row" justify="between" align="center" wrap>
           <Text tone="subtle" size="xs">{ocr?.setupCompleted ? "当前环境已完成设置" : "先检查路径，再保存参数"}</Text>
-          <Button size="sm" variant="secondary" loading={ocrState === "checking" || ocrState === "saving"} onClick={checkAndSaveOcr} startIcon={<Wrench size={15} />}>验证并保存环境</Button>
+          <Button size="sm" variant="secondary" loading={ocrState === "checking" || ocrState === "saving"} disabled={writeBusy} onClick={checkAndSaveOcr} startIcon={<Wrench size={15} />}>验证并保存环境</Button>
         </Stack>
         {paddleCheck?.ok === true && <div className={styles.ocrCheckResult} data-tone="success" role="status">
           <Text tone="success" size="sm"><Icon icon={CheckCircle2} size={15} /> 检查通过 · Paddle {paddleCheck.paddleVersion} / PaddleOCR {paddleCheck.paddleOcrVersion}</Text>
@@ -346,6 +351,7 @@ export function OcrStatusPanel({
   cancelPaddleOcrInstall,
   openEnvironmentDialog,
 }: OcrStatusPanelProps) {
+  const writeBusy = useGlobalSettingsStore((state) => state.mutationOwner !== null);
   const selection = config?.ocrSelection;
   const vision = engineStatus(config, "vision");
   const paddle = engineStatus(config, "paddleocr");
@@ -392,11 +398,11 @@ export function OcrStatusPanel({
     {paddleInstallState === "canceled" && <div className={styles.ocrInstallFeedback} data-tone="warning" role="status">
       <Stack direction="row" justify="between" align="center" gap={3} wrap>
         <Text tone="warning" size="sm">安装已取消；已创建的运行环境会在下次安装时复用。</Text>
-        <Button size="sm" variant="ghost" onClick={installPaddleOcr}>重试安装</Button>
+        <Button size="sm" variant="ghost" disabled={writeBusy} onClick={installPaddleOcr}>重试安装</Button>
       </Stack>
     </div>}
     {paddleInstallState === "error" && paddleInstallError && <div className={styles.ocrInstallFeedback} data-tone="danger">
-      <InlineError message={paddleInstallError} onRetry={installPaddleOcr} />
+      <InlineError message={paddleInstallError} {...(writeBusy ? {} : { onRetry: installPaddleOcr })} />
     </div>}
 
     <div className={styles.ocrDecision} aria-live="polite">

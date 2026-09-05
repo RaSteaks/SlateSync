@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { OcrEnvironmentSnapshot, VisionOcrCheckResult } from "../../../shared/contracts/index.js";
 import { Badge, Button, Dialog, Icon, InlineError, Progress, Stack, StatusIndicator, Surface, Text } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
+import { useGlobalSettingsStore } from "../../state";
 import styles from "../../app/app.module.css";
 import { engineStatusLabel, engineStatusTone, engineStatus, type PaddleOcrInstallState } from "./ocrEngineStatus";
 
@@ -49,6 +50,7 @@ export function OcrEnvironmentDialog({
   visionCheckState,
   onCheckVision,
 }: OcrEnvironmentDialogProps) {
+  const writeBusy = useGlobalSettingsStore((state) => state.mutationOwner !== null);
   const [environment, setEnvironment] = useState<OcrEnvironmentSnapshot | null>(null);
   const [environmentState, setEnvironmentState] = useState<EnvironmentState>("idle");
   const [environmentError, setEnvironmentError] = useState<string | null>(null);
@@ -206,7 +208,7 @@ export function OcrEnvironmentDialog({
             <Text tone="warning" size="sm">安装已取消；已创建的运行环境会在下次安装时复用。</Text>
           </div>}
           {paddleInstallState === "error" && paddleInstallError && <div className={styles.ocrInstallFeedback} data-tone="danger">
-            <InlineError message={paddleInstallError} onRetry={onInstallPaddleOcr} />
+            <InlineError message={paddleInstallError} {...(writeBusy ? {} : { onRetry: onInstallPaddleOcr })} />
           </div>}
           <Stack direction="row" justify="between" align="center" wrap>
             <Text tone={paddleEnvironment?.configuredPythonPath && paddleEnvironment?.activePythonExists === false ? "warning" : "subtle"} size="xs">
@@ -222,6 +224,7 @@ export function OcrEnvironmentDialog({
               size="sm"
               variant={paddleEnvironment?.venvExists || paddleEnvironment?.activePythonExists ? "secondary" : "primary"}
               loading={paddleInstallState === "installing"}
+              disabled={writeBusy}
               onClick={onInstallPaddleOcr}
               startIcon={<Download size={15} />}
             >
