@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import SlateSyncDomain
 import SlateSyncMedia
@@ -40,8 +41,18 @@ private actor HandoffEngine: LocalOCREngine {
 
 @MainActor final class MediaOCRWorkflowTests: XCTestCase {
     private func input() throws -> MediaInput {
-        let url = try XCTUnwrap(Bundle.module.url(forResource:"sm06-integration",withExtension:"pdf"))
-        return .bytes(try Data(contentsOf:url),filename:"slate.pdf")
+        // This workflow test only needs a valid media handoff. Generate its
+        // minimal PDF locally instead of tracking a duplicate binary fixture.
+        let bytes = NSMutableData()
+        let consumer = try XCTUnwrap(CGDataConsumer(data: bytes as CFMutableData))
+        var mediaBox = CGRect(x: 0, y: 0, width: 200, height: 250)
+        let context = try XCTUnwrap(CGContext(consumer: consumer, mediaBox: &mediaBox, nil))
+        context.beginPDFPage(nil)
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 215, width: 40, height: 35))
+        context.endPDFPage()
+        context.closePDF()
+        return .bytes(bytes as Data,filename:"slate.pdf")
     }
     func testOCRFirstHandoffOptionalDegradationAndDirectPDFRejection() async throws {
         let log = MediaHandoffLog()

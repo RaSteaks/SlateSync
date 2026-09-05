@@ -170,17 +170,5 @@
     "markers": "Synthetic solid color patches sampled at central 50% of each patch; dominant channel >= 180 and other channels <= 80; white alpha background channels >= 240. Samples avoid antialiased edges.",
     "pixelBudget": "No additional product rejection limit. Decoders subsample to <= 3000 per axis; check all finite bounds and integer products before allocation. Analysis <= 512 wide. One source page at a time.",
     "orientation": "EXIF orientation 6 is clockwise; PDF /Rotate 90 is clockwise. Red top-left/blue bottom-right source markers must follow the independent rotated geometry."
-  },
-  "workflowFiles": [
-    {
-      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM06/sm06-integration.jpg",
-      "bytes": 172838,
-      "sha256": "6e12317617b63c706da92ddb96fe0bc8e52bcfa96d2c5baa6989fb5caf5bd6cc"
-    },
-    {
-      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM06/sm06-integration.pdf",
-      "bytes": 1457,
-      "sha256": "aafb365654c8076e50dcd53925906462c5c6e9f5022712685b48fdc5713f2b2b"
-    }
-  ]
+  }
 }

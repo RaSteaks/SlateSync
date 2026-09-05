@@ -1,5 +1,16 @@
 # SlateSync 当前项目方案
 
+## 2026-09-05 SM-06 二进制夹具清理（当前有效）
+
+- SM-06 功能提交中的媒体文件属于测试输入夹具，不是 Gate 关键证据；
+  正式 Gate 日志与产物仍保持在 Git 忽略的 `.codex/gate-results/` 中。
+- 删除 Workflow 测试目标下未使用的 `sm06-integration.jpg` 和与
+  Media 夹具字节重复的 `sm06-integration.pdf`；Workflow 测试改为运行时
+  生成最小单页 PDF，不依赖外部工具、网络或用户文件。
+- 保留 `SlateSyncMediaTests/Fixtures/SM06` 中被测试直接使用的最小媒体矩阵，
+  继续覆盖 PNG/JPEG/WebP、EXIF/透明度、PDF 页数/旋转/裁剪/密码/损坏与异常
+  bounds；manifest 仅冻结这些实际测试资源。
+
 ## 2026-09-05 SM-07 Provider 与识别实施（IN_PROGRESS）
 
 - 用户已单独授权 SM-07 代码施工。已在 Domain 建立 secret-free Provider/
