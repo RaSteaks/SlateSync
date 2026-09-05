@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "updatedAt": "2026-09-05",
-  "phase": "SM-05",
+  "phase": "SM-06",
   "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
@@ -18,22 +18,22 @@
     "observationMacroProbe": "passed-outside-command-sandbox",
     "universalBinaryProbe": "passed"
   },
-  "activePackage": ".codex/swift-migration/packages/SM-05.md",
-  "nextPackage": ".codex/swift-migration/packages/SM-06.md",
+  "activePackage": ".codex/swift-migration/packages/SM-06.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-07.md",
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "7c36f642632401ac21ff97316f1f3a9c1e8e6530",
+    "reviewCommit": "3ba200cafad758b10ad51c08eace5024bcffa90e",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-04T20:06:44Z",
-    "evidenceReport": ".codex/swift-migration/reviews/SM-05.md",
+    "approvedAt": "2026-09-05T08:19:33Z",
+    "evidenceReport": ".codex/swift-migration/reviews/SM-06.md",
     "approvable": true,
     "blockers": []
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "113 passed",
+    "swiftTest": "139 passed across general and dedicated Paddle lanes",
     "xcodeDebugBuild": "passed-arm64-Onone",
     "xcodeTestPlan": "3 passed",
     "buildAndRunVerify": "passed-background-real-process-verification",
@@ -45,21 +45,25 @@
     "nodeTests": "323 passed",
     "modernTests": "118 passed",
     "nativeAbiLifecycle": "passed-electron-and-node",
-    "gateSelfTests": "71 passed",
+    "gateSelfTests": "78 passed",
     "persistenceContract": "passed-sqlite-project-library-v1",
-    "sm05Contract": "passed-csv-metadata-scenario-v1",
+    "sm05Contract": "passed-csv-metadata-scenario-v1-technical-regression",
     "sm05ReleasePerformance": "passed-10k-median-1.923736s-max-1.955408s-ratio-2.049",
+    "sm06Contract": "passed-35-media-ocr-acceptance-ids",
+    "visionOCR": "passed-native-revision-3-13-block-smoke",
+    "paddleOCR": "passed-offline-pp-ocrv5-prewarm-two-inferences",
+    "mediaResourceLifecycle": "passed-20-pages-60-views-three-rounds-drained",
     "lastDiagnosticGate": {
       "result": "PASS",
       "approvable": false,
-      "reviewCommit": "523fd49790a32b229e1bf1ce36ea2ee8c60ae3c9",
-      "evidence": ".codex/gate-results/SM-05/20260904T194114Z-523fd49790a3/result.json"
+      "reviewCommit": "0429abf0980a02eb3db3834210e75344e5dc2b99",
+      "evidence": ".codex/gate-results/SM-06/20260905T074810Z-0429abf0980a/result.json"
     },
     "lastFormalGate": {
       "result": "PASS",
       "approvable": true,
-      "reviewCommit": "7c36f642632401ac21ff97316f1f3a9c1e8e6530",
-      "evidence": ".codex/gate-results/SM-05/20260904T195924Z-7c36f6426324/result.json"
+      "reviewCommit": "3ba200cafad758b10ad51c08eace5024bcffa90e",
+      "evidence": ".codex/gate-results/SM-06/20260905T081330Z-3ba200cafad7/result.json"
     }
   }
 }
