@@ -1,5 +1,33 @@
 # SlateSync 当前项目方案
 
+## 2026-09-05 SM-08 / SM-09 详细施工包（规划完成，尚未开工）
+
+- 已将 `.codex/swift-migration/packages/SM-08.md` 从阶段摘要细化为 WP-0～WP-9：
+  行为/fixture/性能预算冻结、UI façade 与 window-scoped session、Project Library、
+  Workspace/Task/单一 autosave、Recognition、10k `NSTableView` CSV editor、全局/项目
+  Settings、Provider/Vision/Paddle、文件日志/Help，以及 A11y/IME/multi-window/lifecycle/
+  performance 与正式 Gate。
+- SM-08 固定 500 ms Workspace autosave、250 ms cell/result commit、500 projects、
+  1,000 tasks、10,000 editable CSV rows、3 秒日志刷新、7 日保留和 500/2,000 read limit；
+  AppKit 只允许 CSV table、必要 file panel 与 async termination/reopen 的窄桥，业务真相仍在
+  Swift actors/façades。
+- 已将 `.codex/swift-migration/packages/SM-09.md` 细化为 WP-0～WP-9：最终 inventory、
+  删除前完整兼容矩阵、Xcode/资源/版本/签名、Universal archive/ZIP/DMG、Swift-only CI、
+  Developer ID/公证 lane、Electron/React/Node production-input cutover、data/package/upgrade
+  audit、文档/smoke 和最终治理。
+- SM-09 使用 pre-cutover 与 final native cutover 两点证据链；旧 Node/Electron oracle 只有在
+  完整矩阵 PASS、replacement coverage 与 source hash 封存后才可删除。`.codex/refactor/**`
+  原样保留；Paddle Python runner/requirements 迁为唯一原生 App resource，不与 Node 输入
+  一起误删。最终 CI/Gate/Release 不再依赖 node/npm/npx。
+- ad-hoc Archive 只证明本地/PR 可构建签名，不能宣称 Gatekeeper-ready。正式外部分发另需
+  Developer ID、notary Accepted、staple/validate、`spctl` 与已发布 artifact smoke；缺凭据按
+  `BLOCKED_ENV`/同 commit 等价 CI evidence 处理，不允许静默降级后继续发布。
+- 两份施工包都只是计划：当前 `CURRENT_STATE.json` 仍合法停在 SM-06 `COMPLETE`；
+  SM-07 的 formal clean Gate 已在 review commit
+  `5001aa4319e443bddde87fe837dfcd4692be01b9` PASS，但 Owner approval 仍为 PENDING。
+  因此 SM-08/09 均保持 `NOT_STARTED`，本轮未改产品/测试/Gate/CI/Release/阶段状态，未删除
+  legacy 输入，也未生成或发布 artifact。
+
 ## 2026-09-05 历史产物完整清理（当前有效）
 
 - 复核当前分支全部可达提交；保留产品/打包输入、可执行测试夹具、
@@ -23,7 +51,7 @@
   继续覆盖 PNG/JPEG/WebP、EXIF/透明度、PDF 页数/旋转/裁剪/密码/损坏与异常
   bounds；manifest 仅冻结这些实际测试资源。
 
-## 2026-09-05 SM-07 Provider 与识别实施（IN_PROGRESS）
+## 2026-09-05 SM-07 Provider 与识别实施（clean Gate PASS，Owner approval 待定）
 
 - 用户已单独授权 SM-07 代码施工。已在 Domain 建立 secret-free Provider/
   recognition 执行值、稳定错误和单一 TakeStatus adapter；Persistence
@@ -55,9 +83,10 @@
   dirty diagnostic Gate 为 `PASS/approvable=false`，证据目录为
   `.codex/gate-results/SM-07/20260905T122916Z-d65a6063fe80/`。
 - 治理状态依旧保留 `CURRENT_STATE.json` 中已批准的 SM-06 COMPLETE。
-  当前代码施工与 dirty Gate 已收尾；dedicated review commit、精确 SHA
-  clean Gate、review report 和 Owner 最终批准仍是 SM-07 转 `COMPLETE`
-  的必要条件。
+  SM-07 dedicated review commit 为
+  `5001aa4319e443bddde87fe837dfcd4692be01b9`；该精确 SHA 的 formal clean Gate
+  已 PASS（20 项 PASS、`approvable=true`），review report 已完成。Owner 最终批准仍为
+  PENDING；只有批准和治理提交完成后，才可把 SM-07 转为 `COMPLETE` 并开放 SM-08。
 
 ## 2026-09-05 SM-07 Provider 与识别详细施工包（历史规划记录）
 
