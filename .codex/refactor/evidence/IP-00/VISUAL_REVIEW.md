@@ -1,5 +1,8 @@
 # IP-00 visual baseline human review
 
+> Repository cleanup note (2026-09-05): this curated review remains tracked;
+> its raw per-run captures and manifests were removed as reproducible output.
+
 CLASSIFICATION: **FROZEN LEGACY VISUAL EVIDENCE — NON-EXECUTABLE**.
 
 - Reviewed: 2026-08-20

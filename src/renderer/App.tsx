@@ -1,7 +1,9 @@
 import { BookOpen, Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import appIconUrl from "../../build/icon.png";
+// Reuse the packaged Icon Composer artwork so every UI surface consumes one
+// tracked bitmap instead of committing copied icon exports.
+import appIconUrl from "../../build/slatesync.icon/Assets/icon.png";
 import { AppShell, Button, ContextMenu, Dialog, Field, Icon, IconButton, Input, Separator, Sidebar, Stack, Text, Toast, Toolbar } from "./design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "./services/api";
 import { createOperationGuard } from "./services/operation-guard";

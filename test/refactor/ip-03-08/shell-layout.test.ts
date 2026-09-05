@@ -13,9 +13,9 @@ describe("application shell layout", () => {
       readFile(appStyles, "utf8"),
     ]);
 
-    // Importing the canonical build asset lets Vite package the exact artwork
-    // used by Electron. Its native button reuses the guarded Library route.
-    expect(source).toContain('import appIconUrl from "../../build/icon.png"');
+    // Importing the Icon Composer source lets Vite package the exact artwork
+    // used by Electron without a duplicate build/icon.png copy.
+    expect(source).toContain('import appIconUrl from "../../build/slatesync.icon/Assets/icon.png"');
     expect(source).toContain('className={styles.brandHomeButton} aria-label="返回项目库"');
     expect(source).toContain('title="返回项目库" onClick={leaveProject}');
     expect(source).toContain("className={styles.brandIcon}");

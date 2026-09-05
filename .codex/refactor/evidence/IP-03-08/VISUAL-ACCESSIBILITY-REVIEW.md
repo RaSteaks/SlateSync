@@ -2,6 +2,10 @@
 
 Review date: 2026-08-21
 
+> Repository cleanup note (2026-09-05): the raw capture directories and
+> generated comparison JSON were removed from the current tree after review.
+> This curated conclusion and the executable legacy baseline remain tracked.
+
 ## Captured states
 
 - Final stable pair: `visual-contained-run-25/` and `visual-contained-run-26/`.

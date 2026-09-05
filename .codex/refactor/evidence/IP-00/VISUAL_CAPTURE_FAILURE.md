@@ -1,5 +1,8 @@
 # Gate-00 visual capture failure evidence
 
+> Repository cleanup note (2026-09-05): this incident summary remains tracked;
+> raw successful-run captures and comparison manifests were removed.
+
 CLASSIFICATION: **HISTORICAL FAILED-RUN DIAGNOSTIC — SUPERSEDED BY THE LATER
 SUCCESSFUL LEGACY CAPTURE; NOT A CURRENT BLOCKER**.
 

@@ -2,6 +2,10 @@
 
 Captured: 2026-08-21 (Asia/Shanghai)
 
+> Historical classification: on 2026-09-05 the Owner superseded the retention
+> decision below. Raw evidence screenshots were removed; executable visual
+> baselines and textual review conclusions remain tracked.
+
 ## Classification
 
 ### Must remain available as test/golden inputs

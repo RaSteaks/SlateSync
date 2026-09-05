@@ -2,6 +2,10 @@
 
 Captured: 2026-08-21 (Asia/Shanghai)
 
+> Historical result: broader Owner-authorized cleanup on 2026-09-05 replaced
+> these narrow image rules with a generated-evidence policy and removed the raw
+> capture directories from the current tree.
+
 ## Action
 
 At the Owner's request, the root `.gitignore` was updated to prevent

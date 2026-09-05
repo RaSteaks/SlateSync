@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // The harness renders unchanged production HTML/CSS/JavaScript with one
-// synthetic preload. Runtime state lives in an OS temp directory; only the
-// reviewed PNGs and manifest are retained as baseline evidence.
+// synthetic preload. Runtime state and comparison output stay in ignored
+// locations; only the executable PNG baseline and manifest are retained.
 import { app, BrowserWindow, nativeTheme, screen } from "electron";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const outputDir = join(ROOT, ".codex", "refactor", "baseline", "visual");
-const evidenceDir = join(ROOT, ".codex", "refactor", "evidence", "IP-00", "visual");
+const evidenceDir = join(ROOT, "test-results", "refactor", "IP-00", "visual");
 const captureCommand = "./node_modules/.bin/electron test-support/baseline/capture-visuals.mjs";
 const baselineCommit = "c7dafa4d972e5eb7be61f00e2b546d6826e70c87";
 const fixtureId = "synthetic-project-library-v1";

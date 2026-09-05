@@ -27,16 +27,22 @@ public/vendor/
 /.vite/
 *.tsbuildinfo
 
-# Keep only the reviewed visual baselines and final stable captures visible.
-# Intermediate captures remain locally available but must not enter commits.
-.codex/refactor/evidence/IP-03-08/visual-contained-run-[1-9]/*.png
-.codex/refactor/evidence/IP-03-08/visual-contained-run-1[0-9]/*.png
-.codex/refactor/evidence/IP-03-08/visual-contained-run-2[0-4]/*.png
-.codex/refactor/evidence/IP-03-08/visual-run-1/*.png
-.codex/refactor/evidence/IP-03-08/c02-visual-run-1/*.png
-.codex/refactor/evidence/IP-03-08/c02-visual-run-2/*.png
-.codex/refactor/evidence/IP-03-08/c02-final-visual-run-1/*.png
-.codex/refactor/evidence/IP-03-08/c02-final-visual-run-2/*.png
+# Raw validation output belongs under ignored test-results, never in source
+# control. Keep only executable baselines and curated Markdown summaries.
+/.codex/refactor/baseline/validation/
+/.codex/refactor/evidence/**/*visual*/
+/.codex/refactor/evidence/**/*visual-stability.json
+/.codex/refactor/evidence/**/changed-paths.json
+/.codex/refactor/evidence/**/*performance*.json
+/.codex/refactor/evidence/**/*smoke.json
+/.codex/refactor/evidence/**/electron-rejected-invoke.json
+/.codex/refactor/evidence/**/package-content.txt
+
+# Icon Composer exports and copied icon iterations are reproducible. The
+# layered package artwork is the single tracked raster source.
+/build/* Exports/
+/build/icon.png
+/assets/slatesync-icon*.png
 
 # Local assistant session exports may contain prompts and absolute machine paths.
 session-*.md

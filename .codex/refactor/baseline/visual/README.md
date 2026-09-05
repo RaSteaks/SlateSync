@@ -32,5 +32,6 @@ production ready-promise lifecycle and waits for scroll stability, so the
 `result-detail` and `csv-preview` images contain their actual result panels.
 
 No production UI, IPC, data format, dependency, signing configuration, or
-visual test assertion was changed. Detailed run comparison and human review
-evidence is retained under `.codex/refactor/evidence/IP-00/visual/`.
+visual test assertion was changed. The executable baseline manifest retains
+the reviewed hashes; raw captures and comparison output are regenerated under
+the ignored `test-results/refactor/` tree.

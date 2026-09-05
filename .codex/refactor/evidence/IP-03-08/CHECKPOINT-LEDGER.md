@@ -2,6 +2,10 @@
 
 Recorded: 2026-08-21 (Asia/Shanghai)
 
+> Repository cleanup note (2026-09-05): raw screenshots and generated JSON
+> outputs named below were removed after approval. The executed-result summary
+> remains historical evidence; executable tests and visual baselines remain.
+
 ## Admission and baseline
 
 - Authority: .codex/refactor/packages/IP-03-08-CONTINUOUS.md

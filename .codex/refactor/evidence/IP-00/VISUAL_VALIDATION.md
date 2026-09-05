@@ -1,5 +1,9 @@
 # IP-00 visual validation
 
+> Repository cleanup note (2026-09-05): this curated validation summary
+> remains tracked; raw comparison output now belongs under ignored
+> `test-results/refactor/`.
+
 CLASSIFICATION: **FROZEN LEGACY VISUAL VALIDATION — ACCEPTED BY GATE 01-02;
 NOT THE MODERN CONTINUOUS VISUAL DELIVERABLE**.
 

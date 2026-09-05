@@ -29,7 +29,10 @@ const electronBinary = require("electron");
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const mainPath = join(root, "electron", "main.mjs");
 const modernIndex = join(root, "out", "renderer", "index.html");
-const evidenceRoot = join(root, ".codex", "refactor", "evidence", "IP-03-08");
+// Smoke measurements are reproducible run output, so their default location
+// is ignored instead of living beside curated repository review summaries.
+const testResultsRoot = join(root, "test-results", "refactor");
+const evidenceRoot = join(testResultsRoot, "IP-03-08");
 const isPackagedSmoke = process.argv.includes("--packaged");
 const runTimeoutMs = 25_000;
 
@@ -420,9 +423,9 @@ app.whenReady().then(async () => {
     assert.equal(facts.codeType, "undefined");
     assert.equal(facts.statusType, "undefined");
     assert.equal(facts.retryableType, "undefined");
-    await mkdir(join(root, ".codex", "refactor", "evidence", "IP-02"), { recursive: true });
+    await mkdir(join(testResultsRoot, "IP-02"), { recursive: true });
     await writeFile(
-      join(root, ".codex", "refactor", "evidence", "IP-02", "electron-rejected-invoke.json"),
+      join(testResultsRoot, "IP-02", "electron-rejected-invoke.json"),
       `${JSON.stringify({ generatedAt: new Date().toISOString(), facts }, null, 2)}\n`,
       "utf8",
     );

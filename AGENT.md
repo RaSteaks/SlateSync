@@ -1,5 +1,17 @@
 # SlateSync 当前项目方案
 
+## 2026-09-05 历史产物完整清理（当前有效）
+
+- 复核当前分支全部可达提交；保留产品/打包输入、可执行测试夹具、
+  视觉基线与 Markdown 审查摘要，删除原始运行截图、逐轮 manifest、完整
+  终端日志、可再生成性能/smoke JSON、Icon Composer 导出和旧图标迭代。
+- Renderer、Electron Dock/窗口、README 和打包统一使用
+  `build/slatesync.icon/Assets/icon.png`；其它图标副本不再跟踪。
+- 性能、Electron smoke 和现代/旧视觉捕获的默认输出统一迁到已忽略的
+  `test-results/refactor/`；`repository-hygiene.test.mjs` 防止上述原始产物被重新跟踪。
+- 本次使用新清理提交，不改写已共享历史；历史提交中的 blob 仍保留，
+  如需减少 clone 历史体积须单独授权历史重写。
+
 ## 2026-09-05 SM-06 二进制夹具清理（当前有效）
 
 - SM-06 功能提交中的媒体文件属于测试输入夹具，不是 Gate 关键证据；

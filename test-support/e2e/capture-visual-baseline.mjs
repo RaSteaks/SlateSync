@@ -13,7 +13,9 @@ import { fileURLToPath } from "node:url";
 import { _electron as electron } from "@playwright/test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const outputRoot = resolve(process.env.SLATESYNC_VISUAL_OUTPUT || join(root, ".codex", "refactor", "evidence", "IP-03-08", "visual-run-1"));
+// Raw captures are local test output. A reviewer can still override the path,
+// while the default stays under the repository's ignored test-results tree.
+const outputRoot = resolve(process.env.SLATESYNC_VISUAL_OUTPUT || join(root, "test-results", "refactor", "IP-03-08", "visual-run-1"));
 const mainPath = join(root, "electron", "main.mjs");
 const configPath = join(root, "slatesync.config.json");
 
@@ -106,9 +108,9 @@ const userData = await mkdtemp(join(tmpdir(), "slatesync-visual-"));
 // name is stable so a user-visible path does not invalidate PNG hashes.
 const isolatedLibrary = join(tmpdir(), "slatesync-visual-baseline.slatesync-library");
 const tinySlatePath = join(userData, "visual-slate.png");
-// Reuse a reviewed repository PNG as disposable image bytes; the loopback
-// provider returns deterministic slate data and never interprets this image.
-await writeFile(tinySlatePath, await readFile(join(root, ".codex", "refactor", "evidence", "IP-03-08", "final-handoff", "visual-rerun-1", "01-project-library-empty-dark-1440x900.png")));
+// Reuse the executable legacy baseline as disposable image bytes; the
+// loopback provider returns deterministic slate data and never interprets it.
+await writeFile(tinySlatePath, await readFile(join(root, ".codex", "refactor", "baseline", "visual", "workspace-empty.png")));
 
 let providerGateOpen = false;
 const providerWaiters = [];

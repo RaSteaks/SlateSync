@@ -2,6 +2,10 @@
 
 Recorded: 2026-08-21 (Asia/Shanghai)
 
+> Repository cleanup note (2026-09-05): this table retains the reviewed sizes
+> and hashes; its two raw capture directories were removed from the current
+> tree as reproducible test output.
+
 - First root: `.codex/refactor/evidence/IP-03-08/final-handoff/visual-rerun-1`
 - Second root: `.codex/refactor/evidence/IP-03-08/final-handoff/visual-rerun-2`
 - Capture commands: existing `capture-visual-baseline.mjs`, with only

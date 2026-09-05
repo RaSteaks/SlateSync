@@ -2,7 +2,8 @@
 
 // This benchmark measures only local Promise/Result/adapter overhead. It
 // never opens Electron, Main services, a Worker, a database, or a network
-// request, so it cannot change production state while recording evidence.
+// request, so it cannot change production state. Generated measurements stay
+// under ignored test-results instead of becoming repository evidence files.
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -56,7 +57,7 @@ const evidence = {
   adapterOverheadMedianMs: legacyAdapter.medianMs - raw.medianMs,
   transportCalls: calls.length,
 };
-const output = resolve(root, ".codex/refactor/evidence/IP-02/performance.json");
+const output = resolve(root, "test-results/refactor/IP-02/performance.json");
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, JSON.stringify(evidence, null, 2) + "\n", "utf8");
 console.log(JSON.stringify(evidence));

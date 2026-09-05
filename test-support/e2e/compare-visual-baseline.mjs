@@ -7,8 +7,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const firstRoot = resolve(process.argv[2] || join(root, ".codex", "refactor", "evidence", "IP-03-08", "visual-run-1"));
-const secondRoot = resolve(process.argv[3] || join(root, ".codex", "refactor", "evidence", "IP-03-08", "visual-run-2"));
+const generatedRoot = join(root, "test-results", "refactor", "IP-03-08");
+const firstRoot = resolve(process.argv[2] || join(generatedRoot, "visual-run-1"));
+const secondRoot = resolve(process.argv[3] || join(generatedRoot, "visual-run-2"));
 const first = JSON.parse(await readFile(join(firstRoot, "manifest.json"), "utf8"));
 const second = JSON.parse(await readFile(join(secondRoot, "manifest.json"), "utf8"));
 assert.deepEqual(second.viewportStates.map((item) => item.name), first.viewportStates.map((item) => item.name));
@@ -21,9 +22,8 @@ for (const item of first.viewportStates) {
   assert.equal(firstHash, secondHash, `visual baseline drift: ${item.name}`);
   comparisons.push({ name: item.name, bytes: firstBytes.byteLength, sha256: firstHash, identical: true });
 }
-// An explicit third path lets managed review runs write a temporary result;
-// governance evidence can then be copied through the repository's reviewed
-// documentation edit path without weakening filesystem protections.
-const evidencePath = resolve(process.argv[4] || join(root, ".codex", "refactor", "evidence", "IP-03-08", "visual-stability.json"));
+// The comparison is generated test output. Curated review conclusions belong
+// in Markdown summaries rather than a copied raw JSON result.
+const evidencePath = resolve(process.argv[4] || join(generatedRoot, "visual-stability.json"));
 await writeFile(evidencePath, `${JSON.stringify({ firstRoot, secondRoot, comparisons }, null, 2)}\n`, "utf8");
 process.stdout.write(`VISUAL_BASELINE_STABLE_OK ${comparisons.length} ${evidencePath}\n`);

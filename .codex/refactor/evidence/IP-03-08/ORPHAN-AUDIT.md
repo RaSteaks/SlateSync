@@ -2,6 +2,11 @@
 
 Recorded: 2026-08-21 (Asia/Shanghai)
 
+> Historical note: a later Owner-authorized repository cleanup removed raw
+> generated evidence and duplicate assets from the current tree. This report
+> remains the record of the earlier no-deletion decision, not current retention
+> policy.
+
 ## Result
 
 The audit completed with no safe deletion target. The exact cleanup deletion

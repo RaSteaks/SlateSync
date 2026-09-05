@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/slatesync-icon-v5.png" alt="SlateSync 图标" width="112" />
+<img src="./build/slatesync.icon/Assets/icon.png" alt="SlateSync 图标" width="112" />
 
 # SlateSync
 

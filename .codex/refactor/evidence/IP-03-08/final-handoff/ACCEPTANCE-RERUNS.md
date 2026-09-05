@@ -2,6 +2,10 @@
 
 Recorded: 2026-08-21 (Asia/Shanghai)
 
+> Repository cleanup note (2026-09-05): raw generated files referenced below
+> were removed after approval. This result summary remains tracked; future runs
+> write their raw output beneath ignored `test-results/refactor/`.
+
 ## Environment
 
 - HEAD: `c7dafa4d972e5eb7be61f00e2b546d6826e70c87`

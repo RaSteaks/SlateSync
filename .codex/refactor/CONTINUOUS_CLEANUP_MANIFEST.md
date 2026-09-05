@@ -2,6 +2,13 @@
 
 Recorded: 2026-08-21 (Asia/Shanghai)
 
+> Superseded artifact disposition (2026-09-05): the Owner later authorized a
+> repository-wide cleanup. Raw visual-run directories, generated smoke and
+> performance JSON, package/path inventories, baseline terminal logs, and
+> reproducible build exports listed as retained below were removed from the
+> current tree. Curated Markdown conclusions and executable baselines remain.
+> The original rows are preserved only as the historical pre-cleanup decision.
+
 ## Scope and disposition
 
 - Authority: .codex/refactor/packages/IP-03-08-CONTINUOUS.md

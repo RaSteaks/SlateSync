@@ -4,6 +4,10 @@ Decision: `IP-03-08-REPO-HYGIENE-001`
 Authorized: Owner direction, 2026-08-22 (Asia/Shanghai)  
 Status: **OWNER AUTHORIZED — STANDALONE**
 
+> Historical authorization: the Owner issued broader cleanup authority on
+> 2026-09-05. Raw run output and duplicate assets protected by this earlier
+> narrow scope were subsequently removed from the current tree.
+
 ## Objective
 
 Keep reproducible build output, test-run output, local environment variants,
@@ -45,4 +49,3 @@ file is deleted, rewritten, staged, committed, pushed, reset, or cleaned.
 Stop and request a new authorization if any path other than `.gitignore` is
 added to the hygiene bucket, if a required evidence path becomes ignored, or
 if any cleanup would require accessing user data or mutating Git history.
-
