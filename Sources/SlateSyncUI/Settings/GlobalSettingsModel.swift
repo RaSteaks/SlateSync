@@ -151,16 +151,19 @@ public final class GlobalSettingsModel {
         }
     }
 
-    public func cancelProbe(providerID: String) {
+    public func cancelProbe(providerID: String) async {
+        // Cancellation is itself a service call. Count it in the same barrier
+        // as probe/save operations so application drain cannot close the
+        // workflow while this reset is still crossing actors.
+        guard beginOperation() else { return }
+        defer { endOperation() }
         guard providerOperations[providerID]?.isRunning == true else { return }
         providerOperations[providerID] = .running(label: "正在取消验证…")
         providerRequests[providerID] = nil
-        Task {
-            await service.cancelModelProbe(providerID: providerID)
-            guard providerRequests[providerID] == nil else { return }
-            probingProviderIDs.remove(providerID)
-            providerOperations[providerID] = .canceled
-        }
+        await service.cancelModelProbe(providerID: providerID)
+        guard providerRequests[providerID] == nil else { return }
+        probingProviderIDs.remove(providerID)
+        providerOperations[providerID] = .canceled
     }
 
     @discardableResult

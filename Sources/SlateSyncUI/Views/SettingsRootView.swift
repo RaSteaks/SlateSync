@@ -235,7 +235,9 @@ public struct SettingsRootView: View {
                     }
                 }
                 if settings.probingProviderIDs.contains(providerID) {
-                    Button("取消", role: .cancel) { settings.cancelProbe(providerID: providerID) }
+                    Button("取消", role: .cancel) {
+                        Task { await settings.cancelProbe(providerID: providerID) }
+                    }
                 }
                 if let warning = result.warning { Text(warning).foregroundStyle(.secondary).lineLimit(2) }
             }

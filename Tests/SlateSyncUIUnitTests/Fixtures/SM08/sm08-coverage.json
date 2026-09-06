@@ -64,7 +64,8 @@
     ],
     "APP-06": [
       "testConcurrentTerminationRequestsJoinOneLifecycleDrain",
-      "testTerminationFailureDismissalClearsItsOwnErrorOwner"
+      "testTerminationFailureDismissalClearsItsOwnErrorOwner",
+      "testSettingsCancellationTasksJoinApplicationDrain"
     ],
     "PRJ-03": [
       "testProjectMutationsStopAtFailedWorkspaceBarrier"
@@ -105,13 +106,15 @@
     ],
     "SET-05": [
       "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection",
-      "testSettingsAndInstallerProgressCannotRegressAfterActorHop"
+      "testSettingsAndInstallerProgressCannotRegressAfterActorHop",
+      "testSettingsCancellationTasksJoinApplicationDrain"
     ],
     "SET-07": [
       "testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment",
       "testPaddleInstallerRejectsManagedDirectorySymlinkWithoutInstalling",
       "testPaddleInstallerCancelAndDrainWaitsForInjectedRunner",
-      "testSettingsAndInstallerProgressCannotRegressAfterActorHop"
+      "testSettingsAndInstallerProgressCannotRegressAfterActorHop",
+      "testSettingsCancellationTasksJoinApplicationDrain"
     ],
     "SET-08": [
       "testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment"
@@ -186,6 +189,7 @@
     "SM08OwnershipTests/testTerminationFailureDismissalClearsItsOwnErrorOwner",
     "SM08OwnershipTests/testSettingsDiscoveryAndProbeUseOfflineFacadeProjection",
     "SM08OwnershipTests/testSettingsAndInstallerProgressCannotRegressAfterActorHop",
+    "SM08OwnershipTests/testSettingsCancellationTasksJoinApplicationDrain",
     "SM08OwnershipTests/testResultEditIsCanonicalAndFlushJoinsPendingCommit",
     "SM08OwnershipTests/testMixedResultAndPromptEditsPersistTheLatestCompleteSnapshot",
     "SM08OwnershipTests/testCloseJoinsPendingEnqueueBeforeClosingWriter",

@@ -364,6 +364,55 @@ final class SM08OwnershipTests: XCTestCase {
     }
 
     @MainActor
+    func testSettingsCancellationTasksJoinApplicationDrain() async {
+        let probeGate = SM08TestGate()
+        let providerCancelGate = SM08FirstCallGate()
+        let service = GlobalSettingsFake(
+            providerProbeGate: probeGate,
+            providerCancelGate: providerCancelGate
+        )
+        let settings = GlobalSettingsModel(service: service)
+        let probe = Task { await settings.probe(providerID: "custom-test", modelIDs: ["vision-test"]) }
+        await probeGate.entered()
+        let cancelProbe = Task { await settings.cancelProbe(providerID: "custom-test") }
+        await providerCancelGate.entered()
+        var settingsDrained = false
+        let settingsDrain = Task { await settings.drain(); settingsDrained = true }
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertFalse(settingsDrained)
+        await probeGate.release()
+        await probe.value
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertFalse(settingsDrained, "drain must join the first explicit cancellation task")
+        await providerCancelGate.release()
+        await cancelProbe.value
+        await settingsDrain.value
+        XCTAssertTrue(settingsDrained)
+
+        let installGate = SM08TestGate()
+        let installerCancelGate = SM08TestGate()
+        let installerService = GlobalSettingsFake(
+            paddleInstallGate: installGate,
+            paddleCancelGate: installerCancelGate
+        )
+        let installer = PaddleInstallerModel(service: installerService)
+        installer.install()
+        await installGate.entered()
+        installer.cancel()
+        await installerCancelGate.entered()
+        var installerDrained = false
+        let installerDrain = Task { await installer.drain(); installerDrained = true }
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertFalse(installerDrained)
+        await installerCancelGate.release()
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertFalse(installerDrained, "drain must still own the suspended installation")
+        await installGate.release()
+        await installerDrain.value
+        XCTAssertTrue(installerDrained)
+    }
+
+    @MainActor
     func testResultEditIsCanonicalAndFlushJoinsPendingCommit() async throws {
         let workspaceService = WorkspaceFake(rowCount: 0)
         let workspace = WorkspaceModel(service: workspaceService)
@@ -845,7 +894,23 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
     private(set) var probeCount = 0
     private(set) var saveCount = 0
     private let credentialGate: SM08TestGate?
-    init(credentialGate: SM08TestGate? = nil) { self.credentialGate = credentialGate }
+    private let providerProbeGate: SM08TestGate?
+    private let providerCancelGate: SM08FirstCallGate?
+    private let paddleInstallGate: SM08TestGate?
+    private let paddleCancelGate: SM08TestGate?
+    init(
+        credentialGate: SM08TestGate? = nil,
+        providerProbeGate: SM08TestGate? = nil,
+        providerCancelGate: SM08FirstCallGate? = nil,
+        paddleInstallGate: SM08TestGate? = nil,
+        paddleCancelGate: SM08TestGate? = nil
+    ) {
+        self.credentialGate = credentialGate
+        self.providerProbeGate = providerProbeGate
+        self.providerCancelGate = providerCancelGate
+        self.paddleInstallGate = paddleInstallGate
+        self.paddleCancelGate = paddleCancelGate
+    }
 
     func globalSettings() async throws -> GlobalSettingsProjection { Self.projection }
     func saveGlobalSettings(
@@ -887,19 +952,21 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
         // projection must retain the newest monotonic value.
         progress(.init(providerId: providerID, model: "vision-test", completed: 0, total: 1, percent: 25))
         await Task.yield()
+        await providerProbeGate?.wait()
         return .init(canceled: false, results: [result], completed: 1, total: 1)
     }
 
-    func cancelModelProbe(providerID: String) async {}
+    func cancelModelProbe(providerID: String) async { await providerCancelGate?.waitFirst() }
     func installPaddleOCR(
         progress: @escaping @Sendable (PaddleOcrInstallProgress) -> Void
     ) async throws -> PaddleOcrInstallResult {
         progress(.init(stage: .completed, percent: 100, message: "安装完成"))
         progress(.init(stage: .detectPython, percent: 5, message: "迟到的环境检测"))
         await Task.yield()
+        await paddleInstallGate?.wait()
         return .init(pythonPath: "/tmp/fake-python", setupCompleted: true, setupSkipped: false, paddleVersion: "3.3.1", paddleOcrVersion: "3.7.0")
     }
-    func cancelPaddleOCRInstallation() async {}
+    func cancelPaddleOCRInstallation() async { await paddleCancelGate?.wait() }
 
     private nonisolated static let model = ModelData(
         id: "vision-test",
@@ -945,6 +1012,20 @@ private actor SM08TestGate {
         released = true
         waiters.forEach { $0.resume() }; waiters.removeAll()
     }
+}
+
+/// Only the first matching service call suspends. This prevents a drain's
+/// defensive second cancellation from accidentally making an unowned first
+/// cancellation look joined in lifecycle tests.
+private actor SM08FirstCallGate {
+    private let gate = SM08TestGate()
+    private var calls = 0
+    func waitFirst() async {
+        calls += 1
+        if calls == 1 { await gate.wait() }
+    }
+    func entered() async { await gate.entered() }
+    func release() async { await gate.release() }
 }
 
 extension SM08OwnershipTests {
