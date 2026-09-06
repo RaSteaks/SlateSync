@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-05",
-  "phase": "SM-07",
+  "updatedAt": "2026-09-06",
+  "phase": "SM-08",
   "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
@@ -18,39 +18,45 @@
     "observationMacroProbe": "passed-outside-command-sandbox",
     "universalBinaryProbe": "passed"
   },
-  "activePackage": ".codex/swift-migration/packages/SM-07.md",
-  "nextPackage": ".codex/swift-migration/packages/SM-08.md",
+  "activePackage": ".codex/swift-migration/packages/SM-08.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-09.md",
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "49f09f4de5cf45f7b6714d12bb1e24b872d06a87",
+    "reviewCommit": "70fb5db50befaeeee3d44a38a6bf4e917542f2a7",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-05T14:01:18Z",
-    "evidenceReport": ".codex/swift-migration/reviews/SM-07.md",
+    "approvedAt": "2026-09-06T11:07:39Z",
+    "evidenceReport": ".codex/swift-migration/reviews/SM-08.md",
     "approvable": true,
     "blockers": []
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "167 executed, 166 passed, 1 dedicated Paddle-lane skip",
+    "swiftTest": "226 executed, 225 passed, 1 dedicated Paddle-lane skip",
     "xcodeDebugBuild": "passed-arm64-Onone",
-    "xcodeTestPlan": "3 passed",
+    "xcodeTestPlan": "10 passed (8 UI, 2 product unit)",
     "buildAndRunVerify": "passed-background-real-process-verification",
     "releaseBuild": "passed-arm64-x86_64",
     "archive": "passed-arm64-x86_64",
     "minimumSystem": "15.0",
     "platformContract": "passed-macos-only-current-entrypoints",
     "electronPackage": "passed-macos-15-dmg-zip-arm64-x86_64-runtime-guard",
-    "nodeTests": "323 passed",
+    "nodeTests": "324 passed",
     "modernTests": "118 passed",
     "nativeAbiLifecycle": "passed-electron-and-node",
-    "gateSelfTests": "79 passed",
+    "gateSelfTests": "83 passed",
     "persistenceContract": "passed-sqlite-project-library-v1",
     "sm05Contract": "passed-csv-metadata-scenario-v1-technical-regression",
     "sm05ReleasePerformance": "passed-10k-median-1.923736s-max-1.955408s-ratio-2.049",
     "sm06Contract": "passed-35-media-ocr-acceptance-ids",
     "sm07Contract": "passed-57-provider-recognition-acceptance-ids",
+    "sm08Contract": "passed-45-native-evidence-acceptance-ids-and-governance",
+    "sm08NativeSurfaces": "passed-6-native-surfaces-including-accessibility-and-foreground-cadence",
+    "sm08UIAcceptance": "passed-8-ui-tests-including-chinese-reopen-settings-help-logs-and-windows",
+    "sm08NativeEvidence": "passed-45-acceptance-scoped-json-artifacts-with-source-fingerprint",
+    "realSQLiteScale": "passed-500-projects-1000-tasks-1-warmup-5-samples",
+    "foregroundCSVPerformance": "passed-10000-rows-119.686-fps-minimum-45",
     "visionOCR": "passed-native-revision-3-13-block-smoke",
     "paddleOCR": "passed-offline-pp-ocrv5-prewarm-two-inferences",
     "mediaResourceLifecycle": "passed-20-pages-60-views-three-rounds-drained",
@@ -63,8 +69,8 @@
     "lastFormalGate": {
       "result": "PASS",
       "approvable": true,
-      "reviewCommit": "49f09f4de5cf45f7b6714d12bb1e24b872d06a87",
-      "evidence": ".codex/gate-results/SM-07/20260905T135852Z-49f09f4de5cf/result.json"
+      "reviewCommit": "70fb5db50befaeeee3d44a38a6bf4e917542f2a7",
+      "evidence": ".codex/gate-results/SM-08/20260906T104253Z-70fb5db50bef/result.json"
     }
   }
 }
