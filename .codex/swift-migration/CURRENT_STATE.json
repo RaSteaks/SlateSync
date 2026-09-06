@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-06",
+  "updatedAt": "2026-09-07",
   "phase": "SM-08",
   "lifecycleState": "COMPLETE",
   "platform": {
@@ -24,16 +24,16 @@
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "70fb5db50befaeeee3d44a38a6bf4e917542f2a7",
+    "reviewCommit": "2d44b3ac29fdc1579b2a2504c04220a5b281e861",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-06T11:07:39Z",
+    "approvedAt": "2026-09-06T16:35:04Z",
     "evidenceReport": ".codex/swift-migration/reviews/SM-08.md",
     "approvable": true,
     "blockers": []
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "226 executed, 225 passed, 1 dedicated Paddle-lane skip",
+    "swiftTest": "228 executed, 227 passed, 1 dedicated Paddle-lane skip",
     "xcodeDebugBuild": "passed-arm64-Onone",
     "xcodeTestPlan": "10 passed (8 UI, 2 product unit)",
     "buildAndRunVerify": "passed-background-real-process-verification",
@@ -45,7 +45,8 @@
     "nodeTests": "324 passed",
     "modernTests": "118 passed",
     "nativeAbiLifecycle": "passed-electron-and-node",
-    "gateSelfTests": "83 passed",
+    "gateSelfTests": "87 passed",
+    "reviewRemediationRound": "passed-2026-09-07-branch-review-fixes-swift-full-suite-node-324-modern-118-gate-selftest-87-contracts",
     "persistenceContract": "passed-sqlite-project-library-v1",
     "sm05Contract": "passed-csv-metadata-scenario-v1-technical-regression",
     "sm05ReleasePerformance": "passed-10k-median-1.923736s-max-1.955408s-ratio-2.049",
