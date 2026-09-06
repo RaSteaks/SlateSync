@@ -27,9 +27,15 @@
   `BLOCKED_ENV/PENDING`，不得在后台约束下伪标 COMPLETE 或启动 SM-09。
 - 为遵守“所有测试在后台进行”同时继续关闭可自动化证据缺口，SM08 native-surface
   harness 改为把真实 `NSWindow` 固定到所有显示器之外并使用 `orderBack`；不再调用
-  `makeKeyAndOrderFront`、`orderFront` 或应用激活 API。真实 AppKit field editor、
+  `makeKeyAndOrderFront`、`orderFront` 或应用激活 API。独立复审发现 titled window
+  可能在首次 ordering 时被 AppKit 约束回屏，现于 alpha=0 后重新设置离屏 frame，并
+  明确断言不与任何 `NSScreen` 相交、`screen == nil`、非 key/main、应用激活状态和原
+  key/main window 均未改变。真实 AppKit field editor、
   NSTableView 万行复用/滚动/释放、同 revision 数据替换和 close delegate 4/4 通过，
   完整 Swift 回归因此可不跳过该 suite，当前为 224 项、1 项 Paddle 跳过、0 失败。
+  完全离屏窗口没有显示器合成语义，因此已从该测试删除 display-link FPS 通过门槛和
+  `scrollFramesPerSecond` 指标；真实帧率继续保留为前台 PERF-02 Gate，不用后台 tick
+  冒充屏幕渲染证据。
   SM08 contract 已继续执行到唯一缺失的 `--native-evidence` 门槛，不再因 native-surface
   XCTest 未执行而提前失败；这仍不替代 XCUI/VoiceOver/真实候选窗或 Owner 背书。
 - 历史 XCUI `.xcresult` 活动树与录像证明：Help 路由已通过，两个窗口失败

@@ -2,7 +2,6 @@ import AppKit
 import CryptoKit
 import Foundation
 import Darwin
-import QuartzCore
 import SlateSyncDomain
 @testable import SlateSyncUI
 import SwiftUI
@@ -15,7 +14,7 @@ import XCTest
 final class SM08NativeSurfaceTests: XCTestCase {
     func testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners() async throws {
         var renderMS: [Double] = [], editMS: [Double] = [], viewCounts: [Int] = []
-        var scrollFPS: [Double] = [], memoryDeltas: [Int64] = []
+        var memoryDeltas: [Int64] = []
         let table = fixtureTable()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(table)
@@ -30,7 +29,6 @@ final class SM08NativeSurfaceTests: XCTestCase {
             try await harness!.mount()
             let loadedMS = began.duration(to: .now).milliseconds
             let native = try XCTUnwrap(harness?.tableView)
-            let cadence = await ScrollCadenceProbe().measure(window: harness!.window!, table: native)
             XCTAssertEqual(native.numberOfRows, 10_000)
             native.scrollRowToVisible(9_999)
             native.layoutSubtreeIfNeeded()
@@ -51,7 +49,7 @@ final class SM08NativeSurfaceTests: XCTestCase {
             XCTAssertLessThanOrEqual(count, 300, "CSV must virtualize its 10k rows")
             if sample > 0 {
                 renderMS.append(loadedMS); editMS.append(editedMS); viewCounts.append(count)
-                scrollFPS.append(cadence); memoryDeltas.append(max(0, try residentBytes() - baselineMemory))
+                memoryDeltas.append(max(0, try residentBytes() - baselineMemory))
             }
             // Weak references are checked after releasing the hosting tree;
             // retaining the native table local here would invalidate that test.
@@ -60,7 +58,6 @@ final class SM08NativeSurfaceTests: XCTestCase {
         }
         XCTAssertLessThanOrEqual(renderMS.max() ?? .infinity, 1200)
         XCTAssertLessThanOrEqual(editMS.max() ?? .infinity, 100)
-        XCTAssertGreaterThanOrEqual(scrollFPS.min() ?? 0, 45)
         XCTAssertLessThanOrEqual(memoryDeltas.max() ?? .max, 134_217_728)
         // Dedicated scope has no test-local strong native reference.
         var released: WeakCSVReferences?
@@ -86,7 +83,9 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertLessThanOrEqual(retained, 33_554_432)
         try saveMetrics(["schemaVersion": 1, "fixtureRows": 10_000, "fixtureSHA256": fixtureSHA,
                          "warmups": 1, "samples": 5, "snapshotMs": renderMS, "farRowEditMs": editMS,
-                         "visibleCellCounts": viewCounts, "scrollFramesPerSecond": scrollFPS,
+                         // A fully offscreen window has no display-backed frame
+                         // cadence; real render FPS remains a foreground Gate.
+                         "visibleCellCounts": viewCounts,
                          "residentDeltaBytes": memoryDeltas, "retainedResidentBytes": retained], named: "native-csv-scale.json")
     }
 
@@ -214,8 +213,15 @@ private final class CSVHarness {
     height: CGFloat,
     styleMask: NSWindow.StyleMask
 ) -> NSWindow {
-    let window = NSWindow(
-        contentRect: NSRect(x: -1_000_000, y: -1_000_000, width: width, height: height),
+    let application = NSApplication.shared
+    let wasActive = application.isActive
+    let previousKeyWindow = application.keyWindow
+    let previousMainWindow = application.mainWindow
+    let offscreenFrame = NSRect(x: -15_000, y: -15_000, width: width, height: height)
+    let window = UnconstrainedBackgroundTestWindow(
+        // WindowServer coordinates are bounded; stay inside that range and
+        // assert the final ordered frame does not intersect an attached screen.
+        contentRect: offscreenFrame,
         styleMask: styleMask,
         backing: .buffered,
         defer: false
@@ -223,8 +229,31 @@ private final class CSVHarness {
     window.isReleasedWhenClosed = false
     window.isExcludedFromWindowsMenu = true
     window.ignoresMouseEvents = true
+    // Alpha zero is set before ordering so coordinate normalization cannot
+    // flash a test surface even when a host has an unusual display topology.
+    window.alphaValue = 0
+    window.animationBehavior = .none
     window.orderBack(nil)
+    // First ordering may normalize a titled window despite the requested
+    // content rect. Move it again only after the transparent surface exists.
+    window.setFrame(offscreenFrame, display: false)
+    XCTAssertFalse(NSScreen.screens.contains { $0.frame.intersects(window.frame) })
+    XCTAssertNil(window.screen)
+    XCTAssertFalse(window.isKeyWindow)
+    XCTAssertFalse(window.isMainWindow)
+    XCTAssertEqual(application.isActive, wasActive)
+    XCTAssertTrue(application.keyWindow === previousKeyWindow)
+    XCTAssertTrue(application.mainWindow === previousMainWindow)
     return window
+}
+
+/// AppKit normally constrains titled windows back onto the nearest display.
+/// The test-only subclass preserves the requested offscreen frame; assertions
+/// above then fail closed if WindowServer still maps it onto a real screen.
+@MainActor private final class UnconstrainedBackgroundTestWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
 }
 
 @MainActor private final class WeakCSVReferences {
@@ -239,46 +268,6 @@ private extension NSView {
 
 private extension Duration {
     var milliseconds: Double { Double(components.seconds) * 1000 + Double(components.attoseconds) / 1e15 }
-}
-
-/// Measures delivered display-link cadence while each frame scrolls and draws
-/// the actual table. A timeout returns zero rather than manufacturing a pass.
-@MainActor private final class ScrollCadenceProbe: NSObject {
-    private var link: CADisplayLink?
-    private weak var table: NSTableView?
-    private var timestamps: [Double] = []
-    private var completion: CheckedContinuation<Double, Never>?
-    private var timeout: Task<Void, Never>?
-    func measure(window: NSWindow, table: NSTableView) async -> Double {
-        self.table = table
-        return await withCheckedContinuation { continuation in
-            completion = continuation
-            let link = window.displayLink(target: self, selector: #selector(frame(_:)))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
-            self.link = link
-            link.add(to: .main, forMode: .common)
-            timeout = Task { [weak self] in
-                do { try await Task.sleep(for: .seconds(3)) } catch { return }
-                self?.finish(0)
-            }
-        }
-    }
-    @objc private func frame(_ sender: CADisplayLink) {
-        guard let table else { finish(0); return }
-        timestamps.append(CACurrentMediaTime())
-        table.scrollRowToVisible((timestamps.count * 149) % table.numberOfRows)
-        table.layoutSubtreeIfNeeded()
-        table.displayIfNeeded()
-        if timestamps.count >= 61 {
-            finish(Double(timestamps.count - 1) / (timestamps.last! - timestamps.first!))
-        }
-    }
-    private func finish(_ value: Double) {
-        link?.invalidate(); link = nil
-        timeout?.cancel(); timeout = nil
-        let callback = completion; completion = nil
-        callback?.resume(returning: value)
-    }
 }
 
 private func residentBytes() throws -> Int64 {
