@@ -62,6 +62,38 @@ private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
+/// Restoring a persisted choice must not silently substitute a different
+/// Provider or model. Availability is validated only when recognition starts;
+/// an explicit Provider change may clear an incompatible model draft.
+struct RecognitionOptionSelection: Equatable {
+    let providerID: String
+    let modelID: String
+
+    static func restored(
+        task: TaskData?,
+        project: ProjectSettings
+    ) -> Self {
+        Self(
+            // Empty tasks inherit only explicit project defaults. View-local
+            // state belongs to the previously selected task and is never a
+            // valid fallback for a new task identity.
+            providerID: task?.provider ?? project.providerId ?? "",
+            modelID: task?.model ?? project.modelId ?? ""
+        )
+    }
+
+    static func selectingProvider(
+        _ providerID: String,
+        currentModelID: String,
+        availableModels: [ModelData]
+    ) -> Self {
+        Self(
+            providerID: providerID,
+            modelID: availableModels.contains(where: { $0.id == currentModelID }) ? currentModelID : ""
+        )
+    }
+}
+
 /// Project-scoped recognition owner. It survives route changes because the
 /// composition root retains it with the window session, not with the view.
 @MainActor @Observable
@@ -86,6 +118,7 @@ public final class RecognitionModel {
     private var recognitionTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
     private var cancelTask: Task<Void, Never>?
+    private var optionsGeneration = 0
     public var didComplete: (@MainActor (NativeRecognitionRequest, RecognitionData) async throws -> Void)?
 
     public init(
@@ -99,13 +132,17 @@ public final class RecognitionModel {
     /// Provider and model eligibility is projected by Workflow. The view
     /// never reconstructs catalog, credential, or capability rules.
     public func loadOptions() async {
+        optionsGeneration += 1
+        let request = optionsGeneration
         optionsOperation = .running(label: "正在读取识别选项…")
         do {
             let projection = try await settings.globalSettings()
+            guard optionsGeneration == request else { return }
             providers = projection.providers.filter(\.configured)
             models = projection.models.filter(Self.isEligible)
             optionsOperation = .idle
         } catch {
+            guard optionsGeneration == request else { return }
             optionsOperation = .failed(ProductPrivacy.error(error))
         }
     }
@@ -121,7 +158,10 @@ public final class RecognitionModel {
 
     public func recognize(_ request: NativeRecognitionRequest, flush: @escaping @MainActor () async throws -> Void) {
         guard permitsNewOperation?() != false else { return }
-        guard recognitionTask == nil else { return }
+        // The canceled worker may finish before its service-side cancellation.
+        // Keep admission closed until both owners have drained so a late cancel
+        // cannot target or repaint a newly started operation.
+        guard recognitionTask == nil, cancelTask == nil else { return }
         guard commitVisibleEditor() else { return }
         guard let providerID = request.providerID,
               let modelID = request.modelID,
@@ -177,30 +217,40 @@ public final class RecognitionModel {
         // File-panel completions can arrive after a Library/close barrier has
         // disabled the view. Enforce admission again at the operation owner.
         guard permitsNewOperation?() != false else { return }
-        guard recognitionTask == nil, let local = service as? any LocalSlateWorkflowServing else { return }
+        guard recognitionTask == nil, cancelTask == nil,
+              let local = service as? any LocalSlateWorkflowServing else { return }
         guard commitVisibleEditor() else { return }
+        let id = UUID()
         self.projectID = projectID
-        operationID = UUID()
+        operationID = id
         operation = .running(label: "正在读取场记 CSV…")
         recognitionTask = Task { [self] in
             do {
                 try await flush()
                 let records = try await local.decodeSlateCSV(data)
                 try Task.checkCancellation()
-                slateCSVRecords = records
-                slateCSVFilename = filename
-                operation = .succeeded(message: "已载入 \(records.count) 条本地场记")
-            } catch { operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error)) }
-            recognitionTask = nil
+                if operationID == id {
+                    slateCSVRecords = records
+                    slateCSVFilename = filename
+                    operation = .succeeded(message: "已载入 \(records.count) 条本地场记")
+                }
+            } catch {
+                if operationID == id {
+                    operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
+                }
+            }
+            await finishOperation(id)
         }
     }
 
     public func generateLocalRecords(flush: @escaping @MainActor () async throws -> Void,
                                      commit: @escaping @MainActor ([PersistedRecognitionRecord], String) -> Void) {
         guard permitsNewOperation?() != false else { return }
-        guard recognitionTask == nil, !slateCSVRecords.isEmpty,
+        guard recognitionTask == nil, cancelTask == nil, !slateCSVRecords.isEmpty,
               let local = service as? any LocalSlateWorkflowServing else { return }
         guard commitVisibleEditor() else { return }
+        let id = UUID()
+        operationID = id
         operation = .running(label: "正在生成本地结果…")
         let records = slateCSVRecords
         let filename = slateCSVFilename ?? "场记 CSV"
@@ -209,14 +259,20 @@ public final class RecognitionModel {
                 try await flush()
                 let value = await local.localSlateRecords(records)
                 try Task.checkCancellation()
-                // A local result must not retain a previous Provider response.
-                result = nil
-                resultTableID = UUID()
-                editableRecords = value.enumerated().map { EditableRecognitionRecord($0.element, fallbackID: "slate-csv-\($0.offset)") }
-                commit(value, filename)
-                operation = .succeeded(message: "已生成 \(value.count) 条本地结果")
-            } catch { operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error)) }
-            recognitionTask = nil
+                if operationID == id {
+                    // A local result must not retain a previous Provider response.
+                    result = nil
+                    resultTableID = UUID()
+                    editableRecords = value.enumerated().map { EditableRecognitionRecord($0.element, fallbackID: "slate-csv-\($0.offset)") }
+                    commit(value, filename)
+                    operation = .succeeded(message: "已生成 \(value.count) 条本地结果")
+                }
+            } catch {
+                if operationID == id {
+                    operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
+                }
+            }
+            await finishOperation(id)
         }
     }
 
@@ -259,7 +315,7 @@ public final class RecognitionModel {
     }
 
     public func load(task: TaskData?) {
-        guard recognitionTask == nil else { return }
+        guard recognitionTask == nil, cancelTask == nil else { return }
         result = nil
         resultTableID = UUID()
         slateCSVRecords = []

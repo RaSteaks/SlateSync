@@ -124,6 +124,184 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertTrue(CSVKeyboardNavigation.validSelection(IndexSet([0]), rows: 0).isEmpty)
     }
 
+    func testCSVKeyboardSelectorsPreserveIMEAndNativeClipboardRouting() {
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSResponder.insertTab(_:)), hasMarkedText: false),
+            .move(.next)
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSResponder.insertBacktab(_:)), hasMarkedText: false),
+            .move(.previous)
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSResponder.moveToBeginningOfLine(_:)), hasMarkedText: false),
+            .move(.firstColumn)
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSResponder.moveToEndOfLine(_:)), hasMarkedText: false),
+            .move(.lastColumn)
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSResponder.insertNewline(_:)), hasMarkedText: true),
+            .consumeComposition
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSResponder.cancelOperation(_:)), hasMarkedText: true),
+            .consumeComposition
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSText.copy(_:)), hasMarkedText: true),
+            .native
+        )
+        XCTAssertEqual(
+            CSVKeyboardNavigation.action(for: #selector(NSText.paste(_:)), hasMarkedText: true),
+            .native
+        )
+
+        let table = SM08FixtureFactory.resolveCSV()
+        XCTAssertEqual(table.rows.count, 10_000)
+        XCTAssertEqual(table.rows[42][0], table.rows[43][0], "scale fixture must retain duplicate filenames")
+        XCTAssertTrue(table.rows[0][1].contains("中文 IME 🎬"))
+        XCTAssertTrue(table.rows[1][1].isEmpty)
+        XCTAssertGreaterThan(table.rows[2][1].utf16.count, 400)
+        XCTAssertEqual(Set(table.rows.prefix(3).map { $0[5] }), Set(["好", "保", ""]))
+    }
+
+    func testFocusedNewTaskRequiresVisibleWorkspaceRoute() {
+        XCTAssertTrue(FocusedActionAvailability.permitsNewTask(route: .workspace, projectID: "project-a"))
+        for route in SidebarDestination.allCases where route != .workspace {
+            XCTAssertFalse(FocusedActionAvailability.permitsNewTask(route: route, projectID: "project-a"))
+        }
+        XCTAssertFalse(FocusedActionAvailability.permitsNewTask(route: .workspace, projectID: nil))
+    }
+
+    func testRecognitionOptionRestorationNeverSubstitutesUnavailableValues() {
+        let restored = RecognitionOptionSelection.restored(
+            task: TaskData(provider: "removed-provider", model: "retired-model"),
+            project: ProjectSettings(providerId: "project-provider", modelId: "project-model")
+        )
+        XCTAssertEqual(restored.providerID, "removed-provider")
+        XCTAssertEqual(restored.modelID, "retired-model")
+
+        let emptyTask = RecognitionOptionSelection.restored(
+            task: TaskData(),
+            project: ProjectSettings()
+        )
+        XCTAssertEqual(emptyTask.providerID, "")
+        XCTAssertEqual(emptyTask.modelID, "")
+
+        let explicitlyChanged = RecognitionOptionSelection.selectingProvider(
+            "custom-test",
+            currentModelID: "retired-model",
+            availableModels: [ModelData(
+                id: "vision-test",
+                label: "Vision Test",
+                description: "offline fixture",
+                providers: ["custom-test"],
+                verifiedAvailable: true,
+                capabilityStatus: .verified
+            )]
+        )
+        XCTAssertEqual(explicitlyChanged.providerID, "custom-test")
+        XCTAssertEqual(explicitlyChanged.modelID, "")
+    }
+
+    @MainActor
+    func testSettingsRevisionAndRecognitionReloadRejectLateOptionProjection() async {
+        func projection(providerID: String, modelID: String) -> GlobalSettingsProjection {
+            let model = ModelData(
+                id: modelID,
+                label: modelID,
+                description: "offline fixture",
+                providers: [providerID],
+                verifiedAvailable: true,
+                capabilityStatus: .verified
+            )
+            return GlobalSettingsProjection(
+                values: .init(),
+                customProviders: [],
+                providers: [.init(id: providerID, label: providerID, configured: true)],
+                models: [model],
+                configuredCredentialProviderIDs: [],
+                visionAvailable: true,
+                paddleAvailable: false,
+                runtime: .init(
+                    resolvedSettingCount: 0,
+                    globalConfigVersion: 1,
+                    environmentFileLoaded: false,
+                    migrationStatus: .sourceMissing
+                )
+            )
+        }
+
+        let staleGate = SM08TestGate()
+        let service = GlobalSettingsFake(
+            globalSettingsResponses: [
+                projection(providerID: "stale-provider", modelID: "stale-model"),
+                projection(providerID: "current-provider", modelID: "current-model"),
+            ],
+            globalSettingsGates: [staleGate, nil]
+        )
+        let recognition = RecognitionModel(service: WorkspaceFake(rowCount: 0), settings: service)
+        let staleLoad = Task { await recognition.loadOptions() }
+        await staleGate.entered()
+        await recognition.loadOptions()
+        XCTAssertEqual(recognition.providers.map(\.id), ["current-provider"])
+        XCTAssertEqual(recognition.models.map(\.id), ["current-model"])
+        await staleGate.release()
+        await staleLoad.value
+        XCTAssertEqual(recognition.providers.map(\.id), ["current-provider"])
+        XCTAssertEqual(recognition.models.map(\.id), ["current-model"])
+
+        let sharedSettings = GlobalSettingsModel(service: GlobalSettingsFake())
+        XCTAssertEqual(sharedSettings.revision, 0)
+        await sharedSettings.load()
+        XCTAssertEqual(sharedSettings.revision, 1)
+        await sharedSettings.refresh()
+        XCTAssertEqual(sharedSettings.revision, 2)
+    }
+
+    @MainActor
+    func testRecognitionCancellationBlocksNewLocalOperationUntilServiceDrain() async {
+        let localGate = SM08TestGate()
+        let cancelGate = SM08TestGate()
+        let service = WorkspaceFake(
+            rowCount: 0,
+            localRecordsGate: localGate,
+            cancelRecognitionGate: cancelGate
+        )
+        let model = RecognitionModel(service: service, settings: GlobalSettingsFake())
+        model.importSlateCSV(Data(), filename: "slate.csv", projectID: "project-a", flush: {})
+        for _ in 0..<50 where model.slateCSVRecords.isEmpty { await Task.yield() }
+        XCTAssertFalse(model.slateCSVRecords.isEmpty)
+
+        model.generateLocalRecords(flush: {}, commit: { _, _ in })
+        await localGate.entered()
+        let firstID = model.operationID
+        model.cancel()
+        await cancelGate.entered()
+        await localGate.release()
+        for _ in 0..<50 { await Task.yield() }
+
+        // The worker has observed cancellation, but service cancellation still
+        // owns the lifecycle barrier; no replacement operation may enter.
+        model.generateLocalRecords(flush: {}, commit: { _, _ in })
+        for _ in 0..<20 { await Task.yield() }
+        let blockedCount = await service.localRecordsCount
+        XCTAssertEqual(blockedCount, 1)
+        XCTAssertEqual(model.operationID, firstID)
+
+        await cancelGate.release()
+        await model.drain()
+        model.generateLocalRecords(flush: {}, commit: { _, _ in })
+        for _ in 0..<50 {
+            if await service.localRecordsCount >= 2 { break }
+            await Task.yield()
+        }
+        let restartedCount = await service.localRecordsCount
+        XCTAssertEqual(restartedCount, 2)
+    }
+
     func testRecognitionCancellationTicketInvalidatesOnlyQueuedProject() async {
         var ledger = RecognitionCancellationLedger()
         let firstProject = ledger.ticket(for: "project-a")
@@ -873,15 +1051,28 @@ private actor WorkspaceFake: WorkspaceWorkflowServing, LocalSlateWorkflowServing
     private let taskCount: Int
     private let decodeGate: SM08TestGate?
     private let loadGate: SM08TestGate?
+    private let localRecordsGate: SM08TestGate?
+    private let cancelRecognitionGate: SM08TestGate?
     private(set) var metadataScanCount = 0
     private(set) var metadataExpectedKeys: [String] = []
     private(set) var slateCSVDecodeCount = 0
+    private(set) var localRecordsCount = 0
     private(set) var savedEditedRecords: [[PersistedRecognitionRecord]] = []
     private(set) var savedTasks: [TaskData] = []
-    init(rowCount: Int, saveFailuresRemaining: Int = 0, decodeGate: SM08TestGate? = nil, taskCount: Int = 1, loadGate: SM08TestGate? = nil) {
+    init(
+        rowCount: Int,
+        saveFailuresRemaining: Int = 0,
+        decodeGate: SM08TestGate? = nil,
+        taskCount: Int = 1,
+        loadGate: SM08TestGate? = nil,
+        localRecordsGate: SM08TestGate? = nil,
+        cancelRecognitionGate: SM08TestGate? = nil
+    ) {
         self.taskCount = taskCount
         self.decodeGate = decodeGate
         self.loadGate = loadGate
+        self.localRecordsGate = localRecordsGate
+        self.cancelRecognitionGate = cancelRecognitionGate
         self.saveFailuresRemaining = saveFailuresRemaining
         table = ResolveCSVTable(
             headers: ["文件名", "注释"],
@@ -922,12 +1113,14 @@ private actor WorkspaceFake: WorkspaceWorkflowServing, LocalSlateWorkflowServing
         return [.init(fileName: "A001C001.mov", scene: "1", shot: "1", take: "1")]
     }
     func localSlateRecords(_ records: [SlateCsvRecord]) async -> [PersistedRecognitionRecord] {
-        records.map { .init(scene: $0.scene, shot: $0.shot, take: $0.take) }
+        localRecordsCount += 1
+        await localRecordsGate?.wait()
+        return records.map { .init(scene: $0.scene, shot: $0.shot, take: $0.take) }
     }
     func listScenarios(projectID: String) async throws -> [ScenarioSummary] { [] }
     func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData { throw SlateSyncError(code: "TEST", message: "unused") }
     func recognitionProgress(projectID: String) async -> AsyncStream<RecognitionProgress> { AsyncStream { $0.finish() } }
-    func cancelRecognition(projectID: String) async {}
+    func cancelRecognition(projectID: String) async { await cancelRecognitionGate?.wait() }
     func closeProject(id: String) async throws {}
 }
 
@@ -950,21 +1143,37 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
     private let providerCancelGate: SM08FirstCallGate?
     private let paddleInstallGate: SM08TestGate?
     private let paddleCancelGate: SM08TestGate?
+    private let globalSettingsResponses: [GlobalSettingsProjection]
+    private let globalSettingsGates: [SM08TestGate?]
+    private var globalSettingsCall = 0
     init(
         credentialGate: SM08TestGate? = nil,
         providerProbeGate: SM08TestGate? = nil,
         providerCancelGate: SM08FirstCallGate? = nil,
         paddleInstallGate: SM08TestGate? = nil,
-        paddleCancelGate: SM08TestGate? = nil
+        paddleCancelGate: SM08TestGate? = nil,
+        globalSettingsResponses: [GlobalSettingsProjection] = [],
+        globalSettingsGates: [SM08TestGate?] = []
     ) {
         self.credentialGate = credentialGate
         self.providerProbeGate = providerProbeGate
         self.providerCancelGate = providerCancelGate
         self.paddleInstallGate = paddleInstallGate
         self.paddleCancelGate = paddleCancelGate
+        self.globalSettingsResponses = globalSettingsResponses
+        self.globalSettingsGates = globalSettingsGates
     }
 
-    func globalSettings() async throws -> GlobalSettingsProjection { Self.projection }
+    func globalSettings() async throws -> GlobalSettingsProjection {
+        let index = globalSettingsCall
+        globalSettingsCall += 1
+        let response = globalSettingsResponses.indices.contains(index)
+            ? globalSettingsResponses[index]
+            : Self.projection
+        let gate = globalSettingsGates.indices.contains(index) ? globalSettingsGates[index] : nil
+        await gate?.wait()
+        return response
+    }
     func saveGlobalSettings(
         values: GlobalSettingValues,
         customProviders: [CustomProviderConfiguration]

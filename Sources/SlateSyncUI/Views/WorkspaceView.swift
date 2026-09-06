@@ -16,6 +16,7 @@ public struct WorkspaceView: View {
     @State private var modelID = ""
     @State private var scenarioID = ""
     @State private var accuracy = ProjectSettings.AccuracyMode.high
+    private let settingsRevision: Int
 
     private enum WorkspaceSection: String, CaseIterable, Identifiable {
         case input = "输入"
@@ -29,13 +30,15 @@ public struct WorkspaceView: View {
         recognition: RecognitionModel,
         csv: ResolveCSVModel,
         metadata: MetadataScanModel,
-        media: MediaInputModel
+        media: MediaInputModel,
+        settingsRevision: Int = 0
     ) {
         self.workspace = workspace
         self.recognition = recognition
         self.csv = csv
         self.metadata = metadata
         self.media = media
+        self.settingsRevision = settingsRevision
     }
 
     public var body: some View {
@@ -105,10 +108,13 @@ public struct WorkspaceView: View {
         .onChange(of: workspace.selectedTaskID) {
             adoptTaskRecognitionOptions()
         }
-        .onChange(of: providerID) {
-            let available = recognition.availableModels(providerID: providerID)
-            if !available.contains(where: { $0.id == modelID }) {
-                modelID = available.first?.id ?? ""
+        .onChange(of: settingsRevision) {
+            // Settings is a separate scene and does not remount this view.
+            // Reload its workflow projection on each shared publication while
+            // preserving any still-unavailable persisted task selection.
+            Task {
+                await recognition.loadOptions()
+                adoptTaskRecognitionOptions()
             }
         }
     }
@@ -148,12 +154,26 @@ public struct WorkspaceView: View {
             Section("识别") {
                 Picker("Provider", selection: providerSelection) {
                     Text("请选择").tag("")
+                    if unavailableProvider {
+                        Text("不可用：\(providerID)").tag(providerID)
+                    }
                     ForEach(recognition.providers, id: \.id) { Text($0.label).tag($0.id) }
                 }
                 Picker("模型", selection: modelSelection) {
                     Text("请选择").tag("")
+                    if unavailableModel {
+                        Text("不可用：\(modelID)").tag(modelID)
+                    }
                     ForEach(recognition.availableModels(providerID: providerID), id: \.id) {
                         Text($0.label).tag($0.id)
+                    }
+                }
+                if unavailableProvider || unavailableModel {
+                    LabeledContent("已保存的识别选项不可用") {
+                        HStack {
+                            Text("请选择可用项或先完成 Provider 配置")
+                            SettingsLink { Text("打开全局设置") }
+                        }
                     }
                 }
                 if case .failed(let error) = recognition.optionsOperation {
@@ -216,6 +236,14 @@ public struct WorkspaceView: View {
     private var canRecognize: Bool {
         workspace.projectID != nil && workspace.selectedTaskID != nil && media.document != nil && !media.operation.isRunning &&
             recognition.canRecognize(providerID: providerID, modelID: modelID)
+    }
+
+    private var unavailableProvider: Bool {
+        !providerID.isEmpty && !recognition.providers.contains(where: { $0.id == providerID })
+    }
+
+    private var unavailableModel: Bool {
+        !modelID.isEmpty && !recognition.availableModels(providerID: providerID).contains(where: { $0.id == modelID })
     }
 
     @ViewBuilder private var autosaveBanner: some View {
@@ -293,11 +321,15 @@ public struct WorkspaceView: View {
 
     private var providerSelection: Binding<String> {
         Binding(get: { providerID }, set: { value in
-            providerID = value
-            let available = recognition.availableModels(providerID: value)
-            if !available.contains(where: { $0.id == modelID }) {
-                modelID = available.first?.id ?? ""
-            }
+            // Only an explicit Picker change may clear an incompatible model;
+            // restoring a task preserves stale IDs for visible recovery.
+            let selection = RecognitionOptionSelection.selectingProvider(
+                value,
+                currentModelID: modelID,
+                availableModels: recognition.availableModels(providerID: value)
+            )
+            providerID = selection.providerID
+            modelID = selection.modelID
             persistRecognitionOptions()
         })
     }
@@ -335,13 +367,12 @@ public struct WorkspaceView: View {
     private func adoptTaskRecognitionOptions() {
         scenarioID = workspace.selectedTask?.scenarioId ?? workspace.projectSettings.scenarioId ?? ""
         accuracy = workspace.selectedTask?.accuracyMode ?? workspace.projectSettings.accuracyMode
-        let taskProvider = workspace.selectedTask?.provider ?? workspace.projectSettings.providerId ?? providerID
-        providerID = recognition.providers.contains(where: { $0.id == taskProvider })
-            ? taskProvider
-            : (recognition.providers.first?.id ?? "")
-        let taskModel = workspace.selectedTask?.model ?? workspace.projectSettings.modelId ?? modelID
-        let available = recognition.availableModels(providerID: providerID)
-        modelID = available.contains(where: { $0.id == taskModel }) ? taskModel : (available.first?.id ?? "")
+        let selection = RecognitionOptionSelection.restored(
+            task: workspace.selectedTask,
+            project: workspace.projectSettings
+        )
+        providerID = selection.providerID
+        modelID = selection.modelID
     }
 }
 

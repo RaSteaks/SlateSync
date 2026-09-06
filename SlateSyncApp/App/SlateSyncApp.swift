@@ -80,7 +80,12 @@ struct SlateSyncApp: App {
             // Each WindowGroup content instance constructs an independent
             // AppSessionModel and focused feature models. Only the actor façade
             // and global Settings scene are shared across windows.
-            SlateSyncWindowRoot(workflow: workflow, termination: termination, projectOwnership: projectOwnership)
+            SlateSyncWindowRoot(
+                workflow: workflow,
+                globalSettings: globalSettings,
+                termination: termination,
+                projectOwnership: projectOwnership
+            )
                 .defaultAppStorage(preferences)
                 .frame(minWidth: 960, minHeight: 600)
                 .task {
@@ -127,6 +132,7 @@ private actor IsolatedAppKeychain: KeychainBackend {
 
 @MainActor
 private struct SlateSyncWindowRoot: View {
+    private let globalSettings: GlobalSettingsModel
     private let termination: TerminationCoordinator
     @State private var windowID: UUID
     @State private var projects: ProjectLibraryModel
@@ -140,7 +146,13 @@ private struct SlateSyncWindowRoot: View {
     @State private var help: HelpModel
     @State private var session: AppSessionModel
 
-    init(workflow: SlateSyncWorkflowFacade, termination: TerminationCoordinator, projectOwnership: ProjectWindowOwnership) {
+    init(
+        workflow: SlateSyncWorkflowFacade,
+        globalSettings: GlobalSettingsModel,
+        termination: TerminationCoordinator,
+        projectOwnership: ProjectWindowOwnership
+    ) {
+        self.globalSettings = globalSettings
         self.termination = termination
         let windowID = UUID()
         _windowID = State(initialValue: windowID)
@@ -175,7 +187,8 @@ private struct SlateSyncWindowRoot: View {
             projectSettings: projectSettings,
             logs: logs,
             help: help,
-            termination: termination
+            termination: termination,
+            settingsRevision: globalSettings.revision
         )
         .task {
             workspace.permitsNewOperation = { [weak termination] in

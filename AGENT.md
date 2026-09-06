@@ -2,6 +2,19 @@
 
 ## 2026-09-06 SM-08 正式收尾（当前有效）
 
+- 独立代码审查补出并修复识别取消 drain 期间重新准入、失效 Provider/Model
+  被静默替换、非 Workspace route 的 ⌘N 隐藏建任务三类所有权缺陷。取消期间
+  `recognitionTask` 与 `cancelTask` 共同关闭准入；任务/项目保存的失效选项会原样
+  显示“不可用”并提供 Settings 入口，只有用户明确切换 Provider 才清除不兼容模型。
+- 空任务不再继承上一任务的 View-local Provider/Model。共享
+  `GlobalSettingsModel.revision` 会在 Settings 发布后触发所有仍挂载的 Workspace 与
+  Project Settings 重载；`RecognitionModel` 以 generation 拒绝重叠加载的迟到结果。
+- CSV 键盘 selector 现由纯策略覆盖 Enter/Escape/Tab/Shift-Tab/方向键/Home/End，
+  copy/paste 保留给 NSTextView responder chain，IME marked text 只阻断单元格导航。
+  万行 fixture 已加入中文、emoji、长字段、空值、重复文件名与混合状态；coverage
+  将含原生交互的宽泛验收项移回 manual/Gate lane，native evidence 还要求结构化命令、
+  退出码、逐项断言和不可复用的 Gate 根目录制品。当前后台 owner 52/52、完整 Swift
+  219 项（1 项专用 Paddle 跳过）均为 0 失败；原生前台证据仍不据此宣称 PASS。
 - 历史 XCUI `.xcresult` 活动树与录像证明：Help 路由已通过，两个窗口失败
   都是 ⌘W 后目标窗口持续可见，不是 XCUI 计数滞后。根因为
   `SlateSyncCommands` 替换了整个 `.saveItem` 系统组，连同 macOS

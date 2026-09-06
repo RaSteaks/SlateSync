@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Focused commands are offered only when the visible route owns the action.
+/// A retained project identity must not make Command-N mutate a hidden workspace.
+enum FocusedActionAvailability {
+    static func permitsNewTask(route: SidebarDestination, projectID: String?) -> Bool {
+        route == .workspace && projectID != nil
+    }
+}
+
 /// Commands and toolbar actions share these focused closures so menu items
 /// always target the front window's current state owner.
 public struct SlateSyncFocusedActions {

@@ -7,7 +7,34 @@ import SwiftUI
 /// The coordinator applies the returned destination only after committing the
 /// current cell, so selection never outruns the persisted table snapshot.
 enum CSVKeyboardNavigation {
-    enum Movement { case next, previous, up, down, left, right, firstColumn, lastColumn }
+    enum Movement: Equatable { case next, previous, up, down, left, right, firstColumn, lastColumn }
+    enum CommandAction: Equatable {
+        case native
+        case consumeComposition
+        case cancel
+        case finish
+        case move(Movement)
+    }
+
+    /// Keep selector ownership testable without mounting a visible window.
+    /// Unknown commands, including copy/paste, remain with NSTextView; only
+    /// cell navigation is consumed while Chinese marked text is active.
+    static func action(for selector: Selector, hasMarkedText: Bool) -> CommandAction {
+        let action: CommandAction = switch selector {
+        case #selector(NSResponder.cancelOperation(_:)): .cancel
+        case #selector(NSResponder.insertNewline(_:)): .finish
+        case #selector(NSResponder.insertTab(_:)): .move(.next)
+        case #selector(NSResponder.insertBacktab(_:)): .move(.previous)
+        case #selector(NSResponder.moveUp(_:)): .move(.up)
+        case #selector(NSResponder.moveDown(_:)): .move(.down)
+        case #selector(NSResponder.moveLeft(_:)): .move(.left)
+        case #selector(NSResponder.moveRight(_:)): .move(.right)
+        case #selector(NSResponder.moveToBeginningOfLine(_:)): .move(.firstColumn)
+        case #selector(NSResponder.moveToEndOfLine(_:)): .move(.lastColumn)
+        default: .native
+        }
+        return hasMarkedText && action != .native ? .consumeComposition : action
+    }
 
     static func destination(
         row: Int,
@@ -242,8 +269,17 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             doCommandBy commandSelector: Selector
         ) -> Bool {
             guard let field = control as? NSTextField else { return false }
-            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-                guard !textView.hasMarkedText() else { return true }
+            switch CSVKeyboardNavigation.action(
+                for: commandSelector,
+                hasMarkedText: textView.hasMarkedText()
+            ) {
+            case .native:
+                // Copy, paste and text-system commands remain on NSTextView's
+                // responder chain, including during an IME composition.
+                return false
+            case .consumeComposition:
+                return true
+            case .cancel:
                 timer?.cancel()
                 let identity = cellIdentity(for: field)
                 field.stringValue = value(row: identity.row, column: identity.column)
@@ -252,35 +288,11 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 lastCommittedValue = nil
                 tableView?.abortEditing()
                 return true
-            }
-            // Enter, Tab, arrows and Home/End are cell commands, not text
-            // mutations. A marked Chinese composition consumes the command so
-            // no destructive navigation can submit its unfinished candidate.
-            guard !textView.hasMarkedText() else { return true }
-            switch commandSelector {
-            case #selector(NSResponder.insertNewline(_:)):
+            case .finish:
                 finishEditing(field)
                 return true
-            case #selector(NSResponder.insertTab(_:)):
-                return moveEditing(field, movement: .next)
-            case #selector(NSResponder.insertBacktab(_:)):
-                return moveEditing(field, movement: .previous)
-            case #selector(NSResponder.moveUp(_:)):
-                return moveEditing(field, movement: .up)
-            case #selector(NSResponder.moveDown(_:)):
-                return moveEditing(field, movement: .down)
-            case #selector(NSResponder.moveLeft(_:)):
-                return moveEditing(field, movement: .left)
-            case #selector(NSResponder.moveRight(_:)):
-                return moveEditing(field, movement: .right)
-            case #selector(NSResponder.moveToBeginningOfLine(_:)):
-                return moveEditing(field, movement: .firstColumn)
-            case #selector(NSResponder.moveToEndOfLine(_:)):
-                return moveEditing(field, movement: .lastColumn)
-            default:
-                // Copy and paste remain NSTextView's native responder-chain
-                // actions, preserving standard macOS shortcuts and services.
-                return false
+            case .move(let movement):
+                return moveEditing(field, movement: movement)
             }
         }
 

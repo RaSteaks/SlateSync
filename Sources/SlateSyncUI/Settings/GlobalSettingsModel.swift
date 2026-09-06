@@ -9,6 +9,9 @@ import SlateSyncDomain
 public final class GlobalSettingsModel {
     public private(set) var live: GlobalSettingsProjection?
     public private(set) var operation: OperationState = .idle
+    /// Shared windows observe this monotonic publication token and reload the
+    /// workflow-owned Provider/model projection after Settings changes.
+    public private(set) var revision = 0
     public var draft = GlobalSettingValues()
     public var customProviders: [CustomProviderConfiguration] = []
     public private(set) var discoveryResults: [String: ModelDiscoveryResult] = [:]
@@ -58,7 +61,10 @@ public final class GlobalSettingsModel {
             }
             let saved = try await service.saveGlobalSettings(values: values, customProviders: providers)
             if draft == values, customProviders == providers { publish(saved) }
-            else { live = saved }
+            else {
+                live = saved
+                revision += 1
+            }
             operation = .succeeded(message: "全局设置已保存")
         } catch {
             operation = .failed(ProductPrivacy.error(error))
@@ -324,6 +330,7 @@ public final class GlobalSettingsModel {
         live = value
         draft = value.values
         customProviders = value.customProviders
+        revision += 1
     }
 
     public func refresh() async {
@@ -349,5 +356,6 @@ public final class GlobalSettingsModel {
             customProviders.append(provider)
         }
         live = value
+        revision += 1
     }
 }

@@ -15,6 +15,7 @@ public struct AppRootView: View {
     private let logs: LogsModel
     private let help: HelpModel
     private let termination: TerminationCoordinator
+    private let settingsRevision: Int
 
     public init(
         session: AppSessionModel,
@@ -27,7 +28,8 @@ public struct AppRootView: View {
         projectSettings: ProjectSettingsModel,
         logs: LogsModel,
         help: HelpModel,
-        termination: TerminationCoordinator
+        termination: TerminationCoordinator,
+        settingsRevision: Int = 0
     ) {
         self.session = session
         self.projects = projects
@@ -40,6 +42,7 @@ public struct AppRootView: View {
         self.logs = logs
         self.help = help
         self.termination = termination
+        self.settingsRevision = settingsRevision
     }
 
     public var body: some View {
@@ -78,12 +81,20 @@ public struct AppRootView: View {
                 onSettings: { project in Task { await session.showProjectSettings(project) } }
             )
         case .workspace:
-            WorkspaceView(workspace: workspace, recognition: recognition, csv: csv, metadata: metadata, media: media)
+            WorkspaceView(
+                workspace: workspace,
+                recognition: recognition,
+                csv: csv,
+                metadata: metadata,
+                media: media,
+                settingsRevision: settingsRevision
+            )
         case .projectSettings:
             ProjectSettingsView(
                 model: projectSettings,
                 recognition: recognition,
-                projectID: session.projectID
+                projectID: session.projectID,
+                settingsRevision: settingsRevision
             )
         case .logs:
             LogsView(model: logs, recognition: recognition)
@@ -112,7 +123,10 @@ public struct AppRootView: View {
                     if session.route == .projects { projects.showsCreateSheet = true }
                 }
             },
-            newTask: session.projectID == nil ? nil : { Task { await workspace.createTask() } },
+            newTask: FocusedActionAvailability.permitsNewTask(
+                route: session.route,
+                projectID: session.projectID
+            ) ? { Task { await workspace.createTask() } } : nil,
             save: session.route == .workspace ? { Task { try? await workspace.flush() } } : nil,
             cancelRecognition: recognition.operation.isRunning ? { recognition.cancel() } : nil
         )

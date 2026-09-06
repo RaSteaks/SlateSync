@@ -15,6 +15,14 @@ const expectedIDs = [
   ...ids("CSV", 8), ...ids("SET", 8), ...ids("LOG", 4), ...ids("A11Y", 5),
   ...ids("PERF", 3), "GOV-01",
 ];
+// These broad acceptance IDs contain native interaction, lifecycle, IME,
+// accessibility, or package semantics that a narrow model test cannot prove.
+// Keep them in the raw-artifact lane unless this governance contract is
+// deliberately revised alongside stronger evidence requirements.
+const interactionEvidenceIDs = [
+  "APP-06", "PRJ-03", "PRJ-04", "PRJ-05", "PRJ-07",
+  "REC-06", "CSV-02", "A11Y-05",
+];
 
 function ids(prefix, count) {
   return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + 1).padStart(2, "0")}`);
@@ -31,6 +39,7 @@ export function validateFixtures(
   sourceManifest = readJSON(join(fixtureRoot, "source-manifest.json")),
   fixtureManifest = readJSON(join(fixtureRoot, "fixture-manifest.json")),
   budget = readJSON(join(fixtureRoot, "performance-budget.json")),
+  focusMatrix = readJSON(join(fixtureRoot, "state-focus-matrix.json")),
 ) {
   assert.equal(sourceManifest.phase, "SM-08");
   assert.equal(sourceManifest.networkRequired, false);
@@ -39,11 +48,18 @@ export function validateFixtures(
   }
   assert.equal(fixtureManifest.applicationSupport, "explicit-temporary-root-only");
   assert.deepEqual(fixtureManifest.fixtures.map(value => value.count), [500, 1_000, 10_000]);
+  assert.equal(fixtureManifest.fixtures[2].generator, "deterministic-adverse-indexed-row-v2");
   assert.ok(fixtureManifest.edgeCases.includes("IME"));
   assert.equal(budget.samples, 5);
   assert.equal(budget.warmups, 1);
   assert.equal(budget.csv10000.visibleViewsMax, 300);
   assert.equal(budget.release.timerCountAfterClose, 0);
+  assert.deepEqual(Object.keys(focusMatrix.csvKeyboard).sort(), [
+    "arrows", "boundary", "copyPaste", "enter", "escape", "homeEnd",
+    "markedText", "shiftTab", "tab",
+  ]);
+  assert.match(focusMatrix.csvKeyboard.markedText, /without-commit-revert-or-focus-change/);
+  assert.match(focusMatrix.csvKeyboard.copyPaste, /native-NSTextView/);
 }
 
 export function validateCoverage(coverage = readJSON(join(fixtureRoot, "sm08-coverage.json"))) {
@@ -53,6 +69,9 @@ export function validateCoverage(coverage = readJSON(join(fixtureRoot, "sm08-cov
   assert.equal(manual.size, coverage.manualOrGate.length, "duplicate manual/Gate acceptance ID");
   for (const id of automated) assert.ok(!manual.has(id), `${id} has two evidence lanes`);
   assert.deepEqual([...automated, ...manual].sort(), [...expectedIDs].sort());
+  for (const id of interactionEvidenceIDs) {
+    assert.ok(manual.has(id), `${id} requires native/Gate evidence, not a narrow unit-test alias`);
+  }
   assert.deepEqual(Object.keys(coverage.automatedEvidence).sort(), [...automated].sort());
   for (const [id, tests] of Object.entries(coverage.automatedEvidence)) {
     assert.ok(tests.length, id);
@@ -109,13 +128,33 @@ export function validateNativeEvidence(report, coverage, fingerprint = sourceFin
   assert.ok(Number.isFinite(Date.parse(report.generatedAt)), "native evidence timestamp is required");
   const required = coverage.manualOrGate.filter(id => id !== "GOV-01");
   assert.deepEqual(Object.keys(report.acceptance).sort(), [...required].sort());
+  const artifactDigests = new Map();
   for (const id of required) {
     const entry = report.acceptance[id];
     assert.equal(entry.result, "PASS", `${id}: acceptance did not pass`);
-    assert.ok(entry.assertions?.length > 0 && entry.command?.length > 0, `${id}: no executed assertions/command`);
+    assert.equal(typeof entry.command, "object", `${id}: structured command evidence is required`);
+    assert.ok(typeof entry.command.executable === "string" && entry.command.executable.length > 0, `${id}: executable missing`);
+    assert.ok(Array.isArray(entry.command.arguments) && entry.command.arguments.every(value => typeof value === "string"), `${id}: command arguments invalid`);
+    assert.equal(entry.command.exitCode, 0, `${id}: command did not exit successfully`);
+    assert.ok(Number.isFinite(entry.command.durationMs) && entry.command.durationMs >= 0, `${id}: command duration missing`);
+    assert.ok(Array.isArray(entry.assertions) && entry.assertions.length > 0, `${id}: executed assertions missing`);
+    for (const assertion of entry.assertions) {
+      assert.ok(typeof assertion.id === "string" && assertion.id.startsWith(`${id}:`), `${id}: assertion identity is not acceptance-scoped`);
+      assert.equal(assertion.result, "PASS", `${id}: assertion did not pass`);
+      assert.ok(typeof assertion.expected === "string" && assertion.expected.length > 0, `${id}: assertion expected value missing`);
+      assert.ok(typeof assertion.observed === "string" && assertion.observed.length > 0, `${id}: assertion observation missing`);
+    }
     assert.ok(entry.artifacts?.length > 0, `${id}: no retained raw evidence`);
     for (const artifact of entry.artifacts) {
-      assert.equal(digest(readFileSync(resolve(repository, artifact.path))), artifact.sha256, `${id}: artifact drift`);
+      assert.equal(artifact.acceptanceID, id, `${id}: artifact is not acceptance-scoped`);
+      assert.ok(["xcresult", "json", "log", "image", "video", "text"].includes(artifact.kind), `${id}: unsupported artifact kind`);
+      assert.ok(typeof artifact.path === "string" && artifact.path.startsWith(".codex/gate-results/SM-08/"), `${id}: artifact must be retained in the SM-08 Gate evidence root`);
+      assert.doesNotMatch(artifact.path, /(^|\/)\.\.($|\/)/, `${id}: artifact path escapes evidence root`);
+      assert.match(artifact.sha256, /^[a-f0-9]{64}$/, `${id}: artifact digest invalid`);
+      const actualDigest = digest(readFileSync(resolve(repository, artifact.path)));
+      assert.equal(actualDigest, artifact.sha256, `${id}: artifact drift`);
+      assert.ok(!artifactDigests.has(actualDigest), `${id}: raw artifact is reused by ${artifactDigests.get(actualDigest)}`);
+      artifactDigests.set(actualDigest, id);
     }
   }
 }
@@ -134,6 +173,21 @@ function sourceAudit() {
   assert.equal((app.match(/NSApplicationDelegate/g) ?? []).length, 2);
   assert.doesNotMatch(app, /NSHostingView|NSWindow\s*\(/);
   assert.match(app, /guard let termination else \{ return \.terminateCancel \}/);
+
+  const appRoot = read("Sources/SlateSyncUI/Views/AppRootView.swift");
+  assert.match(appRoot, /FocusedActionAvailability\.permitsNewTask/);
+  const workspaceView = read("Sources/SlateSyncUI/Views/WorkspaceView.swift");
+  const projectSettingsView = read("Sources/SlateSyncUI/Views/ProjectSettingsView.swift");
+  const recognitionModel = read("Sources/SlateSyncUI/Recognition/RecognitionModel.swift");
+  const globalSettingsModel = read("Sources/SlateSyncUI/Settings/GlobalSettingsModel.swift");
+  assert.match(workspaceView, /已保存的识别选项不可用/);
+  assert.match(projectSettingsView, /已保存的识别选项不可用/);
+  assert.match(workspaceView, /\.onChange\(of: settingsRevision\)/);
+  assert.match(projectSettingsView, /\.onChange\(of: settingsRevision\)/);
+  assert.match(recognitionModel, /optionsGeneration == request/);
+  assert.match(globalSettingsModel, /public private\(set\) var revision = 0/);
+  assert.doesNotMatch(workspaceView, /available\.first\?\.id|recognition\.providers\.first\?\.id/);
+  assert.doesNotMatch(projectSettingsView, /available\.first\?\.id|recognition\.providers\.first\?\.id/);
 
   const uiFiles = readdirSync(join(repository, "Sources/SlateSyncUI"), { recursive: true })
     .filter(path => String(path).endsWith(".swift"))
@@ -157,7 +211,9 @@ function sourceAudit() {
   for (const token of ["3.3.1", "3.7.0", "30 * 60", ".detectPython, 5", ".createEnvironment, 20", ".installDependencies, 35", ".verify, 90", ".completed, 100", "SIGTERM", "SIGKILL", "lstat(requirementsURL.path"]) {
     assert.ok(installer.includes(token), token);
   }
-  assert.equal((read("Sources/SlateSyncUI/Help/HelpModel.swift").match(/\.init\(id:/g) ?? []).length, 6);
+  const helpSections = readJSON(join(repository, "Sources/SlateSyncUI/Resources/help-sections.json"));
+  assert.equal(helpSections.length, 6);
+  assert.deepEqual(new Set(helpSections.map(section => section.id)).size, 6);
   assert.match(read("SlateSync.xcodeproj/project.pbxproj"), /pinned OCR requirements in Resources/);
   assert.match(read("AGENT.md"), /SM-08/);
   commandsAudit();
@@ -183,15 +239,39 @@ export function runSelfTests() {
   const fixtureManifest = structuredClone(readJSON(join(fixtureRoot, "fixture-manifest.json")));
   fixtureManifest.fixtures[2].count = 9_999;
   assert.throws(() => validateFixtures(undefined, fixtureManifest));
+  const homogeneousFixture = structuredClone(readJSON(join(fixtureRoot, "fixture-manifest.json")));
+  homogeneousFixture.fixtures[2].generator = "deterministic-indexed-row";
+  assert.throws(() => validateFixtures(undefined, homogeneousFixture));
+  const incompleteKeyboard = structuredClone(readJSON(join(fixtureRoot, "state-focus-matrix.json")));
+  delete incompleteKeyboard.csvKeyboard.shiftTab;
+  assert.throws(() => validateFixtures(undefined, undefined, undefined, incompleteKeyboard));
   const coverage = structuredClone(readJSON(join(fixtureRoot, "sm08-coverage.json")));
   coverage.manualOrGate = coverage.manualOrGate.filter(id => id !== "GOV-01");
   assert.throws(() => validateCoverage(coverage));
+  const mislabeled = structuredClone(readJSON(join(fixtureRoot, "sm08-coverage.json")));
+  mislabeled.manualOrGate = mislabeled.manualOrGate.filter(id => id !== "APP-06");
+  mislabeled.automated.push("APP-06");
+  mislabeled.automatedEvidence["APP-06"] = ["testConcurrentTerminationRequestsJoinOneLifecycleDrain"];
+  assert.throws(() => validateCoverage(mislabeled));
   validateState({ phase: "SM-07", lifecycleState: "COMPLETE", activePackage: ".codex/swift-migration/packages/SM-07.md", nextPackage: ".codex/swift-migration/packages/SM-08.md" });
   assert.throws(() => validateState({ phase: "SM-08", lifecycleState: "IN_PROGRESS" }));
   assert.throws(() => assertExecuted({ automatedEvidence: { "APP-05": ["testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"] } }, ""));
   assert.throws(() => validateNativeEvidence(undefined, coverage, "test-fingerprint"));
   assert.throws(() => validateNativeEvidence({ schemaVersion: 1, phase: "SM-08", sourceFingerprint: "stale" }, coverage, "test-fingerprint"));
   assert.throws(() => validateNativeEvidence({ schemaVersion: 1, phase: "SM-08", sourceFingerprint: "test-fingerprint", generatedAt: "2026-09-06T00:00:00Z", acceptance: {} }, coverage, "test-fingerprint"));
+  const legacySelfReport = {
+    schemaVersion: 1,
+    phase: "SM-08",
+    sourceFingerprint: "test-fingerprint",
+    generatedAt: "2026-09-06T00:00:00Z",
+    acceptance: Object.fromEntries(coverage.manualOrGate.filter(id => id !== "GOV-01").map(id => [id, {
+      result: "PASS",
+      command: "echo pass",
+      assertions: ["pass"],
+      artifacts: [{ path: "Package.swift", sha256: digest(read("Package.swift")) }],
+    }])),
+  };
+  assert.throws(() => validateNativeEvidence(legacySelfReport, coverage, "test-fingerprint"));
   console.log("SM-08 governance negative tests: source drift, fixture shrink, coverage gap, invalid state and absent execution rejected");
 }
 

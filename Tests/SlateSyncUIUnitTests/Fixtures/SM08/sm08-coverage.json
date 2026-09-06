@@ -37,16 +37,9 @@
   },
   "automated": [
     "APP-05",
-    "APP-06",
-    "PRJ-03",
-    "PRJ-04",
-    "PRJ-05",
-    "PRJ-07",
     "TSK-05",
     "TSK-06",
     "TSK-07",
-    "REC-06",
-    "CSV-02",
     "CSV-04",
     "SET-03",
     "SET-04",
@@ -55,29 +48,11 @@
     "SET-08",
     "LOG-01",
     "LOG-02",
-    "REC-01",
-    "A11Y-05"
+    "REC-01"
   ],
   "automatedEvidence": {
     "APP-05": [
       "testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"
-    ],
-    "APP-06": [
-      "testConcurrentTerminationRequestsJoinOneLifecycleDrain",
-      "testTerminationFailureDismissalClearsItsOwnErrorOwner",
-      "testSettingsCancellationTasksJoinApplicationDrain"
-    ],
-    "PRJ-03": [
-      "testProjectMutationsStopAtFailedWorkspaceBarrier"
-    ],
-    "PRJ-04": [
-      "testProjectMutationsStopAtFailedWorkspaceBarrier"
-    ],
-    "PRJ-05": [
-      "testProjectMutationsStopAtFailedWorkspaceBarrier"
-    ],
-    "PRJ-07": [
-      "testProjectMutationsStopAtFailedWorkspaceBarrier"
     ],
     "TSK-05": [
       "testAutosaveFlushWritesOnlyLatestImmutableSnapshot"
@@ -88,12 +63,6 @@
     ],
     "TSK-07": [
       "testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"
-    ],
-    "REC-06": [
-      "testResultEditIsCanonicalAndFlushJoinsPendingCommit"
-    ],
-    "CSV-02": [
-      "testCSVModelAcceptsFarRowEditWithoutEagerViewState"
     ],
     "CSV-04": [
       "testCSVModelAcceptsFarRowEditWithoutEagerViewState"
@@ -125,9 +94,6 @@
     "LOG-02": [
       "testLocalLogStoreUsesPermissionsFiltersAndReadClamp"
     ],
-    "A11Y-05": [
-      "testHelpIsFrozenToSixOfflineSearchableSections"
-    ],
     "REC-01": [
       "testRecognitionOptionsPersistAndRestoreThroughTaskSnapshot"
     ]
@@ -137,9 +103,14 @@
     "APP-02",
     "APP-03",
     "APP-04",
+    "APP-06",
     "PRJ-01",
     "PRJ-02",
+    "PRJ-03",
+    "PRJ-04",
+    "PRJ-05",
     "PRJ-06",
+    "PRJ-07",
     "PRJ-08",
     "TSK-01",
     "TSK-02",
@@ -150,9 +121,11 @@
     "REC-03",
     "REC-04",
     "REC-05",
+    "REC-06",
     "REC-07",
     "REC-08",
     "CSV-01",
+    "CSV-02",
     "CSV-03",
     "CSV-05",
     "CSV-06",
@@ -167,6 +140,7 @@
     "A11Y-02",
     "A11Y-03",
     "A11Y-04",
+    "A11Y-05",
     "PERF-01",
     "PERF-02",
     "PERF-03",
@@ -180,6 +154,11 @@
     "SM08OwnershipTests/testHelpIsFrozenToSixOfflineSearchableSections",
     "SM08OwnershipTests/testCSVModelAcceptsFarRowEditWithoutEagerViewState",
     "SM08OwnershipTests/testCSVKeyboardNavigationUsesGridOrderAndBounds",
+    "SM08OwnershipTests/testCSVKeyboardSelectorsPreserveIMEAndNativeClipboardRouting",
+    "SM08OwnershipTests/testFocusedNewTaskRequiresVisibleWorkspaceRoute",
+    "SM08OwnershipTests/testRecognitionOptionRestorationNeverSubstitutesUnavailableValues",
+    "SM08OwnershipTests/testSettingsRevisionAndRecognitionReloadRejectLateOptionProjection",
+    "SM08OwnershipTests/testRecognitionCancellationBlocksNewLocalOperationUntilServiceDrain",
     "SM08OwnershipTests/testLocalLogStoreUsesPermissionsFiltersAndReadClamp",
     "SM08OwnershipTests/testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment",
     "SM08OwnershipTests/testPaddleInstallerRejectsManagedDirectorySymlinkWithoutInstalling",

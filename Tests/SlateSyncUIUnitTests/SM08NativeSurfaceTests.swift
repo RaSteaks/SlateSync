@@ -165,8 +165,7 @@ final class SM08NativeSurfaceTests: XCTestCase {
     }
 
     private func fixtureTable() -> ResolveCSVTable {
-        ResolveCSVTable(headers: ["文件名", "注释", "场", "镜", "次", "帧率"],
-            rows: (0..<10_000).map { [String(format: "A%05d.mov", $0), "", "1", "2", "3", "24"] }, format: .init())
+        SM08FixtureFactory.resolveCSV()
     }
 
     private func saveMetrics(_ value: [String: Any], named name: String) throws {

@@ -6,5 +6,16 @@
   "validation": {"primaryAction": "correct-input", "focus": "first-invalid-field"},
   "unsaved-flush-failed": {"primaryAction": "retry-save", "focus": "original-editor"},
   "archived": {"primaryAction": "restore", "focus": "project-row"},
-  "completed": {"primaryAction": "review-result", "focus": "result-heading"}
+  "completed": {"primaryAction": "review-result", "focus": "result-heading"},
+  "csvKeyboard": {
+    "enter": "commit-current-cell-and-return-focus-to-table",
+    "escape": "revert-current-draft-without-commit",
+    "tab": "commit-and-move-next-in-row-major-order",
+    "shiftTab": "commit-and-move-previous-in-row-major-order",
+    "arrows": "commit-and-move-one-cell-without-wrapping",
+    "homeEnd": "commit-and-move-to-first-or-last-column",
+    "copyPaste": "remain-native-NSTextView-responder-actions",
+    "markedText": "consume-cell-navigation-without-commit-revert-or-focus-change",
+    "boundary": "commit-current-cell-and-stop-at-grid-edge"
+  }
 }
