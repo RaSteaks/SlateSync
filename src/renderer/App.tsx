@@ -384,13 +384,18 @@ export function App() {
     useProjectStore.getState().setError(null);
     try {
       const api = getSlateSync();
-      // Match the compatibility composition root: one parallel authority read
-      // supplies the complete first-usable project projection before routing.
-      const [loaded, scenarios, tasks] = await Promise.all([
-        unwrap(await api.projects.load({ id })),
-        unwrap(await api.projects.listScenarios({ projectId: id })),
-        unwrap(await api.tasks.list({ projectId: id })),
-      ]);
+      // 单次快照 IPC 供给完整首屏投影；旧版 preload 缺少该方法时回退到
+      // 一次并行三读（守卫与提交语义两条路径完全一致）。
+      const snapshot = typeof api.projects.loadSnapshot === "function"
+        ? await unwrap(await api.projects.loadSnapshot({ id }))
+        : null;
+      const [loaded, scenarios, tasks] = snapshot
+        ? [snapshot.project, snapshot.scenarios, snapshot.tasks]
+        : await Promise.all([
+            unwrap(await api.projects.load({ id })),
+            unwrap(await api.projects.listScenarios({ projectId: id })),
+            unwrap(await api.tasks.list({ projectId: id })),
+          ]);
       if (!projectLoadGuard.isCurrent(operationId) || navigationIntentRef.current !== navigationIntent) return;
       // Project identity and its route are one visible projection boundary;
       // publish both subscriptions in one commit so no intermediate frame can

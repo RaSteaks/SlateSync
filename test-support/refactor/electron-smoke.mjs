@@ -268,7 +268,9 @@ async function runProduction({ label, expectedMode, legacyRequested = false, pac
       const selectedRelative = relative(expectedRoot, selectedPath);
       assert(!selectedRelative.startsWith("..") && selectedRelative !== "", `${label} must load inside ${expectedRoot}`);
     }
-    assert.deepEqual(state.namespaceKeys, ["app", "files", "projects", "recognition", "settings", "tasks"]);
+    // 2026-08-26 日志查看器功能包在 typed API 上新增 logs 命名空间；
+    // 命名空间集合与 ip-02 契约测试（七个）保持一致。
+    assert.deepEqual(state.namespaceKeys, ["app", "files", "logs", "projects", "recognition", "settings", "tasks"]);
     assert.equal(state.hasGenericInvoke, false);
     assert.deepEqual(state.forbiddenGlobals, { electronAPI: "undefined", require: "undefined", process: "undefined" });
     assert.equal(state.library.ok, true, `${label} Project Library IPC must succeed`);

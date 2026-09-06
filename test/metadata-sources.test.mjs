@@ -16,11 +16,15 @@ const SAMPLE = [
 ].join("\r\n");
 
 test("registry exposes the Kinefinity source and a case-insensitive union pattern", () => {
-  assert.equal(METADATA_SOURCES.length, 1);
-  assert.equal(METADATA_SOURCES[0].id, "kinefinity");
+  // QuickTime 内嵌元数据（DJI 等）注册后共两类来源
+  assert.deepEqual(METADATA_SOURCES.map((source) => source.id).sort(), [
+    "kinefinity",
+    "quicktime",
+  ]);
   assert.equal(METADATA_FILE_PATTERN.test("A004C004-slate.txt"), true);
   assert.equal(METADATA_FILE_PATTERN.test("A004C004-SLATE.TXT"), true);
-  assert.equal(METADATA_FILE_PATTERN.test("A004C004.mov"), false);
+  // 并集 pattern 现在也覆盖内嵌元数据的视频扩展名
+  assert.equal(METADATA_FILE_PATTERN.test("A004C004.mov"), true);
 });
 
 test("parseMetadataFile dispatches a Kinefinity slate.txt to the canonical shape", () => {

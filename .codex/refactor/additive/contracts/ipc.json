@@ -6,6 +6,7 @@
     "deleteProject": { "channel": "delete-project", "args": ["id"] },
     "importProject": { "channel": "import-project", "args": [] },
     "exportProject": { "channel": "export-project", "args": ["id"] },
+    "loadProjectSnapshot": { "channel": "load-project-snapshot", "args": ["id"] },
     "renameLibrary": { "channel": "rename-library", "args": ["name"] },
     "checkCompatibleJsonSchema": { "channel": "check-compatible-json-schema", "args": [] },
     "checkVisionOcr": { "channel": "check-vision-ocr", "args": [] },

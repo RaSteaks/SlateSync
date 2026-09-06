@@ -65,7 +65,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
     kicker: "02 / 术语对照",
     title: "场记术语对照表",
     summary: "场记单上的术语如何对应应用字段与 Resolve 列，以及识别流程中的常用词。",
-    keywords: "术语 对照 场次 镜 次 场镜次 条次 状态 过 保 废条 卷号 视频码 C0 素材键 景别 机位 拍摄内容 备注 A机 B机 C机 D机 换号 合并单元格 Scene Shot Take Comments Camera FPS Shoot Day Camera # slate.txt Profile 场记结构 OCR evidence 置信度 主识别 查漏 复核 冲突 精确",
+    keywords: "术语 对照 场次 镜 次 场镜次 条次 状态 过 保 废条 卷号 视频码 C0 素材键 景别 机位 拍摄内容 备注 A机 B机 C机 D机 换号 合并单元格 Scene Shot Take Comments Camera FPS Shoot Day Camera # slate.txt 内嵌 元数据 DJI 如影 QuickTime Profile 场记结构 OCR evidence 置信度 主识别 查漏 复核 冲突 精确",
     icon: BookOpen,
     content: <>
       <div className={styles.helpTableFrame}>
@@ -93,7 +93,7 @@ const HELP_SECTIONS: readonly HelpSection[] = [
         <div><dt>摄影机子行</dt><dd>同一横行按 A机/B机/C机/D机分成子区块，各自读取视频码和状态，但共用左侧的场次、镜、次。</dd></div>
         <div><dt>换号</dt><dd>摄影机中途更换卷号的标记（如 B015.B016）；标记前后的记录分属前后两个卷号。</dd></div>
         <div><dt>合并单元格继承</dt><dd>场次和镜常只写一次，下方留空的行沿用所属区块上方最近的值；跨页看不清时返回 null，由程序继承。</dd></div>
-        <div><dt>Shoot Day / Camera FPS</dt><dd>从素材目录 slate.txt 读取的拍摄日期与帧率，独立回填到 Resolve CSV，不依赖场记识别结果。</dd></div>
+        <div><dt>Shoot Day / Camera FPS</dt><dd>拍摄日期与帧率独立回填到 Resolve CSV，不依赖场记识别结果。来源分两类且互斥：Kinefinity 等的 slate.txt 侧车，或 DJI 如影 4D 等直接读取 MOV 内嵌元数据（帧率取自视频轨时基，变帧率素材按平均帧率取值；日期按素材创建时间取本地日期）。</dd></div>
         <div><dt>场记结构 Profile</dt><dd>应用从 OCR 表头和页面版式学习的表格结构档案，可在“识别设置”中自动学习或复用。</dd></div>
         <div><dt>OCR evidence</dt><dd>本地 OCR 预先提取的文字、置信度和坐标证据，供视觉模型交叉核对；它不是最终答案，以图像为准。</dd></div>
         <div><dt>置信度</dt><dd>每条记录的整体识别可信度（high/medium/low）；低置信度行和警告建议在导出前人工复核。</dd></div>

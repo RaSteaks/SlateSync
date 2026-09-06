@@ -432,6 +432,7 @@ const responses: Readonly<Record<string, unknown>> = {
   "rename-library": renamedLibrary,
   "create-project": project,
   "load-project": project,
+  "load-project-snapshot": { project, scenarios: [scenarioSummary], tasks: taskList },
   "update-project": project,
   "archive-project": project,
   "restore-project": project,
@@ -468,7 +469,7 @@ function expectSuccess<T>(result: Result<T>, expected: T): void {
 }
 
 describe("IP-02 Shared Contract and typed Preload", () => {
-  it("exposes exactly seven namespaces and exact success DTOs for all 40 operations", async () => {
+  it("exposes exactly seven namespaces and exact success DTOs for all 41 operations", async () => {
     const transport = makeTransport(responses);
     const api = createSlateSyncApi(transport);
     expect(Object.keys(api)).toEqual(["app", "projects", "tasks", "recognition", "files", "settings", "logs"]);
@@ -486,6 +487,7 @@ describe("IP-02 Shared Contract and typed Preload", () => {
     expectSuccess(await api.projects.renameLibrary({ name: "Renamed" }), renamedLibrary);
     expectSuccess(await api.projects.create({ name: "Demo" }), project);
     expectSuccess(await api.projects.load({ id: project.id }), project);
+    expectSuccess(await api.projects.loadSnapshot({ id: project.id }), { project, scenarios: [scenarioSummary], tasks: taskList });
     expectSuccess(await api.projects.update({ id: project.id, name: "Demo" }), project);
     expectSuccess(await api.projects.archive({ id: project.id }), project);
     expectSuccess(await api.projects.restore({ id: project.id }), project);
@@ -518,9 +520,11 @@ describe("IP-02 Shared Contract and typed Preload", () => {
 
     expect(transport.calls.map(({ channel }) => channel)).toEqual(Object.keys(responses));
     expect(transport.calls[9]?.payload).toEqual({ name: "Demo" });
-    expect(transport.calls[15]?.payload).toEqual({ projectId: project.id });
-    expect(transport.calls[23]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
-    expect(transport.calls[24]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[10]?.payload).toEqual({ id: project.id });
+    expect(transport.calls[11]?.payload).toEqual({ id: project.id });
+    expect(transport.calls[16]?.payload).toEqual({ projectId: project.id });
+    expect(transport.calls[24]?.payload).toEqual({ taskId: "task-1", provider: "openai", imageDataUrl: "data:image/png;base64,AAAA" });
+    expect(transport.calls[25]?.payload).toEqual({ projectId: project.id });
   });
 
   it("maps the complete failure matrix without transport boilerplate, paths, or retry changes", async () => {

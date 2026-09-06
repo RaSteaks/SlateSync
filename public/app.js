@@ -1594,7 +1594,9 @@ function applySlateDirectoryResult({
   if (!metadata.length) {
     state.slateMetadata = [];
     state.slateWarnings = compactSlateWarnings(warnings);
-    const discovered = stats.discoveredSlateFiles || 0;
+    // 元数据文件含外置侧车（slate.txt）与内嵌元数据视频（MOV/MP4）两类
+    const discovered =
+      (stats.discoveredSlateFiles || 0) + (stats.discoveredVideoFiles || 0);
     const reason = discovered
       ? `找到 ${discovered} 个元数据文件，但均未解析出有效的 Clip Name、Sensor FPS 或 Shot Date。`
       : `未找到与 CSV 素材匹配的元数据文件（已搜索前 ${slateMaxDirectoryDepth()} 层），请检查目录结构。`;
@@ -1619,7 +1621,10 @@ function applySlateDirectoryResult({
   const scanLabel = `访问 ${stats.visitedDirectories} 个目录 · 剪枝 ${stats.prunedDirectories} 个`;
   const cacheLabel = stats.cacheHits ? ` · 缓存 ${stats.cacheHits}` : "";
   const missingLabel = missingCount ? ` · 无元数据 ${missingCount} 个素材` : "";
-  elements.slateFileMeta.textContent = `${stats.discoveredSlateFiles} 个元数据文件 · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材${missingLabel} · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
+  // 元数据文件总数 = 外置侧车 + 内嵌元数据视频
+  const discoveredFileCount =
+    (stats.discoveredSlateFiles || 0) + (stats.discoveredVideoFiles || 0);
+  elements.slateFileMeta.textContent = `${discoveredFileCount} 个元数据文件 · Camera FPS ${cameraFpsCount} 个素材 · Shoot Day ${shootDayCount} 个素材${missingLabel} · ${scanLabel}${cacheLabel}${warningCount ? ` · ${warningCount} 个警告` : ""}`;
   elements.slateCard.hidden = false;
   elements.slateDropzone.hidden = true;
   clearSlateStatus();

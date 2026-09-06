@@ -235,6 +235,16 @@ export interface ProjectData extends ProjectSummary {
   readonly lastRecognitionDefaults: RecognitionDefaults | null;
 }
 
+/**
+ * 打开项目的一次性快照：单个 IPC 同时供给工作台首屏可用的完整投影，
+ * 替代 load-project / list-scenarios / list-tasks 三次并行往返。
+ */
+export interface ProjectLoadSnapshot {
+  readonly project: ProjectData;
+  readonly scenarios: readonly ScenarioSummary[];
+  readonly tasks: readonly TaskListItem[];
+}
+
 export interface LibraryInfo {
   readonly id: string;
   readonly name: string;
@@ -976,6 +986,7 @@ export interface SlateSyncApi {
     renameLibrary(request: LibraryRenameRequest): Promise<Result<LibraryRenameResult>>;
     create(request: ProjectRequest): Promise<Result<ProjectData>>;
     load(request: ProjectIdRequest): Promise<Result<ProjectData>>;
+    loadSnapshot(request: ProjectIdRequest): Promise<Result<ProjectLoadSnapshot>>;
     update(request: ProjectRequest): Promise<Result<ProjectData>>;
     archive(request: ProjectIdRequest): Promise<Result<ProjectData>>;
     restore(request: ProjectIdRequest): Promise<Result<ProjectData>>;

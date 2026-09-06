@@ -4,8 +4,9 @@
 // below stay unchanged.
 
 import { kinefinityMetadataSource } from "./kinefinity.js";
+import { quicktimeMetadataSource } from "./quicktime.js";
 
-export const METADATA_SOURCES = [kinefinityMetadataSource];
+export const METADATA_SOURCES = [kinefinityMetadataSource, quicktimeMetadataSource];
 
 // Union of every source's file patterns, used by the directory walkers to
 // decide which files are metadata sidecars at all (instead of a hardcoded

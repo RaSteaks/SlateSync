@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerIpcHandlers } from "../electron/ipc-handlers.mjs";
+import { createProjectLibrary } from "../lib/project-library.mjs";
+import { createProjectRuntime } from "../lib/project-runtime.mjs";
 
 function createMockIpcMain() {
   const handlers = new Map();
@@ -68,6 +73,7 @@ describe("electron IPC handlers", () => {
       "rename-library",
       "create-project",
       "load-project",
+      "load-project-snapshot",
       "update-project",
       "archive-project",
       "restore-project",
@@ -102,6 +108,51 @@ describe("electron IPC handlers", () => {
         ipcMain.handlers.has(channel),
         `Missing handler for ${channel}`,
       );
+    }
+  });
+
+  it("loads a project through the runtime and returns a sanitized one-call snapshot", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-ipc-snapshot-"));
+    const library = createProjectLibrary(join(tempRoot, "library"));
+    const runtime = createProjectRuntime(library);
+    try {
+      const project = await library.createProject({ name: "快照项目" });
+      const context = await runtime.get(project.id);
+      await context.taskStore.saveTask({
+        id: "snapshot-task",
+        filename: "slate.png",
+        status: "completed",
+        result: { records: [{ scene: "001" }] },
+      });
+      const ipcMain = createMockIpcMain();
+      registerIpcHandlers(ipcMain, createMockContext({
+        projectLibrary: library,
+        projectRuntime: runtime,
+      }));
+
+      // load-project 改走运行时共享句柄：payload 与旧实现字段一致，
+      // 且仍由 sanitizeProject 剥离 directoryPath。
+      const loaded = await ipcMain.invoke("load-project", { id: project.id });
+      assert.equal(loaded.name, "快照项目");
+      assert.equal(loaded.taskCount, 1);
+      assert.equal(loaded.directoryPath, undefined);
+      assert.ok(loaded.settings);
+
+      // 单次往返返回完整首屏投影：项目 + 场记 + 任务摘要。
+      const snapshot = await ipcMain.invoke("load-project-snapshot", {
+        id: project.id,
+      });
+      assert.equal(snapshot.project.id, project.id);
+      assert.equal(snapshot.project.directoryPath, undefined);
+      assert.deepEqual(
+        snapshot.tasks.map((task) => task.filename),
+        ["slate.png"],
+      );
+      assert.deepEqual(snapshot.scenarios, []);
+    } finally {
+      await runtime.close();
+      await library.close();
+      await rm(tempRoot, { recursive: true, force: true });
     }
   });
 

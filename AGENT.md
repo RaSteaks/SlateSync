@@ -2,10 +2,10 @@
 
 ## 当前任务
 
-2026-09-05：按已确认方案修复现代 Renderer 的三项延期布局问题：全局设置自适应
-单双栏、侧栏收起分区占位、浅色分段按钮对比度。三项代码与浏览器验收均已完成。
-已完成的 8 项交互修复继续保留，并随布局变更复跑；不修改 IPC、Shared Contract、
-数据库、算法或 Electron 最小窗口尺寸，不增加依赖。
+2026-09-06：实施「打开项目耗时 + 前端↔数据库连接」性能优化方案
+（`.claude/PROJECT-OPEN-PERF-PLAN.md`）：每项目单一共享 SQLite 连接、
+识别默认值 O(1) 读取、JSON 快照迁移完成标记、任务摘要列、
+合并打开项目 IPC 为单次快照读取。2026-09-05 的三项布局修复已完成并保留。
 
 ## 既有架构实施记录
 
@@ -1006,6 +1006,39 @@ Worker 边界、验收证据和最终治理交接。
   保留，作为后续专项遗留风险；本轮未执行 Windows 实机验证、Electron 前台 GUI
   或发布上传，也未提交、推送、重置、清理或切换分支。
 
+## 2026-09-06 QuickTime 内嵌元数据回填（DJI 如影 4D）
+
+- 新增第二类素材元数据来源：DJI 如影 4D 等摄影机把元数据直接内嵌进 MOV/MP4
+  容器而非生成 slate.txt 侧车。外置侧车与内嵌元数据**互斥出现**，同一目录下
+  侧车优先：素材目录先探测侧车，未命中才在同目录寻找带素材键的视频文件。
+- `public/metadata-sources/quicktime.js`：纯解析器（无 I/O，渲染端与 Worker 可
+  导入）。输入为完整 moov atom 字节：`moov/meta`（mdta 键值区，兼容直挂与
+  udta 嵌套、有无 version/flags 两种对齐）读 `com.apple.proapps.clipFileName`
+  等键；帧率不在键值区，由视频轨 `mdhd.timescale ÷ stts 加权采样增量` 推导
+  （24000/1000→24、30000/1001→29.97，3 位小数对齐）；拍摄日期由
+  `mvhd.creationTime`（Mac 纪元 1904 秒）按**本地时区**取日，与剧组按本地日期
+  命名素材的习惯一致（真实文件验证：UTC 09-05T22:54 → 本地 26-09-06，与文件名
+  260906 一致）。输出与 slate.txt 来源同形：`{sourceName, clipName,
+  materialKey, sensorFps, shootDay}`，materialKey 校验 clipFileName 与文件名一致。
+- `electron/quicktime-meta-reader.mjs`：moov 定位读取器。素材文件动辄数 GB，
+  只按 8 字节步长读顶级 atom 头、跳过 mdat，最后一次性读出 moov（真实 8K
+  素材实测 1.1MB）；支持 faststart 与尾部 moov、32/64 位 largesize，moov 上限
+  默认 64MB（可配 `maxMoovBytes`），非 QuickTime 文件返回 null 由扫描器告警。
+- 扫描器集成（`electron/slate-scanner.mjs`）：视频候选要求文件名携带素材键
+  （过滤手机花絮等无关视频、避免无意义 moov 读取）；带键但不在本 CSV 的视频
+  照常剪枝；片段目录内的视频还要求与所在目录指向同一素材，防止错位文件被
+  静默误归属。侧车与视频候选共用单次 readdir 枚举。`stats` 新增
+  `discoveredVideoFiles/readVideoFiles`；app.js 元数据计数改为侧车+视频之和。
+  注册表并集 pattern 现在覆盖 `.mov/.mp4/.m4v`。VFR 素材的帧率取 stts 加权
+  平均（与 CFR 摄影机文件行为一致）；`maxMoovBytes` 为预留参数（默认 64MB，
+  暂无调用方传入，待出现超大 moov 素材再接 `workflow.slate` 配置）。
+- 回填语义不变：内嵌元数据经同一 `buildSlateMetadataIndex →
+  mergeSlateIntoResolveTable` 通道独立回填 Camera FPS / Shoot Day，与场记解耦。
+- 覆盖：`test/quicktime-embedded.test.mjs` 13 项（合成 moov 单测：mdta 两种
+  对齐、CFR/NTSC 帧率、mvhd v0/v1、clipFileName 冲突拒绝、moov 定位/largesize/
+  上限、扫描器混合来源与坏文件告警）；真实 DJI 素材（3.4GB RONIN 4D 8K）端到
+  端扫描验证通过。
+
 ## 2026-09-04 CSV 回填（以 Resolve 规范列为准）
 
 - 管线：Resolve CSV 为主体；两条独立回填通道——场记单识别 `records` 回填素材行
@@ -1167,3 +1200,40 @@ Worker 边界、验收证据和最终治理交接。
 - DESIGN.md lint：0 error；26 条既有语义 token 命名/未在 frontmatter 组件中引用的提示
   保留，运行时 CSS 仍是 token 权威。构建保留大 chunk 提示；Storybook 用户级设置写入
   被沙盒阻止，但静态构建成功。这些提示不影响本轮三项布局验收。
+
+## 2026-09-06 打开项目性能优化
+
+- 打开项目主链路改为每项目单一共享 SQLite 句柄：task/scenario/diagnostics
+  三个 store 注入复用连接，`close()` 仅在自开句柄时关闭；项目运行时每次
+  请求仍从 library 索引行刷新归档/删除/改名并做廉价元数据刷新，保持
+  "每请求读最新"语义，无失效协议。
+- 识别默认值（上次成功识别的 provider/model/prompt）迁移到
+  `lib/recognition-defaults.mjs`：project_meta 键 O(1) 命中 + 回退扫描回写，
+  task-store 在写任务行同事务内增量维护（upsert/delete/编辑源任务失效）；
+  平局规则镜像原 `created_at DESC, rowid DESC` 扫描排序，源任务被编辑成
+  不合格时清键，legacy 迁移批量导入后无条件失效重扫。
+- JSON 快照迁移加 `app_meta` 完成标记（`json_migration_tasks_v1` /
+  `json_migration_diagnostics_v1`）：重复打开项目不再全量重读历史快照；
+  标记之后手动放入的快照不再自动导入，SQLite 是唯一权威存储。
+- `tasks` 表新增 nullable `summary_json` 摘要列（存量库幂等 ALTER 补列，
+  追加在末列使新库与迁移库 `table_info` 一致）：保存时预计算摘要，
+  `list-tasks` 优先读摘要、NULL 行解析后单事务回填，列表不再解析完整
+  任务 blob；投影字段与旧实现逐字段一致，不额外加版本字段。
+- 新增 `load-project-snapshot` 类型化通道：单次往返返回项目 + 场记 +
+  任务摘要，替代 renderer 打开项目的三次并行 IPC；旧三通道保留供
+  legacy renderer 与局部刷新使用；`load-project` 改走运行时共享句柄，
+  payload 与 sanitize 行为不变。
+- 打开项目库页仅在 store 缺少项目库信息时补取一次 `get-library-info`，
+  且已有项目列表时跳过 loading 置位（stale-while-revalidate）。
+- 契约登记：additive `ipc.json` 新增 `loadProjectSnapshot`，baseline
+  `persistence/schema.json` 登记 `tasks.summary_json`（reviewed drift），
+  `PROJECT_FORMAT_VERSION` 保持 1 不变。
+- 验证：`npx vitest run` 全量通过；新增 `test/project-runtime.test.mjs`、
+  `test/recognition-defaults.test.mjs`，扩展 `test/persistence.test.mjs`
+  （摘要回填、迁移标记）与 `test/electron-ipc.test.mjs`（快照 handler）；
+  `project-library.test.mjs` 的 defaults 继承固定测试原样通过。
+- Electron 冒烟（隔离 profile，Owner 授权后台运行）：首跑暴露
+  `electron-smoke.mjs` 的命名空间断言停留在 logs 功能包之前的 6 个，
+  已修正为与 ip-02 契约一致的 7 个；复跑
+  `IP0102_PRODUCTION_ELECTRON_SMOKE_OK development` 通过，脚本自动
+  恢复 Node ABI，Node 套件复验 4/4。

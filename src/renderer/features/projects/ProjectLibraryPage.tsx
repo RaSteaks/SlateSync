@@ -37,13 +37,20 @@ export function ProjectLibraryPage({ onOpenProject, onOpenLibrarySettings }: { o
 
   const refresh = async () => {
     const operationId = refreshGuard.start();
-    setLoading(true);
+    const snapshot = useProjectStore.getState();
+    // App 启动已 seed 项目库信息，仅缺失时补取一次；projects 已在 store 时
+    // 跳过 loading 置位（stale-while-revalidate），避免重进页面的闪烁。
+    const needsLibraryInfo = !snapshot.library;
+    if (snapshot.projects.length === 0) setLoading(true);
     setError(null);
     try {
       const api = getSlateSync();
-      const [libraryInfo, projectList] = await Promise.all([unwrap(await api.projects.getLibraryInfo()), unwrap(await api.projects.list())]);
+      const [libraryInfo, projectList] = await Promise.all([
+        needsLibraryInfo ? unwrap(await api.projects.getLibraryInfo()) : Promise.resolve(snapshot.library),
+        unwrap(await api.projects.list()),
+      ]);
       if (!refreshGuard.isCurrent(operationId)) return false;
-      setLibrary(libraryInfo);
+      if (needsLibraryInfo && libraryInfo) setLibrary(libraryInfo);
       setProjects(projectList);
       return true;
     } catch (nextError) {

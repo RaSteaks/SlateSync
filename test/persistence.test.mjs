@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createDiagnosticsStore } from "../lib/diagnostics.mjs";
+import {
+  closeSlateDatabase,
+  openSlateDatabase,
+  SQLITE_FILENAMES,
+} from "../lib/sqlite-store.mjs";
 import { createTaskStore } from "../lib/task-store.mjs";
 
 test("task updates preserve recognition data and use owner-only files", async () => {
@@ -55,6 +60,109 @@ test("diagnostic sessions use owner-only files and validated IDs", async () => {
       () => store.loadSession("../outside"),
       /无效诊断会话 ID/,
     );
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("listTasks rebuilds and backfills summary_json cleared by another connection", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-summary-backfill-"));
+  const store = createTaskStore(dataDir, { filename: SQLITE_FILENAMES.project });
+  let inspector;
+  try {
+    await store.saveTask({
+      id: "task-1",
+      filename: "day-01.png",
+      provider: "openai",
+      model: "gpt",
+      status: "completed",
+      pageCount: 2,
+      result: { records: [{ id: "one" }] },
+    });
+    await store.saveTask({
+      id: "task-2",
+      filename: "day-02.png",
+      status: "created",
+    });
+
+    // 模拟存量库/迁移行：第二条连接清空 summary_json。
+    inspector = openSlateDatabase(dataDir, {
+      kind: "project",
+      filename: SQLITE_FILENAMES.project,
+    });
+    inspector.db.prepare("UPDATE tasks SET summary_json = NULL").run();
+    closeSlateDatabase(inspector.db);
+    inspector = null;
+
+    // 读取端解析完整 blob 重建摘要，并在单事务内回填列。
+    // 两条任务在同一毫秒内保存时 updated_at 平序，排序比较不依赖行序。
+    const tasks = await store.listTasks();
+    assert.deepEqual(tasks.map((task) => task.id).sort(), ["task-1", "task-2"]);
+    assert.equal(tasks.find((task) => task.id === "task-1").recordCount, 1);
+    assert.equal(tasks.find((task) => task.id === "task-2").status, "created");
+    inspector = openSlateDatabase(dataDir, {
+      kind: "project",
+      filename: SQLITE_FILENAMES.project,
+    });
+    const backfilled = inspector.db.prepare(
+      "SELECT id, summary_json FROM tasks ORDER BY updated_at DESC",
+    ).all();
+    assert.equal(backfilled.every((row) => row.summary_json), true);
+    // 每行回填内容与重建出的摘要一致（JSON 序列化两侧丢弃 undefined 键后
+    // 按 id 对齐比较，不依赖行序）。
+    for (const row of backfilled) {
+      const expected = tasks.find((task) => task.id === row.id);
+      assert.deepEqual(
+        JSON.parse(row.summary_json),
+        JSON.parse(JSON.stringify(expected)),
+      );
+    }
+  } finally {
+    closeSlateDatabase(inspector?.db);
+    await store.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("completed JSON snapshot migration no longer re-imports later manual snapshots", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-migration-marker-"));
+  try {
+    // 首次打开前目录里已有历史快照：迁移导入并写完成标记。
+    await mkdir(join(dataDir, "tasks"), { recursive: true });
+    await writeFile(
+      join(dataDir, "tasks", "task-legacy.json"),
+      JSON.stringify({
+        id: "task-legacy",
+        filename: "legacy.png",
+        status: "completed",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    let store = createTaskStore(dataDir, { filename: SQLITE_FILENAMES.project });
+    assert.deepEqual(
+      (await store.listTasks()).map((task) => task.id),
+      ["task-legacy"],
+    );
+    await store.close();
+
+    // 标记写入后手动放入的新快照不再自动导入（SQLite 是唯一权威存储）。
+    await writeFile(
+      join(dataDir, "tasks", "task-manual.json"),
+      JSON.stringify({
+        id: "task-manual",
+        filename: "manual.png",
+        status: "completed",
+        createdAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    );
+    store = createTaskStore(dataDir, { filename: SQLITE_FILENAMES.project });
+    assert.deepEqual(
+      (await store.listTasks()).map((task) => task.id),
+      ["task-legacy"],
+    );
+    await assert.rejects(() => store.loadTask("task-manual"), /任务不存在/);
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

@@ -334,10 +334,32 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("load-project", async (_event, { id }) => {
-    if (!projectLibrary) throw new Error("项目库不可用");
-    return withProjectRead(id, async () =>
-      sanitizeProject(await projectLibrary.getProject(id)),
-    );
+    if (!projectRuntime) throw new Error("项目运行时不可用");
+    return withProjectRead(id, async () => {
+      // 走项目运行时而不是 projectLibrary.getProject：共享句柄免去每请求
+      // 临时开库，readOnly 语义（allowArchived: true）与旧实现等价。
+      const context = await resolveProjectContext(id, { readOnly: true });
+      return sanitizeProject(context.project);
+    });
+  });
+
+  // 一次往返返回打开工作台所需的完整投影（项目 + 场记 + 任务摘要），
+  // 替代 renderer 打开项目时的三次并行 IPC；旧通道保留供 legacy renderer
+  // 与局部刷新使用。
+  ipcMain.handle("load-project-snapshot", async (_event, { id } = {}) => {
+    if (!projectRuntime) throw new Error("项目运行时不可用");
+    return withProjectRead(id, async () => {
+      const context = await resolveProjectContext(id, { readOnly: true });
+      const [scenarios, tasks] = await Promise.all([
+        context.scenarioStore ? context.scenarioStore.listProfiles() : [],
+        context.taskStore ? context.taskStore.listTasks() : [],
+      ]);
+      return {
+        project: sanitizeProject(context.project),
+        scenarios,
+        tasks,
+      };
+    });
   });
 
   ipcMain.handle("update-project", async (_event, body) => {
