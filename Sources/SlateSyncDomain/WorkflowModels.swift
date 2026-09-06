@@ -96,6 +96,14 @@ public struct ResolveCSVTable: Codable, Hashable, Sendable {
     }
 }
 
+/// CSV 文本输入的统一大小预算。媒体侧已有 20 MiB 硬限；CSV 解码/解析会把
+/// 原始字节、字符串与二维行数组同时保留在内存中，此前没有上限，GB 级文件
+/// 会导致数倍内存峰值。64 MiB 远高于产品冻结的 10,000 行 CSV 预算，只用于
+/// fail-closed 地拦截病态输入，正常文件不会触及。
+public enum CSVInputBudget {
+    public static let maximumInputBytes = 64 * 1024 * 1024
+}
+
 public struct OCRBlock: Codable, Hashable, Sendable {
     public var text: String
     public var confidence: Double

@@ -8,6 +8,11 @@ public actor SlateCSVWorkflow {
     public init() {}
 
     public func decode(_ data: Data) throws -> [SlateCsvRecord] {
+        // 与 Resolve CSV 共用统一预算：先拒病态大文件，再进入逐行解析
+        // （行级取消检查见下方 compactMap）。
+        guard data.count <= CSVInputBudget.maximumInputBytes else {
+            throw SlateSyncError(code: "CSV_INPUT_SIZE", message: "场记 CSV 超过 \(CSVInputBudget.maximumInputBytes / 1024 / 1024) MB 上限")
+        }
         guard var text = String(data: data, encoding: .utf8), !data.isEmpty else {
             throw SlateSyncError(code: "SLATE_CSV_ENCODING", message: "场记 CSV 需要非空 UTF-8 文件")
         }

@@ -3,6 +3,12 @@ import SlateSyncDomain
 
 /// Registry-backed parser for v1 camera sidecars. Unsupported names fail
 /// closed so arbitrary files are never interpreted as camera metadata.
+///
+/// 文件名语义冻结自旧版 `kinefinity.js` 的 `/slate\.txt$/i`：对整个来源名做
+/// 忽略大小写的后缀匹配（如 `A001C001-SLATE.TXT` 必须接受，黄金测试锁定）。
+/// 因此 `fooslate.txt` 这类名字也会命中——真正的准入由两层兜底：扫描器只在
+/// 素材编号命中 expected 集合的目录内收集候选，解析器再校验 Clip Name 可
+/// 解析且与文件名指向一致，无法识别时以 METADATA_CLIP 拒绝。
 public enum SlateMetadataParser {
     public static func supports(sourceName: String) -> Bool {
         sourceName.lowercased().hasSuffix("slate.txt")

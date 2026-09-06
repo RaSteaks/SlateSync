@@ -8,6 +8,11 @@ public actor ResolveCSVEngine: CSVProcessing {
         guard !data.isEmpty else {
             throw SlateSyncError(code: "CSV_EMPTY", message: "CSV 文件为空")
         }
+        // 病态大文件在解码/解析路径会同时保留字节、字符串与行数组等多份
+        // 拷贝，先按统一预算 fail-closed 拒绝（媒体侧为 20 MiB，CSV 为 64 MiB）。
+        guard data.count <= CSVInputBudget.maximumInputBytes else {
+            throw SlateSyncError(code: "CSV_INPUT_SIZE", message: "CSV 文件超过 \(CSVInputBudget.maximumInputBytes / 1024 / 1024) MB 上限")
+        }
         let detected = try Self.detect(data)
         let content = data.dropFirst(detected.prefixCount)
         guard let text = String(data: content, encoding: detected.stringEncoding) else {
@@ -211,6 +216,9 @@ public actor ResolveCSVEngine: CSVProcessing {
                     let next = text.index(after: index)
                     if next < text.endIndex, text[next] == "\n" { index = next }
                 }
+                // 逐行检查取消：大文件解析期间用户取消操作必须能及时停止，
+                // 行粒度足以保证检查开销可忽略。
+                try Task.checkCancellation()
                 row.append(field)
                 records.append(row)
                 row = []

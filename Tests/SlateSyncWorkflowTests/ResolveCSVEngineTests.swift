@@ -41,6 +41,20 @@ final class ResolveCSVEngineTests: XCTestCase {
         await XCTAssertSlateErrorAsync("CSV_ENCODING", try await engine.decode(Data([0xFF, 0xFF, 0xFF])))
     }
 
+    func testRejectsInputAboveUnifiedBudget() async throws {
+        // 统一预算 64 MiB：超限输入必须在解码前 fail-closed（媒体侧为 20 MiB），
+        // 解析器不再无界保留字节/字符串/行数组多份拷贝。两个 CSV 入口——
+        // Resolve CSV 与场记 CSV——都必须拒绝并返回同一错误码。
+        let oversized = Data(count: CSVInputBudget.maximumInputBytes + 1)
+        let engine = ResolveCSVEngine()
+        await XCTAssertSlateErrorAsync("CSV_INPUT_SIZE", try await engine.decode(oversized))
+        let slate = SlateCSVWorkflow()
+        await XCTAssertSlateErrorAsync("CSV_INPUT_SIZE", try await slate.decode(oversized))
+        // 预算边界内的合法输入不受影响。
+        let table = try await engine.decode(Data("File Name,Scene\nA001C001.mov,1\n".utf8))
+        XCTAssertEqual(table.rows.count, 1)
+    }
+
     func testCROnlyNoFinalNewlineTrailingCellsAndMutationControl() async throws {
         let source = Data("File Name,Scene,Notes,\rA001C001.mov,,,".utf8)
         let engine = ResolveCSVEngine()
