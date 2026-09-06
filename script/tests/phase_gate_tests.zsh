@@ -464,5 +464,15 @@ assert_success "SM-05 retains negative admission assertions" node --input-type=m
   assert.throws(()=>assertAdmissionBoundary({phase:"SM-06",lifecycleState:"COMPLETE"}));
   assert.throws(()=>assertAdmissionBoundary({phase:"SM-05",lifecycleState:"IN_PROGRESS"}));
 '
+
+# 扫描工具退出码裁决：0/1 视为扫描完成，2+ 必须按检查失败处理（fail-closed）。
+assert_success "scan helper accepts clean no-match status" assert_scan_healthy "scan" 1
+assert_failure "scan helper fails closed on rg error" assert_scan_healthy "scan" 2
+# forbidden_items_check 在干净源码上必须通过。
+assert_success "forbidden items check passes on clean sources" forbidden_items_check
+# rg 自身故障（退出码 2）不能被误读成"无违规"：用同名函数遮蔽真实 rg 验证。
+rg() { return 2; }
+assert_failure "forbidden items check fails closed when rg errors" forbidden_items_check
+unfunction rg
 print -r -- "Gate helper tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

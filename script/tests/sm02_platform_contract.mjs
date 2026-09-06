@@ -95,7 +95,11 @@ function assertMacOSWorkflows() {
     const runners = [...source.matchAll(/^\s+runs-on:\s*([^\n]+)$/gm)].map(([, runner]) => runner.trim());
     requireCondition(runners.length > 0 && runners.every((runner) => runner === "macos-14"), `${name} 存在非 macOS runner`);
     requireCondition(!/(?:ubuntu|windows|linux|appimage|nsis)/i.test(source), `${name} 仍包含非 macOS 平台声明或产物目标`);
-    requireCondition(source.includes("./script/phase_gate.sh SM-02"), `${name} 未调用共享 SM-02 phase Gate`);
+    // Gate 阶段必须从 CURRENT_STATE.json 解析（与 gate_validate_phase_state 的
+    // {N-1, N} 合法状态对应）；硬编码 SM-XX 会在阶段推进后让 CI 必然失败。
+    requireCondition(source.includes("./script/phase_gate.sh"), `${name} 未调用共享 phase Gate`);
+    requireCondition(source.includes("CURRENT_STATE.json"), `${name} 未从治理状态解析当前 Gate 阶段`);
+    requireCondition(!/phase_gate\.sh\s+["']?SM-/.test(source), `${name} 硬编码了阶段 Gate 调用`);
     requireCondition(!source.includes("--allow-dirty"), `${name} 不得用 dirty diagnostic 替代正式 Gate`);
   }
   requireCondition(release.includes("dist/*.dmg") && release.includes("dist/*.zip"), "release 未验证 macOS DMG/ZIP 产物");

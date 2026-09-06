@@ -33,9 +33,19 @@ jobs:
       - name: Build local Vision OCR bridge
         run: node scripts/build-vision-ocr.mjs --arch ${{ matrix.arch }}
 
+      # 与 ci.yml 相同：Gate 阶段从治理状态解析，避免硬编码 SM-XX 随阶段推进失效。
+      - name: Resolve the active migration phase
+        id: phase
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          with open(".codex/swift-migration/CURRENT_STATE.json", encoding="utf-8") as handle:
+              print(f"phase={json.load(handle)['phase']}")
+          PY
+
       - name: Verify source and tests
         run: |
-          ./script/phase_gate.sh SM-02
+          ./script/phase_gate.sh "${{ steps.phase.outputs.phase }}"
           npm run check
           npm run typecheck
           npm test

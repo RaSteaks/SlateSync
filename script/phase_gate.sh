@@ -198,22 +198,31 @@ sm01_scope_contract_check() {
       return 1
     }
 
+  # 以下三处扫描全部 fail-closed：rg/git grep 退出码 0=命中违规、1=无违规、
+  # 2+=工具自身故障。故障必须显式失败，不能被 `|| true` 吞成"无违规"。
   forbidden_tracked="$(git ls-files | rg \
-    '(^|/)(\.build|DerivedData|\.swiftpm/xcode|\.codex/gate-results)(/|$)|premium-audit\.json$|\.xcarchive(/|$)|\.xcresult(/|$)|\.log$' || true)"
+    '(^|/)(\.build|DerivedData|\.swiftpm/xcode|\.codex/gate-results)(/|$)|premium-audit\.json$|\.xcarchive(/|$)|\.xcresult(/|$)|\.log$')"
+  local tracked_status=$?
+  assert_scan_healthy "generated artifact scan failed" "$tracked_status" || return 1
   if [[ -n "$forbidden_tracked" ]]; then
     print -u2 -r -- "$forbidden_tracked"
     print -u2 "generated artifacts are tracked"
     return 1
   fi
   changed_paths="$(git diff --name-only "${baseline_parent}..${review_commit}")"
-  if print -r -- "$changed_paths" | rg -q \
-    '(^|/)(\.env$|id_rsa|id_ed25519|.*\.(pem|p12|key|sqlite|sqlite-shm|sqlite-wal)$|Application Support)(/|$)'; then
+  print -r -- "$changed_paths" | rg -q \
+    '(^|/)(\.env$|id_rsa|id_ed25519|.*\.(pem|p12|key|sqlite|sqlite-shm|sqlite-wal)$|Application Support)(/|$)'
+  local changed_status=$?
+  if (( changed_status == 0 )); then
     print -u2 "SM-01 commit contains a credential or user-data path"
     return 1
   fi
+  assert_scan_healthy "credential path scan failed" "$changed_status" || return 1
   sensitive_content="$(git grep -n -I -E \
     'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9]{20,}' \
-    "$review_commit" -- . ':!.env.example' 2>/dev/null || true)"
+    "$review_commit" -- . ':!.env.example' 2>/dev/null)"
+  local content_status=$?
+  assert_scan_healthy "credential content scan failed" "$content_status" || return 1
   if [[ -n "$sensitive_content" ]]; then
     print -u2 -r -- "$sensitive_content"
     print -u2 "tracked source contains a credential-like value"
@@ -286,22 +295,8 @@ clean_workspace_check() {
   return 1
 }
 
-forbidden_items_check() {
-  local -a swift_roots=(Package.swift SlateSyncApp Sources SlateSyncTests SlateSyncUITests Tests)
-  if rg -n \
-    'fatalError\(|preconditionFailure\(|try!|as!|@unchecked[[:space:]]+Sendable' \
-    "${swift_roots[@]}"; then
-    print -u2 -r -- "forbidden unsafe Swift construct found"
-    return 1
-  fi
-  # Keep the marker expression different from the literal marker text so this
-  # Gate can safely audit its own shell sources.
-  if rg -n '^(<{7}|={7}|>{7})' "${swift_roots[@]}" script; then
-    print -u2 -r -- "unresolved merge marker found"
-    return 1
-  fi
-  return 0
-}
+# forbidden_items_check 已移入 lib/phase_gate_lib.sh：
+# 与其他 Gate 检查一样支持自测注入故障 rg，验证扫描工具自身故障时 fail-closed。
 
 sm01_debug_settings_check() {
   local settings

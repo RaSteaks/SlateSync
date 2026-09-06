@@ -301,6 +301,45 @@ raise SystemExit(0)
 PY
 }
 
+# rg/git grep 等扫描工具的退出码语义：0=命中，1=无匹配，2+=工具自身故障。
+# Gate 的扫描检查必须把 2+ 当作检查失败（fail-closed）：否则工具故障产生
+# 的空输出会被误读成"无违规"而静默放行，凭据/生成物扫描将失去保护作用。
+assert_scan_healthy() {
+  local description="$1"
+  # 注意：zsh 的 status 是只读特殊变量（等价 $?），这里必须换名。
+  local scan_status="$2"
+  if (( scan_status >= 2 )); then
+    print -u2 -r -- "${description}（扫描工具退出码 ${scan_status}，按检查失败处理）"
+    return 1
+  fi
+  return 0
+}
+
+# 原生代码的通用负向扫描：冲突标记与被禁止的不安全 Swift 构造。
+# 独立成 lib 函数便于自测注入故障 rg，phase_gate.sh 主流程按同名调用。
+forbidden_items_check() {
+  local -a swift_roots=(Package.swift SlateSyncApp Sources SlateSyncTests SlateSyncUITests Tests)
+  rg -n \
+    'fatalError\(|preconditionFailure\(|try!|as!|@unchecked[[:space:]]+Sendable' \
+    "${swift_roots[@]}"
+  local construct_status=$?
+  if (( construct_status == 0 )); then
+    print -u2 -r -- "forbidden unsafe Swift construct found"
+    return 1
+  fi
+  assert_scan_healthy "forbidden construct scan failed" "$construct_status" || return 1
+  # Keep the marker expression different from the literal marker text so this
+  # Gate can safely audit its own shell sources.
+  rg -n '^(<{7}|={7}|>{7})' "${swift_roots[@]}" script
+  local marker_status=$?
+  if (( marker_status == 0 )); then
+    print -u2 -r -- "unresolved merge marker found"
+    return 1
+  fi
+  assert_scan_healthy "merge marker scan failed" "$marker_status" || return 1
+  return 0
+}
+
 gate_validate_approval_state() {
   local state_path="$1"
   local expected_commit="$2"
