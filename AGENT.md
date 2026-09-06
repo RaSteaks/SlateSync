@@ -1,5 +1,27 @@
 # SlateSync 当前项目方案
 
+## 2026-09-07 SM-09 开工（当前有效）
+
+- Owner 已授权进入 SM-09（cutover and release）。准入条件核对通过：SM-08
+  COMPLETE、状态与 review 指向同一已批准 commit 链、原生 App 覆盖全部
+  表面、旧兼容源完整、工作树干净。
+- CI/Gate 解析器升级为"工作阶段"语义：上一阶段 COMPLETE 且下一阶段已开工
+  （有施工包、尚无 review）时，CI 跑下一阶段 Gate 的预准入模式
+  （`gate_validate_phase_state` 接受 {N-1, N}，approval_freshness 只在
+  Gate 阶段==状态阶段时生效），实施期提交不再击穿上一阶段批准检查；
+  `phase_gate.sh` 新增 SM-09 预准入 case（sm05/07/08 合同 technical-only、
+  Node/Modern 兼容车道保留至 WP-6、里程碑构建/归档检查已纳入）。
+- WP-0 产出：`script/sm09_inventory.py`（568 个 tracked 文件的全量分类：
+  native-product 120 / native-test 84 / release-input 19 / migration-history
+  104 / fixture-migrate 2 / legacy-remove 233 / decision-required 6，含
+  sha256 与删除前引用图）落盘 `.codex/swift-migration/manifests/
+  sm09-inventory.json`；发布/版本/分发决策冻结在
+  `manifests/sm09-wp0-decisions.md`（ZIP+DMG 双格式、v1.0.0/1 版本映射、
+  本阶段仅 ad-hoc lane 不公证不发 Release、六项 decision-required 建议）。
+- SM-09 剩余 WP-0 项：sm09-coverage.json（旧测试 family → Swift/fixture/
+  history-only 映射）随 WP-1 baseline 产出；decision-required 六项在 WP-6
+  删除前需 Owner 一次性确认。
+
 ## 2026-09-07 分支审查修复（当前有效）
 
 - 对 `swift-rewrite` 全部 58 个提交完成只读审查后，按 Owner 确认的清单修复

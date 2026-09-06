@@ -25,17 +25,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 当前治理状态决定 Gate 阶段：phase 字段只在实际 COMPLETE 后推进，
-      # 因此这里的解析值在实现期指向上一完成阶段、在批准后指向当前阶段，
-      # 与 gate_validate_phase_state 允许的 {N-1, N} 两种合法状态一一对应，
-      # 不再硬编码某个 SM-XX 导致后续阶段 CI 必然失败。
+      # 当前治理状态决定 Gate 阶段，采用"工作阶段"语义：上一阶段 COMPLETE
+      # 且下一阶段已开工（有施工包、尚无 review）时，CI 跑下一阶段 Gate 的
+      # 预准入模式——gate_validate_phase_state 接受 {N-1, N} 的 COMPLETE 状态，
+      # approval_freshness 只在 Gate 阶段 == 状态阶段时生效。因此实施期的
+      # 新提交不再击穿上一阶段的批准检查，而批准后仅治理元数据漂移仍会被
+      # 上一阶段 Gate 拦截；两条路径都不硬编码 SM-XX。
       - name: Resolve the active migration phase
         id: phase
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
+          import json, os
           with open(".codex/swift-migration/CURRENT_STATE.json", encoding="utf-8") as handle:
-              print(f"phase={json.load(handle)['phase']}")
+              state = json.load(handle)
+          phase = state["phase"]
+          number = int(phase.split("-")[1])
+          work = f"SM-{number + 1:02d}"
+          packages = ".codex/swift-migration/packages"
+          reviews = ".codex/swift-migration/reviews"
+          if os.path.exists(f"{packages}/{work}.md") and not os.path.exists(f"{reviews}/{work}.md"):
+              phase = work
+          print(f"phase={phase}")
           PY
 
       - name: Run the shared phase Gate for the active phase

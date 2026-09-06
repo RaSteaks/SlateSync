@@ -613,6 +613,26 @@ case "$phase" in
     run_check sm08_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
     run_check sm08_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
     ;;
+  SM-09)
+    # SM-09 预准入脚手架（WP-0/WP-1，2026-09-07）：CI 解析器在 SM-08 COMPLETE
+    # 且 SM-09 已开工时指向本 case，实施期提交由此获得有效门禁。检查集沿用
+    # 删除前矩阵：sm05/sm07/sm08 合同全部 technical-only（准入断言只在各自
+    # 阶段生效），Node/Modern 兼容车道保留到 WP-6 删除时再收敛；native
+    # evidence 属 SM-08 批准上下文，不在此重跑。WP-1/WP-3/WP-4/WP-9 将逐步
+    # 加入 pre-cutover 差分、bundle audit 与 native-only 检查并最终移除 Node。
+    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
+      node script/tests/sm05_contract.mjs --technical-only
+    run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
+      node script/tests/sm07_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
+    run_check sm08_technical_regression true "SM-08 原生 UI fixture/验收映射/执行覆盖继续通过" \
+      node script/tests/sm08_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
+    run_check sm09_node_compatibility true "Electron 数据/Provider/媒体兼容基线继续通过" npm run test:node
+    run_check sm09_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
+    run_check sm09_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
+    run_check sm09_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
+    run_check sm09_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
+    run_check sm09_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
+    ;;
   SM-01) ;;
   *)
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing
@@ -632,7 +652,7 @@ fi
 # Milestone phases retain the real executable and distributable artifact
 # checks. SM-08 adds the final native UI to the same signed app surface.
 if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
-   [[ "$phase" == "SM-06" || "$phase" == "SM-08" ]]; then
+   [[ "$phase" == "SM-06" || "$phase" == "SM-08" || "$phase" == "SM-09" ]]; then
   run_check sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
     sm01_debug_settings_check
   run_check sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \
