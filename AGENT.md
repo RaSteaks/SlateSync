@@ -1,6 +1,50 @@
 # SlateSync 当前项目方案
 
-## 2026-09-06 SM-08 正式收尾（当前有效）
+## 2026-09-07 分支审查修复（当前有效）
+
+- 对 `swift-rewrite` 全部 58 个提交完成只读审查后，按 Owner 确认的清单修复
+  九项仍存活的问题；全部修改停留在工作树，未提交。
+- CI/release 不再硬编码 `phase_gate.sh SM-02`：新增从 `CURRENT_STATE.json`
+  解析当前阶段的步骤（与 `gate_validate_phase_state` 的 {N-1,N} 合法状态对应），
+  `sm02_platform_contract.mjs` 同步改为断言"调用共享 Gate 且未硬编码阶段"。
+  修复前 CI 在 SM-03 起必然失败。
+- AGENT.md 顶部治理叙述与 `CURRENT_STATE.json` 对齐（见下方 SM-08 完成章节）。
+- OCR 管线：`ManagedOCRProcess` 写入/读取管道故障先按子进程存活状态分类，
+  子进程已退出时映射为 `OCR_PROCESS_EXIT`（监督者 one-shot 恢复白名单成员），
+  修复"大请求写入中子进程死亡被误判为 OCR_PROTOCOL 不恢复"的竞态；
+  `OCR_PROCESS_EXIT` 错误现在附带有界（2KiB 采样/500 字符）且脱敏的
+  stderr 尾部摘录。
+- Vision 原生识别的同步 `perform` 移到专用串行队列，actor 在 continuation
+  上挂起，不再长期占用 Swift 协作线程池；非 Sendable 的 Vision 对象沿
+  `WindowLifecycleBridge` 的地址移交先例跨队列（passRetained/takeRetained），
+  不引入 Gate 禁止的 unchecked Sendable 声明。
+- CSV 输入新增统一 64 MiB 预算（`CSVInputBudget`，Owner 选定；媒体侧为
+  20 MiB）：`ResolveCSVEngine.decode` 与 `SlateCSVWorkflow.decode` 超限即
+  fail-closed 返回 `CSV_INPUT_SIZE`，解析循环逐行 `Task.checkCancellation`。
+- Gate 扫描 fail-closed：`forbidden_items_check` 移入 lib 并对 rg 退出码
+  2+ 显式失败；SM-01 范围检查的三处 rg/git grep 扫描（生成物/凭据路径/
+  凭据内容）同样不再被 `|| true` 吞成"无违规"；gate 自测新增 5 项负例
+  （注入退出码 2 的 rg），当前 87/87。
+- SQLite WAL 附属文件 `-wal`/`-shm` 在打开、checkpoint 与关闭三个时点
+  尽力修复为 0600（nonisolated 实现，init 亦可调用）。
+- `SlateMetadataParser.supports` 的后缀匹配语义经核实为冻结的旧版
+  `/slate\.txt$/i` 兼容行为（黄金测试要求接受 `A001C001-SLATE.TXT`），
+  行为不变，仅修正误导性注释并说明两层兜底。
+- 新增回归：EPIPE 场景 one-shot 恢复（fake runner 新增 die-after-warmup
+  模式并同步 manifest 哈希，断言 `launches == 2` 证明恢复发生）、CSV 预算
+  负例。SM-06 契约自测、SM-02 平台契约、Gate 自测与受影响测试目标均通过。
+
+## 2026-09-06 SM-08 阶段正式完成（当前有效）
+
+- 治理收尾提交 `bb5c910` 已将 `.codex/swift-migration/CURRENT_STATE.json` 更新为
+  SM-08 `COMPLETE`：Gate 结论 `PASS`，审查提交 `70fb5db`，Owner 批准时间
+  `2026-09-06T11:07:39Z`，正式记录在 `.codex/swift-migration/reviews/SM-08.md`。
+- 下方"SM-08 正式收尾"章节是完成前（`BLOCKED_ENV` 期）的历史记录，其中
+  "CURRENT_STATE.json 仍保持 SM-07 COMPLETE、SM08 为 BLOCKED_ENV/PENDING"的表述
+  已被本章节取代；当前准入为 SM-08 `COMPLETE`，下一施工包为
+  `.codex/swift-migration/packages/SM-09.md`。
+
+## 2026-09-06 SM-08 正式收尾（历史记录，已被上方完成章节取代）
 
 - 用户已允许最终验收使用前台测试；中间回归仍优先后台执行。所有
   `.xcresult`、截图、日志与性能数据只写入 `/private/tmp` 或已忽略的
