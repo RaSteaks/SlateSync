@@ -49,9 +49,9 @@
   47 项全通过。不呈现窗口的 500 projects / 1,000 tasks List
   规模测试单项通过；12 条重入预警已通过最小纯 SwiftUI 对照归类为
   隐藏 harness 行为，对照日志为 `/private/tmp/slatesync-sm08-minimal-hidden-list.log`。
-- 产品提交 `ce04157adab9d2ac651b5803449819c7c797f6c9` 的 Xcode
+- 产品提交 `cf4396856e55f485ddcf64439284e75de3be3d35` 的 Xcode
   Debug/Release build、静态分析以及本地 Release Archive 均在后台重新通过；Archive
-  路径为 `/private/tmp/slatesync-sm08-ce04157-signed.xcarchive`，是
+  路径为 `/private/tmp/slatesync-sm08-cf43968-signed.xcarchive`，是
   arm64/x86_64 universal、ad hoc、hardened runtime，codesign strict verification
   通过，不代表 Developer ID 签名、notarization 或发行资格；Xcode 静态分析亦无源码诊断。
 - 用户已要求继续完成 SM-08 剩余阶段，并明确所有后续测试在后台进行；因此本轮不再启动或操作前台应用，不把未执行的原生窗口、IME、VoiceOver、明暗色和最小窗口验收伪记为 PASS。
@@ -62,7 +62,7 @@
 - 兼容矩阵后台检查均通过：Node 324/324、Modern 25 files/118 tests、静态检查、TypeScript typecheck、Modern production build、Node/Electron SQLite ABI（137/148 modules，SQLite 3.53.2）；原始日志见本轮背景验证记录。
 - 真实 SQLite 规模证据：500 个项目、1,000 个任务，1 次 warm-up 加 5 次样本；项目列表 291.21–310.09 ms，任务列表 10.31–10.70 ms，均低于 1,500/900 ms 预算。原始指标在 `/private/tmp/slatesync-sm08-metrics/real-sqlite-scale.json`。
 - 后台 Debug 构建、Release 构建、静态分析和 Archive 均成功；产品提交
-  `ce04157` 的当前 Archive `/private/tmp/slatesync-sm08-ce04157-signed.xcarchive`
+  `cf43968` 的当前 Archive `/private/tmp/slatesync-sm08-cf43968-signed.xcarchive`
   为 universal arm64/x86_64、ad hoc runtime 签名，无 Developer ID Team ID，
   因此仅完成本地包完整性验证，不宣称 notarization/distribution 通过。
 - 前台约束生效前的最新 XCUI 记录 `/private/tmp/slatesync-sm08-ui-rerun-20260906.xcresult` 为 5 项中 3 项通过、2 项关闭后的窗口计数等待超时；Help 导航已通过，main close 修复随后又有更新，Settings 关闭尚未在后台条件下重新验证。该记录保留为历史诊断，不作为当前 PASS。
