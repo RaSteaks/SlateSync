@@ -35,6 +35,7 @@ public extension FocusedValues {
 public struct SlateSyncCommands: Commands {
     @FocusedValue(\.slateSyncActions) private var actions
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     public init() {}
 
     public var body: some Commands {
@@ -50,10 +51,13 @@ public struct SlateSyncCommands: Commands {
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(actions?.newTask == nil)
         }
-        // `.saveItem` also owns the system Close command on macOS. Append our
-        // focused Save action instead of replacing the group, preserving ⌘W
-        // for both WindowGroup and Settings windows.
-        CommandGroup(after: .saveItem) {
+        // `.saveItem` also owns Close on macOS. Rebuild that small group with
+        // SwiftUI's current-window action so Settings and WindowGroup retain
+        // ⌘W without leaving the system Save beside our focused Save.
+        CommandGroup(replacing: .saveItem) {
+            Button("关闭窗口") { dismissWindow() }
+                .keyboardShortcut("w", modifiers: .command)
+            Divider()
             Button("保存") { actions?.save?() }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(actions?.save == nil)

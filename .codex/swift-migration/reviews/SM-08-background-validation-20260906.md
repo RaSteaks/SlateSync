@@ -12,14 +12,14 @@
 
 | 范围 | 结果 | 证据 |
 | --- | --- | --- |
-| SM08 owner 专项 | PASS | `/private/tmp/slatesync-sm08-owner-46.log`；46/46 通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket、迟到 picker 准入、终止错误所有权和进度单调性回归 |
-| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-progress-swift.log`；213/213 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
+| SM08 owner 专项 | PASS | `/private/tmp/slatesync-sm08-commandgroup-owner.log`；46/46 通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket、迟到 picker 准入、终止错误所有权和进度单调性回归 |
+| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-commandgroup-swift.log`；213/213 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
 | 隐藏原生 List 规模 | PASS_WITH_FRAMEWORK_WARNING | `/private/tmp/slatesync-sm08-postreview-hidden-list.log`；500 projects / 1,000 tasks、1 warm-up + 5 samples，1 项通过；每个 List 挂载有一次 `NSTableView` delegate 重入预警（共 12 次） |
 | 隐藏 List 最小对照 | REPRODUCED_FRAMEWORK_BEHAVIOR | `/private/tmp/slatesync-sm08-minimal-hidden-list.log`；不含 SlateSync 模型/绑定的纯 `List(0..<500)` 在未 ordered `NSWindow` 中 6 次挂载精确生成 6 条同样预警 |
-| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-progress-xcode-debug`；当前代码 `xcodebuild` 退出码 0 |
-| Xcode static analysis | PASS | `/private/tmp/slatesync-sm08-progress-xcode-analyze`；当前代码 `xcodebuild analyze` 退出码 0，无源码诊断 |
-| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-progress-xcode-release`；当前代码 `xcodebuild` 退出码 0 |
-| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-progress-signed.xcarchive`；当前代码 arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
+| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-commandgroup-xcode-debug`；当前代码 `xcodebuild` 退出码 0 |
+| Xcode static analysis | PASS | `/private/tmp/slatesync-sm08-commandgroup-xcode-analyze`；当前代码 `xcodebuild analyze` 退出码 0，无源码诊断 |
+| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-commandgroup-xcode-release`；当前代码 `xcodebuild` 退出码 0 |
+| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-commandgroup-signed.xcarchive`；当前代码 arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
 
 收尾审查修复了 CSV 缩表时选区越界、Paddle 子进程继承用户 pip/HOME
 配置、coordinator 构建窗口内的识别取消竞态、迟到的本地 CSV picker 回调绕过
@@ -43,9 +43,10 @@ percent 倒退；反序回调测试固定验证较新的完成态不会被迟到
 
 代码根因是 `SlateSyncCommands` 使用 `CommandGroup(replacing: .saveItem)` 后只放回
 自定义 Save；macOS 的 `.saveItem` 系统组同时包含 Close，因而 ⌘W 被全局移除并
-同时影响 WindowGroup 与 Settings。实现已改为 `CommandGroup(after: .saveItem)`，保留
-系统 Close 并追加聚焦 Save。该根因有直接历史证据且可后台编译，但修复后
-的真实 ⌘W 交互仍需在允许前台的专用 UI 环境中复验，暂不改记为 PASS。
+同时影响 WindowGroup 与 Settings。最终实现继续替换该组，但用 SwiftUI
+`dismissWindow()` 显式恢复当前窗口 ⌘W，并只保留一个聚焦 ⌘S；工具栏 Save 不再
+重复注册快捷键。该根因有直接历史证据且可后台编译，但修复后的真实 ⌘W/⌘S
+交互仍需在允许前台的专用 UI 环境中复验，暂不改记为 PASS。
 
 ## 已验证证据
 
@@ -61,7 +62,7 @@ percent 倒退；反序回调测试固定验证较新的完成态不会被迟到
 | Release 构建 | PASS | `/private/tmp/slatesync-sm08-release-derived-final`，`** BUILD SUCCEEDED **` |
 | Release Archive | PASS | `/private/tmp/slatesync-sm08-release-20260906-final.xcarchive`，`** ARCHIVE SUCCEEDED **` |
 | contract 静态负例 | PASS | `node script/tests/sm08_contract.mjs --self-test` |
-| Gate helper 自测 | PASS | `/private/tmp/slatesync-sm08-progress-gate-selftest.log`；当前 coverage 更新后 82 passed / 0 failed |
+| Gate helper 自测 | PASS | `/private/tmp/slatesync-sm08-commandgroup-gate-selftest.log`；当前 command/coverage 契约更新后 82 passed / 0 failed |
 | Node compatibility | PASS | `/private/tmp/slatesync-sm08-node-compat-final.log`；324 passed / 0 failed |
 | Modern compatibility | PASS | `/private/tmp/slatesync-sm08-modern-compat-final.log`；25 files / 118 tests passed |
 | JavaScript static check | PASS | `/private/tmp/slatesync-sm08-static-check-final.log` |

@@ -159,9 +159,23 @@ function sourceAudit() {
   assert.equal((read("Sources/SlateSyncUI/Help/HelpModel.swift").match(/\.init\(id:/g) ?? []).length, 6);
   assert.match(read("SlateSync.xcodeproj/project.pbxproj"), /pinned OCR requirements in Resources/);
   assert.match(read("AGENT.md"), /SM-08/);
+  commandsAudit();
+}
+
+// The custom File group must restore current-window Close while registering
+// exactly one focused Save shortcut; duplicate menu/toolbar shortcuts can
+// route to a disabled or stale command before reaching the active owner.
+function commandsAudit() {
+  const commands = read("Sources/SlateSyncUI/App/FocusedActions.swift");
+  assert.match(commands, /@Environment\(\\\.dismissWindow\)/);
+  assert.match(commands, /CommandGroup\(replacing: \.saveItem\)/);
+  assert.match(commands, /Button\("关闭窗口"\) \{ dismissWindow\(\) \}/);
+  assert.equal((commands.match(/\.keyboardShortcut\("s"/g) ?? []).length, 1);
+  assert.doesNotMatch(read("Sources/SlateSyncUI/Views/WorkspaceView.swift"), /\.keyboardShortcut\("s"/);
 }
 
 export function runSelfTests() {
+  commandsAudit();
   const sourceManifest = structuredClone(readJSON(join(fixtureRoot, "source-manifest.json")));
   sourceManifest.sources[0].sha256 = "0".repeat(64);
   assert.throws(() => validateFixtures(sourceManifest));

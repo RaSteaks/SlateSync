@@ -60,7 +60,8 @@ public struct WorkspaceView: View {
                 Button("保存", systemImage: "square.and.arrow.down") {
                     Task { try? await workspace.flush() }
                 }
-                .keyboardShortcut("s", modifiers: .command)
+                // The File menu owns the single ⌘S registration; this toolbar
+                // button invokes the same workspace owner without competing.
                 Button("开始识别", systemImage: "viewfinder") { startRecognition() }
                     .disabled(!canRecognize || recognition.operation.isRunning)
                     .accessibilityIdentifier(AccessibilityID.recognize)
