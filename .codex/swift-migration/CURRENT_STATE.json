@@ -5,7 +5,10 @@
   "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
-    "architectures": ["arm64", "x86_64"],
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
     "windowsSupported": false,
     "legacyWindowsArtifactsPresent": true
   },
@@ -46,7 +49,7 @@
     "modernTests": "118 passed",
     "nativeAbiLifecycle": "passed-electron-and-node",
     "gateSelfTests": "87 passed",
-    "reviewRemediationRound": "passed-2026-09-07-branch-review-fixes-swift-full-suite-node-324-modern-118-gate-selftest-87-contracts",
+    "reviewRemediationRound": "passed-2026-09-07-branch-review-fixes-technical-matrix-swift-full-suite-node-324-modern-118-gate-selftest-87; formal-gate-rerun-7babb9a-26-of-28-checks-pass-sm07-regression-fixed; ui-evidence-lanes-blocked-env-locked-console-CGSSessionScreenIsLocked-at-run-time-documented-in-review",
     "persistenceContract": "passed-sqlite-project-library-v1",
     "sm05Contract": "passed-csv-metadata-scenario-v1-technical-regression",
     "sm05ReleasePerformance": "passed-10k-median-1.923736s-max-1.955408s-ratio-2.049",
