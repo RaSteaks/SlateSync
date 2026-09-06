@@ -63,7 +63,8 @@
       "testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails"
     ],
     "APP-06": [
-      "testConcurrentTerminationRequestsJoinOneLifecycleDrain"
+      "testConcurrentTerminationRequestsJoinOneLifecycleDrain",
+      "testTerminationFailureDismissalClearsItsOwnErrorOwner"
     ],
     "PRJ-03": [
       "testProjectMutationsStopAtFailedWorkspaceBarrier"
@@ -103,12 +104,14 @@
       "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection"
     ],
     "SET-05": [
-      "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection"
+      "testSettingsDiscoveryAndProbeUseOfflineFacadeProjection",
+      "testSettingsAndInstallerProgressCannotRegressAfterActorHop"
     ],
     "SET-07": [
       "testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment",
       "testPaddleInstallerRejectsManagedDirectorySymlinkWithoutInstalling",
-      "testPaddleInstallerCancelAndDrainWaitsForInjectedRunner"
+      "testPaddleInstallerCancelAndDrainWaitsForInjectedRunner",
+      "testSettingsAndInstallerProgressCannotRegressAfterActorHop"
     ],
     "SET-08": [
       "testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment"
@@ -180,7 +183,9 @@
     "SM08OwnershipTests/testPaddleInstallerCancelAndDrainWaitsForInjectedRunner",
     "SM08OwnershipTests/testRouteBarrierKeepsWorkspaceAndDraftWhenAutosaveFails",
     "SM08OwnershipTests/testConcurrentTerminationRequestsJoinOneLifecycleDrain",
+    "SM08OwnershipTests/testTerminationFailureDismissalClearsItsOwnErrorOwner",
     "SM08OwnershipTests/testSettingsDiscoveryAndProbeUseOfflineFacadeProjection",
+    "SM08OwnershipTests/testSettingsAndInstallerProgressCannotRegressAfterActorHop",
     "SM08OwnershipTests/testResultEditIsCanonicalAndFlushJoinsPendingCommit",
     "SM08OwnershipTests/testMixedResultAndPromptEditsPersistTheLatestCompleteSnapshot",
     "SM08OwnershipTests/testCloseJoinsPendingEnqueueBeforeClosingWriter",

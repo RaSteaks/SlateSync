@@ -125,6 +125,13 @@ public final class GlobalSettingsModel {
                 Task { @MainActor in
                     guard let self, self.providerRequests[providerID] == request,
                           self.providerOperations[providerID]?.isRunning == true else { return }
+                    // Callback actor hops can be delivered after a newer
+                    // sample. Preserve both count and percentage monotonicity
+                    // so a late model result cannot regress the progress UI.
+                    if let current = self.probeProgress[providerID] {
+                        guard value.completed >= current.completed,
+                              value.percent >= current.percent else { return }
+                    }
                     self.probeProgress[providerID] = value
                     self.providerOperations[providerID] = .running(
                         label: "已验证 \(value.completed)/\(value.total)"

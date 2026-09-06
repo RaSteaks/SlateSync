@@ -26,6 +26,11 @@ public final class PaddleInstallerModel {
                 let installed = try await service.installPaddleOCR { [weak self] value in
                     Task { @MainActor in
                         guard let self, self.task != nil else { return }
+                        // The service callback is synchronous, but each
+                        // MainActor hop is independently scheduled. Reject a
+                        // late stage instead of letting visible progress move
+                        // backward while installation is still active.
+                        guard value.percent >= (self.progress?.percent ?? -.infinity) else { return }
                         self.progress = value
                         self.operation = .running(label: value.message)
                     }

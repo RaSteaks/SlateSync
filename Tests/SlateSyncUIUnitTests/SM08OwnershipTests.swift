@@ -346,6 +346,24 @@ final class SM08OwnershipTests: XCTestCase {
     }
 
     @MainActor
+    func testSettingsAndInstallerProgressCannotRegressAfterActorHop() async {
+        let service = GlobalSettingsFake()
+        let settings = GlobalSettingsModel(service: service)
+        await settings.probe(providerID: "custom-test", modelIDs: ["vision-test"])
+        XCTAssertEqual(settings.probeProgress["custom-test"]?.completed, 1)
+        XCTAssertEqual(settings.probeProgress["custom-test"]?.percent, 100)
+
+        let installer = PaddleInstallerModel(service: service)
+        installer.install()
+        await installer.drain()
+        XCTAssertEqual(installer.progress?.stage, .completed)
+        XCTAssertEqual(installer.progress?.percent, 100)
+        if case .succeeded = installer.operation {} else {
+            XCTFail("安装完成后不应被迟到的早期进度覆盖")
+        }
+    }
+
+    @MainActor
     func testResultEditIsCanonicalAndFlushJoinsPendingCommit() async throws {
         let workspaceService = WorkspaceFake(rowCount: 0)
         let workspace = WorkspaceModel(service: workspaceService)
@@ -865,6 +883,10 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
             capabilityStatus: .verified
         )
         progress(.init(providerId: providerID, model: "vision-test", completed: 1, total: 1, percent: 100, result: result))
+        // Simulate a delayed earlier sample arriving after completion. The UI
+        // projection must retain the newest monotonic value.
+        progress(.init(providerId: providerID, model: "vision-test", completed: 0, total: 1, percent: 25))
+        await Task.yield()
         return .init(canceled: false, results: [result], completed: 1, total: 1)
     }
 
@@ -872,7 +894,10 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
     func installPaddleOCR(
         progress: @escaping @Sendable (PaddleOcrInstallProgress) -> Void
     ) async throws -> PaddleOcrInstallResult {
-        .init(pythonPath: "/tmp/fake-python", setupCompleted: true, setupSkipped: false, paddleVersion: "3.3.1", paddleOcrVersion: "3.7.0")
+        progress(.init(stage: .completed, percent: 100, message: "安装完成"))
+        progress(.init(stage: .detectPython, percent: 5, message: "迟到的环境检测"))
+        await Task.yield()
+        return .init(pythonPath: "/tmp/fake-python", setupCompleted: true, setupSkipped: false, paddleVersion: "3.3.1", paddleOcrVersion: "3.7.0")
     }
     func cancelPaddleOCRInstallation() async {}
 

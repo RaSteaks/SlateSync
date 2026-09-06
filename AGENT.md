@@ -9,7 +9,11 @@
   Settings 共用的标准 ⌘W；正式 UI PASS 仍等待允许前台后复跑。
 - 关闭/退出失败横幅现由 `TerminationCoordinator` 清除自己的错误，不再误调
   `AppSessionModel.clearError()`；只有导航/自动保存错误显示“重试保存”，
-  IME 组字、Library barrier 等终止错误不再提供无效重试动作。
+  IME 组字、Library barrier 等终止错误不再提供无效重试动作；对应回归已纳入
+  SM08 coverage 的 `APP-06` 与 Gate regression evidence，防止后续只编译未执行。
+- Provider 探针与 Paddle 安装的同步进度回调会各自 hop 到 MainActor；模型现在拒绝
+  completed/percent 倒退的迟到样本，避免并发调度让可见进度回退。反序回调测试已纳入
+  `SET-05`、`SET-07` 和 Gate regression evidence。
 - 收尾代码审查发现并修复两个可在后台验证的问题：CSV 缩表刷新前裁剪
   `NSTableView` 选区，避免重新应用越界行；Paddle 安装子进程改用受管
   HOME 并禁用 pip/user-site 配置，不再隐式读取用户包索引凭据。
@@ -31,8 +35,8 @@
   picker 读取失败也改由 Recognition 表面报告。
 - 安装进度测试改为同步加锁收集回调，避免并行回归中多个无结构
   actor-hop Task 合法乱序后造成的假失败。
-- 审查后后台 Swift 回归共 212 项、退出码 0；SM08 owner 专项
-  45 项全通过。不呈现窗口的 500 projects / 1,000 tasks List
+- 审查后后台 Swift 回归共 213 项、退出码 0；SM08 owner 专项
+  46 项全通过。不呈现窗口的 500 projects / 1,000 tasks List
   规模测试单项通过；12 条重入预警已通过最小纯 SwiftUI 对照归类为
   隐藏 harness 行为，对照日志为 `/private/tmp/slatesync-sm08-minimal-hidden-list.log`。
 - 当前代码的 Xcode Debug/Release build 以及本地 Release Archive
@@ -46,7 +50,7 @@
 - Gate helper 后台自测为 82 passed / 0 failed（`/private/tmp/slatesync-sm08-phase-gate-selftest-final.log`）；这只证明 Gate 辅助逻辑，不等于运行了完整 SM-08 Gate。
 - 兼容矩阵后台检查均通过：Node 324/324、Modern 25 files/118 tests、静态检查、TypeScript typecheck、Modern production build、Node/Electron SQLite ABI（137/148 modules，SQLite 3.53.2）；原始日志见本轮背景验证记录。
 - 真实 SQLite 规模证据：500 个项目、1,000 个任务，1 次 warm-up 加 5 次样本；项目列表 291.21–310.09 ms，任务列表 10.31–10.70 ms，均低于 1,500/900 ms 预算。原始指标在 `/private/tmp/slatesync-sm08-metrics/real-sqlite-scale.json`。
-- 后台 Debug 构建、Release 构建和 Archive 均成功；当前 Archive `/private/tmp/slatesync-sm08-errorowner-signed.xcarchive` 为 universal arm64/x86_64、ad hoc runtime 签名，无 Developer ID Team ID，因此仅完成本地包完整性验证，不宣称 notarization/distribution 通过。
+- 后台 Debug 构建、Release 构建和 Archive 均成功；当前 Archive `/private/tmp/slatesync-sm08-progress-signed.xcarchive` 为 universal arm64/x86_64、ad hoc runtime 签名，无 Developer ID Team ID，因此仅完成本地包完整性验证，不宣称 notarization/distribution 通过。
 - 前台约束生效前的最新 XCUI 记录 `/private/tmp/slatesync-sm08-ui-rerun-20260906.xcresult` 为 5 项中 3 项通过、2 项关闭后的窗口计数等待超时；Help 导航已通过，main close 修复随后又有更新，Settings 关闭尚未在后台条件下重新验证。该记录保留为历史诊断，不作为当前 PASS。
 - 当前结论为 `BLOCKED_ENV`，不是 `COMPLETE`：原生 UI/A11y/IME/完整窗口生命周期证据、clean Gate、独立 `reviews/SM-08.md`、Owner approval 尚未齐备；`CURRENT_STATE.json` 继续保持 SM-07 `COMPLETE`，不启动 SM-09。
 
