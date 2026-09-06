@@ -25,6 +25,21 @@ Swift 整轮回归执行 220 项，1 项专用离线 Paddle 测试跳过，0 失
 证据为 `/private/tmp/slatesync-sm08-dc00b6d-contract-blocked.log`。这证明 Gate 未把后台
 单元测试误当原生交互 PASS，而不是产品回归失败。
 
+随后将 4 项真实 AppKit native-surface 测试改为透明离屏窗口执行。初版独立复审发现
+titled window 可能被 AppKit 约束回屏，且离屏 display link 不能证明屏幕渲染 FPS；
+最终提交 `8c7ac42c2206abf368bd58e09a23b76de2b482eb` 已关闭两项 P2。harness 在
+alpha=0 后 ordering、重新设置 bounded offscreen frame，并断言窗口不与任何屏幕相交、
+`screen == nil`、非 key/main、应用激活和既有 key/main window 均未改变。FPS probe、
+阈值和指标已删除，真实帧率仍留在前台 Gate。
+
+最终离屏 native suite 4/4 通过，证据为
+`/private/tmp/slatesync-sm08-8c7ac42-native.log`；包含该 suite 的完整 Swift 回归为
+224 项、1 项 Paddle 跳过、0 失败，证据为
+`/private/tmp/slatesync-sm08-offscreen-v4-full-swift.log`。完整 contract 已能确认所有
+映射 XCTest 执行，现只在缺少 Owner-attested `--native-evidence` 时 fail closed，证据为
+`/private/tmp/slatesync-sm08-8c7ac42-contract.log`。最终独立复审确认两项 P2 均关闭，
+无新增 P1/P2/P3。
+
 ## 收尾代码审查后复验
 
 | 范围 | 结果 | 证据 |
