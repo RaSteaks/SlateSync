@@ -8,6 +8,23 @@
 
 后台可执行的代码、功能回归、真实 SQLite 规模加载和本地 Release/Archive 检查已完成；原生窗口交互、中文 IME、VoiceOver、明暗色、最小窗口布局、完整退出/重开生命周期和 clean Gate 仍没有满足阶段清单要求的证据。
 
+## 精确提交最终复验与独立审查
+
+最终产品提交为 `dc00b6d15ec9119e308f5f38f0f38fbddb032e2a`。该提交的后台
+Swift 整轮回归执行 220 项，1 项专用离线 Paddle 测试跳过，0 失败；其中 SM08 owner
+专项为 52/52。Debug、Release、静态分析和本地双架构 Archive 均在该精确提交通过，
+日志统一使用 `/private/tmp/slatesync-sm08-dc00b6d-*` 前缀。
+
+独立代理 `01a07569-6bba-7950-aa7c-d1b1226fef02`（Ramanujan）只读审阅该提交相对
+`0802248dbb75c110c063c37125db948b36fd52f9` 的完整 16 文件 diff，并复核此前全部发现；
+最终报告为 P1/P2/P3 均无可执行代码发现。正式报告归档于
+`.codex/swift-migration/reviews/SM-08.md`。该审查没有启动 UI，也不替代下列原生验收。
+
+完整 SM08 contract 在只提供后台 Swift 日志时按设计失败，首先报告缺少
+`SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners`；
+证据为 `/private/tmp/slatesync-sm08-dc00b6d-contract-blocked.log`。这证明 Gate 未把后台
+单元测试误当原生交互 PASS，而不是产品回归失败。
+
 ## 收尾代码审查后复验
 
 | 范围 | 结果 | 证据 |

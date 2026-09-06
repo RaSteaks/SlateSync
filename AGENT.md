@@ -14,7 +14,17 @@
   万行 fixture 已加入中文、emoji、长字段、空值、重复文件名与混合状态；coverage
   将含原生交互的宽泛验收项移回 manual/Gate lane，native evidence 还要求结构化命令、
   退出码、逐项断言和不可复用的 Gate 根目录制品。当前后台 owner 52/52、完整 Swift
-  219 项（1 项专用 Paddle 跳过）均为 0 失败；原生前台证据仍不据此宣称 PASS。
+  220 项（1 项专用 Paddle 跳过）均为 0 失败；原生前台证据仍不据此宣称 PASS。
+- 最终产品提交 `dc00b6d15ec9119e308f5f38f0f38fbddb032e2a` 已完成精确提交后台
+  复验：Swift 220 项（SM08 owner 52/52）、Debug、Release、静态分析、双架构
+  Archive、Gate helper 82/82、Node 324/324、Modern 118/118、静态检查、类型检查、
+  production build 与 Node/Electron SQLite ABI 均通过。独立代理
+  `01a07569-6bba-7950-aa7c-d1b1226fef02` 只读审阅完整 diff，P1/P2/P3 均无可执行
+  代码发现；正式记录在 `.codex/swift-migration/reviews/SM-08.md`。
+- 完整 SM08 contract 在缺少 native-surface 执行和 Owner-attested evidence 时按设计
+  fail closed；本地 evidence schema 只能验证结构、摘要和源码新鲜度，不能自建可信
+  执行根。因此 `CURRENT_STATE.json` 仍保持 SM-07 `COMPLETE`，SM08 为
+  `BLOCKED_ENV/PENDING`，不得在后台约束下伪标 COMPLETE 或启动 SM-09。
 - 历史 XCUI `.xcresult` 活动树与录像证明：Help 路由已通过，两个窗口失败
   都是 ⌘W 后目标窗口持续可见，不是 XCUI 计数滞后。根因为
   `SlateSyncCommands` 替换了整个 `.saveItem` 系统组，连同 macOS
