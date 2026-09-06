@@ -283,17 +283,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   runSelfTests();
   if (!process.argv.includes("--self-test")) {
     // 与 sm07 相同：SM-09 起 Gate 以 technical 模式重跑本合同时跳过准入窗口
-    // 断言；源审计、执行覆盖与原生证据校验仍全程生效。
-    if (!process.argv.includes("--technical-only")) {
+    // 断言与 native-evidence 校验（后者是 SM-08 批准上下文的证据产物，由
+    // SM-08 自身 Gate 生成）；源审计与执行覆盖仍全程生效。
+    const technicalOnly = process.argv.includes("--technical-only");
+    if (!technicalOnly) {
       validateState(readJSON(join(repository, ".codex/swift-migration/CURRENT_STATE.json")));
     }
     sourceAudit();
     const index = process.argv.indexOf("--swift-log");
     assert.ok(index >= 0 && process.argv[index + 1], "--swift-log is required; static-only contract cannot PASS");
     assertExecuted(coverage, readFileSync(process.argv[index + 1], "utf8"));
-    const nativeIndex = process.argv.indexOf("--native-evidence");
-    assert.ok(nativeIndex >= 0 && process.argv[nativeIndex + 1], "--native-evidence is required; manualOrGate names cannot establish PASS");
-    validateNativeEvidence(readJSON(process.argv[nativeIndex + 1]), coverage);
+    if (!technicalOnly) {
+      const nativeIndex = process.argv.indexOf("--native-evidence");
+      assert.ok(nativeIndex >= 0 && process.argv[nativeIndex + 1], "--native-evidence is required; manualOrGate names cannot establish PASS");
+      validateNativeEvidence(readJSON(process.argv[nativeIndex + 1]), coverage);
+    }
     console.log("SM-08 contract PASS: frozen sources, all acceptance IDs, executed UI ownership tests, AppKit allowlist and phase admission verified");
   }
 }
