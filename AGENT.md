@@ -25,6 +25,13 @@
   fail closed；本地 evidence schema 只能验证结构、摘要和源码新鲜度，不能自建可信
   执行根。因此 `CURRENT_STATE.json` 仍保持 SM-07 `COMPLETE`，SM08 为
   `BLOCKED_ENV/PENDING`，不得在后台约束下伪标 COMPLETE 或启动 SM-09。
+- 为遵守“所有测试在后台进行”同时继续关闭可自动化证据缺口，SM08 native-surface
+  harness 改为把真实 `NSWindow` 固定到所有显示器之外并使用 `orderBack`；不再调用
+  `makeKeyAndOrderFront`、`orderFront` 或应用激活 API。真实 AppKit field editor、
+  NSTableView 万行复用/滚动/释放、同 revision 数据替换和 close delegate 4/4 通过，
+  完整 Swift 回归因此可不跳过该 suite，当前为 224 项、1 项 Paddle 跳过、0 失败。
+  SM08 contract 已继续执行到唯一缺失的 `--native-evidence` 门槛，不再因 native-surface
+  XCTest 未执行而提前失败；这仍不替代 XCUI/VoiceOver/真实候选窗或 Owner 背书。
 - 历史 XCUI `.xcresult` 活动树与录像证明：Help 路由已通过，两个窗口失败
   都是 ⌘W 后目标窗口持续可见，不是 XCUI 计数滞后。根因为
   `SlateSyncCommands` 替换了整个 `.saveItem` 系统组，连同 macOS

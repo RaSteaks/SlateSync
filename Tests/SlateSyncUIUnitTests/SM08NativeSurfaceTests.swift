@@ -8,8 +8,9 @@ import SlateSyncDomain
 import SwiftUI
 import XCTest
 
-/// Actual AppKit-backed surfaces, mounted in a test-owned window. These tests
-/// never launch the product or access the operator's Library or Keychain.
+/// Actual AppKit-backed surfaces, mounted in a test-owned offscreen window.
+/// The harness enters WindowServer lifecycle without activating or presenting
+/// the product, and never accesses the operator's Library or Keychain.
 @MainActor
 final class SM08NativeSurfaceTests: XCTestCase {
     func testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners() async throws {
@@ -124,15 +125,13 @@ final class SM08NativeSurfaceTests: XCTestCase {
 
     func testWindowCloseVetoRetainsWindowUntilRetrySucceeds() async throws {
         _ = NSApplication.shared
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 600), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
+        let window = backgroundTestWindow(width: 960, height: 600, styleMask: [.titled, .closable])
         var attempts = 0, failures = 0
         let coordinator = WindowCloseCoordinator(close: {
             attempts += 1
             if attempts == 1 { throw SlateSyncError(code: "TEST_SAVE", message: "save failed") }
         }, failure: { _ in failures += 1 })
         coordinator.attach(to: window)
-        window.orderFront(nil)
         window.performClose(nil)
         for _ in 0..<20 { await Task.yield() }
         XCTAssertEqual(attempts, 1)
@@ -191,11 +190,9 @@ private final class CSVHarness {
         _ = NSApplication.shared
         let content = EditableCSVTableRepresentable(tableID: UUID(), table: input, revision: 0) { [weak self] in self?.commits.append($0) }
         let host = NSHostingView(rootView: content)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 600), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
+        let window = backgroundTestWindow(width: 1000, height: 600, styleMask: [.titled, .closable, .resizable])
         window.contentView = host
         self.host = host; self.window = window
-        window.makeKeyAndOrderFront(nil)
         host.layoutSubtreeIfNeeded()
         // Give SwiftUI one mount pass; this wait is included in snapshot timing.
         try await Task.sleep(for: .milliseconds(40))
@@ -208,6 +205,26 @@ private final class CSVHarness {
         window?.close()
         host = nil; window = nil
     }
+}
+
+/// Keep native tests attached to a real ordered window without showing it on
+/// any desktop or taking key-window focus from the user's foreground app.
+@MainActor private func backgroundTestWindow(
+    width: CGFloat,
+    height: CGFloat,
+    styleMask: NSWindow.StyleMask
+) -> NSWindow {
+    let window = NSWindow(
+        contentRect: NSRect(x: -1_000_000, y: -1_000_000, width: width, height: height),
+        styleMask: styleMask,
+        backing: .buffered,
+        defer: false
+    )
+    window.isReleasedWhenClosed = false
+    window.isExcludedFromWindowsMenu = true
+    window.ignoresMouseEvents = true
+    window.orderBack(nil)
+    return window
 }
 
 @MainActor private final class WeakCSVReferences {
