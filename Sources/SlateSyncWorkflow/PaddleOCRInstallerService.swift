@@ -57,14 +57,20 @@ public actor PaddleOCRInstallerService {
         defer { installing = false }
 
         try validateRequirements()
-        emit(.detectPython, 5, "正在检查本机 Python 环境…", progress)
-        let python = try await detectPython()
-        try checkCanceled()
-
         let venv = userDataRoot.appending(path: "paddleocr-venv", directoryHint: .isDirectory)
-        try validateInstallPath(venv)
+        let installHome = userDataRoot.appending(path: "paddle-install-home", directoryHint: .isDirectory)
+        try validateInstallPath(installHome)
         try FileManager.default.createDirectory(at: userDataRoot, withIntermediateDirectories: true)
-        let environment = sanitizedEnvironment()
+        try FileManager.default.createDirectory(at: installHome, withIntermediateDirectories: true)
+        try validateInstallPath(installHome)
+        let environment = sanitizedEnvironment(home: installHome)
+
+        emit(.detectPython, 5, "正在检查本机 Python 环境…", progress)
+        let python = try await detectPython(environment: environment)
+        try checkCanceled()
+        // Keep environment probing non-destructive for an existing venv; its
+        // complete path audit still happens before the first venv mutation.
+        try validateInstallPath(venv)
 
         emit(.createEnvironment, 20, "已找到 Python，正在创建独立运行环境…", progress)
         _ = try await command(python.executable, python.prefix + ["-m", "venv", "--copies", venv.path], environment)
@@ -120,7 +126,7 @@ public actor PaddleOCRInstallerService {
 
     private struct PythonCommand { let executable: URL; let prefix: [String] }
 
-    private func detectPython() async throws -> PythonCommand {
+    private func detectPython(environment: [String: String]) async throws -> PythonCommand {
         let candidates = [
             PythonCommand(executable: URL(fileURLWithPath: "/opt/homebrew/bin/python3"), prefix: []),
             PythonCommand(executable: URL(fileURLWithPath: "/usr/local/bin/python3"), prefix: []),
@@ -128,7 +134,7 @@ public actor PaddleOCRInstallerService {
         ]
         for candidate in candidates {
             do {
-                let result = try await command(candidate.executable, candidate.prefix + ["--version"], sanitizedEnvironment())
+                let result = try await command(candidate.executable, candidate.prefix + ["--version"], environment)
                 let version = result.stdout + " " + result.stderr
                 if Self.isSupportedPython(version) { return candidate }
             } catch {
@@ -212,11 +218,12 @@ public actor PaddleOCRInstallerService {
         .init(code: "PADDLEOCR_INSTALL_PATH_INVALID", message: "PaddleOCR 安装目录包含越界链接")
     }
 
-    private func sanitizedEnvironment() -> [String: String] {
-        let allowed = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"]
+    private func sanitizedEnvironment(home: URL) -> [String: String] {
+        let allowed = ["PATH", "TMPDIR", "LANG", "LC_ALL", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"]
         var result = ProcessInfo.processInfo.environment.filter { allowed.contains($0.key) }
-        // Package indexes commonly embed tokens and are never inherited.
-        // Proxy URLs remain useful only when they contain no userinfo.
+        // HOME and pip configuration are redirected into the managed install
+        // area so user-level config, netrc and package-index credentials cannot
+        // enter the child. Proxies remain useful only without URL userinfo.
         for key in ["HTTPS_PROXY", "HTTP_PROXY"] {
             if let raw = result[key],
                let components = URLComponents(string: raw),
@@ -224,7 +231,13 @@ public actor PaddleOCRInstallerService {
                 result[key] = nil
             }
         }
+        result["HOME"] = home.path
+        result["XDG_CONFIG_HOME"] = home.appending(path: ".config", directoryHint: .isDirectory).path
+        result["XDG_CACHE_HOME"] = home.appending(path: ".cache", directoryHint: .isDirectory).path
+        result["PIP_CONFIG_FILE"] = "/dev/null"
         result["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+        result["PIP_NO_INPUT"] = "1"
+        result["PYTHONNOUSERSITE"] = "1"
         result["PYTHONUNBUFFERED"] = "1"
         result["PYTHONDONTWRITEBYTECODE"] = "1"
         result["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"

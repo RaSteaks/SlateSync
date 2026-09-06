@@ -83,9 +83,9 @@ public final class WorkspaceModel {
         // persisted projection. Otherwise its unsaved editor is overwritten.
         try await flush()
         try await prepareSelectionChange?()
-            // A completing operation may have staged data while the first
-            // flush was suspended. Drain first, then persist its final state.
-            try await flush()
+        // A completing operation may have staged data while the first flush
+        // was suspended. Drain first, then persist its final state.
+        try await flush()
         let loaded = try await service.listTasks(projectID: newProjectID)
         let candidate = loaded.compactMap(\.id).first
         let task: TaskData?
@@ -241,9 +241,9 @@ public final class WorkspaceModel {
         defer { isTransitioning = false }
         try await flush()
         try await prepareSelectionChange?()
-            // A completing operation may have staged data while the first
-            // flush was suspended. Drain first, then persist its final state.
-            try await flush()
+        // A completing operation may have staged data while the first flush
+        // was suspended. Drain first, then persist its final state.
+        try await flush()
         if let projectID { try await closeRuntimeProject(projectID) }
         try await autosave.close()
         isClosed = true

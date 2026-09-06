@@ -102,7 +102,11 @@ public struct ProjectLibraryView: View {
             exportProject = nil
             exportsLibrary = false
         }
-        .task { await model.load() }
+        .task {
+            // A retained model may be remounted while already populated. Do
+            // not publish a redundant reload from SwiftUI's table mount pass.
+            if model.library == nil { await model.load() }
+        }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {

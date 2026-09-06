@@ -120,6 +120,20 @@ final class SM08OwnershipTests: XCTestCase {
         )
         XCTAssertNil(CSVKeyboardNavigation.destination(row: 1, column: 2, rows: 2, columns: 3, movement: .next))
         XCTAssertNil(CSVKeyboardNavigation.destination(row: 0, column: 0, rows: 2, columns: 3, movement: .up))
+        XCTAssertEqual(CSVKeyboardNavigation.validSelection(IndexSet([0, 2, 9]), rows: 3), IndexSet([0, 2]))
+        XCTAssertTrue(CSVKeyboardNavigation.validSelection(IndexSet([0]), rows: 0).isEmpty)
+    }
+
+    func testRecognitionCancellationTicketInvalidatesOnlyQueuedProject() {
+        var ledger = RecognitionCancellationLedger()
+        let firstProject = ledger.ticket(for: "project-a")
+        let secondProject = ledger.ticket(for: "project-b")
+
+        ledger.cancel(projectID: "project-a")
+
+        XCTAssertFalse(ledger.permits(firstProject, for: "project-a"))
+        XCTAssertTrue(ledger.permits(secondProject, for: "project-b"))
+        XCTAssertTrue(ledger.permits(ledger.ticket(for: "project-a"), for: "project-a"))
     }
 
     func testLocalLogStoreUsesPermissionsFiltersAndReadClamp() async throws {
@@ -161,13 +175,10 @@ final class SM08OwnershipTests: XCTestCase {
         let progress = ProgressProbe()
 
         let result = try await installer.install { value in
-            Task { await progress.append(value) }
+            progress.append(value)
         }
-        // Progress callbacks are synchronous, but the Sendable test collector
-        // crosses an actor hop; wait for all five fixed stages deterministically.
-        for _ in 0..<100 where await progress.values.count < 5 { await Task.yield() }
 
-        let values = await progress.values
+        let values = progress.values
         let commands = await runner.commands
         XCTAssertEqual(values.map(\.stage), [.detectPython, .createEnvironment, .installDependencies, .verify, .completed])
         XCTAssertEqual(values.map(\.percent), [5, 20, 35, 90, 100])
@@ -178,6 +189,9 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertTrue(commands.allSatisfy { $0.environment["OPENAI_API_KEY"] == nil })
         XCTAssertTrue(commands.allSatisfy { $0.environment["PIP_INDEX_URL"] == nil })
         XCTAssertTrue(commands.allSatisfy { $0.environment["PIP_EXTRA_INDEX_URL"] == nil })
+        XCTAssertTrue(commands.allSatisfy { $0.environment["HOME"] == root.appending(path: "paddle-install-home").path })
+        XCTAssertTrue(commands.allSatisfy { $0.environment["PIP_CONFIG_FILE"] == "/dev/null" })
+        XCTAssertTrue(commands.allSatisfy { $0.environment["PYTHONNOUSERSITE"] == "1" })
         XCTAssertTrue(commands.allSatisfy { $0.environment["PIP_DISABLE_PIP_VERSION_CHECK"] == "1" })
     }
 
@@ -566,9 +580,20 @@ final class SM08OwnershipTests: XCTestCase {
     }
 }
 
-private actor ProgressProbe {
-    private(set) var values: [PaddleOcrInstallProgress] = []
-    func append(_ value: PaddleOcrInstallProgress) { values.append(value) }
+/// The production progress callback is synchronous. A lock-backed collector
+/// preserves callback order even when the surrounding suite runs in parallel;
+/// unstructured actor-hop Tasks can legally enqueue those values out of order.
+private final class ProgressProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [PaddleOcrInstallProgress] = []
+    var values: [PaddleOcrInstallProgress] { lock.withLock { storage } }
+    func append(_ value: PaddleOcrInstallProgress) { lock.withLock { storage.append(value) } }
+}
+
+/// Reference ownership avoids mutating a captured local after the admission
+/// closure has crossed Swift's concurrency checking boundary.
+@MainActor private final class SM08InputAdmissionProbe {
+    var recognitionRunning = true
 }
 
 private actor MutationBarrierProbe {
@@ -710,7 +735,7 @@ private actor AutosaveProbe {
     }
 }
 
-private actor WorkspaceFake: WorkspaceWorkflowServing {
+private actor WorkspaceFake: WorkspaceWorkflowServing, LocalSlateWorkflowServing {
     let table: ResolveCSVTable
     private var saveFailuresRemaining: Int
     private let taskCount: Int
@@ -718,6 +743,7 @@ private actor WorkspaceFake: WorkspaceWorkflowServing {
     private let loadGate: SM08TestGate?
     private(set) var metadataScanCount = 0
     private(set) var metadataExpectedKeys: [String] = []
+    private(set) var slateCSVDecodeCount = 0
     private(set) var savedEditedRecords: [[PersistedRecognitionRecord]] = []
     private(set) var savedTasks: [TaskData] = []
     init(rowCount: Int, saveFailuresRemaining: Int = 0, decodeGate: SM08TestGate? = nil, taskCount: Int = 1, loadGate: SM08TestGate? = nil) {
@@ -759,6 +785,14 @@ private actor WorkspaceFake: WorkspaceWorkflowServing {
         metadataExpectedKeys = options.expectedKeys
         return ScanResult(metadata: [], warnings: [], stats: ScanStats(visitedDirectories: 0, prunedDirectories: 0, skippedDeepDirectories: 0, discoveredSlateFiles: 0, readSlateFiles: 0, learnedStructures: 0), missingKeys: [])
     }
+    func decodeSlateCSV(_ data: Data) async throws -> [SlateCsvRecord] {
+        slateCSVDecodeCount += 1
+        return [.init(fileName: "A001C001.mov", scene: "1", shot: "1", take: "1")]
+    }
+    func localSlateRecords(_ records: [SlateCsvRecord]) async -> [PersistedRecognitionRecord] {
+        records.map { .init(scene: $0.scene, shot: $0.shot, take: $0.take) }
+    }
+    func listScenarios(projectID: String) async throws -> [ScenarioSummary] { [] }
     func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData { throw SlateSyncError(code: "TEST", message: "unused") }
     func recognitionProgress(projectID: String) async -> AsyncStream<RecognitionProgress> { AsyncStream { $0.finish() } }
     func cancelRecognition(projectID: String) async {}
@@ -1272,36 +1306,47 @@ extension SM08OwnershipTests {
         let mediaService = SM08MediaAdmissionProbe()
         let media = MediaInputModel(service: mediaService)
         let metadata = MetadataScanModel(service: service)
-        var recognitionRunning = true
-        media.permitsNewOperation = { !recognitionRunning }
-        metadata.permitsNewOperation = { !recognitionRunning }
+        let recognition = RecognitionModel(service: service, settings: GlobalSettingsFake())
+        let admission = SM08InputAdmissionProbe()
+        media.permitsNewOperation = { !admission.recognitionRunning }
+        metadata.permitsNewOperation = { !admission.recognitionRunning }
+        recognition.permitsNewOperation = { !admission.recognitionRunning }
         var writes = 0
         media.onPrepared = { _ in writes += 1 }
         metadata.onResult = { _, _ in writes += 1 }
         let url = URL(fileURLWithPath: "/private/tmp/blocked-input")
         media.select(url)
         metadata.scan(url)
+        recognition.importSlateCSV(Data(), filename: "blocked.csv", projectID: "p1", flush: {})
         for _ in 0..<20 { await Task.yield() }
         let blockedMedia = await mediaService.calls
         let blockedMetadata = await service.metadataScanCount
+        let blockedSlateCSV = await service.slateCSVDecodeCount
         XCTAssertEqual(blockedMedia, 0)
         XCTAssertEqual(blockedMetadata, 0)
+        XCTAssertEqual(blockedSlateCSV, 0)
         XCTAssertEqual(writes, 0)
         XCTAssertFalse(media.canAcceptInput)
         // Reopening admission must restore the same entry points.
-        recognitionRunning = false
+        admission.recognitionRunning = false
         media.select(url)
         metadata.scan(url)
+        recognition.importSlateCSV(Data(), filename: "allowed.csv", projectID: "p1", flush: {})
         for _ in 0..<200 {
-            if await mediaService.calls == 1, await service.metadataScanCount == 1 { break }
+            if await mediaService.calls == 1, await service.metadataScanCount == 1,
+               await service.slateCSVDecodeCount == 1 { break }
             await Task.yield()
         }
         let allowedMedia = await mediaService.calls
         let allowedMetadata = await service.metadataScanCount
+        let allowedSlateCSV = await service.slateCSVDecodeCount
         XCTAssertEqual(allowedMedia, 1)
         XCTAssertEqual(allowedMetadata, 1)
+        XCTAssertEqual(allowedSlateCSV, 1)
+        XCTAssertEqual(recognition.slateCSVRecords.count, 1)
         await media.drain()
         await metadata.drain()
+        await recognition.drain()
     }
 
     @MainActor

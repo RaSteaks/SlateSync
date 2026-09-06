@@ -280,7 +280,8 @@ private func residentBytes() throws -> Int64 {
 }
 
 /// Shared native list harness also used with project/task projections. It
-/// retains one hosting tree and provides an explicit release boundary.
+/// retains one non-presented hosting tree and provides an explicit release
+/// boundary, allowing scale measurements to remain a background-only test.
 @MainActor final class SM08ListHarness<Content: View> {
     private(set) var host: NSHostingView<Content>?
     private var window: NSWindow?
@@ -292,7 +293,9 @@ private func residentBytes() throws -> Int64 {
         window.isReleasedWhenClosed = false
         self.host = host; self.window = window
         window.contentView = host
-        window.makeKeyAndOrderFront(nil)
+        host.frame = window.contentLayoutRect
+        // `settle()` performs the single delayed layout needed by the hidden
+        // measurement surface; this window is never ordered onto the desktop.
     }
     func settle() async throws {
         try await Task.sleep(for: .milliseconds(40))

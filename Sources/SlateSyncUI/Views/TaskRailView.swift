@@ -50,7 +50,14 @@ public struct TaskRailView: View {
     private var selection: Binding<String?> {
         Binding(
             get: { model.selectedTaskID },
-            set: { id in if let id { Task { try? await model.selectTask(id) } } }
+            set: { id in
+                // SwiftUI synchronizes native List selection during mounting;
+                // ignore its echo instead of reloading the active task from a
+                // private NSTableView delegate callback.
+                if let id, id != model.selectedTaskID {
+                    Task { try? await model.selectTask(id) }
+                }
+            }
         )
     }
 }

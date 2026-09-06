@@ -78,6 +78,7 @@ public final class RecognitionModel {
     public private(set) var slateCSVRecords: [SlateCsvRecord] = []
     public private(set) var slateCSVFilename: String?
     public var flushEditor: (@MainActor () throws -> Void)?
+    public var permitsNewOperation: (@MainActor () -> Bool)?
     private(set) var editableRecords: [EditableRecognitionRecord] = []
 
     private let service: any WorkspaceWorkflowServing
@@ -119,6 +120,7 @@ public final class RecognitionModel {
     }
 
     public func recognize(_ request: NativeRecognitionRequest, flush: @escaping @MainActor () async throws -> Void) {
+        guard permitsNewOperation?() != false else { return }
         guard recognitionTask == nil else { return }
         guard commitVisibleEditor() else { return }
         guard let providerID = request.providerID,
@@ -172,6 +174,9 @@ public final class RecognitionModel {
     }
 
     public func importSlateCSV(_ data: Data, filename: String, projectID: String, flush: @escaping @MainActor () async throws -> Void) {
+        // File-panel completions can arrive after a Library/close barrier has
+        // disabled the view. Enforce admission again at the operation owner.
+        guard permitsNewOperation?() != false else { return }
         guard recognitionTask == nil, let local = service as? any LocalSlateWorkflowServing else { return }
         guard commitVisibleEditor() else { return }
         self.projectID = projectID
@@ -192,6 +197,7 @@ public final class RecognitionModel {
 
     public func generateLocalRecords(flush: @escaping @MainActor () async throws -> Void,
                                      commit: @escaping @MainActor ([PersistedRecognitionRecord], String) -> Void) {
+        guard permitsNewOperation?() != false else { return }
         guard recognitionTask == nil, !slateCSVRecords.isEmpty,
               let local = service as? any LocalSlateWorkflowServing else { return }
         guard commitVisibleEditor() else { return }
@@ -234,6 +240,12 @@ public final class RecognitionModel {
         // cell first so its final 250 ms draft is accepted by receiveResult.
         do { try flushEditor?(); return true }
         catch { operation = .failed(ProductPrivacy.error(error)); return false }
+    }
+
+    /// Picker read failures belong to this operation surface, not the media
+    /// preparation owner that happens to share the surrounding input form.
+    public func report(_ error: Error) {
+        operation = .failed(ProductPrivacy.error(error))
     }
 
     public func drain() async {

@@ -38,6 +38,13 @@ enum CSVKeyboardNavigation {
             return (row, columns - 1)
         }
     }
+
+    /// NSTableView can preserve selection while SwiftUI replaces the backing
+    /// snapshot. Keep only rows that still exist before reapplying selection.
+    static func validSelection(_ selection: IndexSet, rows: Int) -> IndexSet {
+        guard rows > 0 else { return [] }
+        return IndexSet(selection.filter { $0 >= 0 && $0 < rows })
+    }
 }
 
 /// The single SM-08 AppKit data-surface bridge. NSTableView supplies row reuse
@@ -122,7 +129,10 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         guard context.coordinator.renderedRevision != revision ||
                 context.coordinator.renderedTableID != tableID else { return }
         let origin = scrollView.contentView.bounds.origin
-        let selected = tableView.selectedRowIndexes
+        let selected = CSVKeyboardNavigation.validSelection(
+            tableView.selectedRowIndexes,
+            rows: table.rows.count
+        )
         tableView.reloadData()
         tableView.selectRowIndexes(selected, byExtendingSelection: false)
         scrollView.contentView.scroll(to: origin)

@@ -191,6 +191,11 @@ private struct SlateSyncWindowRoot: View {
             // Form.disabled, so every input owner shares the same admission.
             media.permitsNewOperation = csv.permitsNewOperation
             metadata.permitsNewOperation = csv.permitsNewOperation
+            recognition.permitsNewOperation = { [weak termination, weak workspace] in
+                guard let termination, let workspace else { return false }
+                return !workspace.isTransitioning && !termination.isDraining &&
+                    !termination.isMutatingLibrary && !termination.restartRequired
+            }
             projects.mutationCoordinator = termination.performLibraryMutation
             projects.didChangeLibrary = { await termination.refreshProjects(activeIDs: $0) }
             projects.didRequireRestart = termination.requireRestart

@@ -95,7 +95,7 @@ public struct WorkspaceView: View {
                 let data = try Data(contentsOf: url)
                 guard let projectID = workspace.projectID else { return }
                 recognition.importSlateCSV(data, filename: url.lastPathComponent, projectID: projectID) { try await workspace.flush() }
-            } catch { media.report(error) }
+            } catch { recognition.report(error) }
         }
         .task {
             await recognition.loadOptions()

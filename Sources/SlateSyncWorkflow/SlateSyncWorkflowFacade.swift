@@ -3,6 +3,20 @@ import SlateSyncDomain
 import SlateSyncMedia
 import SlateSyncPersistence
 
+/// Project-scoped tickets close the factory-construction cancellation gap
+/// without canceling recognition already running in unrelated windows.
+struct RecognitionCancellationLedger {
+    private var revisions: [String: Int] = [:]
+
+    func ticket(for projectID: String) -> Int { revisions[projectID, default: 0] }
+    func permits(_ ticket: Int, for projectID: String) -> Bool {
+        revisions[projectID, default: 0] == ticket
+    }
+    mutating func cancel(projectID: String) {
+        revisions[projectID, default: 0] &+= 1
+    }
+}
+
 /// Production façade consumed by the focused SM-08 UI models. It is the only
 /// composition boundary allowed to join Library/runtime, CSV, media/OCR,
 /// Provider transport, settings, and file logs; views receive only protocols.
@@ -23,11 +37,11 @@ public actor SlateSyncWorkflowFacade:
     private let paddleInstaller: PaddleOCRInstallerService
     private let allowsExternalOperations: Bool
     private var recognition: RecognitionCoordinator?
-    private var recognitionRegistry: ProviderRegistry?
     private var settingsProviders: SettingsProviderRuntime?
     private var recognitionBuild: Task<RecognitionCoordinator, Error>?
     private var recognitionReset: Task<Void, Never>?
     private var recognitionGeneration = 0
+    private var recognitionCancellations = RecognitionCancellationLedger()
     private var settingsBuild: Task<SettingsProviderRuntime, Error>?
     private var settingsReset: Task<Void, Never>?
     private var settingsGeneration = 0
@@ -204,9 +218,16 @@ public actor SlateSyncWorkflowFacade:
 
     public func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData {
         try requireExternalOperations()
+        let cancellationTicket = recognitionCancellations.ticket(for: request.projectID)
         let coordinator = try await recognitionCoordinator()
         await record(.info, category: "recognition", event: "started", message: "识别已开始")
         do {
+            // Building the coordinator and recording the start both suspend
+            // this actor. A close/archive cancellation during either hop must
+            // stop this queued request before it reaches the coordinator.
+            guard recognitionCancellations.permits(cancellationTicket, for: request.projectID) else {
+                throw RecognitionFailure.canceled
+            }
             let result = try await coordinator.recognize(request)
             await record(.info, category: "recognition", event: "completed", message: "识别已完成")
             return result
@@ -226,7 +247,16 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func cancelRecognition(projectID: String) async {
-        await recognition?.cancel(projectID: projectID)
+        recognitionCancellations.cancel(projectID: projectID)
+        let current = recognition
+        let building = recognitionBuild
+        if let current { await current.cancel(projectID: projectID) }
+        // Joining an in-flight factory makes cancellation deterministic for a
+        // request already waiting on construction. The ticket above prevents
+        // that request from starting if cancellation wins the join race.
+        if let building, let value = try? await building.value {
+            await value.cancel(projectID: projectID)
+        }
     }
 
     public func closeProject(id: String) async throws {
@@ -594,7 +624,6 @@ public actor SlateSyncWorkflowFacade:
         let building = recognitionBuild
         recognition = nil
         recognitionBuild = nil
-        recognitionRegistry = nil
         let reset = Task {
             if let current { await current.close() }
             if let building, let value = try? await building.value { await value.close() }

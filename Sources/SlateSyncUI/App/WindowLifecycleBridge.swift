@@ -83,8 +83,14 @@ public final class WindowCloseCoordinator: NSObject, NSWindowDelegate {
         previous = nil
     }
 
-    public override func responds(to selector: Selector!) -> Bool {
-        super.responds(to: selector) || previous?.responds(to: selector) == true
+    public nonisolated override func responds(to selector: Selector!) -> Bool {
+        if super.responds(to: selector) { return true }
+        // NSObject declares this introspection hook nonisolated, while AppKit
+        // invokes an NSWindow delegate on the main thread. Make that bridge
+        // contract explicit before reading the MainActor-owned delegate.
+        return MainActor.assumeIsolated {
+            previous?.responds(to: selector) == true
+        }
     }
 
     public func windowDidChangeOcclusionState(_ notification: Notification) {
@@ -94,8 +100,14 @@ public final class WindowCloseCoordinator: NSObject, NSWindowDelegate {
         previous?.windowDidChangeOcclusionState?(notification)
     }
 
-    public override func forwardingTarget(for selector: Selector!) -> Any? {
-        if previous?.responds(to: selector) == true { return previous }
+    public nonisolated override func forwardingTarget(for selector: Selector!) -> Any? {
+        let target: MainThreadForwardingTarget? = MainActor.assumeIsolated {
+            guard previous?.responds(to: selector) == true else { return nil }
+            // The wrapper crosses only the synchronous assumeIsolated return;
+            // AppKit consumes the delegate immediately on this same thread.
+            return previous.map { MainThreadForwardingTarget(value: $0) }
+        }
+        if let target { return target.value }
         return super.forwardingTarget(for: selector)
     }
 
@@ -124,6 +136,12 @@ public final class WindowCloseCoordinator: NSObject, NSWindowDelegate {
         }
         return false
     }
+}
+
+/// Objective-C forwarding is main-thread-only but `assumeIsolated` requires a
+/// Sendable return value. This wrapper never escapes the synchronous hook.
+private struct MainThreadForwardingTarget: @unchecked Sendable {
+    let value: AnyObject
 }
 
 private enum WindowCloseFailure: LocalizedError {
