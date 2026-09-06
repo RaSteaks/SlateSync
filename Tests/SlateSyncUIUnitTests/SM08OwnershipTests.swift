@@ -8,6 +8,7 @@ import SlateSyncPersistence
 import XCTest
 import SwiftUI
 import CryptoKit
+import Synchronization
 
 final class SM08OwnershipTests: XCTestCase {
     func testAutosaveFlushWritesOnlyLatestImmutableSnapshot() async throws {
@@ -890,14 +891,13 @@ final class SM08OwnershipTests: XCTestCase {
     }
 }
 
-/// The production progress callback is synchronous. A lock-backed collector
+/// The production progress callback is synchronous. A Mutex-backed collector
 /// preserves callback order even when the surrounding suite runs in parallel;
 /// unstructured actor-hop Tasks can legally enqueue those values out of order.
-private final class ProgressProbe: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [PaddleOcrInstallProgress] = []
-    var values: [PaddleOcrInstallProgress] { lock.withLock { storage } }
-    func append(_ value: PaddleOcrInstallProgress) { lock.withLock { storage.append(value) } }
+private final class ProgressProbe: Sendable {
+    private let valuesStorage = Mutex<[PaddleOcrInstallProgress]>([])
+    var values: [PaddleOcrInstallProgress] { valuesStorage.withLock { $0 } }
+    func append(_ value: PaddleOcrInstallProgress) { valuesStorage.withLock { $0.append(value) } }
 }
 
 /// Reference ownership avoids mutating a captured local after the admission

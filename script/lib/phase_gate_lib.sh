@@ -186,7 +186,9 @@ gate_xcode_test_plan_check() {
   ephemeral_result_bundle="${test_workspace}/SlateSync.xcresult"
   (
     cd "$project_root" &&
-    xcodebuild -quiet \
+    # Preserve XCTest PASS lines in the raw Gate log for acceptance-scoped
+    # evidence generation; result classification still comes from xcresult.
+    xcodebuild \
       -project SlateSync.xcodeproj \
       -scheme SlateSync \
       -testPlan SlateSync \

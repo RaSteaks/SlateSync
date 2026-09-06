@@ -103,11 +103,21 @@ public final class WindowCloseCoordinator: NSObject, NSWindowDelegate {
     public nonisolated override func forwardingTarget(for selector: Selector!) -> Any? {
         let target: MainThreadForwardingTarget? = MainActor.assumeIsolated {
             guard previous?.responds(to: selector) == true else { return nil }
-            // The wrapper crosses only the synchronous assumeIsolated return;
-            // AppKit consumes the delegate immediately on this same thread.
-            return previous.map { MainThreadForwardingTarget(value: $0) }
+            // Retain only across this synchronous Objective-C forwarding
+            // boundary; takeRetainedValue transfers ownership to AppKit's
+            // returned AnyObject without an unchecked Sendable escape.
+            return previous.map {
+                MainThreadForwardingTarget(
+                    address: UInt(bitPattern: Unmanaged.passRetained($0).toOpaque())
+                )
+            }
         }
-        if let target { return target.value }
+        if let target {
+            guard let pointer = UnsafeMutableRawPointer(bitPattern: target.address) else {
+                return super.forwardingTarget(for: selector)
+            }
+            return Unmanaged<AnyObject>.fromOpaque(pointer).takeRetainedValue()
+        }
         return super.forwardingTarget(for: selector)
     }
 
@@ -138,10 +148,10 @@ public final class WindowCloseCoordinator: NSObject, NSWindowDelegate {
     }
 }
 
-/// Objective-C forwarding is main-thread-only but `assumeIsolated` requires a
-/// Sendable return value. This wrapper never escapes the synchronous hook.
-private struct MainThreadForwardingTarget: @unchecked Sendable {
-    let value: AnyObject
+/// The retained Objective-C address is Sendable as an integer while the object
+/// is immediately transferred back to AppKit on the same synchronous call.
+private struct MainThreadForwardingTarget: Sendable {
+    let address: UInt
 }
 
 private enum WindowCloseFailure: LocalizedError {
