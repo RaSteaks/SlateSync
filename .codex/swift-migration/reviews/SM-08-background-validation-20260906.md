@@ -16,10 +16,10 @@
 | 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-cancel-drain-final-swift.log`；214/214 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
 | 隐藏原生 List 规模 | PASS_WITH_FRAMEWORK_WARNING | `/private/tmp/slatesync-sm08-postreview-hidden-list.log`；500 projects / 1,000 tasks、1 warm-up + 5 samples，1 项通过；每个 List 挂载有一次 `NSTableView` delegate 重入预警（共 12 次） |
 | 隐藏 List 最小对照 | REPRODUCED_FRAMEWORK_BEHAVIOR | `/private/tmp/slatesync-sm08-minimal-hidden-list.log`；不含 SlateSync 模型/绑定的纯 `List(0..<500)` 在未 ordered `NSWindow` 中 6 次挂载精确生成 6 条同样预警 |
-| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-cancel-drain-xcode-debug`；当前代码 `xcodebuild` 退出码 0 |
-| Xcode static analysis | PASS | `/private/tmp/slatesync-sm08-cancel-drain-xcode-analyze`；当前代码 `xcodebuild analyze` 退出码 0，无源码诊断 |
-| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-cancel-drain-xcode-release`；当前代码 `xcodebuild` 退出码 0 |
-| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-cancel-drain-signed.xcarchive`；当前代码 arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
+| Xcode Debug build | PASS | 产品提交 `ce04157`；`/private/tmp/slatesync-sm08-ce04157-debug.log` 与 `/private/tmp/slatesync-sm08-ce04157-xcode-debug`，`** BUILD SUCCEEDED **` |
+| Xcode static analysis | PASS | 产品提交 `ce04157`；`/private/tmp/slatesync-sm08-ce04157-analyze.log` 与 `/private/tmp/slatesync-sm08-ce04157-xcode-analyze`，`** ANALYZE SUCCEEDED **`，无 SlateSync 源码诊断 |
+| Xcode Release build | PASS | 产品提交 `ce04157`；`/private/tmp/slatesync-sm08-ce04157-release.log` 与 `/private/tmp/slatesync-sm08-ce04157-xcode-release`，`** BUILD SUCCEEDED **` |
+| Release Archive | PASS_LOCAL | 产品提交 `ce04157`；`/private/tmp/slatesync-sm08-ce04157-archive.log` 与 `/private/tmp/slatesync-sm08-ce04157-signed.xcarchive`，arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
 
 收尾审查修复了 CSV 缩表时选区越界、Paddle 子进程继承用户 pip/HOME
 配置、coordinator 构建窗口内的识别取消竞态、迟到的本地 CSV picker 回调绕过
@@ -81,7 +81,13 @@ service hop 和原始操作同时结束，且 drain 开始后不再接纳新的�
 | project list load | 291.21–310.09 ms | ≤ 1,500 ms |
 | task list load | 10.31–10.70 ms | ≤ 900 ms |
 
-Archive 为 universal arm64/x86_64，包通过本地 codesign strict verification，签名为 ad hoc runtime 且没有 Developer ID Team ID；这只证明本地包完整性，不证明 notarization 或发行资格。
+产品提交 `ce04157adab9d2ac651b5803449819c7c797f6c9` 的 Archive 为 universal
+arm64/x86_64，bundle ID 为 `com.slatesync.app`，最低系统为 macOS 15.0。包通过
+本地 codesign strict verification，CodeDirectory flags 为 `adhoc,runtime` 且没有
+Developer ID Team ID；这只证明本地包完整性，不证明 notarization 或发行资格。构建
+日志中的 AVFCore missing-symbol 输出来自 Xcode 资产工具加载当前 SDK，另有“无
+AppIntents.framework 依赖”的 metadata 跳过提示；四项命令均成功且没有 SlateSync
+源码诊断。
 
 ## UI 历史诊断
 
