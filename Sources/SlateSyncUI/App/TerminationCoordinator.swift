@@ -69,6 +69,10 @@ public final class TerminationCoordinator {
 
     public func reportCloseFailure(_ failure: Error) { error = ProductPrivacy.error(failure) }
 
+    /// Window-close and termination failures are owned here rather than by
+    /// navigation. Dismissing their banner must not mutate workspace state.
+    public func clearError() { error = nil }
+
     public func requireRestart() { restartRequired = true }
 
     public func refreshProjects(activeIDs: Set<String>) async { await windows.refreshAll(activeIDs: activeIDs) }

@@ -119,12 +119,23 @@ public struct AppRootView: View {
     }
 
     @ViewBuilder private var sessionError: some View {
-        if let error = session.navigationError ?? termination.error {
+        if let error = session.navigationError {
             HStack {
                 Label(error.message, systemImage: "exclamationmark.triangle")
                 Spacer()
                 Button("重试保存") { Task { await workspace.retryAutosave() } }
                 Button("关闭") { session.clearError() }
+            }
+            .padding(10)
+            .background(.bar)
+            .accessibilityElement(children: .combine)
+        } else if let error = termination.error {
+            HStack {
+                Label(error.message, systemImage: "exclamationmark.triangle")
+                Spacer()
+                // Close/quit failures include IME composition and Library
+                // barriers; an autosave retry is not valid for those owners.
+                Button("关闭") { termination.clearError() }
             }
             .padding(10)
             .background(.bar)

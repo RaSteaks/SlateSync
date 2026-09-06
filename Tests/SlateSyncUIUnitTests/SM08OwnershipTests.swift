@@ -290,6 +290,19 @@ final class SM08OwnershipTests: XCTestCase {
     }
 
     @MainActor
+    func testTerminationFailureDismissalClearsItsOwnErrorOwner() {
+        let termination = TerminationCoordinator(lifecycle: LifecycleProbe())
+        termination.reportCloseFailure(SlateSyncError(
+            code: "EDIT_COMPOSITION",
+            message: "请先完成当前文字输入"
+        ))
+
+        XCTAssertEqual(termination.error?.code, "EDIT_COMPOSITION")
+        termination.clearError()
+        XCTAssertNil(termination.error)
+    }
+
+    @MainActor
     func testSettingsDiscoveryAndProbeUseOfflineFacadeProjection() async {
         let service = GlobalSettingsFake()
         let model = GlobalSettingsModel(service: service)

@@ -12,18 +12,23 @@
 
 | 范围 | 结果 | 证据 |
 | --- | --- | --- |
-| SM08 owner 专项 | PASS | 44 项通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket 和迟到 picker 准入回归 |
-| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-commandfix-swift.log`；关闭命令修复后 211/211 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
+| SM08 owner 专项 | PASS | `/private/tmp/slatesync-sm08-owner-45.log`；45/45 通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket、迟到 picker 准入和终止错误所有权回归 |
+| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-errorowner-swift.log`；212/212 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
 | 隐藏原生 List 规模 | PASS_WITH_FRAMEWORK_WARNING | `/private/tmp/slatesync-sm08-postreview-hidden-list.log`；500 projects / 1,000 tasks、1 warm-up + 5 samples，1 项通过；每个 List 挂载有一次 `NSTableView` delegate 重入预警（共 12 次） |
 | 隐藏 List 最小对照 | REPRODUCED_FRAMEWORK_BEHAVIOR | `/private/tmp/slatesync-sm08-minimal-hidden-list.log`；不含 SlateSync 模型/绑定的纯 `List(0..<500)` 在未 ordered `NSWindow` 中 6 次挂载精确生成 6 条同样预警 |
-| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-commandfix-xcode-debug`；关闭命令修复后 `xcodebuild` 退出码 0 |
-| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-commandfix-xcode-release`；关闭命令修复后 `xcodebuild` 退出码 0 |
-| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-commandfix-signed.xcarchive`；关闭命令修复后 arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
+| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-errorowner-xcode-debug`；当前代码 `xcodebuild` 退出码 0 |
+| Xcode static analysis | PASS | `/private/tmp/slatesync-sm08-review-analyze`；当前代码 `xcodebuild analyze` 退出码 0，无源码诊断 |
+| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-errorowner-xcode-release`；当前代码 `xcodebuild` 退出码 0 |
+| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-errorowner-signed.xcarchive`；当前代码 arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
 
 收尾审查修复了 CSV 缩表时选区越界、Paddle 子进程继承用户 pip/HOME
 配置、coordinator 构建窗口内的识别取消竞态、迟到的本地 CSV picker 回调绕过
 生命周期准入门，以及并行测试中进度收集乱序造成的假失败。这是代码审查与后台
 复验，不构成阶段要求的独立 review 或 Owner approval。
+
+后续错误横幅审查又修复了终止错误的错误所有权：关闭/退出失败现在由
+`TerminationCoordinator` 自行清除，导航所有者不再被误改；只有导航/自动保存
+错误提供“重试保存”，IME 组字和 Library barrier 等终止错误只允许关闭提示。
 
 ## 历史 UI 失败静态分诊
 
