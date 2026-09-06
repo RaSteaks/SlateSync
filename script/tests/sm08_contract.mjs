@@ -133,6 +133,7 @@ function sourceAudit() {
   }
   assert.equal((app.match(/NSApplicationDelegate/g) ?? []).length, 2);
   assert.doesNotMatch(app, /NSHostingView|NSWindow\s*\(/);
+  assert.match(app, /guard let termination else \{ return \.terminateCancel \}/);
 
   const uiFiles = readdirSync(join(repository, "Sources/SlateSyncUI"), { recursive: true })
     .filter(path => String(path).endsWith(".swift"))

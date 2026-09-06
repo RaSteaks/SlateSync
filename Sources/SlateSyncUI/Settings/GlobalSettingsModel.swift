@@ -159,9 +159,14 @@ public final class GlobalSettingsModel {
         defer { endOperation() }
         guard providerOperations[providerID]?.isRunning == true else { return }
         providerOperations[providerID] = .running(label: "正在取消验证…")
-        providerRequests[providerID] = nil
+        // A provider edit/removal can supersede this cancellation while the
+        // service drains. Retain a unique owner so the late callback cannot
+        // recreate operation state that the newer mutation already cleared.
+        let cancellation = UUID()
+        providerRequests[providerID] = cancellation
         await service.cancelModelProbe(providerID: providerID)
-        guard providerRequests[providerID] == nil else { return }
+        guard providerRequests[providerID] == cancellation else { return }
+        providerRequests[providerID] = nil
         probingProviderIDs.remove(providerID)
         providerOperations[providerID] = .canceled
     }

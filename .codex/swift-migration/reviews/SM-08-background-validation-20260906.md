@@ -12,8 +12,8 @@
 
 | 范围 | 结果 | 证据 |
 | --- | --- | --- |
-| SM08 owner 专项 | PASS | `/private/tmp/slatesync-sm08-cancel-drain-final-owner.log`；47/47 通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket、迟到 picker 准入、终止错误所有权、进度单调性和设置取消 drain 回归 |
-| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-cancel-drain-final-swift.log`；214/214 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
+| SM08 owner 专项 | PASS | `/private/tmp/slatesync-sm08-postreview-final-owner.log`；47/47 通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket、迟到 picker 准入、终止错误所有权、进度单调性和设置取消 drain 回归 |
+| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-postreview-final-swift.log`；214/214 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
 | 隐藏原生 List 规模 | PASS_WITH_FRAMEWORK_WARNING | `/private/tmp/slatesync-sm08-postreview-hidden-list.log`；500 projects / 1,000 tasks、1 warm-up + 5 samples，1 项通过；每个 List 挂载有一次 `NSTableView` delegate 重入预警（共 12 次） |
 | 隐藏 List 最小对照 | REPRODUCED_FRAMEWORK_BEHAVIOR | `/private/tmp/slatesync-sm08-minimal-hidden-list.log`；不含 SlateSync 模型/绑定的纯 `List(0..<500)` 在未 ordered `NSWindow` 中 6 次挂载精确生成 6 条同样预警 |
 | Xcode Debug build | PASS | 产品提交 `ce04157`；`/private/tmp/slatesync-sm08-ce04157-debug.log` 与 `/private/tmp/slatesync-sm08-ce04157-xcode-debug`，`** BUILD SUCCEEDED **` |
@@ -26,6 +26,15 @@
 生命周期准入门，以及并行测试中进度收集乱序造成的假失败。这是代码审查与后台
 复验，不构成阶段要求的独立 review 或 Owner approval。
 
+构建后集中复审进一步封闭了取消先于 facade actor 入场的窗口：旧调用现在除了
+项目级 ticket，还必须保有未取消的调用 Task；因此它不能在取消已完成后捕获新 ticket
+并启动 Provider。coordinator 构建后会先复核所有权再写 started 日志，避免已取消请求
+留下虚假启动事件；确定性 gate 测试覆盖已取消调用者的重新入场。
+
+同轮审查把 coordinator 尚未由 WindowGroup `.task` 注入时的极早期 Quit 从
+`.terminateNow` 改为 `.terminateCancel`。初始化窗口不再允许绕过全局设置、安装、窗口
+与持久化 drain；静态契约固定该 fail-closed 默认值。
+
 后续错误横幅审查又修复了终止错误的错误所有权：关闭/退出失败现在由
 `TerminationCoordinator` 自行清除，导航所有者不再被误改；只有导航/自动保存
 错误提供“重试保存”，IME 组字和 Library barrier 等终止错误只允许关闭提示。
@@ -36,7 +45,8 @@ percent 倒退；反序回调测试固定验证较新的完成态不会被迟到
 
 生命周期审查还将 Provider probe 取消纳入 `GlobalSettingsModel` 的 active-call
 barrier，并由 `PaddleInstallerModel` 保留安装取消 task。应用 drain 现在会等待取消
-service hop 和原始操作同时结束，且 drain 开始后不再接纳新的安装取消请求。
+service hop 和原始操作同时结束，且 drain 开始后不再接纳新的安装取消请求。probe
+取消还持有独立 UUID；删除或编辑 Provider 一旦取代它，迟到取消不会重建已清除状态。
 
 ## 历史 UI 失败静态分诊
 
@@ -66,7 +76,7 @@ service hop 和原始操作同时结束，且 drain 开始后不再接纳新的�
 | Release 构建 | PASS | `/private/tmp/slatesync-sm08-release-derived-final`，`** BUILD SUCCEEDED **` |
 | Release Archive | PASS | `/private/tmp/slatesync-sm08-release-20260906-final.xcarchive`，`** ARCHIVE SUCCEEDED **` |
 | contract 静态负例 | PASS | `node script/tests/sm08_contract.mjs --self-test` |
-| Gate helper 自测 | PASS | `/private/tmp/slatesync-sm08-cancel-drain-final-gate-selftest.log`；当前 command/coverage 契约更新后 82 passed / 0 failed |
+| Gate helper 自测 | PASS | `/private/tmp/slatesync-sm08-postreview-final-gate-selftest.log`；当前 command/coverage 契约更新后 82 passed / 0 failed |
 | Node compatibility | PASS | `/private/tmp/slatesync-sm08-node-compat-final.log`；324 passed / 0 failed |
 | Modern compatibility | PASS | `/private/tmp/slatesync-sm08-modern-compat-final.log`；25 files / 118 tests passed |
 | JavaScript static check | PASS | `/private/tmp/slatesync-sm08-static-check-final.log` |

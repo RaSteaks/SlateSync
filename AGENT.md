@@ -17,7 +17,11 @@
   `SET-05`、`SET-07` 和 Gate regression evidence。
 - Provider probe 取消现进入 `GlobalSettingsModel` 的 active-call barrier；Paddle
   安装取消 task 由模型保留并在应用 drain 中等待。退出不会在这两个取消 service hop
-  仍活动时提前关闭 workflow；确定性双 gate 测试覆盖取消与原操作同时挂起的顺序。
+  仍活动时提前关闭 workflow；probe 取消用独立 UUID 所有权阻止删除/编辑 Provider 后
+  的迟到终态回写。确定性 gate 测试覆盖取消、后继删除与原操作同时挂起的顺序。
+- AppDelegate 在 WindowGroup 尚未注入生命周期 owner 的极早期 Quit 现在 fail closed
+  为 `.terminateCancel`，不再用 `.terminateNow` 绕过全局 settings/installer/window drain；
+  SM08 静态契约固定该安全默认值。
 - 收尾代码审查发现并修复两个可在后台验证的问题：CSV 缩表刷新前裁剪
   `NSTableView` 选区，避免重新应用越界行；Paddle 安装子进程改用受管
   HOME 并禁用 pip/user-site 配置，不再隐式读取用户包索引凭据。
@@ -31,7 +35,9 @@
   model 重入；可见窗口仍留待专用 UI 环境确认。
 - 识别取消新增项目级 ticket：如果关闭/归档发生在 coordinator 构建或
   started-log 挂起期间，排队请求在进入真实 OCR/Provider 前即会收敛为取消，
-  不影响其他窗口项目。
+  不影响其他窗口项目。facade 入场还同时检查调用 Task 的取消状态，封闭“取消已先
+  发生、旧调用随后才进入 actor 并捕获新 ticket”的窗口；构建后会在写 started 日志
+  前重新校验，已取消请求不会留下误导性的启动事件。
 - `NSWindowDelegate` 的 Objective-C 动态转发入口现在显式使用 AppKit 主线程
   契约访问 MainActor 所有的 previous delegate，清除 Swift 6 非隔离重写警告。
 - 本地场记 CSV picker 的迟到回调现在与媒体/metadata 共享底层准入门：
@@ -52,7 +58,7 @@
 - 已补齐后台可验证的功能缺口：识别选项通过任务快照保存/恢复，metadata 扫描使用 CSV canonical material key，CSV 键盘顺序/边界有单元回归；窗口 close coordinator 的成功许可会在复用到新窗口时重置。
 - 早期后台非原生 Swift 回归退出码为 0（日志含 210 条测试记录）；
   识别选项、metadata canonical key、CSV 键盘、真实 SQLite 规模加载均通过。
-- 当前 Gate helper 后台自测为 82 passed / 0 failed（`/private/tmp/slatesync-sm08-cancel-drain-final-gate-selftest.log`）；这只证明 Gate 辅助逻辑，不等于运行了完整 SM-08 Gate。
+- 当前 Gate helper 后台自测为 82 passed / 0 failed（`/private/tmp/slatesync-sm08-postreview-final-gate-selftest.log`）；这只证明 Gate 辅助逻辑，不等于运行了完整 SM-08 Gate。
 - 兼容矩阵后台检查均通过：Node 324/324、Modern 25 files/118 tests、静态检查、TypeScript typecheck、Modern production build、Node/Electron SQLite ABI（137/148 modules，SQLite 3.53.2）；原始日志见本轮背景验证记录。
 - 真实 SQLite 规模证据：500 个项目、1,000 个任务，1 次 warm-up 加 5 次样本；项目列表 291.21–310.09 ms，任务列表 10.31–10.70 ms，均低于 1,500/900 ms 预算。原始指标在 `/private/tmp/slatesync-sm08-metrics/real-sqlite-scale.json`。
 - 后台 Debug 构建、Release 构建、静态分析和 Archive 均成功；产品提交

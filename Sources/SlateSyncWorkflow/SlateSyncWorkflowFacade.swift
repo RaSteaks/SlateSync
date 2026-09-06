@@ -5,12 +5,20 @@ import SlateSyncPersistence
 
 /// Project-scoped tickets close the factory-construction cancellation gap
 /// without canceling recognition already running in unrelated windows.
-struct RecognitionCancellationLedger {
+struct RecognitionCancellationLedger: Sendable {
     private var revisions: [String: Int] = [:]
 
     func ticket(for projectID: String) -> Int { revisions[projectID, default: 0] }
     func permits(_ ticket: Int, for projectID: String) -> Bool {
         revisions[projectID, default: 0] == ticket
+    }
+    func requirePermit(_ ticket: Int, for projectID: String) throws {
+        // A canceled caller can reach this actor after cancelRecognition has
+        // already advanced the ledger and then capture that newer ticket.
+        // Check task ownership as well as revision ownership at admission.
+        guard !Task.isCancelled, permits(ticket, for: projectID) else {
+            throw RecognitionFailure.canceled
+        }
     }
     mutating func cancel(projectID: String) {
         revisions[projectID, default: 0] &+= 1
@@ -219,15 +227,17 @@ public actor SlateSyncWorkflowFacade:
     public func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData {
         try requireExternalOperations()
         let cancellationTicket = recognitionCancellations.ticket(for: request.projectID)
+        try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
         let coordinator = try await recognitionCoordinator()
+        // A factory build can suspend long enough for close/archive to win.
+        // Do not emit a misleading started event for work that is already
+        // canceled and will never reach the Provider.
+        try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
         await record(.info, category: "recognition", event: "started", message: "识别已开始")
         do {
-            // Building the coordinator and recording the start both suspend
-            // this actor. A close/archive cancellation during either hop must
-            // stop this queued request before it reaches the coordinator.
-            guard recognitionCancellations.permits(cancellationTicket, for: request.projectID) else {
-                throw RecognitionFailure.canceled
-            }
+            // Recording the start also suspends this actor. A close/archive
+            // cancellation during that hop must stop the queued request.
+            try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
             let result = try await coordinator.recognize(request)
             await record(.info, category: "recognition", event: "completed", message: "识别已完成")
             return result

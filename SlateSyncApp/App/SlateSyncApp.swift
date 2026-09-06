@@ -273,7 +273,10 @@ final class SlateSyncAppDelegate: NSObject, NSApplicationDelegate {
     private var isAwaitingTerminationReply = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let termination else { return .terminateNow }
+        // The WindowGroup installs its lifecycle owner asynchronously. An
+        // unusually early Quit must fail closed instead of bypassing every
+        // settings, installer, window and persistence drain.
+        guard let termination else { return .terminateCancel }
         guard !isAwaitingTerminationReply else { return .terminateLater }
         // Quit does not pass through windowShouldClose. Commit every focused
         // native editor before any asynchronous store drain, respecting IME.

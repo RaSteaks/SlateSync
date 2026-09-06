@@ -124,7 +124,7 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertTrue(CSVKeyboardNavigation.validSelection(IndexSet([0]), rows: 0).isEmpty)
     }
 
-    func testRecognitionCancellationTicketInvalidatesOnlyQueuedProject() {
+    func testRecognitionCancellationTicketInvalidatesOnlyQueuedProject() async {
         var ledger = RecognitionCancellationLedger()
         let firstProject = ledger.ticket(for: "project-a")
         let secondProject = ledger.ticket(for: "project-b")
@@ -134,6 +134,27 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertFalse(ledger.permits(firstProject, for: "project-a"))
         XCTAssertTrue(ledger.permits(secondProject, for: "project-b"))
         XCTAssertTrue(ledger.permits(ledger.ticket(for: "project-a"), for: "project-a"))
+
+        let admissionGate = SM08TestGate()
+        let currentLedger = ledger
+        let canceledCaller = Task {
+            await admissionGate.wait()
+            try currentLedger.requirePermit(
+                currentLedger.ticket(for: "project-a"),
+                for: "project-a"
+            )
+        }
+        await admissionGate.entered()
+        canceledCaller.cancel()
+        await admissionGate.release()
+        do {
+            try await canceledCaller.value
+            XCTFail("an already-canceled caller must not capture a fresh ticket and start recognition")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, RecognitionFailure.canceled.code)
+        } catch {
+            XCTFail("unexpected cancellation error: \(error)")
+        }
     }
 
     func testLocalLogStoreUsesPermissionsFiltersAndReadClamp() async throws {
@@ -388,6 +409,37 @@ final class SM08OwnershipTests: XCTestCase {
         await cancelProbe.value
         await settingsDrain.value
         XCTAssertTrue(settingsDrained)
+
+        let supersededProbeGate = SM08TestGate()
+        let supersededCancelGate = SM08FirstCallGate()
+        let supersededService = GlobalSettingsFake(
+            providerProbeGate: supersededProbeGate,
+            providerCancelGate: supersededCancelGate
+        )
+        let supersededSettings = GlobalSettingsModel(service: supersededService)
+        let supersededProbe = Task {
+            await supersededSettings.probe(
+                providerID: "custom-test",
+                modelIDs: ["vision-test"]
+            )
+        }
+        await supersededProbeGate.entered()
+        let supersededCancel = Task {
+            await supersededSettings.cancelProbe(providerID: "custom-test")
+        }
+        await supersededCancelGate.entered()
+        // Removing the provider uses the second, non-blocking service cancel
+        // and clears its UI state while the first cancellation is still late.
+        await supersededSettings.removeCustomProvider(id: "custom-test")
+        XCTAssertNil(supersededSettings.providerOperations["custom-test"])
+        await supersededCancelGate.release()
+        await supersededCancel.value
+        XCTAssertNil(
+            supersededSettings.providerOperations["custom-test"],
+            "a superseded cancellation must not recreate removed provider state"
+        )
+        await supersededProbeGate.release()
+        await supersededProbe.value
 
         let installGate = SM08TestGate()
         let installerCancelGate = SM08TestGate()
