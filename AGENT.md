@@ -2,14 +2,22 @@
 
 ## 2026-09-06 SM-08 正式收尾（当前有效）
 
+- 历史 XCUI `.xcresult` 活动树与录像证明：Help 路由已通过，两个窗口失败
+  都是 ⌘W 后目标窗口持续可见，不是 XCUI 计数滞后。根因为
+  `SlateSyncCommands` 替换了整个 `.saveItem` 系统组，连同 macOS
+  Close 命令一并删除。现改为在系统组后追加聚焦 Save，保留主窗口和
+  Settings 共用的标准 ⌘W；正式 UI PASS 仍等待允许前台后复跑。
 - 收尾代码审查发现并修复两个可在后台验证的问题：CSV 缩表刷新前裁剪
   `NSTableView` 选区，避免重新应用越界行；Paddle 安装子进程改用受管
   HOME 并禁用 pip/user-site 配置，不再隐式读取用户包索引凭据。
 - 项目/任务 List 性能 harness 改为只附着不展示的 `NSWindow`，不再调用
   `makeKeyAndOrderFront`；这项规模测量因此可以遵循“所有测试在后台进行”的约束。
 - List 挂载时跳过已有项目库的重复 load，任务 rail 忽略原生选区回写的
-  同 ID echo，减少重复读取与选择动作。隐藏 List 测量仍由 SwiftUI 私有
-  `NSTableView` delegate 报告每次挂载一次重入预警，暂不把该预警误记为已消除。
+  同 ID echo，减少重复读取与选择动作。隐藏 List 测量中每次挂载一次的
+  `NSTableView` delegate 重入预警，已用不含任何 SlateSync 状态/绑定的
+  纯 `List(0..<500)` 后台最小复现；6 次挂载精确产生 6 条。因此当前
+  12 条可归类为未 ordered 的 SwiftUI List/harness 行为，不是项目/任务
+  model 重入；可见窗口仍留待专用 UI 环境确认。
 - 识别取消新增项目级 ticket：如果关闭/归档发生在 coordinator 构建或
   started-log 挂起期间，排队请求在进入真实 OCR/Provider 前即会收敛为取消，
   不影响其他窗口项目。
@@ -22,8 +30,8 @@
   actor-hop Task 合法乱序后造成的假失败。
 - 审查后后台 Swift 回归共 211 项、退出码 0；SM08 owner 专项
   44 项全通过。不呈现窗口的 500 projects / 1,000 tasks List
-  规模测试单项通过，但 12 次 List 挂载各有一次 AppKit delegate
-  重入预警，仍保留为未关闭风险。
+  规模测试单项通过；12 条重入预警已通过最小纯 SwiftUI 对照归类为
+  隐藏 harness 行为，对照日志为 `/private/tmp/slatesync-sm08-minimal-hidden-list.log`。
 - 当前代码的 Xcode Debug/Release build 以及本地 Release Archive
   均在后台通过；Archive 为 arm64/x86_64 universal、ad hoc、
   hardened runtime，codesign strict verification 通过，不代表 Developer ID

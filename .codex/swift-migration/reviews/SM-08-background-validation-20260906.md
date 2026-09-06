@@ -13,16 +13,30 @@
 | 范围 | 结果 | 证据 |
 | --- | --- | --- |
 | SM08 owner 专项 | PASS | 44 项通过，包含 CSV 缩表选区、Paddle 安装环境、识别取消 ticket 和迟到 picker 准入回归 |
-| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-postreview-swift.log`；211/211 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
-| 隐藏原生 List 规模 | PASS_WITH_WARNING | `/private/tmp/slatesync-sm08-postreview-hidden-list.log`；500 projects / 1,000 tasks、1 warm-up + 5 samples，1 项通过；每个 List 挂载仍有一次 `NSTableView` delegate 重入预警（共 12 次） |
-| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-review-xcode-debug`；`xcodebuild` 退出码 0 |
-| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-review-xcode-release`；`xcodebuild` 退出码 0 |
-| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-review-signed.xcarchive`；arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
+| 后台 Swift 整轮回归 | PASS | `/private/tmp/slatesync-sm08-commandfix-swift.log`；关闭命令修复后 211/211 测试记录，退出码 0；跳过所有 `SM08NativeSurfaceTests` 与隐藏 List 规模用例 |
+| 隐藏原生 List 规模 | PASS_WITH_FRAMEWORK_WARNING | `/private/tmp/slatesync-sm08-postreview-hidden-list.log`；500 projects / 1,000 tasks、1 warm-up + 5 samples，1 项通过；每个 List 挂载有一次 `NSTableView` delegate 重入预警（共 12 次） |
+| 隐藏 List 最小对照 | REPRODUCED_FRAMEWORK_BEHAVIOR | `/private/tmp/slatesync-sm08-minimal-hidden-list.log`；不含 SlateSync 模型/绑定的纯 `List(0..<500)` 在未 ordered `NSWindow` 中 6 次挂载精确生成 6 条同样预警 |
+| Xcode Debug build | PASS | `/private/tmp/slatesync-sm08-commandfix-xcode-debug`；关闭命令修复后 `xcodebuild` 退出码 0 |
+| Xcode Release build | PASS | `/private/tmp/slatesync-sm08-commandfix-xcode-release`；关闭命令修复后 `xcodebuild` 退出码 0 |
+| Release Archive | PASS_LOCAL | `/private/tmp/slatesync-sm08-commandfix-signed.xcarchive`；关闭命令修复后 arm64/x86_64 universal、ad hoc、hardened runtime，`codesign --verify --deep --strict` 通过 |
 
 收尾审查修复了 CSV 缩表时选区越界、Paddle 子进程继承用户 pip/HOME
 配置、coordinator 构建窗口内的识别取消竞态、迟到的本地 CSV picker 回调绕过
 生命周期准入门，以及并行测试中进度收集乱序造成的假失败。这是代码审查与后台
 复验，不构成阶段要求的独立 review 或 Owner approval。
+
+## 历史 UI 失败静态分诊
+
+`xcresulttool` 对 `/private/tmp/slatesync-sm08-ui-rerun-20260906.xcresult` 的活动树
+确认 Help 用例通过；多窗口和 Settings 用例均在发送 ⌘W 后等待窗口
+数下降时超时。失败期间的自动录像显示目标窗口持续可见，因此这两项是产品
+命令缺口，不是 XCUI `windows.count` 滞后。
+
+代码根因是 `SlateSyncCommands` 使用 `CommandGroup(replacing: .saveItem)` 后只放回
+自定义 Save；macOS 的 `.saveItem` 系统组同时包含 Close，因而 ⌘W 被全局移除并
+同时影响 WindowGroup 与 Settings。实现已改为 `CommandGroup(after: .saveItem)`，保留
+系统 Close 并追加聚焦 Save。该根因有直接历史证据且可后台编译，但修复后
+的真实 ⌘W 交互仍需在允许前台的专用 UI 环境中复验，暂不改记为 PASS。
 
 ## 已验证证据
 
@@ -57,12 +71,12 @@ Archive 为 universal arm64/x86_64，包通过本地 codesign strict verificatio
 
 ## UI 历史诊断
 
-前台约束生效前的最新记录为 `/private/tmp/slatesync-sm08-ui-rerun-20260906.xcresult`：5 项中 3 项通过，Help 导航通过；以下两项在关闭后的窗口计数等待中超时：
+前台约束生效前的最新记录为 `/private/tmp/slatesync-sm08-ui-rerun-20260906.xcresult`：5 项中 3 项通过，Help 导航通过；以下两项因 `.saveItem` 替换误删系统 Close 而在 ⌘W 后的窗口计数等待中超时：
 
 - `testIndependentWindowsAndNewWindowAfterClosingLastWindow`
 - `testSettingsCanOpenAndCloseWithoutReplacingHelpRoute`
 
-该记录不是本轮后台测试结果。`WindowLifecycleBridge` 的 close 决策和 coordinator 复用许可已继续修正，但本轮不重新启动应用验证，因此两项不能改记为 PASS；Settings close 也不能区分为产品缺陷还是自动化定位/等待问题。
+该记录不是本轮后台测试结果。历史活动树、录像和命令组定义现已将两项分类为同一产品缺陷，并已修复代码；但本轮不重新启动应用验证，因此两项仍不能改记为 PASS。
 
 ## BLOCKED_ENV 清单
 
@@ -70,7 +84,7 @@ Archive 为 universal arm64/x86_64，包通过本地 codesign strict verificatio
 - 中文拼音 marked text、纯键盘端到端操作、VoiceOver：需要真实编辑控件和辅助功能运行环境，不能用单元测试替代。
 - 深色/浅色切换及 960×600 最小窗口布局：需要真实窗口渲染检查，未宣称通过。
 - 完整窗口退出/重开、后台识别/metadata 操作取消、资源释放：已有部分模型/服务测试和真实数据库加载，但缺少阶段要求的完整原生生命周期证据。
-- `PERF-01` 的隐藏列表规模测试已达标，但 SwiftUI 挂载仍有将在未来变为 assert 的 AppKit delegate 重入预警，需要在原生交互环境中区分 harness 与产品行为；`PERF-03` 生命周期释放仍缺完整原生证据。
+- `PERF-01` 的隐藏列表规模测试已达标；其 AppKit delegate 预警已由纯 SwiftUI 最小对照复现，可归类为未 ordered 窗口中的框架/harness 行为，而非 SlateSync model 重入。可见窗口仍需在专用 UI 环境复验；`PERF-03` 生命周期释放仍缺完整原生证据。
 - clean Gate、独立 `reviews/SM-08.md`、最终独立审查和 Owner approval：不能由本文件代替。
 
 ## 收尾状态

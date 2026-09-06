@@ -50,7 +50,10 @@ public struct SlateSyncCommands: Commands {
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(actions?.newTask == nil)
         }
-        CommandGroup(replacing: .saveItem) {
+        // `.saveItem` also owns the system Close command on macOS. Append our
+        // focused Save action instead of replacing the group, preserving ⌘W
+        // for both WindowGroup and Settings windows.
+        CommandGroup(after: .saveItem) {
             Button("保存") { actions?.save?() }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(actions?.save == nil)
