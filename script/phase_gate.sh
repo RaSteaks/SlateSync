@@ -487,10 +487,11 @@ swift_test_check() {
     # Native-rendered review images are artifacts, never acceptance goldens.
     mkdir -p "${result_dir}/media-artifacts" || return 1
     SM06_ARTIFACT_ROOT="${result_dir}/media-artifacts" swift test
-  elif [[ "$phase" == SM-08 ]]; then
-    # SM-08's formal Gate is explicitly foreground-authorized: collect all
-    # scale JSON beside the ignored Gate artifacts and exercise real display
-    # cadence. Routine `swift test` leaves this one surface skipped.
+  elif [[ "$phase" == SM-08 || "$phase" == SM-09 ]]; then
+    # SM-08/SM-09 的 Gate 显式获得前台授权：收集全部 scale JSON 于忽略的
+    # Gate 工件目录并行使真实显示节奏（SM-09 的 sm08 技术回归要求该用例
+    # 在日志中 PASS；WP-1 也明确不因进入 release 阶段跳过性能）。常规
+    # `swift test` 保持该面跳过。
     mkdir -p "${result_dir}/sm08-metrics" || return 1
     SWIFTPM_MODULECACHE_OVERRIDE="${result_dir}/swift-module-cache" \
     CLANG_MODULE_CACHE_PATH="${result_dir}/swift-module-cache" \
