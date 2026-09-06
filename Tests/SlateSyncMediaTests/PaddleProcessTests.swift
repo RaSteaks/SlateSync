@@ -75,6 +75,22 @@ struct FakePaddleRuntime: Sendable {
             await supervisor.close(); assertExited(runtime)
         }
     }
+    func testChildExitDuringLargeRequestRecoversViaOneShotFallback() async throws {
+        let runtime = try FakePaddleRuntime(); defer { runtime.cleanup() }
+        // slate.jpg 经 base64 后约 230KB，recognize 请求必然跨越多个 64KB 写入
+        // 块；worker 在 warmup 响应后立即退出且从不读取请求，父进程大概率在
+        // 写入中途命中 EPIPE。修复前的 EPIPE 被映射为 OCR_PROTOCOL（不在监督
+        // 者恢复白名单中），请求会直接失败；修复后写入故障先按子进程存活状态
+        // 归类为 OCR_PROCESS_EXIT，监督者据此启动 one-shot 恢复并成功返回。
+        let doc = try await MediaPreparationService().prepare(.bytes(mediaFixture("slate.jpg"),filename:"slate.jpg")).selected(.standard)
+        let supervisor = OCRProcessSupervisor(paths:runtime.paths)
+        let result = try await supervisor.execute(configuration:config("die-after-warmup"),document:doc,operation:.init())
+        // one-shot 恢复返回的响应必须是协议合法的成功结果。
+        try OCRProcessSupervisor.requireSuccess(try XCTUnwrap(result))
+        let snapshot = await supervisor.snapshot()
+        XCTAssertEqual(snapshot.launches,2)
+        await supervisor.close(); assertExited(runtime)
+    }
     func testQueuedCancellationAndDeadlineDoNotKillActiveWorker() async throws {
         let runtime = try FakePaddleRuntime(); defer { runtime.cleanup() }
         let clock = ManualOCRClock(), supervisor = OCRProcessSupervisor(paths:runtime.paths,clock:clock)

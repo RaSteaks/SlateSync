@@ -152,8 +152,8 @@
       "sha256": "1a24e5b14f6f835533c5e5d13605ac6b7c0a95701bfae974492e969ecad6ca58"
     },
     "sm06-fake-runner.py": {
-      "bytes": 3539,
-      "sha256": "63596c7bd99780c96e735c632ca8f674865e63b162c7edc0ab9a33d0701afcea"
+      "bytes": 3877,
+      "sha256": "f9b710255bc839d25e4e58561bcb7e04e895e4ab67fb9dbc252e899776cb69d5"
     },
     "huge-bounds.pdf": {
       "bytes": 445,

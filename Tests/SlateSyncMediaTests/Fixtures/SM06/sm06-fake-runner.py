@@ -72,4 +72,8 @@ for line in sys.stdin:
         if mode=="server-unsupported": sys.exit(2)
         if mode=="timeout-warmup": time.sleep(30)
         emit(FINAL,{"requestId":request_id,"ok":True,"type":"warmup"})
+        # die-after-warmup: 响应 warmup 后立即退出，且从不读取后续 recognize
+        # 请求——父进程写入大请求时按竞态命中 EPIPE 或退出检测，用于回归
+        # "写入中进程死亡必须收敛为 OCR_PROCESS_EXIT 并触发 one-shot 恢复"。
+        if mode=="die-after-warmup": os._exit(0)
     else: recognize(request["payload"],request_id)

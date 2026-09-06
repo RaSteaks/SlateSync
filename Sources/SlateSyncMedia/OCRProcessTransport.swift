@@ -35,7 +35,13 @@ public actor ManagedOCRProcess: OCRProcessTransport {
                         Darwin.write(input.fileHandleForWriting.fileDescriptor, bytes.baseAddress?.advanced(by: sent), min(64 * 1024, request.count - sent))
                     }
                     if written > 0 { sent += written }
-                    else if written < 0, ![EAGAIN,EWOULDBLOCK,EINTR].contains(errno) { throw MediaFailure.protocolError }
+                    else if written < 0, ![EAGAIN,EWOULDBLOCK,EINTR].contains(errno) {
+                        // 请求可达数十 MB，而单次写入仅 64KB：子进程在读取中途
+                        // 死亡时大概率先命中 EPIPE 而不是退出检测。这里按子进程
+                        // 是否已退出分类，让监督者的 one-shot 恢复白名单能接管
+                        // 进程退出故障，而不是把它当作不可恢复的协议错误。
+                        throw classifyPipeFailure()
+                    }
                 }
                 if oneShot, sent == request.count, !inputClosed { try input.fileHandleForWriting.close(); inputClosed = true }
                 // Bound each drain batch as well as retained data. A noisy child
@@ -60,7 +66,11 @@ public actor ManagedOCRProcess: OCRProcessTransport {
                     // Drain again after observing exit, so the final bytes and
                     // exit status both precede completion. No success on nonzero.
                     if !eof { continue }
-                    guard child.terminationStatus == 0, let final else { throw SlateSyncError(code: "OCR_PROCESS_EXIT", message: "本地 OCR 进程异常退出", retryable: true) }
+                    guard child.terminationStatus == 0, let final else {
+                        // stderr 尾部是唯一能说明子进程侧死因的线索，随退出
+                        // 错误一并暴露（有界 + 脱敏）。
+                        throw SlateSyncError(code: "OCR_PROCESS_EXIT", message: "本地 OCR 进程异常退出" + stderrDiagnostic(), retryable: true)
+                    }
                     try deadline.check(clock: clock, operation: operation)
                     if oneShot { await close() }
                     return final
@@ -103,9 +113,38 @@ public actor ManagedOCRProcess: OCRProcessTransport {
             if count > 0 { bytes.append(contentsOf: buffer.prefix(count)) }
             else if count == 0 { return (bytes, true) }
             else if [EAGAIN,EWOULDBLOCK,EINTR].contains(errno) { return (bytes, false) }
-            else { throw MediaFailure.protocolError }
+            else { throw classifyPipeFailure() }
         }
         return (bytes, false)
+    }
+
+    /// 将管道读写故障分类为可恢复的进程退出或真正的协议错误。子进程死亡
+    /// 时的 EPIPE/EIO 退出状态由 Foundation 异步收割，这里给一个有界窗口
+    /// 等待 isRunning 翻转；命中退出则映射为 OCR_PROCESS_EXIT（监督者恢复
+    /// 白名单成员），子进程仍存活时的错误保持协议错误，不触发恢复。
+    private func classifyPipeFailure() -> SlateSyncError {
+        if let child {
+            let deadline = ProcessInfo.processInfo.systemUptime + 0.2
+            while child.isRunning, ProcessInfo.processInfo.systemUptime < deadline {
+                usleep(5_000)
+            }
+            if !child.isRunning {
+                return SlateSyncError(code: "OCR_PROCESS_EXIT", message: "本地 OCR 进程异常退出" + stderrDiagnostic(), retryable: true)
+            }
+        }
+        return MediaFailure.protocolError
+    }
+
+    /// 提取子进程 stderr 尾部的有界诊断摘录。先限长、再脱敏、再截断，
+    /// 确保错误通道不会携带大块日志或敏感值；无有效内容时返回空串。
+    private func stderrDiagnostic() -> String {
+        guard !stderrTail.isEmpty else { return "" }
+        let text = String(decoding: stderrTail.suffix(2 * 1024), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+        let redacted = StructuredLogRedactor.redactText(text)
+        let excerpt = redacted.count > 500 ? String(redacted.suffix(500)) : redacted
+        return "；stderr 尾部：\(excerpt)"
     }
     private func consume(_ line: Data, requestID: String?, final: inout Data?, operation: MediaOperation, progress: MediaProgressSink?) throws {
         let marker = Data("__SLATESYNC_OCR_JSON__".utf8), progressMarker = Data("__SLATESYNC_OCR_PROGRESS__".utf8)

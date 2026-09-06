@@ -25,7 +25,12 @@ public actor NativeVisionObservationSource: VisionObservationSource {
         guard let languages = try? request(configuration).supportedRecognitionLanguages() else { return false }
         return configuration.languages.allSatisfy { languages.contains($0) }
     }
-    public func observations(_ image: PreparedImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) throws -> [RawVisionObservation] {
+    /// 同步 Vision 调用的专用串行队列。VNImageRequestHandler.perform 对
+    /// accurate 级别的大图可能长时间阻塞，必须固定在队列线程执行；actor 在
+    /// continuation 上挂起等待，不再占用 Swift 协作线程池。
+    private static let performQueue = DispatchQueue(label: "com.slatesync.vision.perform", qos: .userInitiated)
+
+    public func observations(_ image: PreparedImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) async throws -> [RawVisionObservation] {
         try deadline.check(clock: clock, operation: operation)
         let decoded = try ImageRasterizer.decode(image.jpeg, maximum: 3000)
         let request = request(configuration)
@@ -34,8 +39,25 @@ public actor NativeVisionObservationSource: VisionObservationSource {
             if operation.isCanceled || clock.nowMilliseconds() >= deadline.end { request.cancel() }
         }
         defer { request.progressHandler = { _, _, _ in } }
-        do { try VNImageRequestHandler(cgImage: decoded).perform([request]) }
-        catch {
+        // perform 本身仍是同步阻塞调用，但被移到专用队列上执行；取消依旧
+        // 依赖 progressHandler，perform 返回后的检查语义不变。VNImageRequest
+        // Handler/VNRecognizeTextRequest 不是 Sendable，队列闭包只捕获裸指针
+        // 与 continuation：沿用了 WindowLifecycleBridge 的地址移交先例，
+        // passRetained 把所有权移交给队列，takeRetained 在闭包内接回，
+        // 满足严格并发检查的同时不需要任何 unchecked Sendable 声明。
+        let handler = VNImageRequestHandler(cgImage: decoded)
+        let handlerPointer = Unmanaged.passRetained(handler).toOpaque()
+        let requestPointer = Unmanaged.passRetained(request).toOpaque()
+        do {
+            _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                Self.performQueue.async {
+                    let handler = Unmanaged<VNImageRequestHandler>.fromOpaque(UnsafeRawPointer(handlerPointer)).takeRetainedValue()
+                    let request = Unmanaged<VNRecognizeTextRequest>.fromOpaque(UnsafeRawPointer(requestPointer)).takeRetainedValue()
+                    do { try handler.perform([request]); continuation.resume() }
+                    catch { continuation.resume(throwing: error) }
+                }
+            }
+        } catch {
             try deadline.check(clock: clock, operation: operation)
             throw SlateSyncError(code: "VISIONOCR_FAILED", message: "Vision OCR 识别失败", retryable: true)
         }
