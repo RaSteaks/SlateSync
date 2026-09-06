@@ -282,7 +282,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   validateCoverage(coverage);
   runSelfTests();
   if (!process.argv.includes("--self-test")) {
-    validateState(readJSON(join(repository, ".codex/swift-migration/CURRENT_STATE.json")));
+    // 与 sm07 相同：SM-09 起 Gate 以 technical 模式重跑本合同时跳过准入窗口
+    // 断言；源审计、执行覆盖与原生证据校验仍全程生效。
+    if (!process.argv.includes("--technical-only")) {
+      validateState(readJSON(join(repository, ".codex/swift-migration/CURRENT_STATE.json")));
+    }
     sourceAudit();
     const index = process.argv.indexOf("--swift-log");
     assert.ok(index >= 0 && process.argv[index + 1], "--swift-log is required; static-only contract cannot PASS");

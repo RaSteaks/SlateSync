@@ -162,7 +162,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   validateCoverage(coverage);
   runSelfTests();
   if (!process.argv.includes("--self-test")) {
-    validateState(readJSON(join(repository, ".codex/swift-migration/CURRENT_STATE.json")));
+    // 后续阶段（如 SM-08 Gate 的 sm07_technical_regression）以 technical 模式
+    // 重跑本合同：准入窗口断言只在 SM-07 自身准入期执行，源审计与执行覆盖
+    // 仍全程生效，与 sm05 的 --technical-only 模式一致。
+    if (!process.argv.includes("--technical-only")) {
+      validateState(readJSON(join(repository, ".codex/swift-migration/CURRENT_STATE.json")));
+    }
     scopeAudit();
     const index = process.argv.indexOf("--swift-log");
     assert.ok(index >= 0 && process.argv[index + 1], "--swift-log is required; static-only contract cannot PASS");

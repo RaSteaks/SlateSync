@@ -600,8 +600,10 @@ case "$phase" in
     run_check sm07_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
     ;;
   SM-08)
+    # SM-07 合同在 SM-08 Gate 中是跨阶段技术回归：与 sm05 一致用
+    # --technical-only 跳过准入窗口断言，源审计与 57 项执行覆盖仍强制。
     run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
-      node script/tests/sm07_contract.mjs --swift-log "${result_dir}/swift_test.log"
+      node script/tests/sm07_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
     run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
       node script/tests/sm05_contract.mjs --technical-only
     run_check sm08_node_compatibility true "Electron 数据/Provider/媒体兼容基线继续通过" npm run test:node
