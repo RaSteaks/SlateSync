@@ -47,7 +47,7 @@
 - 已补齐后台可验证的功能缺口：识别选项通过任务快照保存/恢复，metadata 扫描使用 CSV canonical material key，CSV 键盘顺序/边界有单元回归；窗口 close coordinator 的成功许可会在复用到新窗口时重置。
 - 早期后台非原生 Swift 回归退出码为 0（日志含 210 条测试记录）；
   识别选项、metadata canonical key、CSV 键盘、真实 SQLite 规模加载均通过。
-- Gate helper 后台自测为 82 passed / 0 failed（`/private/tmp/slatesync-sm08-phase-gate-selftest-final.log`）；这只证明 Gate 辅助逻辑，不等于运行了完整 SM-08 Gate。
+- 当前 Gate helper 后台自测为 82 passed / 0 failed（`/private/tmp/slatesync-sm08-progress-gate-selftest.log`）；这只证明 Gate 辅助逻辑，不等于运行了完整 SM-08 Gate。
 - 兼容矩阵后台检查均通过：Node 324/324、Modern 25 files/118 tests、静态检查、TypeScript typecheck、Modern production build、Node/Electron SQLite ABI（137/148 modules，SQLite 3.53.2）；原始日志见本轮背景验证记录。
 - 真实 SQLite 规模证据：500 个项目、1,000 个任务，1 次 warm-up 加 5 次样本；项目列表 291.21–310.09 ms，任务列表 10.31–10.70 ms，均低于 1,500/900 ms 预算。原始指标在 `/private/tmp/slatesync-sm08-metrics/real-sqlite-scale.json`。
 - 后台 Debug 构建、Release 构建和 Archive 均成功；当前 Archive `/private/tmp/slatesync-sm08-progress-signed.xcarchive` 为 universal arm64/x86_64、ad hoc runtime 签名，无 Developer ID Team ID，因此仅完成本地包完整性验证，不宣称 notarization/distribution 通过。

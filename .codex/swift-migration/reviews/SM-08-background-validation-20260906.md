@@ -61,7 +61,7 @@ percent 倒退；反序回调测试固定验证较新的完成态不会被迟到
 | Release 构建 | PASS | `/private/tmp/slatesync-sm08-release-derived-final`，`** BUILD SUCCEEDED **` |
 | Release Archive | PASS | `/private/tmp/slatesync-sm08-release-20260906-final.xcarchive`，`** ARCHIVE SUCCEEDED **` |
 | contract 静态负例 | PASS | `node script/tests/sm08_contract.mjs --self-test` |
-| Gate helper 自测 | PASS | `/private/tmp/slatesync-sm08-phase-gate-selftest-final.log`；82 passed / 0 failed |
+| Gate helper 自测 | PASS | `/private/tmp/slatesync-sm08-progress-gate-selftest.log`；当前 coverage 更新后 82 passed / 0 failed |
 | Node compatibility | PASS | `/private/tmp/slatesync-sm08-node-compat-final.log`；324 passed / 0 failed |
 | Modern compatibility | PASS | `/private/tmp/slatesync-sm08-modern-compat-final.log`；25 files / 118 tests passed |
 | JavaScript static check | PASS | `/private/tmp/slatesync-sm08-static-check-final.log` |
