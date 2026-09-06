@@ -66,6 +66,7 @@ public actor SQLiteDatabase {
             try Self.executeScript(handle, sql: "PRAGMA busy_timeout = 5000;")
             if mode != .readOnly {
                 try SecureFilePermissions.repairFile(at: url, permissions: 0o600)
+                repairSidecarPermissions()
             }
         } catch {
             if let handle { sqlite3_close(handle) }
@@ -154,6 +155,21 @@ public actor SQLiteDatabase {
     /// snapshot while leaving WAL mode enabled for the next open.
     public func checkpoint() throws {
         try Self.executeScript(try openHandle(), sql: "PRAGMA wal_checkpoint(TRUNCATE);")
+        repairSidecarPermissions()
+    }
+
+    /// WAL 模式产生的 -wal/-shm 附属文件可能包含未合并的数据页，权限必须
+    /// 与主库一致（0600）。它们在首次写入后才存在，因此在打开、checkpoint
+    /// 与关闭三个时点尽力修复；失败不阻断数据库生命周期——目录本身已由
+    /// prepareDirectory 保护为 0700，暴露面有限。只读 nonisolated 的 url，
+    /// 因此声明为 nonisolated，init 的非隔离上下文也能调用。
+    private nonisolated func repairSidecarPermissions() {
+        for suffix in ["-wal", "-shm"] {
+            try? SecureFilePermissions.repairFile(
+                at: URL(fileURLWithPath: url.path + suffix),
+                permissions: 0o600
+            )
+        }
     }
 
     /// Writes a transactionally consistent, standalone SQLite copy while this
@@ -233,6 +249,8 @@ public actor SQLiteDatabase {
 
     public func close() throws {
         guard let handle else { return }
+        // 关闭是附属文件最后一次可能仍存在的时点，先尽力修复权限再释放句柄。
+        repairSidecarPermissions()
         let status = sqlite3_close(handle)
         guard status == SQLITE_OK else {
             throw databaseError(handle, status: status, fallbackCode: "SQLITE_CLOSE")
