@@ -84,9 +84,15 @@ public struct SettingsRootView: View {
             Picker("外观", selection: $appearance) {
                 Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark")
             }
+            // macOS Form presents picker titles as sibling static text, so
+            // explicitly name the interactive controls for VoiceOver/XCUI.
+            .accessibilityLabel("外观")
+            .accessibilityIdentifier(AccessibilityID.settingsAppearance)
             Picker("界面密度", selection: $density) {
                 Text("舒适").tag("comfortable"); Text("紧凑").tag("compact")
             }
+            .accessibilityLabel("界面密度")
+            .accessibilityIdentifier(AccessibilityID.settingsDensity)
         }.formStyle(.grouped)
     }
 

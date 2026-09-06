@@ -2,6 +2,17 @@
 
 ## 2026-09-06 SM-08 正式收尾（当前有效）
 
+- 用户已允许最终验收使用前台测试；中间回归仍优先后台执行。所有
+  `.xcresult`、截图、日志与性能数据只写入 `/private/tmp` 或已忽略的
+  `.codex/gate-results` 目录，不进入提交。
+- 前台 XCUI 已证明原有两项 ⌘W 失败是产品缺陷：应用级 `Commands`
+  中的 `dismissWindow` 没有当前 Scene 所有权。关闭命令现路由至
+  `NSApp.keyWindow?.performClose(nil)`，使 WindowGroup delegate 保存拦截与辅助窗口
+  关闭同时生效；多窗口关闭/重开和 Settings 关闭返回 Help 已 2/2 通过。
+- 新增中文键盘与明暗外观验收时发现 macOS Form 的纵向 TextField 及
+  Picker 只将标题暴露为独立静态文本，交互控件本身无 VoiceOver 名称。
+  当前修复为显式无障碍标签与稳定标识；中文保存恢复、VoiceOver 语义和浅深色
+  前台验收已通过。
 - 独立代码审查补出并修复识别取消 drain 期间重新准入、失效 Provider/Model
   被静默替换、非 Workspace route 的 ⌘N 隐藏建任务三类所有权缺陷。取消期间
   `recognitionTask` 与 `cancelTask` 共同关闭准入；任务/项目保存的失效选项会原样

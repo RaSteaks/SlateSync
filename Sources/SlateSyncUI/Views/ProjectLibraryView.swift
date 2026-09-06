@@ -214,6 +214,9 @@ private struct CreateProjectSheet: View {
                     .accessibilityIdentifier("project.name")
                 TextField("描述（可选）", text: $model.createDescription, axis: .vertical)
                     .lineLimit(2...4)
+                    // Keep the multiline control itself named for VoiceOver;
+                    // Form renders its visible title as a sibling element.
+                    .accessibilityLabel("描述（可选）")
             }
             if let error = model.error { Text(error.message).foregroundStyle(.red) }
             HStack {

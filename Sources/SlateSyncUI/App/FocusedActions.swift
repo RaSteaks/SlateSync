@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Focused commands are offered only when the visible route owns the action.
@@ -5,6 +6,16 @@ import SwiftUI
 enum FocusedActionAvailability {
     static func permitsNewTask(route: SidebarDestination, projectID: String?) -> Bool {
         route == .workspace && projectID != nil
+    }
+}
+
+/// App-wide `Commands` do not inherit a scene-specific `dismissWindow`
+/// action. Route Close through AppKit's key window so WindowGroup delegates
+/// still receive `windowShouldClose`, while auxiliary windows close normally.
+@MainActor
+enum FocusedWindowCommandRouting {
+    static func closeKeyWindow() {
+        NSApp.keyWindow?.performClose(nil)
     }
 }
 
@@ -43,7 +54,6 @@ public extension FocusedValues {
 public struct SlateSyncCommands: Commands {
     @FocusedValue(\.slateSyncActions) private var actions
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
     public init() {}
 
     public var body: some Commands {
@@ -60,10 +70,10 @@ public struct SlateSyncCommands: Commands {
                 .disabled(actions?.newTask == nil)
         }
         // `.saveItem` also owns Close on macOS. Rebuild that small group with
-        // SwiftUI's current-window action so Settings and WindowGroup retain
-        // ⌘W without leaving the system Save beside our focused Save.
+        // the AppKit key-window action so Settings and WindowGroup retain ⌘W
+        // without leaving the system Save beside our focused Save.
         CommandGroup(replacing: .saveItem) {
-            Button("关闭窗口") { dismissWindow() }
+            Button("关闭窗口") { FocusedWindowCommandRouting.closeKeyWindow() }
                 .keyboardShortcut("w", modifiers: .command)
             Divider()
             Button("保存") { actions?.save?() }

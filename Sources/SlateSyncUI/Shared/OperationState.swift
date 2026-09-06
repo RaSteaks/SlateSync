@@ -19,9 +19,12 @@ public enum AccessibilityID {
     public static let projectCreateConfirm = "project.create.confirm"
     public static let workspaceHeading = "workspace.heading"
     public static let taskCreate = "task.create"
+    public static let workspaceCustomPrompt = "workspace.custom-prompt"
     public static let recognize = "recognition.start"
     public static let recognitionCancel = "recognition.cancel"
     public static let csvTable = "csv.table"
     public static let logsList = "logs.list"
     public static let helpSearch = "help.search"
+    public static let settingsAppearance = "settings.appearance"
+    public static let settingsDensity = "settings.density"
 }

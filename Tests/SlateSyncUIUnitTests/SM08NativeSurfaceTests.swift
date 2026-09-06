@@ -122,6 +122,59 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertEqual(harness.commits.count, 1)
     }
 
+    func testNativeCSVExposesAccessibleHeadersAndEditableCells() async throws {
+        let harness = CSVHarness(table: fixtureTable())
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        XCTAssertEqual(table.accessibilityLabel(), "可编辑 Resolve CSV")
+        XCTAssertEqual(table.tableColumns.count, harness.headers.count)
+        XCTAssertTrue(table.tableColumns.allSatisfy { !$0.title.isEmpty })
+
+        let field = try XCTUnwrap(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTextField)
+        XCTAssertEqual(field.accessibilityLabel(), "第 1 行，\(harness.headers[0])")
+        XCTAssertTrue(field.isEditable)
+        XCTAssertTrue(field.isSelectable)
+    }
+
+    func testForegroundCSVMeetsDisplayCadenceBudget() async throws {
+        guard ProcessInfo.processInfo.environment["SLATESYNC_SM08_FOREGROUND_GATE"] == "1" else {
+            throw XCTSkip("display-backed cadence runs only in the authorized SM-08 foreground Gate")
+        }
+        let harness = ForegroundCSVHarness(table: fixtureTable())
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        let window = try XCTUnwrap(harness.window)
+        XCTAssertTrue(window.isVisible)
+        XCTAssertNotNil(window.screen)
+
+        let counter = DisplayLinkCounter()
+        let displayLink = window.displayLink(target: counter, selector: #selector(DisplayLinkCounter.tick(_:)))
+        displayLink.add(to: .main, forMode: .common)
+        let started = ContinuousClock.now
+        // Alternate across the whole data set long enough to sample actual
+        // WindowServer-backed presentation rather than layout-only timings.
+        for step in 0..<120 {
+            table.scrollRowToVisible(step.isMultiple(of: 2) ? 9_999 : 0)
+            table.needsDisplay = true
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        displayLink.invalidate()
+        let elapsedSeconds = started.duration(to: .now).seconds
+        let framesPerSecond = Double(counter.frames) / elapsedSeconds
+        XCTAssertGreaterThanOrEqual(framesPerSecond, 45)
+        try saveMetrics([
+            "schemaVersion": 1,
+            "fixtureRows": 10_000,
+            "displayBacked": true,
+            "samples": counter.frames,
+            "durationSeconds": elapsedSeconds,
+            "scrollFramesPerSecond": framesPerSecond,
+            "minimumScrollFPS": 45,
+        ], named: "native-csv-foreground.json")
+    }
+
     func testWindowCloseVetoRetainsWindowUntilRetrySucceeds() async throws {
         _ = NSApplication.shared
         let window = backgroundTestWindow(width: 960, height: 600, styleMask: [.titled, .closable])
@@ -177,6 +230,7 @@ final class SM08NativeSurfaceTests: XCTestCase {
 @MainActor
 private final class CSVHarness {
     private let input: ResolveCSVTable
+    var headers: [String] { input.headers }
     var commits: [CSVCellCommit] = []
     var host: NSHostingView<EditableCSVTableRepresentable>?
     var window: NSWindow?
@@ -203,6 +257,61 @@ private final class CSVHarness {
         window?.orderOut(nil)
         window?.close()
         host = nil; window = nil
+    }
+}
+
+/// Foreground-only harness used by the formal Gate to measure real display
+/// presentation. It is intentionally separate from the default offscreen
+/// harness so routine SwiftPM runs never surface a window.
+@MainActor
+private final class ForegroundCSVHarness {
+    private let input: ResolveCSVTable
+    var host: NSHostingView<EditableCSVTableRepresentable>?
+    var window: NSWindow?
+    var tableView: NSTableView? { host?.descendants.compactMap { $0 as? NSTableView }.first }
+
+    init(table: ResolveCSVTable) { input = table }
+
+    func mount() async throws {
+        let host = NSHostingView(rootView: EditableCSVTableRepresentable(
+            tableID: UUID(), table: input, revision: 0, onCommit: { _ in }
+        ))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 600),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "SM-08 10k CSV 显示性能验收"
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.center()
+        window.orderFrontRegardless()
+        self.host = host
+        self.window = window
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+    }
+
+    func unmount() {
+        window?.makeFirstResponder(nil)
+        window?.contentView = nil
+        window?.orderOut(nil)
+        window?.close()
+        host = nil
+        window = nil
+    }
+}
+
+@MainActor
+private final class DisplayLinkCounter: NSObject {
+    private(set) var frames = 0
+
+    @objc func tick(_ displayLink: CADisplayLink) {
+        // Reading the timestamp binds the count to delivered display-link
+        // callbacks and prevents an unused callback parameter warning.
+        _ = displayLink.timestamp
+        frames += 1
     }
 }
 
@@ -268,6 +377,7 @@ private extension NSView {
 
 private extension Duration {
     var milliseconds: Double { Double(components.seconds) * 1000 + Double(components.attoseconds) / 1e15 }
+    var seconds: Double { Double(components.seconds) + Double(components.attoseconds) / 1e18 }
 }
 
 private func residentBytes() throws -> Int64 {

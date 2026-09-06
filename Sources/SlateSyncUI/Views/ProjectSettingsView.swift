@@ -25,7 +25,11 @@ public struct ProjectSettingsView: View {
                 Form {
                     Section("项目") {
                         TextField("名称", text: $model.name)
-                        TextField("描述", text: $model.description, axis: .vertical).lineLimit(2...5)
+                        TextField("描述", text: $model.description, axis: .vertical)
+                            .lineLimit(2...5)
+                            // Vertical Form fields need an explicit accessible
+                            // name because AppKit exposes the title separately.
+                            .accessibilityLabel("描述")
                     }
                     Section("识别上下文") {
                         Picker("Provider", selection: providerBinding) {
@@ -57,6 +61,7 @@ public struct ProjectSettingsView: View {
                         }
                         TextField("自定义提示词", text: $model.settings.customPrompt, axis: .vertical)
                             .lineLimit(3...8)
+                            .accessibilityLabel("自定义提示词")
                     }
                     Section("Resolve 格式") {
                         TextField("场", text: $model.settings.resolve.fieldFormats.scene)

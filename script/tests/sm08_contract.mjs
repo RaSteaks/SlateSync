@@ -219,14 +219,15 @@ function sourceAudit() {
   commandsAudit();
 }
 
-// The custom File group must restore current-window Close while registering
-// exactly one focused Save shortcut; duplicate menu/toolbar shortcuts can
-// route to a disabled or stale command before reaching the active owner.
+// The custom File group must restore current-window Close through AppKit's
+// key window while registering exactly one focused Save shortcut; app-wide
+// Commands cannot rely on a scene-scoped dismissWindow environment action.
 function commandsAudit() {
   const commands = read("Sources/SlateSyncUI/App/FocusedActions.swift");
-  assert.match(commands, /@Environment\(\\\.dismissWindow\)/);
+  assert.match(commands, /NSApp\.keyWindow\?\.performClose\(nil\)/);
   assert.match(commands, /CommandGroup\(replacing: \.saveItem\)/);
-  assert.match(commands, /Button\("关闭窗口"\) \{ dismissWindow\(\) \}/);
+  assert.match(commands, /Button\("关闭窗口"\) \{ FocusedWindowCommandRouting\.closeKeyWindow\(\) \}/);
+  assert.doesNotMatch(commands, /@Environment\(\\\.dismissWindow\)/);
   assert.equal((commands.match(/\.keyboardShortcut\("s"/g) ?? []).length, 1);
   assert.doesNotMatch(read("Sources/SlateSyncUI/Views/WorkspaceView.swift"), /\.keyboardShortcut\("s"/);
 }

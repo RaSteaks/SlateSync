@@ -442,6 +442,9 @@ assert_failure "SM-06 cannot skip directly to SM-09" gate_validate_phase_state "
 assert_success "SM-06 fixture and executed-evidence negative tests" node "${project_root}/script/tests/sm06_contract.mjs" --self-test
 assert_success "SM-07 source, oracle, coverage and admission negative tests" node "${project_root}/script/tests/sm07_contract.mjs" --self-test
 assert_success "SM-08 source, fixture, coverage and admission negative tests" node "${project_root}/script/tests/sm08_contract.mjs" --self-test
+# Keep the acceptance-to-test evidence map executable and complete before the
+# formal Gate writes any ignored evidence artifacts.
+assert_success "SM-08 native evidence plan self-test" node "${project_root}/script/tests/sm08_native_evidence.mjs" --self-test
 cat > "${fixture_root}/sm08-state.json" <<'JSON'
 {
   "phase": "SM-07",

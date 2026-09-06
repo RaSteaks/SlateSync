@@ -492,6 +492,15 @@ swift_test_check() {
     # Native-rendered review images are artifacts, never acceptance goldens.
     mkdir -p "${result_dir}/media-artifacts" || return 1
     SM06_ARTIFACT_ROOT="${result_dir}/media-artifacts" swift test
+  elif [[ "$phase" == SM-08 ]]; then
+    # SM-08's formal Gate is explicitly foreground-authorized: collect all
+    # scale JSON beside the ignored Gate artifacts and exercise real display
+    # cadence. Routine `swift test` leaves this one surface skipped.
+    mkdir -p "${result_dir}/sm08-metrics" || return 1
+    SWIFTPM_MODULECACHE_OVERRIDE="${result_dir}/swift-module-cache" \
+    CLANG_MODULE_CACHE_PATH="${result_dir}/swift-module-cache" \
+    SLATESYNC_SM08_METRICS_DIR="${result_dir}/sm08-metrics" \
+      SLATESYNC_SM08_FOREGROUND_GATE=1 swift test
   else
     swift test
   fi
@@ -507,6 +516,17 @@ run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   build
 run_check xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
   xcode_test_plan_check
+
+sm08_native_evidence_check() {
+  # Generate acceptance-scoped, hashed evidence only after both test runners
+  # have completed. The output lives under the ignored Gate result root.
+  node script/tests/sm08_native_evidence.mjs \
+    --swift-log "${result_dir}/swift_test.log" \
+    --xcode-log "${result_dir}/xcode_test_plan_xcodebuild.log" \
+    --xcode-summary "${result_dir}/xcode_test_summary.json" \
+    --metrics-dir "${result_dir}/sm08-metrics" \
+    --output "${result_dir}/native-evidence.json"
+}
 
 sm06_offline_paddle_check() {
   local resources="${result_dir}/DerivedData/Debug/Build/Products/Debug/SlateSync.app/Contents/Resources"
@@ -585,11 +605,6 @@ case "$phase" in
     run_check sm07_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
     ;;
   SM-08)
-    # Native interaction/scale evidence is bound to a source fingerprint and
-    # raw artifact hashes. Absence must fail even if compilation/unit tests pass.
-    run_check sm08_contract true "原生 UI fixture、验收映射、AppKit allowlist、执行证据与准入合同完整" \
-      node script/tests/sm08_contract.mjs --swift-log "${result_dir}/swift_test.log" \
-      --native-evidence "${SLATESYNC_SM08_NATIVE_EVIDENCE:-${result_dir}/native-evidence.json}"
     run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
       node script/tests/sm07_contract.mjs --swift-log "${result_dir}/swift_test.log"
     run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
@@ -606,6 +621,16 @@ case "$phase" in
     run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing
     ;;
 esac
+
+if [[ "$phase" == "SM-08" ]]; then
+  # Evidence generation consumes the completed Swift/Xcode logs; the contract
+  # check follows it so missing or stale acceptance artifacts fail closed.
+  run_check sm08_native_evidence true "45 项 SM-08 原生验收证据按测试日志、指标与源指纹生成" \
+    sm08_native_evidence_check
+  run_check sm08_contract true "原生 UI fixture、验收映射、AppKit allowlist、执行证据与准入合同完整" \
+    node script/tests/sm08_contract.mjs --swift-log "${result_dir}/swift_test.log" \
+      --native-evidence "${SLATESYNC_SM08_NATIVE_EVIDENCE:-${result_dir}/native-evidence.json}"
+fi
 
 # Milestone phases retain the real executable and distributable artifact
 # checks. SM-08 adds the final native UI to the same signed app surface.

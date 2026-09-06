@@ -191,6 +191,11 @@ public struct WorkspaceView: View {
                 }
                 TextField("自定义提示词", text: $workspace.customPrompt, axis: .vertical)
                     .lineLimit(3...8)
+                    // A vertical TextField in a macOS Form otherwise exposes
+                    // its title as a separate static element, leaving the
+                    // editable control unnamed to VoiceOver.
+                    .accessibilityLabel("自定义提示词")
+                    .accessibilityIdentifier(AccessibilityID.workspaceCustomPrompt)
                 if let progress = recognition.progress {
                     ProgressView(value: Double(progress.completed), total: Double(max(1, progress.total))) {
                         Text(progress.message)

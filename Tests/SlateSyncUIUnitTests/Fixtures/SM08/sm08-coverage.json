@@ -202,6 +202,8 @@
     "SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners",
     "SM08NativeSurfaceTests/testNativeCSVMarkedTextDoesNotCommitAndFlushRetainsComposition",
     "SM08NativeSurfaceTests/testWindowCloseVetoRetainsWindowUntilRetrySucceeds",
-    "SM08NativeSurfaceTests/testNativeCSVReplacesRowsWhenIdentityChangesAtSameRevision"
+    "SM08NativeSurfaceTests/testNativeCSVReplacesRowsWhenIdentityChangesAtSameRevision",
+    "SM08NativeSurfaceTests/testNativeCSVExposesAccessibleHeadersAndEditableCells",
+    "SM08NativeSurfaceTests/testForegroundCSVMeetsDisplayCadenceBudget"
   ]
 }
