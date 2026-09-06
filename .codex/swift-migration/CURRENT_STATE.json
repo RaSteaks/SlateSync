@@ -24,7 +24,7 @@
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "2d44b3ac29fdc1579b2a2504c04220a5b281e861",
+    "reviewCommit": "648644c59a3b62c224d7094b023180e8660f090f",
     "owner": "RaSteaks (Repository Owner)",
     "approvedAt": "2026-09-06T16:35:04Z",
     "evidenceReport": ".codex/swift-migration/reviews/SM-08.md",
