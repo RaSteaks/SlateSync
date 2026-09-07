@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "WP-1C_PASS; FINAL_REFRESH_AND_LATER_WP_EVIDENCE_PENDING",
+  "status": "WP-2_TO_WP-5_AND_FINAL_PRE_CUTOVER_REFRESH_PASS; WP-6_OWNER_DECISION_PENDING",
   "baselineCommit": "218b43c71bc8d58771f70e654fe3349b8174097e",
   "diagnosticGate": {
     "result": "PASS",
@@ -26,13 +26,26 @@
       "result": "PASS; typed payload encoded once, large payload appended once, zero construction decode; legacy bytes equal for payload/warmup/recognize/shutdown"
     },
     "CARRY-02": {
-      "status": "PENDING_WP4_WP5_NATIVE_TIMEOUT_REBASELINE",
-      "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
-      "result": "Interim 60-minute compatibility timeout retained"
+      "status": "PASS",
+      "implementationCommit": "feca73fc2c15a3cec74989f5c07879ab2c8d7fa3",
+      "verificationCommit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+      "result": "CI and release share the native SM-09 Gate with a 30-minute timeout; the full local compatibility Gate completed in about seven minutes and the workflow contract passed 7/7."
     },
-    "CARRY-03": {"status": "PASS", "commit": "218b43c71bc8d58771f70e654fe3349b8174097e", "result": "Persistence failure injection and pre-existing directory protection passed"},
-    "CARRY-04": {"status": "PASS", "commit": "218b43c71bc8d58771f70e654fe3349b8174097e", "result": "Fresh Library default project and protection contract passed"},
-    "CARRY-05": {"status": "PASS", "commit": "ede09a6", "result": "OCR_CLOSED remains distinct from cancellation; full Swift suite passed"},
+    "CARRY-03": {
+      "status": "PASS",
+      "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+      "result": "Persistence failure injection and pre-existing directory protection passed"
+    },
+    "CARRY-04": {
+      "status": "PASS",
+      "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+      "result": "Fresh Library default project and protection contract passed"
+    },
+    "CARRY-05": {
+      "status": "PASS",
+      "commit": "ede09a6",
+      "result": "OCR_CLOSED remains distinct from cancellation; full Swift suite passed"
+    },
     "CARRY-06": {
       "status": "PASS",
       "commit": "2679db6e4d4c0f698a73388370bb5a0c8dc6c7d6",
@@ -44,13 +57,59 @@
       ],
       "result": "PASS; FIFO, individual waiter cancellation, close wake/drain, zero owner polling"
     },
-    "CARRY-07": {"status": "PASS", "commit": "218b43c71bc8d58771f70e654fe3349b8174097e", "result": "Isolated suite fallback chain and Xcode Test Plan passed"},
-    "CARRY-08": {"status": "PASS", "commit": "218b43c71bc8d58771f70e654fe3349b8174097e", "result": "Five ordered rg scans fail closed; 106 Gate self-tests passed"},
-    "CARRY-09": {"status": "PASS", "commit": "218b43c71bc8d58771f70e654fe3349b8174097e", "result": "PASS approval window and pre-admission boundary passed"},
-    "CARRY-10": {"status": "ACCEPTED", "result": "Command-W without keyWindow remains a no-op"},
-    "CARRY-11": {"status": "ACCEPTED", "result": "Case-insensitive slate.txt suffix compatibility retained"},
-    "CARRY-12": {"status": "HISTORY_ONLY", "result": "Immutable history retained; no rewrite"},
-    "CARRY-13": {"status": "BASELINE_PASS_FINAL_REFRESH_PENDING", "result": "233 legacy-remove paths mapped with zero unowned; Node/Modern/ABI clean baseline passed"},
-    "CARRY-14": {"status": "BASELINE_PASS_FINAL_REFRESH_PENDING", "result": "Unlocked console, no foreground contention, UI Test Plan passed without rerun"}
+    "CARRY-07": {
+      "status": "PASS",
+      "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+      "result": "Isolated suite fallback chain, unsafe-construction scan, Xcode Debug build, and the 10-test shared Test Plan passed in the final pre-cutover refresh.",
+      "revalidatedCommit": "52b2a78f6619145b0999bdccf588d83a95349e7c"
+    },
+    "CARRY-08": {
+      "status": "PASS",
+      "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+      "result": "Five ordered rg scans fail closed; 106 Gate self-tests and the final pre-cutover Gate passed.",
+      "revalidatedCommit": "52b2a78f6619145b0999bdccf588d83a95349e7c"
+    },
+    "CARRY-09": {
+      "status": "PASS",
+      "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+      "result": "PASS approval window and pre-admission boundary passed"
+    },
+    "CARRY-10": {
+      "status": "ACCEPTED",
+      "result": "Command-W without keyWindow remains a no-op"
+    },
+    "CARRY-11": {
+      "status": "ACCEPTED",
+      "result": "Case-insensitive slate.txt suffix compatibility retained"
+    },
+    "CARRY-12": {
+      "status": "HISTORY_ONLY",
+      "result": "Immutable history retained; no rewrite"
+    },
+    "CARRY-13": {
+      "status": "FINAL_REFRESH_PASS",
+      "commit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+      "result": "233 legacy-remove paths mapped with zero unowned; Node 324/324, Modern 118/118, typecheck/build, and Electron ABI passed with legacy oracles still present."
+    },
+    "CARRY-14": {
+      "status": "FINAL_REFRESH_PASS",
+      "commit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+      "result": "Unlocked console, no foreground contention, shared Xcode Test Plan 10/10 passed without rerun."
+    }
+  },
+  "finalPreCutoverRefresh": {
+    "result": "PASS",
+    "approvable": true,
+    "commit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+    "implementationCommit": "feca73fc2c15a3cec74989f5c07879ab2c8d7fa3",
+    "directory": ".codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619",
+    "manifest": ".codex/swift-migration/manifests/sm09-final-pre-cutover.json",
+    "resultSha256": "1cc72422c5e63edf72f3d159c4e85c65d514ec3e8ef3687116c968c3189e29fa",
+    "checksSha256": "a1275e51c2ed2ea6485447c9530bb58fd599e63de4554e00cb611a3a2ae595a3",
+    "checks": {
+      "passed": 34,
+      "notApplicable": 1,
+      "failed": 0
+    }
   }
 }

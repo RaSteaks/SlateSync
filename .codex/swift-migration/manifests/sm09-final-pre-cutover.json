@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "kind": "FINAL_PRE_CUTOVER_REFRESH",
+  "status": "PASS",
+  "approvable": true,
+  "commit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+  "implementationCommit": "feca73fc2c15a3cec74989f5c07879ab2c8d7fa3",
+  "evidenceDirectory": ".codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619",
+  "generatedAt": "2026-09-07T15:59:28Z",
+  "resultSha256": "1cc72422c5e63edf72f3d159c4e85c65d514ec3e8ef3687116c968c3189e29fa",
+  "checksSha256": "a1275e51c2ed2ea6485447c9530bb58fd599e63de4554e00cb611a3a2ae595a3",
+  "summarySha256": "33a003f6eb24cf1c0bc6c5b313f9ce2fae47d21447a993ac5b9301f1c0437436",
+  "inventorySha256": "6bcda63ca1d26422943a0c979d14c5a2491cd5e7530ae776bdfa7ac7288184d1",
+  "coverageSha256": "5ca3f20cc1fe810935994889ab584f400c044d236084e4c39fb1f9c3721426e9",
+  "logSha256": {
+    "workspace_layout.log": "cc43bc4b192dc90dd81713103523e407a6ac141b40cb999c3ee68734bce514b7",
+    "required_tools.log": "bb2d7126e6c78026c5258f5b15c318c3785ecb53374e2cadd60cc07ccaac1778",
+    "clean_review_target.log": "afa667202c9e0b6ac9cbff31457d4e39f441cba68bd819504779c434d65635e9",
+    "forbidden_items.log": "88df44936e0325a7fd8b3b566fd98bfd36a3a998a25e431718d493b827334024",
+    "diff_integrity.log": "bc681166d7a3b5f8644b96cd694e36b0183f3bae0e0dcb94ea5b4cc224e7de7d",
+    "gate_self_tests.log": "5335fd8c5ddd4ed97ad11af71ac35384b619a67bed7bb4391eb16b8fadc9612b",
+    "sm01_foundation_contract.log": "f608705fa58c3da7c3a4ef71999b8d603a3472e0e58af5c718cf26d6e2990d8b",
+    "sm01_scope_contract.log": "c70330717c8c3652fedea1bb3e13b102208f4be6c5283ee23c6e27a3a4f19622",
+    "swift_build.log": "0ed23e43a03c43b4583ccffedb4f14bd3093b53ec806dca7e98a96bbb6482b3d",
+    "swift_test.log": "ec35700c7d59c0789bb4dc4556363b56b665d768a57c2ea4835894f8bd802941",
+    "xcode_debug_build.log": "9e4d7fe6a552299a564d702628b97ef6df60849ad95cb22fe61159281f9b56a3",
+    "xcode_test_plan.log": "6ca988f8a0794c67359a01610ac0d50a7af2e5494fb7a6c12c78984cd703b61b",
+    "sm09_release_tools.log": "7a602c8a16774ad1de0b794f2c88b4d93ab8ae10829d8b516ce8954e956304f3",
+    "sm09_release_contract.log": "e6a933d68a3fdff820e6f5ffcc85362d967dc4abf4a11c888c7a0b1c9640c5eb",
+    "sm09_inventory_contract.log": "064e935c6cace37fd21c9c370c87eae51817d57bcdceb34cf141470646a8fe54",
+    "sm09_coverage_contract.log": "564266cd910d8c9a55ea73319d1f42f52224c395d8f774d72f7ddd8b771214e7",
+    "sm09_package_self_tests.log": "6c20dc5edde685566c144e9e5aafc6586f155159f51c2b4d84a59257895cf397",
+    "sm05_technical_regression.log": "8f3ee8ea90cabf0aa2aaca5f0290524bab723260e1ec5e1e9dfe749062e7e995",
+    "sm07_technical_regression.log": "928c9f912d33946b9e76cef3a3b7b731c07775f73eca9f4791e0cb3e981b2089",
+    "sm08_technical_regression.log": "411a11ef4b08e7d12c87180f966970ca71f81dbd8df3cf9313b83ec4cbb01019",
+    "sm09_node_compatibility.log": "1145f21801db8fc614e7237f5814e4498ada3909f60c0ab597f842fa990ab515",
+    "sm09_modern_compatibility.log": "f42ebab7b0ba2448a553adafcbb916b6302e7639a285bb0881d192d768e8fa42",
+    "sm09_static_checks.log": "00c8c63e1c484ff0895b085fff708aea8d2c9fb4679c66f00fbe1f450a6819cf",
+    "sm09_typecheck.log": "a45cd7dc9defb6c1541ae86b1f41232bb00d2f7fd54c909c40ddbb9132d1b905",
+    "sm09_modern_build.log": "313576fe3439a71f3cfa7d2c0a1149e981e6c80f62161e5a83b3acd4db29fad4",
+    "sm09_native_abi.log": "339b94bacd7cdf48d346927d0f414499fb2b60ec6cfa557af7261c34e0532db1",
+    "sm01_debug_settings.log": "e66b199962eca40b88c2505b31be95b44dd072b0071259137bfc237ef52e0104",
+    "sm01_real_app_launch.log": "4158e158e7010ea9f1d46e2c9ffa1c809be8530e2971f7b17b34d80c2803d375",
+    "sm01_release_build.log": "4ba96ffd5a0f0209e2773f3cb86d82d2a52e47ef0e2c9ce01f7c42c962ae36b1",
+    "sm01_release_artifact.log": "7a66d816d9783147ff21c60e4b4ecad577c4226b80caeb1bca85f5d28a11aad8",
+    "sm01_archive.log": "2aef07389972e79d451d87f91c85606d4527a3d6d7ad7333fb158deed1579c27",
+    "sm01_archive_artifact.log": "0976d49ed21cd9e95e4ad35dbfbe68d39b464979c314a86e0c5428f332e7e25b",
+    "sm09_archive_bundle_audit.log": "e907753b391105496d77218d7c016a6c09a01555940a690cddebd6263482e8f4",
+    "sm09_package_artifacts.log": "09379e0a2ce5778bfb128fc037170fee5277038e254be1a70e1fc77407e0e7ca"
+  },
+  "matrix": {
+    "gateChecksPassed": 34,
+    "gateChecksNotApplicable": 1,
+    "swiftTests": {
+      "executed": 236,
+      "skipped": 1,
+      "failures": 0
+    },
+    "xcodeTestPlan": {
+      "passed": 10,
+      "skipped": 0,
+      "failures": 0
+    },
+    "nodeCompatibility": {
+      "passed": 324,
+      "failures": 0
+    },
+    "modernCompatibility": {
+      "filesPassed": 25,
+      "testsPassed": 118,
+      "failures": 0
+    },
+    "gateHelperSelfTests": {
+      "passed": 106,
+      "failures": 0
+    },
+    "packagePipelineSelfTests": {
+      "passed": 16,
+      "failures": 0
+    },
+    "releaseContractSelfTests": {
+      "passed": 7,
+      "failures": 0
+    }
+  },
+  "archive": {
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "minimumMacOS": "15.0",
+    "toolchain": "Xcode 26.3 Build version 17C529",
+    "macOSSDK": "26.2",
+    "signingLane": "adhoc-local-validation",
+    "developerIDStatus": "BLOCKED_ENV:not-authorized-or-configured",
+    "notarizationStatus": "BLOCKED_ENV:not-authorized-or-configured",
+    "published": false,
+    "bundleManifestSha256": "b4e6e51db0105c28ee243b9f643b64d9861c4d10ac9979c952da68318d9f3a91",
+    "artifactManifestSha256": "bbf8873f5a72d98a0fb2d5fe353f0c766f72602f4f2e7151d8602afb49459109",
+    "checksumsSha256": "030db4e0ccd6052c7166e8d3787dae70b900dafd5bd61b8dc40e6f2267bbf8c4",
+    "artifacts": [
+      {
+        "name": "SlateSync-1.0.0-macOS-universal.zip",
+        "bytes": 7353663,
+        "sha256": "08297d6169cfb65143a3f99a7a37ad97abacd51e1e616ad0cef40f0fe7d1cf96"
+      },
+      {
+        "name": "SlateSync-1.0.0-macOS-universal.dmg",
+        "bytes": 8807062,
+        "sha256": "8937b498d7051b655ad38e04c5f722b7323e3d0c6ba6236c1bc1f0f95a03786b"
+      },
+      {
+        "name": "SlateSync-1.0.0-release-notes.md",
+        "bytes": 1044,
+        "sha256": "0e00b69dcada223c9d01ecda4b8414949e879abd5b8ac3011d28efad8a2e8690"
+      }
+    ]
+  },
+  "uiConditions": {
+    "consoleUnlocked": true,
+    "foregroundContentionAvoided": true,
+    "testPlanResult": "PASS",
+    "rerunsRequired": 0
+  },
+  "scope": "Final WP-2 through WP-5 compatibility refresh with legacy oracles still present; hard prerequisite for WP-6 removal."
+}

@@ -28,13 +28,13 @@
   Xcode Debug + UI Test plan + Release/Archive + npm 全家桶）本地实测
   15-20 分钟，GitHub 托管 runner 更慢；CI 解析器修复后该风险变为现实。
 - 建议处置：WP-4 重写 CI 为 native-only 步骤时按实测定值。
-- 状态：**已修复，WP-4/WP-5 已重新核定**（提交 SHA 待本次实现提交后回填）。
+- 状态：**已修复，WP-4/WP-5 已重新核定**（实现提交 `feca73f`，最终复验提交 `52b2a78`）。
   两条 workflow 已切换为共享 native SM-09 Gate，固定 `macos-26` 与 Xcode 26.3，
   不再安装或执行 Node/npm/Electron。CI 与 release 都使用 30 分钟 timeout；依据为
   本机完整 compatibility Gate 约 7 分钟，并为托管冷缓存、Xcode UI、Universal
   archive、DMG 挂载和 trap 清理保留余量。release 只构建一次 archive 并复用其
   audited app。`sm09_release_contract.py` 对 workflow 结构、runner/toolchain、最小权限、
-  禁止旧工具和 timeout 漂移执行正负契约；当前自测 5/5 通过。GitHub 官方 image
+  禁止旧工具、retained artifact 缺失和 timeout 漂移执行正负契约；当前自测 7/7 通过。GitHub 官方 image
   清单确认 `macos-26` 提供 Xcode 26.3，原定 `macos-14` 已进入弃用窗口。
 
 ### CARRY-03 — createProject 孤儿目录（审查遗留）
@@ -119,7 +119,9 @@
   `SlateSync.isolated.ephemeral` 备用 suite 的显式回退链替代 `!`；隔离
   运行下以 `precondition` 保证终极回退显式失败——任何隔离运行都不写真实
   用户偏好。验证：Xcode Debug 构建 + 完整 Test Plan（含隔离启动路径的
-  8 项 UI 用例）通过。
+  8 项 UI 用例）通过。最终删除前刷新提交 `52b2a78` 再次通过
+  unsafe-construction scan、Xcode Debug 与共享 Test Plan 10/10，未回退到
+  `.standard`。
 
 ## 二、Gate/治理遗留（随对应 WP 收敛时修复）
 

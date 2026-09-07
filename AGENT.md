@@ -1,5 +1,27 @@
 # SlateSync 当前项目方案
 
+## 2026-09-08 SM-09 最终删除前兼容刷新（当前有效）
+
+- WP-2～WP-5 与后续 Gate fail-closed 修复已收敛到精确提交
+  `52b2a78f6619145b0999bdccf588d83a95349e7c`。该干净提交仍保留全部 legacy
+  oracle，并完成 SM-09 全矩阵：34 项 PASS、批准窗口 1 项 NOT_APPLICABLE、
+  `approvable=true`。SwiftPM 236 项（1 项离线环境跳过）、Xcode Test Plan
+  10/10、Node compatibility 324/324、Modern 118/118、Gate helper 106/106、
+  release contract 7/7 与 package pipeline 16/16 均通过。
+- 最终 evidence 目录为
+  `.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619`；tracked 摘要为
+  `.codex/swift-migration/manifests/sm09-final-pre-cutover.json`，保存 result、
+  checks、summary、34 份日志、inventory/coverage 与 package artifact hashes。
+  初始 `sm09-pre-cutover.json` 保持原样，未用事后结果改写历史 baseline。
+- Gate 生成的同源 Universal app/ZIP/DMG 均为 arm64+x86_64、macOS 15.0、
+  Xcode 26.3、ad-hoc+hardened runtime、空 entitlements、系统依赖；ZIP/DMG
+  checksum、解压、只读挂载、签名、资源和 app lineage 回验通过。artifact manifest
+  明确记录 Developer ID/notary 未配置、`published=false`，不构成外部分发。
+- CARRY-02 已按本机约 7 分钟完整 compatibility Gate 重新核定两条 workflow 的
+  30 分钟上限；CARRY-07/08/13/14 已在最终刷新复验并写入 carry closure。
+  WP-6 仍需 Owner 对六项 `decision-required` 建议一次性确认；确认前 legacy
+  production inputs 和这六个文件保持原样。
+
 ## 2026-09-07 SM-09 WP-2～WP-5 原生发布链路（当前有效）
 
 - WP-2 将 PaddleOCR runner 与固定依赖清单迁入唯一 canonical 目录
@@ -32,8 +54,8 @@
   `flags=adhoc,runtime`、空 entitlements，依赖仅为系统 framework/dylib；同一 app
   的真实 ZIP（约 7.0 MiB）与 DMG（约 8.4 MiB）均通过解压/只读挂载、签名、
   版本、资源和血缘回验。当前证据位于 `/private/tmp/slatesync-sm09-wp3-archive-2`
-  与 `/private/tmp/slatesync-sm09-wp3-artifacts-2`；这是施工期验证，最终证据仍须
-  在 WP-2～WP-5 提交后的 clean compatibility refresh 重新生成并指向精确 commit。
+  与 `/private/tmp/slatesync-sm09-wp3-artifacts-2`；这是施工期验证，最终 clean
+  compatibility refresh 及精确 commit 证据见上节。
 - WP-4/5 workflows 已去除 Node/npm/Electron 构建步骤，固定 `macos-26` 与
   `/Applications/Xcode_26.3.app`。GitHub 官方 runner 清单确认该 image 提供
   Xcode 26.3；原定 `macos-14` 已进入弃用窗口。CI/release 均调用共享
