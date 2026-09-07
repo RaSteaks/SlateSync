@@ -128,11 +128,33 @@ def validate_workflows(ci: str, release: str) -> None:
     require("Developer ID" in release and "no Developer ID secret" in release, "ad-hoc limitation is not explicit")
 
 
+def validate_gate_package_retention(source: str) -> None:
+    """Keep the package wrapper fail-closed after its external staging step."""
+
+    require(
+        re.search(r"\blocal[^\n]*\bstatus\b", source) is None,
+        "zsh read-only status variable used by Gate",
+    )
+    require(
+        "sm09_package_artifacts_check && sm09_package_artifacts_evidence_check" in source,
+        "package evidence postcondition is not mandatory",
+    )
+    for name in (
+        "SlateSync-1.0.0-macOS-universal.zip",
+        "SlateSync-1.0.0-macOS-universal.dmg",
+        "SHA256SUMS",
+        "SlateSync-1.0.0-manifest.json",
+        "SlateSync-1.0.0-release-notes.md",
+    ):
+        require(name in source, f"retained package evidence is not checked: {name}")
+
+
 def run_contract() -> None:
     manifest = json.loads(read(".codex/swift-migration/manifests/sm09-native-resources.json"))
     validate_resources(manifest)
     validate_xcode()
     validate_workflows(read(".github/workflows/ci.yml"), read(".github/workflows/release.yml"))
+    validate_gate_package_retention(read("script/phase_gate.sh"))
     for script in ("archive_release.sh", "package_release.sh", "verify_bundle.sh"):
         mode = (ROOT / "script" / script).stat().st_mode
         require(mode & stat.S_IXUSR != 0, f"script is not executable: {script}")
@@ -164,6 +186,24 @@ def run_self_tests() -> None:
         cases += 1
     else:
         raise AssertionError("resource hash negative fixture unexpectedly passed")
+
+    gate = read("script/phase_gate.sh")
+    for mutated, expected in (
+        (
+            gate.replace(
+                "sm09_package_artifacts_check && sm09_package_artifacts_evidence_check",
+                "sm09_package_artifacts_check",
+            ),
+            "missing package evidence postcondition",
+        ),
+        (gate.replace("package_status=0", "status=0"), "zsh read-only status variable"),
+    ):
+        try:
+            validate_gate_package_retention(mutated)
+        except AssertionError:
+            cases += 1
+        else:
+            raise AssertionError(f"negative fixture unexpectedly passed: {expected}")
     print(f"SM-09 release contract self-tests: {cases} passed, 0 failed")
 
 

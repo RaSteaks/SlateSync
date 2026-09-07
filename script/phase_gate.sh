@@ -360,7 +360,7 @@ sm01_archive_artifact_check() {
 }
 
 sm09_package_artifacts_check() {
-  local package_root package_output status=0
+  local package_root package_output package_status=0
   package_root="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-gate-package.XXXXXX")" || return 1
   package_output="${package_root}/artifacts"
 
@@ -369,12 +369,33 @@ sm09_package_artifacts_check() {
   # this unique, ignored Gate result directory for CI upload and review.
   ./script/package_release.sh \
     "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" \
-    "$package_output" 1.0.0 1 || status=$?
-  if (( status == 0 )); then
-    /usr/bin/ditto "$package_output" "${result_dir}/artifacts" || status=$?
+    "$package_output" 1.0.0 1 || package_status=$?
+  if (( package_status == 0 )); then
+    /usr/bin/ditto "$package_output" "${result_dir}/artifacts" || package_status=$?
   fi
   rm -rf "$package_root"
-  return "$status"
+  return "$package_status"
+}
+
+sm09_package_artifacts_evidence_check() {
+  local name
+  for name in \
+    SlateSync-1.0.0-macOS-universal.zip \
+    SlateSync-1.0.0-macOS-universal.dmg \
+    SHA256SUMS \
+    SlateSync-1.0.0-manifest.json \
+    SlateSync-1.0.0-release-notes.md; do
+    [[ -s "${result_dir}/artifacts/${name}" ]] || {
+      print -u2 -r -- "missing retained package evidence: ${name}"
+      return 1
+    }
+  done
+}
+
+sm09_package_artifacts_gate_check() {
+  # Keep the evidence assertion separate so an unexpected early return from
+  # the packaging wrapper cannot turn absent artifacts into a successful Gate.
+  sm09_package_artifacts_check && sm09_package_artifacts_evidence_check
 }
 
 phase_specific_gate_missing() {
@@ -728,7 +749,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
       ./script/verify_bundle.sh \
         "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.0.0 1 adhoc
     run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
-      sm09_package_artifacts_check
+      sm09_package_artifacts_gate_check
   fi
 fi
 
