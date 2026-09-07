@@ -273,7 +273,7 @@ test("packaged PaddleOCR resolves its runner from the runtime project root", asy
     assert.equal(result.used, true);
     assert.equal(
       capturedOptions.runnerPath,
-      join(projectDir, "scripts", "paddleocr_runner.py"),
+      join(projectDir, "PaddleOCR", "paddleocr_runner.py"),
     );
   } finally {
     await closePaddleOcrWorker({ force: true });

@@ -28,10 +28,14 @@
   Xcode Debug + UI Test plan + Release/Archive + npm 全家桶）本地实测
   15-20 分钟，GitHub 托管 runner 更慢；CI 解析器修复后该风险变为现实。
 - 建议处置：WP-4 重写 CI 为 native-only 步骤时按实测定值。
-- 状态：**已修复**（Owner 指定本项）。`ci.yml` test job 15→60、
-  `release.yml` build job 30→60，均附实测依据注释；WP-4/WP-5 重写对应
-  workflow 时按 native-only 步骤重新核定。验证：YAML 语法通过，
-  sm02 平台契约（断言 workflows 调用共享 Gate 且未硬编码阶段）通过。
+- 状态：**已修复，WP-4/WP-5 已重新核定**（提交 SHA 待本次实现提交后回填）。
+  两条 workflow 已切换为共享 native SM-09 Gate，固定 `macos-26` 与 Xcode 26.3，
+  不再安装或执行 Node/npm/Electron。CI 与 release 都使用 30 分钟 timeout；依据为
+  本机完整 compatibility Gate 约 7 分钟，并为托管冷缓存、Xcode UI、Universal
+  archive、DMG 挂载和 trap 清理保留余量。release 只构建一次 archive 并复用其
+  audited app。`sm09_release_contract.py` 对 workflow 结构、runner/toolchain、最小权限、
+  禁止旧工具和 timeout 漂移执行正负契约；当前自测 5/5 通过。GitHub 官方 image
+  清单确认 `macos-26` 提供 Xcode 26.3，原定 `macos-14` 已进入弃用窗口。
 
 ### CARRY-03 — createProject 孤儿目录（审查遗留）
 - 来源：SM-01/02 审查 P3-9。

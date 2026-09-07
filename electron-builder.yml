@@ -51,8 +51,8 @@ files:
 extraResources:
   - from: scripts/
     to: app/scripts/
-  - from: requirements-ocr.txt
-    to: app/requirements-ocr.txt
+  - from: SlateSyncApp/Resources/PaddleOCR/
+    to: app/PaddleOCR/
   - from: slatesync.config.json
     to: app/slatesync.config.json
 

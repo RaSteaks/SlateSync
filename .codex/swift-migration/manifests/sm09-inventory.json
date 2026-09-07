@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-07T14:34:31Z",
-  "commit": "2679db6e4d4c0f698a73388370bb5a0c8dc6c7d6",
+  "generatedAt": "2026-09-07T15:27:48Z",
+  "commit": "ec253787a5b2b26bbd2ef414a0704942993e9c73",
   "sourceType": "working-tree",
   "dirtyWorkspace": true,
   "approvable": false,
@@ -16,14 +16,13 @@
     "decision-required"
   ],
   "summary": {
-    "total": 581,
-    "migration-history": 110,
+    "total": 588,
+    "migration-history": 112,
     "decision-required": 6,
-    "release-input": 22,
+    "release-input": 25,
     "legacy-remove": 233,
-    "native-product": 121,
-    "native-test": 87,
-    "fixture-migrate": 2
+    "native-product": 123,
+    "native-test": 89
   },
   "files": [
     {
@@ -1058,8 +1057,6 @@
       "sha256": "2050d39eeb2619d9699f1f7f54df97ee4916dd4e0eb540dd25bb5e9a0dcf3593",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
-        ".github/workflows/ci.yml",
-        ".github/workflows/release.yml",
         "AGENT.md",
         "script/lib/phase_gate_lib.sh",
         "script/phase_gate.sh",
@@ -1134,8 +1131,8 @@
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 13798,
-      "sha256": "08606a399d7f86502d1d9321a312bf934ac0d516315743ad39d9a8ce6efc5093",
+      "bytes": 14237,
+      "sha256": "3bfde9e57d484c22f0f5bbd37a5ec5e0afa7cfdb12233b740163b1cfd51378b3",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md"
@@ -1158,7 +1155,7 @@
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
       "bytes": 117233,
-      "sha256": "f21c7c3c7a7ab2f3f9a7fdf979016dfa2f0240108925258d38330c19d59d229a",
+      "sha256": "5ca3f20cc1fe810935994889ab584f400c044d236084e4c39fb1f9c3721426e9",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/sm09_coverage.py"
@@ -1176,6 +1173,20 @@
       ]
     },
     {
+      "path": ".codex/swift-migration/manifests/sm09-native-resources.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1785,
+      "sha256": "11c045c4da945488377be331ea19559a727b0c67c345df166075f6a165d40123",
+      "referencers": [
+        "AGENT.md",
+        "script/package_release.sh",
+        "script/tests/sm09_release_contract.py",
+        "script/verify_bundle.sh"
+      ]
+    },
+    {
       "path": ".codex/swift-migration/manifests/sm09-pre-cutover.json",
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
@@ -1189,12 +1200,23 @@
       ]
     },
     {
+      "path": ".codex/swift-migration/manifests/sm09-release-notes.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1044,
+      "sha256": "0e00b69dcada223c9d01ecda4b8414949e879abd5b8ac3011d28efad8a2e8690",
+      "referencers": [
+        "script/package_release.sh"
+      ]
+    },
+    {
       "path": ".codex/swift-migration/manifests/sm09-wp0-decisions.md",
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 3200,
-      "sha256": "504b270691a651a82ea15ac6ff35a217804432e916174bd6aa9db4552f883270",
+      "bytes": 3542,
+      "sha256": "c5f3cccaaacb14613cd0d8da7b679897701e184c82e92cd2c550227d18dbce12",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
@@ -1327,8 +1349,8 @@
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 44894,
-      "sha256": "afdef5a474962c55d70e7428953754c3f00a203cb233a85378f7af702701889f",
+      "bytes": 45038,
+      "sha256": "5cf900676aca85ef1295857e64efdb0e94f4906e89af1e846f11e6652f6eb044",
       "referencers": [
         ".codex/swift-migration/CURRENT_STATE.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -1510,8 +1532,8 @@
       "category": "release-input",
       "note": "CI/release lane，WP-4/WP-5 切换为 native-only",
       "owner": "native-release",
-      "bytes": 3222,
-      "sha256": "2a6565ad467a87b53ce7d3e774f6549aa6776c7614b6581dd9629755a75182e9",
+      "bytes": 1777,
+      "sha256": "90ee29dd02b02d81efb7654668762b816e7a788fdb54fecd1c1445d4271037f3",
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
         ".codex/refactor/packages/IP-0102-C01.md",
@@ -1522,6 +1544,7 @@
         ".codex/swift-migration/packages/SM-09.md",
         "script/sm09_coverage.py",
         "script/tests/sm02_platform_contract.mjs",
+        "script/tests/sm09_release_contract.py",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
         "test/baseline-contracts.test.mjs"
@@ -1532,8 +1555,8 @@
       "category": "release-input",
       "note": "CI/release lane，WP-4/WP-5 切换为 native-only",
       "owner": "native-release",
-      "bytes": 3588,
-      "sha256": "d88ea45010820acf25363b7d9472c7494d8bcb346404fee5ca3b13d8a47c09cf",
+      "bytes": 2390,
+      "sha256": "485e2da3e0b59866528a8d8b553ac3d7d0c61d468900f4c0cddd1bd38bc05fb5",
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
         ".codex/refactor/packages/IP-0102-C01.md",
@@ -1543,6 +1566,7 @@
         ".codex/swift-migration/packages/SM-09.md",
         "script/sm09_coverage.py",
         "script/tests/sm02_platform_contract.mjs",
+        "script/tests/sm09_release_contract.py",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
         "test/baseline-contracts.test.mjs"
@@ -1607,8 +1631,8 @@
       "category": "release-input",
       "note": "根目录项目方案（随阶段推进更新）",
       "owner": "native-release",
-      "bytes": 151488,
-      "sha256": "77b44ffc568332daa6ff2b79ab9f077e726f8ff0a9ac0b6653157be0191d4f84",
+      "bytes": 154712,
+      "sha256": "15089ce364632daae36b088674e07cd2851ed2a8e1626883b823656136a6626f",
       "referencers": [
         ".codex/refactor/DECISION_QUEUE.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
@@ -1744,14 +1768,15 @@
       "category": "release-input",
       "note": "唯一 App 构建/测试入口（scheme/test plan），WP-2 冻结发布设置",
       "owner": "native-release",
-      "bytes": 18458,
-      "sha256": "85145025a3ac6ed8a50f360f4d2dceaf2c4d45bdba67396defc55940f9dc6051",
+      "bytes": 17989,
+      "sha256": "4205b5a57007ddf48ced5a63fdef68eb8cb69d5336e3d652cef9d9570135566e",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/phase_gate.sh",
         "script/tests/sm02_platform_contract.mjs",
         "script/tests/sm06_contract.mjs",
-        "script/tests/sm08_contract.mjs"
+        "script/tests/sm08_contract.mjs",
+        "script/tests/sm09_release_contract.py"
       ]
     },
     {
@@ -1800,8 +1825,8 @@
       "category": "native-product",
       "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
       "owner": "native-product",
-      "bytes": 17021,
-      "sha256": "9d761a2630f1642d5b135c2a5498077447e29c43d0d0eaa6b871e1a10250c16a",
+      "bytes": 17058,
+      "sha256": "4a2b32bc81f1a497917a710b59e7308c50986fbf88d47366694c0cd2b39c211c",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/phase_gate.sh",
@@ -1815,11 +1840,46 @@
       "category": "native-product",
       "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
       "owner": "native-product",
-      "bytes": 1251,
-      "sha256": "0dd3bdb6a398e7f84ec052577d6230a693c3d560b77c31b32d5438a1a2fdaacc",
+      "bytes": 1291,
+      "sha256": "260445deedeeadc7542196c0b4cf4698d4fc9ba794d7eba7d21384460930b723",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
-        "SlateSync.xcodeproj/project.pbxproj"
+        "SlateSync.xcodeproj/project.pbxproj",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 18698,
+      "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
+        "Sources/SlateSyncMedia/OCRRuntimePaths.swift",
+        "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
+        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+        "package.json",
+        "script/phase_gate.sh",
+        "script/tests/release_pipeline_tests.zsh",
+        "script/tests/sm06_freeze_oracles.mjs",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 37,
+      "sha256": "d2ace10a8d8a06dd39a51e39fe5b0db9df0b334d7464d229532fe075e0d93f17",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
+        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+        "script/phase_gate.sh",
+        "script/tests/release_pipeline_tests.zsh",
+        "script/tests/sm09_release_contract.py"
       ]
     },
     {
@@ -1831,7 +1891,8 @@
       "sha256": "d9b06c202956033b01e62b21c727eea89b6a4fd456ef71d420c39f460426b9f3",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
-        "SlateSync.xcodeproj/project.pbxproj"
+        "SlateSync.xcodeproj/project.pbxproj",
+        "script/tests/sm09_release_contract.py"
       ]
     },
     {
@@ -2212,8 +2273,8 @@
       "category": "native-product",
       "note": "原生 Swift 业务模块",
       "owner": "native-product",
-      "bytes": 3215,
-      "sha256": "0c013bbaf1a6ad472409885b65624c1c67f17fe353adb5907371e24e999f1739",
+      "bytes": 3240,
+      "sha256": "c1adb7d45121007b414286487534f3d64ea8f761eb90fc18be34d33c64c9ae61",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
@@ -2688,6 +2749,7 @@
       "sha256": "792972dbd70a44e9a289aa5d74d68175c5bda45983703b9d11c06da719099ea8",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
         "script/tests/sm08_contract.mjs"
       ]
     },
@@ -3227,8 +3289,8 @@
       "category": "native-product",
       "note": "原生 Swift 业务模块",
       "owner": "native-product",
-      "bytes": 30089,
-      "sha256": "06a44c80263741f211515091e4bb9b8a8d248146979220182c831bf3e6f62bbd",
+      "bytes": 30302,
+      "sha256": "413cde7d7a0930269a88655f949171e476f56c57e056d62e09a5e78a552f5ad8",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
@@ -3439,8 +3501,8 @@
       "category": "native-test",
       "note": "SwiftPM 测试目标",
       "owner": "native-validation",
-      "bytes": 6221,
-      "sha256": "46a080e36a88d50adb53c1903ef6d31cee868a223b09be248ba5bba5d1b039b8",
+      "bytes": 6246,
+      "sha256": "f8a1d1812c23bdf5af718f032fcf89be5767180c9b1886af9148727455502194",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
@@ -3649,8 +3711,8 @@
       "category": "native-test",
       "note": "SwiftPM 测试目标",
       "owner": "native-validation",
-      "bytes": 19470,
-      "sha256": "821799f99be2f6ac5620648a4702d23c728cc7579b8065e2729a249fa657b980",
+      "bytes": 19695,
+      "sha256": "830ef346221db855a6cb13c4ba983c129d3d261c44980f8ba67f1f63ef20ace0",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
@@ -3844,8 +3906,8 @@
       "category": "native-test",
       "note": "SwiftPM 测试目标",
       "owner": "native-validation",
-      "bytes": 2404,
-      "sha256": "3ef9ab7ad5bff2aed16e883a9287dc151d43c54d21f9f4f7626b760ffe5331b3",
+      "bytes": 2462,
+      "sha256": "47132f2a751fe9da1e5ee25b96d30c2c333fef6f7153559109a92269d2e9e9e7",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
@@ -4225,6 +4287,7 @@
       "sha256": "105825999127f602b81aaf223d94db292c46b6ef41aeabd025e150cfcd01d3be",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
         "AGENT.md",
         "README.md",
         "src/renderer/App.tsx",
@@ -4240,7 +4303,8 @@
       "bytes": 600,
       "sha256": "9c4a6cecb7c3ba52a7edff060ea0cc45b2b8133f18dd4ad56b2e8ecb5a051081",
       "referencers": [
-        ".codex/swift-migration/manifests/sm09-inventory.json"
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json"
       ]
     },
     {
@@ -4248,8 +4312,8 @@
       "category": "legacy-remove",
       "note": "Electron 打包入口，WP-3 原生 archive/package 管线替代",
       "owner": "WP-6-coverage-review",
-      "bytes": 1465,
-      "sha256": "0f7421eaddf66b8570962c647e5387d27b5d84d34be90f71897629c2f248d321",
+      "bytes": 1468,
+      "sha256": "809d4073df99f4586cd5d9aa75599e5b9eccd4b7687ee2c228416eba3fe0e9a1",
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
@@ -4434,8 +4498,8 @@
       "category": "legacy-remove",
       "note": "Electron main/preload 运行时",
       "owner": "WP-6-coverage-review",
-      "bytes": 14751,
-      "sha256": "4734f766578c428bbc495296bc9d9d44b838df7dbd6c223d26267af2efcfb33a",
+      "bytes": 14942,
+      "sha256": "62166db3ec9276c4190fa050eaeb789213378cb1da1388e1f35d0f51526d3876",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/swift-migration/manifests/sm09-coverage.json",
@@ -4767,8 +4831,8 @@
       "category": "legacy-remove",
       "note": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
       "owner": "WP-6-coverage-review",
-      "bytes": 51115,
-      "sha256": "e22b30ee3ec9a95c36f7d0767e190b2af401a9c5cd7466a87ee80ec69f29b7b9",
+      "bytes": 51111,
+      "sha256": "d6f1dda740a107c9555a95278c67a320b87d3a22ff4398d7268eca0e570ebe77",
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/baseline/contracts/build.json",
@@ -4792,8 +4856,8 @@
       "category": "legacy-remove",
       "note": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
       "owner": "WP-6-coverage-review",
-      "bytes": 1736,
-      "sha256": "9561a49a8cb1802843d89ddb217c1507ad37c97535d0683bad7ae6331cd59d14",
+      "bytes": 2178,
+      "sha256": "66e3386a9f45ba241761ca4284903c13b61a07cfc0912390d45ea5b75a889ab3",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -5062,11 +5126,13 @@
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
         "script/phase_gate.sh",
         "script/sm09_coverage.py",
         "script/sm09_inventory.py",
+        "script/verify_bundle.sh",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
         "test/baseline-contracts.test.mjs"
@@ -5077,8 +5143,8 @@
       "category": "legacy-remove",
       "note": "Node 依赖与脚本（WSL 兼容矩阵在 pre-cutover 后失效）",
       "owner": "WP-6-coverage-review",
-      "bytes": 6982,
-      "sha256": "23a76ea6e6d006f7626cd27725d25de3b21af7a26d0ca12a977b4de1df7be8d0",
+      "bytes": 7032,
+      "sha256": "24778b68c3e46d30187782af0498bffbeb7ce7d66e5e2c78d40a6ddda475323b",
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
@@ -5100,6 +5166,7 @@
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
         "electron-builder.yml",
@@ -5108,6 +5175,7 @@
         "script/sm09_inventory.py",
         "script/tests/sm02_platform_contract.mjs",
         "script/tests/sm03_contract.mjs",
+        "script/verify_bundle.sh",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
         "test/baseline-contracts.test.mjs",
@@ -5560,25 +5628,16 @@
       ]
     },
     {
-      "path": "requirements-ocr.txt",
-      "category": "fixture-migrate",
-      "note": "WP-2 与 runner 一起迁入 App Resources；不捆绑 venv/cache/模型",
-      "owner": "WP-2-resource-migration",
-      "bytes": 37,
-      "sha256": "d2ace10a8d8a06dd39a51e39fe5b0db9df0b334d7464d229532fe075e0d93f17",
+      "path": "script/archive_release.sh",
+      "category": "release-input",
+      "note": "原生 Universal Release archive 入口",
+      "owner": "native-release",
+      "bytes": 2125,
+      "sha256": "fad166ce3f626cc6a910972adaa6ce6d0a3fe0c66c0c4c632849e633cfc11f08",
       "referencers": [
-        ".codex/refactor/baseline/contracts/build.json",
-        ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
-        "SlateSync.xcodeproj/project.pbxproj",
-        "SlateSyncApp/App/SlateSyncApp.swift",
-        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
-        "electron-builder.yml",
-        "electron/paddleocr-installer.mjs",
-        "script/sm09_inventory.py",
-        "scripts/setup-paddleocr.sh",
-        "test/paddleocr-installer.test.mjs"
+        "script/sm09_inventory.py"
       ]
     },
     {
@@ -5614,12 +5673,26 @@
       ]
     },
     {
+      "path": "script/package_release.sh",
+      "category": "release-input",
+      "note": "同源 ZIP/DMG、checksum 与 manifest 打包入口",
+      "owner": "native-release",
+      "bytes": 6680,
+      "sha256": "d0bc91ff9bd2815217d45d1469bfe71fb72e883756afb5f1c496ae9a16f5a83a",
+      "referencers": [
+        "AGENT.md",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py",
+        "script/tests/release_pipeline_tests.zsh"
+      ]
+    },
+    {
       "path": "script/phase_gate.sh",
       "category": "release-input",
       "note": "统一 Gate 入口，WP-9 收敛为 native-only",
       "owner": "native-release",
-      "bytes": 30825,
-      "sha256": "3dafdc9ade78e3ba500143d7e571f6ce215f9625376ff6878e3507ee97060ca0",
+      "bytes": 32900,
+      "sha256": "09183cc6f353a549c6bfe595baa4c77ad8f2acc71aec6d608c286849a4a86261",
       "referencers": [
         ".codex/swift-migration/PHASE_GATES.md",
         ".codex/swift-migration/manifests/sm09-coverage.json",
@@ -5649,7 +5722,8 @@
         "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "script/tests/phase_gate_tests.zsh",
-        "script/tests/sm02_platform_contract.mjs"
+        "script/tests/sm02_platform_contract.mjs",
+        "script/tests/sm09_release_contract.py"
       ]
     },
     {
@@ -5670,8 +5744,8 @@
       "category": "release-input",
       "note": "SM-09 原生清单与引用审计工具",
       "owner": "native-release",
-      "bytes": 11196,
-      "sha256": "1d5b907645b41e5aaeee717636dcd74dee4447075e0842a3dcbd0213309fe6ec",
+      "bytes": 11723,
+      "sha256": "5367dbeb912f19d703d8d3fb54b92f8633d76e6705b659d45f7b1fd829457033",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
@@ -5695,8 +5769,8 @@
       "category": "release-input",
       "note": "Gate 自测（zsh，native 工具集）",
       "owner": "native-release",
-      "bytes": 24831,
-      "sha256": "3b9bb2edf6c905b7a90d5c5d656f7e678c8bf64e757a244371f1451d5a4ce7f8",
+      "bytes": 25122,
+      "sha256": "43f6883e03e7105f19cf8795afd9c37bec8f1a26dfb0ed83067a22e8f8f2e9e8",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -5704,6 +5778,18 @@
         "Tests/SlateSyncMediaTests/Fixtures/SM06/coverage.json",
         "script/phase_gate.sh",
         "script/sm09_coverage.py",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/release_pipeline_tests.zsh",
+      "category": "native-test",
+      "note": "原生归档/打包负向与清理自测",
+      "owner": "native-validation",
+      "bytes": 6139,
+      "sha256": "37483cb2fd2c9238c0f66791e3617f9c5d17d24141bc8ad61022160855a7af5e",
+      "referencers": [
+        "script/phase_gate.sh",
         "script/sm09_inventory.py"
       ]
     },
@@ -5772,8 +5858,8 @@
       "category": "legacy-remove",
       "note": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
       "owner": "WP-6-coverage-review",
-      "bytes": 8012,
-      "sha256": "097f61136d1d80a24f7b4a394ebc3b598156002404e10f6d5256ed2b2dfa9d1e",
+      "bytes": 8021,
+      "sha256": "8cf872756bf3e7bbd0a65975ac8f27bf34f56f292755e46898e6c22f906e2161",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -5788,8 +5874,8 @@
       "category": "legacy-remove",
       "note": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
       "owner": "WP-6-coverage-review",
-      "bytes": 5792,
-      "sha256": "5dea585ac9c53583347f7a71f4293eb9756ba8c33d0e27040403d38a02c61b3d",
+      "bytes": 5817,
+      "sha256": "4f4ba6156f9ef86cda8eb73a3a4261d3cab35b8c5bf5d9057fd7f6e0203c0fa1",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
@@ -5853,8 +5939,8 @@
       "category": "legacy-remove",
       "note": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
       "owner": "WP-6-coverage-review",
-      "bytes": 18678,
-      "sha256": "57f015cf574c5314ba63e6634a4d8face7f47ab4300121a3fd580af005e09e77",
+      "bytes": 18684,
+      "sha256": "1a529d6c46776b4577a2cff48182199cb1e60299a94b3cf0efa5ab6cb62c52b9",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -5886,6 +5972,7 @@
       "sha256": "15e50058e8f1f179ea3e522f0ce04d39f55f8a64ca37fba9546bb55cde9ec8d7",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh",
         "script/sm09_inventory.py"
       ]
     },
@@ -5898,7 +5985,34 @@
       "sha256": "eb7494d19ccff895dbfd163874558912ae57bcb40d4bd5c0fbe3d5d13623d45e",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh",
         "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/sm09_release_contract.py",
+      "category": "native-test",
+      "note": "Xcode/resources/workflow 原生发布合同",
+      "owner": "native-validation",
+      "bytes": 7393,
+      "sha256": "c89068c717f4650d4c6881e146264097c89a61991814e03d843d121b9bdc743d",
+      "referencers": [
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/verify_bundle.sh",
+      "category": "release-input",
+      "note": "原生 bundle 架构/版本/资源/依赖/签名审计",
+      "owner": "native-release",
+      "bytes": 6814,
+      "sha256": "e0eee823d41a9eb0ce2947ec0c7c7f43cce4bf8157399418679a2c6c4a4a1a45",
+      "referencers": [
+        "AGENT.md",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py",
+        "script/tests/release_pipeline_tests.zsh"
       ]
     },
     {
@@ -5913,7 +6027,6 @@
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
-        ".github/workflows/release.yml",
         "AGENT.md",
         "package.json",
         "script/tests/sm02_platform_contract.mjs",
@@ -5973,38 +6086,12 @@
       ]
     },
     {
-      "path": "scripts/paddleocr_runner.py",
-      "category": "fixture-migrate",
-      "note": "WP-2 迁入 SlateSyncApp/Resources/PaddleOCR/ 唯一 canonical 位置",
-      "owner": "WP-2-resource-migration",
-      "bytes": 18698,
-      "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3",
-      "referencers": [
-        ".codex/refactor/baseline/contracts/build.json",
-        ".codex/swift-migration/manifests/sm09-inventory.json",
-        ".codex/swift-migration/packages/SM-06.md",
-        ".codex/swift-migration/packages/SM-09.md",
-        ".codex/swift-migration/reviews/SM-06.md",
-        "AGENT.md",
-        "SlateSync.xcodeproj/project.pbxproj",
-        "Sources/SlateSyncMedia/OCRRuntimePaths.swift",
-        "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
-        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
-        "lib/ocr/paddleocr.mjs",
-        "package.json",
-        "script/phase_gate.sh",
-        "script/sm09_inventory.py",
-        "script/tests/sm06_freeze_oracles.mjs",
-        "scripts/vision_ocr.swift"
-      ]
-    },
-    {
       "path": "scripts/setup-paddleocr.sh",
       "category": "decision-required",
       "note": "旧 Paddle 安装入口：SM-08 原生 installer 已替代，确认后删除",
       "owner": "Owner-decision-pending",
-      "bytes": 661,
-      "sha256": "5ffcabb009ea5dff2f5d67bcb99fe6b8235660f0b42b2f23bfe28feb4362e559",
+      "bytes": 746,
+      "sha256": "1c487066e63db5a2c08f7cb7c68e70f46f1692171338efdc48ea7c8c236c656c",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -6019,8 +6106,8 @@
       "category": "decision-required",
       "note": "旧 Vision 桥源码：SM-06 显式 binary 兼容车道（VISIONOCR_BINARY）是否随 cutover 保留需 Owner 决策",
       "owner": "Owner-decision-pending",
-      "bytes": 11473,
-      "sha256": "7e65a0b4c9a86fa1eba0264ff6ea12ad4737c801e6721ad58cd9118f15063296",
+      "bytes": 11482,
+      "sha256": "4c7d06d96b90bd0385f4caca68eedf94c55c4805aad9a4eaf266f21bec419e3e",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/manifests/sm09-wp0-decisions.md",
@@ -6983,8 +7070,8 @@
       "category": "legacy-remove",
       "note": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
       "owner": "WP-6-coverage-review",
-      "bytes": 18880,
-      "sha256": "1dad3ec870e7e6cc5c7c3468512e3140e0fa46dbabc113d1d8ab9fa0d8d634a4",
+      "bytes": 19366,
+      "sha256": "88e03349dc9b71a61187d66c16a6a2eaa3f2d8a7c771f5e7da47910209a2272e",
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/DECISION_QUEUE.md",
@@ -7503,8 +7590,8 @@
       "category": "legacy-remove",
       "note": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
       "owner": "WP-6-coverage-review",
-      "bytes": 24407,
-      "sha256": "3824c97ff81fd7812f312c52b0bc4aac519ba2d409df8b944815f50be811945c",
+      "bytes": 24409,
+      "sha256": "ea060b6a35491047e29e854f8f067fb7a803ece6a2a0ed93f78e444f6af218fa",
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/swift-migration/manifests/sm09-coverage.json",
@@ -7530,8 +7617,8 @@
       "category": "legacy-remove",
       "note": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
       "owner": "WP-6-coverage-review",
-      "bytes": 6727,
-      "sha256": "e899cc7b46c41fd0271c4b0c079d5e715f80cb2a64e1096e26b540edbeec2fa8",
+      "bytes": 6866,
+      "sha256": "e9dbef098dd03897235d4b45b6d3c5f7980dd5361938ded833253cc4f08e7218",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"

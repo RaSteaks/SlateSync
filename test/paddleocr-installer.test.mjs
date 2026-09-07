@@ -11,7 +11,9 @@ import {
 async function withTemporaryProject(callback) {
   const root = await mkdtemp(join(tmpdir(), "slatesync-paddleocr-"));
   try {
-    await writeFile(join(root, "requirements-ocr.txt"), "paddlepaddle==3.3.1\npaddleocr==3.7.0\n");
+    const resourceRoot = join(root, "SlateSyncApp", "Resources", "PaddleOCR");
+    await mkdir(resourceRoot, { recursive: true });
+    await writeFile(join(resourceRoot, "requirements-ocr.txt"), "paddlepaddle==3.3.1\npaddleocr==3.7.0\n");
     return await callback(root);
   } finally {
     await rm(root, { recursive: true, force: true });

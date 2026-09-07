@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "resources": [
+    {
+      "role": "paddle-runner",
+      "source": "SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py",
+      "bundle": "PaddleOCR/paddleocr_runner.py",
+      "bytes": 18698,
+      "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3"
+    },
+    {
+      "role": "paddle-requirements",
+      "source": "SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt",
+      "bundle": "PaddleOCR/requirements-ocr.txt",
+      "bytes": 37,
+      "sha256": "d2ace10a8d8a06dd39a51e39fe5b0db9df0b334d7464d229532fe075e0d93f17"
+    },
+    {
+      "role": "help-content",
+      "source": "Sources/SlateSyncUI/Resources/help-sections.json",
+      "bytes": 2999,
+      "sha256": "792972dbd70a44e9a289aa5d74d68175c5bda45983703b9d11c06da719099ea8"
+    },
+    {
+      "role": "app-icon-image",
+      "source": "build/slatesync.icon/Assets/icon.png",
+      "bytes": 3213643,
+      "sha256": "105825999127f602b81aaf223d94db292c46b6ef41aeabd025e150cfcd01d3be"
+    },
+    {
+      "role": "app-icon-layout",
+      "source": "build/slatesync.icon/icon.json",
+      "bytes": 600,
+      "sha256": "9c4a6cecb7c3ba52a7edff060ea0cc45b2b8133f18dd4ad56b2e8ecb5a051081"
+    }
+  ],
+  "bundlePolicy": {
+    "paddleRoot": "Contents/Resources/PaddleOCR",
+    "allowedPaddleFiles": [
+      "paddleocr_runner.py",
+      "requirements-ocr.txt"
+    ],
+    "forbiddenExtensions": [
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".ts",
+      ".tsx",
+      ".map",
+      ".html",
+      ".css",
+      ".pyc"
+    ],
+    "forbiddenNames": [
+      "app.asar",
+      "node_modules",
+      "package.json",
+      "package-lock.json",
+      "Electron Framework.framework",
+      "Chromium Framework.framework",
+      "__pycache__",
+      ".venv",
+      "venv"
+    ]
+  }
+}

@@ -528,8 +528,19 @@ sm06_offline_paddle_check() {
   local resources="${result_dir}/DerivedData/Debug/Build/Products/Debug/SlateSync.app/Contents/Resources"
   # The actual bundle must carry the shared runner byte-for-byte. Inference
   # uses this read-only resource with an unrelated, injected cwd/model cache.
-  cmp scripts/paddleocr_runner.py "${resources}/paddleocr_runner.py" || return 1
-  SM06_BUNDLE_RESOURCES="$resources" ./script/tests/sm06_offline_paddle.sh
+  cmp SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py "${resources}/PaddleOCR/paddleocr_runner.py" || return 1
+  cmp SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt "${resources}/PaddleOCR/requirements-ocr.txt" || return 1
+  SM06_BUNDLE_RESOURCES="${resources}/PaddleOCR" ./script/tests/sm06_offline_paddle.sh
+}
+
+sm09_release_tools_check() {
+  local tool
+  for tool in ditto hdiutil otool file shasum; do
+    command -v "$tool" >/dev/null 2>&1 || {
+      print -u2 -r -- "missing required release tool: ${tool}"
+      return 127
+    }
+  done
 }
 
 case "$phase" in
@@ -621,18 +632,34 @@ case "$phase" in
     # 阶段生效），Node/Modern 兼容车道保留到 WP-6 删除时再收敛；native
     # evidence 属 SM-08 批准上下文，不在此重跑。WP-1/WP-3/WP-4/WP-9 将逐步
     # 加入 pre-cutover 差分、bundle audit 与 native-only 检查并最终移除 Node。
-    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
-      node script/tests/sm05_contract.mjs --technical-only
-    run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
-      node script/tests/sm07_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
-    run_check sm08_technical_regression true "SM-08 原生 UI fixture/验收映射/执行覆盖继续通过" \
-      node script/tests/sm08_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
-    run_check sm09_node_compatibility true "Electron 数据/Provider/媒体兼容基线继续通过" npm run test:node
-    run_check sm09_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
-    run_check sm09_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
-    run_check sm09_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
-    run_check sm09_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
-    run_check sm09_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
+    run_check sm09_release_tools true "原生归档、依赖与 ZIP/DMG 审计工具可用" sm09_release_tools_check
+    run_check sm09_release_contract true "Xcode、资源、版本、workflow 与发布边界合同完整" \
+      python3 -B script/tests/sm09_release_contract.py
+    run_check sm09_inventory_contract true "SM-09 inventory 分类与引用图完整" \
+      python3 -B script/tests/sm09_inventory_tests.py
+    run_check sm09_coverage_contract true "legacy family 到原生覆盖的映射完整" \
+      python3 -B script/tests/sm09_coverage_tests.py
+    run_check sm09_package_self_tests true "包审计失败、并发和清理路径自测通过" \
+      ./script/tests/release_pipeline_tests.zsh
+    if [[ "${SLATESYNC_NATIVE_ONLY:-0}" == 1 ]]; then
+      # WP-4 CI executes this shared Gate without requiring Node. The default
+      # local path retains all compatibility lanes until WP-6 freezes them.
+      record_check sm09_pre_cutover_compatibility true NOT_APPLICABLE \
+        "native-only CI lane; legacy compatibility executes in the final pre-cutover refresh" ""
+    else
+      run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
+        node script/tests/sm05_contract.mjs --technical-only
+      run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
+        node script/tests/sm07_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
+      run_check sm08_technical_regression true "SM-08 原生 UI fixture/验收映射/执行覆盖继续通过" \
+        node script/tests/sm08_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
+      run_check sm09_node_compatibility true "Electron 数据/Provider/媒体兼容基线继续通过" npm run test:node
+      run_check sm09_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
+      run_check sm09_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
+      run_check sm09_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
+      run_check sm09_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
+      run_check sm09_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
+    fi
     ;;
   SM-01) ;;
   *)
@@ -678,6 +705,15 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     archive
   run_check sm01_archive_artifact true "Archive 为 Universal、macOS 15.0 且签名有效" \
     sm01_archive_artifact_check
+  if [[ "$phase" == "SM-09" ]]; then
+    run_check sm09_archive_bundle_audit true "Archive hardened runtime、entitlements、依赖和资源审计通过" \
+      ./script/verify_bundle.sh \
+        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.0.0 1 adhoc
+    run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
+      ./script/package_release.sh \
+        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" \
+        "${result_dir}/artifacts" 1.0.0 1
+  fi
 fi
 
 # 批准检查仅在"状态阶段 == 本阶段且 lifecycleState == COMPLETE"时生效；

@@ -13,7 +13,7 @@ public struct OCRRuntimePaths: Sendable {
     public init(resources: Resources, python: URL, workingDirectory: URL, modelCache: URL, environment: [String: String]) throws {
         let resourceRoot: URL
         switch resources {
-        case .development(let root): resourceRoot = root; runner = root.appendingPathComponent("scripts/paddleocr_runner.py")
+        case .development(let root): resourceRoot = root; runner = root.appendingPathComponent("SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py")
         case .bundle(let root): resourceRoot = root; runner = root.appendingPathComponent("paddleocr_runner.py")
         }
         guard [resourceRoot, python, workingDirectory, modelCache].allSatisfy(\.isFileURL) else { throw MediaFailure.invalidInput }

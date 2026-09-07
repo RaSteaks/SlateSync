@@ -8,7 +8,7 @@ import { spawn as defaultSpawn } from "node:child_process";
 import { lstat, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createOcrChildEnvironment } from "../lib/ocr/child-environment.mjs";
-import { runtimeProjectDir } from "../lib/ocr/runtime-paths.mjs";
+import { paddleResourceDir, runtimeProjectDir } from "../lib/ocr/runtime-paths.mjs";
 
 export const PADDLEOCR_INSTALL_CANCEL_CODE = "PADDLEOCR_INSTALL_CANCELED";
 export const PADDLEOCR_INSTALL_STAGES = Object.freeze([
@@ -112,7 +112,9 @@ export function createPaddleOcrInstaller({
 
   async function runInstall({ operation, installEnv, onProgress }) {
     const projectDir = runtimeProjectDir(installEnv);
-    const requirementsPath = join(projectDir, "requirements-ocr.txt");
+    // Compatibility reads the same canonical requirements bytes as the native
+    // composition root; a second tracked requirements file is forbidden.
+    const requirementsPath = join(paddleResourceDir(installEnv), "requirements-ocr.txt");
     let requirements;
     try {
       requirements = await readFileImpl(requirementsPath, "utf8");

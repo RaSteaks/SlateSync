@@ -3,6 +3,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(dirname -- "$SCRIPT_DIR")
+PADDLE_RESOURCE_DIR="$PROJECT_DIR/SlateSyncApp/Resources/PaddleOCR"
 OCR_VENV="$PROJECT_DIR/.venv-paddleocr"
 
 # The runner is retained for migration compatibility, but the current OCR
@@ -14,5 +15,5 @@ fi
 
 python3 -m venv "$OCR_VENV"
 "$OCR_VENV/bin/python" -m pip install --upgrade pip
-"$OCR_VENV/bin/python" -m pip install -r "$PROJECT_DIR/requirements-ocr.txt"
-"$OCR_VENV/bin/python" "$SCRIPT_DIR/paddleocr_runner.py" --check
+"$OCR_VENV/bin/python" -m pip install -r "$PADDLE_RESOURCE_DIR/requirements-ocr.txt"
+"$OCR_VENV/bin/python" "$PADDLE_RESOURCE_DIR/paddleocr_runner.py" --check

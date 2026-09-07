@@ -1,4 +1,4 @@
-name: CI
+name: Native macOS CI
 
 on:
   push:
@@ -9,72 +9,44 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: macos-14
-    # 完整 Gate 含 swift build/test（228 项，含规模与性能车道）、Xcode Debug
-    # 构建 + Test Plan（8 项 UI）、Release 构建与 Universal Archive，以及
-    # npm 兼容矩阵；本地实测 15-20 分钟，GitHub 托管 runner 更慢，15 分钟
-    # 必然超时（CARRY-02）。WP-4 切换 native-only 步骤后按实测定值。
-    timeout-minutes: 60
+  native-test:
+    name: Swift, Xcode and local package validation
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    # A full compatibility Gate measured about seven minutes locally. The
+    # native path keeps a 30-minute ceiling for cold caches, UI startup, the
+    # Universal archive, DMG mount verification, and cleanup (CARRY-02).
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # 当前治理状态决定 Gate 阶段，采用"工作阶段"语义：上一阶段 COMPLETE
-      # 且下一阶段已开工（有施工包、尚无 review）时，CI 跑下一阶段 Gate 的
-      # 预准入模式——gate_validate_phase_state 接受 {N-1, N} 的 COMPLETE 状态，
-      # approval_freshness 只在 Gate 阶段 == 状态阶段时生效。因此实施期的
-      # 新提交不再击穿上一阶段的批准检查，而批准后仅治理元数据漂移仍会被
-      # 上一阶段 Gate 拦截；两条路径都不硬编码 SM-XX。
-      # 另接受 PASS 合法中间态（Gate PASS 后、Owner 批准前，CARRY-09）：
-      # 批准窗口内 CI 跑状态阶段自身的 Gate 重跑，不被预准入分支抢走。
-      - name: Resolve the active migration phase
-        id: phase
+      - name: Verify pinned Apple toolchain
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, os
-          with open(".codex/swift-migration/CURRENT_STATE.json", encoding="utf-8") as handle:
-              state = json.load(handle)
-          phase = state["phase"]
-          number = int(phase.split("-")[1])
-          work = f"SM-{number + 1:02d}"
-          packages = ".codex/swift-migration/packages"
-          reviews = ".codex/swift-migration/reviews"
-          # lifecycleState=PASS 是"Gate PASS 后、Owner 批准前"的合法中间态：
-          # 批准窗口内 CI 继续跑状态阶段自身的 Gate（与 gate_validate_phase_state
-          # 接受本阶段 PASS 的语义对应）；下一阶段预准入仍要求上一阶段 COMPLETE。
-          approval_pending = state.get("lifecycleState") == "PASS"
-          if (
-              not approval_pending
-              and os.path.exists(f"{packages}/{work}.md")
-              and not os.path.exists(f"{reviews}/{work}.md")
-          ):
-              phase = work
-          print(f"phase={phase}")
-          PY
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
+          grep -Fx 'Xcode 26.3' "$RUNNER_TEMP/xcode-version.txt"
+          grep -Fx 'Build version 17C529' "$RUNNER_TEMP/xcode-version.txt"
+          swift --version
+          sw_vers
 
-      - name: Run the shared phase Gate for the active phase
-        run: ./script/phase_gate.sh "${{ steps.phase.outputs.phase }}"
+      - name: Run shared native SM-09 Gate
+        env:
+          SLATESYNC_NATIVE_ONLY: "1"
+          SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
+        run: ./script/phase_gate.sh SM-09
 
-      - name: Check source files
-        run: npm run check
-
-      - name: Typecheck and build modern targets
-        run: npm run validate:modern
-
-      - name: Run tests
-        run: npm test
-
-      - name: Verify Electron and Node native ABI lifecycle
-        # This probe uses Electron's Node mode, so CI validates both native
-        # runtimes without requiring a graphical desktop or weakening E2E.
-        run: npm run test:native:abi
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ci-diagnostics
+          path: |
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/*-manifest.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
+          if-no-files-found: ignore
+          retention-days: 7

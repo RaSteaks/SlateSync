@@ -11,9 +11,13 @@ struct FakePaddleRuntime: Sendable {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("SM06 中文 \(UUID().uuidString)")
         let resources = root.appendingPathComponent("资源 Root"), work = root.appendingPathComponent("work"), cache = root.appendingPathComponent("models"), home = root.appendingPathComponent("home")
         for url in [resources,work,cache,home] { try FileManager.default.createDirectory(at:url,withIntermediateDirectories:true) }
-        let scripts = bundle ? resources : resources.appendingPathComponent("scripts")
-        try FileManager.default.createDirectory(at:scripts,withIntermediateDirectories:true)
-        try mediaFixture("sm06-fake-runner.py").write(to:scripts.appendingPathComponent("paddleocr_runner.py"))
+        // Development fixtures mirror the canonical repository subtree while
+        // bundle fixtures receive Contents/Resources/PaddleOCR directly.
+        let paddleResources = bundle
+            ? resources
+            : resources.appendingPathComponent("SlateSyncApp/Resources/PaddleOCR")
+        try FileManager.default.createDirectory(at:paddleResources,withIntermediateDirectories:true)
+        try mediaFixture("sm06-fake-runner.py").write(to:paddleResources.appendingPathComponent("paddleocr_runner.py"))
         paths = try .init(resources:bundle ? .bundle(resources) : .development(resources),python:URL(fileURLWithPath:"/usr/bin/python3"),workingDirectory:work,modelCache:cache,environment:["HOME":home.path,"TMPDIR":work.path,"PATH":"/usr/bin:/bin","OPENAI_API_KEY":"fake-provider-secret","PIP_INDEX_URL":"fake-mirror-secret","LANG":"en_US.UTF-8"])
         if bundle { try FileManager.default.setAttributes([.posixPermissions:0o555],ofItemAtPath:resources.path) }
     }

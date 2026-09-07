@@ -79,7 +79,7 @@ function scopeAudit() {
   assert.doesNotMatch(workflow,/URLSession|SQLite|import SlateSyncPersistence/);
   assert.ok(readFileSync(join(repository,"AGENT.md"),"utf8").includes("SM-06"));
   const project=readFileSync(join(repository,"SlateSync.xcodeproj/project.pbxproj"),"utf8");
-  assert.match(project,/shared Paddle runner in Resources/);
+  assert.match(project,/canonical PaddleOCR resources in Resources/);
 }
 export function runSelfTests() {
   const temporary=mkdtempSync(join(tmpdir(),"sm06-contract-"));

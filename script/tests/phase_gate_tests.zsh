@@ -501,12 +501,16 @@ PY
   assert_success "${completed_phase} admits SM-06 boundary" gate_validate_phase_state "${fixture_root}/sm06-state.json" SM-06
 done
 assert_failure "SM-06 cannot skip directly to SM-09" gate_validate_phase_state "${fixture_root}/sm06-state.json" SM-09
-assert_success "SM-06 fixture and executed-evidence negative tests" node "${project_root}/script/tests/sm06_contract.mjs" --self-test
-assert_success "SM-07 source, oracle, coverage and admission negative tests" node "${project_root}/script/tests/sm07_contract.mjs" --self-test
-assert_success "SM-08 source, fixture, coverage and admission negative tests" node "${project_root}/script/tests/sm08_contract.mjs" --self-test
-# Keep the acceptance-to-test evidence map executable and complete before the
-# formal Gate writes any ignored evidence artifacts.
-assert_success "SM-08 native evidence plan self-test" node "${project_root}/script/tests/sm08_native_evidence.mjs" --self-test
+if [[ "${SLATESYNC_NATIVE_ONLY:-0}" != 1 ]]; then
+  # The pre-cutover lane retains executable legacy governance oracles. Native
+  # CI skips them now; WP-6 removes this branch after their zsh/Swift migration.
+  assert_success "SM-06 fixture and executed-evidence negative tests" node "${project_root}/script/tests/sm06_contract.mjs" --self-test
+  assert_success "SM-07 source, oracle, coverage and admission negative tests" node "${project_root}/script/tests/sm07_contract.mjs" --self-test
+  assert_success "SM-08 source, fixture, coverage and admission negative tests" node "${project_root}/script/tests/sm08_contract.mjs" --self-test
+  # Keep the acceptance-to-test evidence map executable and complete before the
+  # formal Gate writes any ignored evidence artifacts.
+  assert_success "SM-08 native evidence plan self-test" node "${project_root}/script/tests/sm08_native_evidence.mjs" --self-test
+fi
 cat > "${fixture_root}/sm08-state.json" <<'JSON'
 {
   "phase": "SM-07",
@@ -519,13 +523,15 @@ assert_success "SM-07 completion admits SM-08" gate_validate_phase_state \
   "${fixture_root}/sm08-state.json" SM-08
 assert_failure "SM-07 cannot skip directly to SM-09" gate_validate_phase_state \
   "${fixture_root}/sm08-state.json" SM-09
-assert_success "SM-05 retains negative admission assertions" node --input-type=module -e '
-  import assert from "node:assert/strict";
-  process.argv.push("--technical-only");
-  const {assertAdmissionBoundary} = await import("./script/tests/sm05_contract.mjs");
-  assert.throws(()=>assertAdmissionBoundary({phase:"SM-06",lifecycleState:"COMPLETE"}));
-  assert.throws(()=>assertAdmissionBoundary({phase:"SM-05",lifecycleState:"IN_PROGRESS"}));
-'
+if [[ "${SLATESYNC_NATIVE_ONLY:-0}" != 1 ]]; then
+  assert_success "SM-05 retains negative admission assertions" node --input-type=module -e '
+    import assert from "node:assert/strict";
+    process.argv.push("--technical-only");
+    const {assertAdmissionBoundary} = await import("./script/tests/sm05_contract.mjs");
+    assert.throws(()=>assertAdmissionBoundary({phase:"SM-06",lifecycleState:"COMPLETE"}));
+    assert.throws(()=>assertAdmissionBoundary({phase:"SM-05",lifecycleState:"IN_PROGRESS"}));
+  '
+fi
 
 # 扫描工具退出码裁决：0/1 视为扫描完成，2+ 必须按检查失败处理（fail-closed）。
 assert_success "scan helper accepts clean no-match status" assert_scan_healthy "scan" 1

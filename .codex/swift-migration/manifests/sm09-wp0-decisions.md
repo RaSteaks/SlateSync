@@ -35,7 +35,11 @@ project 后打包。
 ## 4. 工具链与 runner
 
 - Xcode 26.3 / Swift 6.2.4 / macOS 26.2 SDK（与 `CURRENT_STATE.json` 一致）。
-- CI runner `macos-14`（与现有 workflows 一致，WP-4 只做步骤切换）。
+- CI runner `macos-26`，并通过 `DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer`
+  固定 Xcode 26.3（build 17C529）。GitHub 官方 runner image 清单确认 `macos-26`
+  提供该工具链；原定 `macos-14` 已进入弃用窗口且不满足 Xcode 26.3 约束，因此在 WP-4
+  按实测工具链要求修正：
+  <https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md>。
 
 ## 5. decision-required 清单处理（recommendation 待 Owner 确认）
 

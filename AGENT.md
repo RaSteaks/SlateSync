@@ -1,5 +1,44 @@
 # SlateSync 当前项目方案
 
+## 2026-09-07 SM-09 WP-2～WP-5 原生发布链路（当前有效）
+
+- WP-2 将 PaddleOCR runner 与固定依赖清单迁入唯一 canonical 目录
+  `SlateSyncApp/Resources/PaddleOCR/`。Xcode 以文件夹引用保留包内
+  `Contents/Resources/PaddleOCR/` 层级；Swift runtime、安装器、SM-06/08
+  fixtures 与最后一次 Electron compatibility oracle 均读取同一份源码。
+  `Info.plist` 的 short/build version 改由 `MARKETING_VERSION` 与
+  `CURRENT_PROJECT_VERSION` 注入，Release 保持 macOS 15、Swift 6、Universal、
+  hardened runtime、空 entitlements，Debug 继续保留可调试边界。
+- `.codex/swift-migration/manifests/sm09-native-resources.json` 冻结 Paddle、Help
+  与 icon 源文件的大小和 SHA-256，并定义最终 bundle allowlist/denylist。
+  `script/verify_bundle.sh` 对精确 arm64+x86_64、版本/标识、macOS 15、资源字节、
+  符号链接、renderer/Node/Python runtime 残留、Mach-O 系统依赖、空 entitlements、
+  hardened runtime、ad-hoc/Developer ID lane 和 nested code 签名 fail-closed。
+- WP-3 新增 `script/archive_release.sh`、`script/package_release.sh`：版本作为显式
+  build input，不改 tracked project；输出目录必须在仓库外且原子新建。ZIP 与 DMG
+  从同一 audited app 生成，解压/只读挂载后再次做 bundle 审计和目录 manifest
+  血缘比对；失败 trap 会卸载磁盘映像并删除 staging/partial artifacts。输出包含
+  `SHA256SUMS`、JSON manifest 和中英 release notes。fake tool 自测覆盖单架构、
+  错误资源、symlink、签名/hardened runtime 失败、mount/DMG 失败、并发输出、
+  partial cleanup，共 16/16 通过。
+- 本机真实 Xcode 26.3 archive 已生成并验证为 arm64+x86_64、macOS 15.0、
+  `flags=adhoc,runtime`、空 entitlements，依赖仅为系统 framework/dylib；同一 app
+  的真实 ZIP（约 7.0 MiB）与 DMG（约 8.4 MiB）均通过解压/只读挂载、签名、
+  版本、资源和血缘回验。当前证据位于 `/private/tmp/slatesync-sm09-wp3-archive-2`
+  与 `/private/tmp/slatesync-sm09-wp3-artifacts-2`；这是施工期验证，最终证据仍须
+  在 WP-2～WP-5 提交后的 clean compatibility refresh 重新生成并指向精确 commit。
+- WP-4/5 workflows 已去除 Node/npm/Electron 构建步骤，固定 `macos-26` 与
+  `/Applications/Xcode_26.3.app`。GitHub 官方 runner 清单确认该 image 提供
+  Xcode 26.3；原定 `macos-14` 已进入弃用窗口。CI/release 均调用共享
+  `SLATESYNC_NATIVE_ONLY=1 ./script/phase_gate.sh SM-09`；release 复用 Gate 生成的
+  单一 Universal archive，不做双架构矩阵拼接。30 分钟 timeout 依据本机完整
+  compatibility Gate 约 7 分钟，并为托管冷缓存、UI、DMG 挂载和清理保留余量。
+- WP-0 决策仍只授权 local/PR ad-hoc lane。本次未配置或读取 Developer ID/notary
+  secret，未执行公证、Gatekeeper 发布评估、tag、push 或 GitHub Release；artifact
+  manifest 与中英 notes 明确记录 `BLOCKED_ENV`/未发布状态。旧 Electron/React/Node
+  目录继续保留，直到 WP-2～WP-5 clean pre-cutover refresh 全项 PASS 且 Owner 确认
+  WP-6 六项 decision-required 建议。
+
 ## 2026-09-07 SM-09 初始基线与 WP-1C 实施（当前有效）
 
 - 准备提交 `218b43c` 已创建；该精确 clean commit 的 SM-09 Gate 全项 PASS、

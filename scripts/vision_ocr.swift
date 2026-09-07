@@ -2,7 +2,7 @@
 // SlateSync macOS Vision OCR bridge.
 //
 // Reads one JSON request from stdin and writes one sentinel-prefixed JSON
-// response to stdout, mirroring scripts/paddleocr_runner.py so the Node side
+// response to stdout, mirroring the canonical PaddleOCR App resource so the Node side
 // can reuse the same parse strategy. Text recognition runs entirely on-device
 // through the Apple Vision framework (VNRecognizeTextRequest).
 //

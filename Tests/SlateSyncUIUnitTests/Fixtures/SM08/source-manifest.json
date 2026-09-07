@@ -58,11 +58,11 @@
       "sha256": "4734f766578c428bbc495296bc9d9d44b838df7dbd6c223d26267af2efcfb33a"
     },
     {
-      "path": "requirements-ocr.txt",
+      "path": "SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt",
       "sha256": "d2ace10a8d8a06dd39a51e39fe5b0db9df0b334d7464d229532fe075e0d93f17"
     },
     {
-      "path": "scripts/paddleocr_runner.py",
+      "path": "SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py",
       "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3"
     }
   ]

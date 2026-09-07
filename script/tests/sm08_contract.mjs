@@ -214,7 +214,7 @@ function sourceAudit() {
   const helpSections = readJSON(join(repository, "Sources/SlateSyncUI/Resources/help-sections.json"));
   assert.equal(helpSections.length, 6);
   assert.deepEqual(new Set(helpSections.map(section => section.id)).size, 6);
-  assert.match(read("SlateSync.xcodeproj/project.pbxproj"), /pinned OCR requirements in Resources/);
+  assert.match(read("SlateSync.xcodeproj/project.pbxproj"), /canonical PaddleOCR resources in Resources/);
   assert.match(read("AGENT.md"), /SM-08/);
   commandsAudit();
 }

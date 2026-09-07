@@ -67,8 +67,8 @@ struct SlateSyncApp: App {
         // Production installation accepts only the bundled pinned manifest.
         // A missing resource resolves to a nonexistent in-bundle path and the
         // installer fails closed instead of consulting the launch directory.
-        let requirementsURL = Bundle.main.url(forResource: "requirements-ocr", withExtension: "txt")
-            ?? Bundle.main.bundleURL.appending(path: "Contents/Resources/requirements-ocr.txt")
+        let requirementsURL = Bundle.main.url(forResource: "requirements-ocr", withExtension: "txt", subdirectory: "PaddleOCR")
+            ?? Bundle.main.bundleURL.appending(path: "Contents/Resources/PaddleOCR/requirements-ocr.txt")
         let paddleInstaller = PaddleOCRInstallerService(
             userDataRoot: locator.url,
             requirementsURL: requirementsURL

@@ -612,8 +612,10 @@ public actor SlateSyncWorkflowFacade:
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         let resources: OCRRuntimePaths.Resources
-        if let bundleRoot = Bundle.main.resourceURL,
+        if let bundleRoot = Bundle.main.resourceURL?.appending(path: "PaddleOCR", directoryHint: .isDirectory),
            FileManager.default.isReadableFile(atPath: bundleRoot.appending(path: "paddleocr_runner.py").path) {
+            // The folder reference preserves one canonical PaddleOCR subtree
+            // in the bundle; runtime/cache paths remain outside Resources.
             resources = .bundle(bundleRoot)
         } else {
             resources = .development(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))

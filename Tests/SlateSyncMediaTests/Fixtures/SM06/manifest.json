@@ -48,7 +48,7 @@
       "sha256": "e22b30ee3ec9a95c36f7d0767e190b2af401a9c5cd7466a87ee80ec69f29b7b9"
     },
     {
-      "path": "scripts/paddleocr_runner.py",
+      "path": "SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py",
       "bytes": 18698,
       "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3"
     },

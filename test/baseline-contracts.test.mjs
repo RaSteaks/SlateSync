@@ -239,6 +239,12 @@ test("baseline package and electron-builder inventories match live configuration
   assertYamlList(builder, "files", [...build.builder.files, ...build.transition.builderFiles]);
   assertYamlList(builder, "asarUnpack", build.builder.asarUnpack);
   for (const resource of build.builder.extraResources) {
+    // WP-2 preserves the frozen requirement bytes while moving their only
+    // tracked source into the native PaddleOCR resource subtree.
+    if (resource.from === "requirements-ocr.txt") {
+      assert.match(builder, /- from:\s*SlateSyncApp\/Resources\/PaddleOCR\/[\s\S]*?to:\s*app\/PaddleOCR\//);
+      continue;
+    }
     assert.match(builder, new RegExp(`- from:\\s*${escapeRegex(resource.from)}[\\s\\S]*?to:\\s*${escapeRegex(resource.to)}`));
   }
   for (const target of build.builder.macTargets) {
@@ -247,11 +253,17 @@ test("baseline package and electron-builder inventories match live configuration
   }
   assert.match(builder, new RegExp(`^  icon:\\s*${escapeRegex(build.builder.icon)}$`, "m"));
   assert.match(builder, new RegExp(`^  entitlements:\\s*${escapeRegex(build.builder.entitlements)}$`, "m"));
-  assert.match(ci, new RegExp(`node-version:\\s*${build.ci.node}`));
-  for (const command of build.ci.validation) assert.match(ci, new RegExp(escapeRegex(command)));
-  for (const command of build.transition.ciValidation) assert.match(ci, new RegExp(escapeRegex(command)));
-  for (const command of ["npm run check", "npm test", "electron-builder --mac"]) assert.match(release, new RegExp(escapeRegex(command)));
-  for (const command of build.transition.releaseValidation) assert.match(release, new RegExp(escapeRegex(command)));
+  // WP-4/5 intentionally replaces the live workflows. Historical build.json
+  // remains immutable; current workflow behavior is owned by the SM-09 native
+  // release contract and must contain no executable legacy tool step.
+  assert.match(ci, /runs-on:\s*macos-26/);
+  assert.match(ci, /Xcode_26\.3\.app/);
+  assert.match(ci, /\.\/script\/phase_gate\.sh SM-09/);
+  assert.doesNotMatch(ci, /actions\/setup-node|\bnpm\b|electron-builder/i);
+  assert.match(release, /workflow_dispatch:/);
+  assert.match(release, /runs-on:\s*macos-26/);
+  assert.match(release, /\.\/script\/phase_gate\.sh SM-09/);
+  assert.doesNotMatch(release, /actions\/setup-node|\bnpm\b|electron-builder|gh release/i);
   assert.deepEqual(Object.keys(build.generatedInputs).sort(), ["bin/vision-ocr", "public/vendor/pdfjs/pdf.mjs", "public/vendor/pdfjs/pdf.worker.mjs"].sort());
 });
 
