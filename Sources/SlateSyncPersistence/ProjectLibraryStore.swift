@@ -542,7 +542,14 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         )
     }
 
-    private func createProjectWithID(
+    /// Creates the on-disk project skeleton and its Library index row in one
+    /// compensated step. Internal (not private) so persistence tests can inject
+    /// deterministic failures with a caller-chosen project ID.
+    ///
+    /// CARRY-03：目录创建成功而索引写入失败时，补偿只删除**本次调用创建**的
+    /// 目录——路径若预先存在，可能承载其它工程数据，无差别删除会是破坏性的
+    /// （清理失败的后备仍是 stageOrRemoveUnindexedProject 的暂存改名）。
+    func createProjectWithID(
         _ id: String,
         name: String,
         description: String,
@@ -554,6 +561,8 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         let projectDirectory = projectsRoot.appending(path: projectID, directoryHint: .isDirectory)
         let relativePath = "Projects/\(projectID)"
         let now = PersistenceJSON.timestamp()
+        // 存在性检查在创建前完成：actor 内串行执行，无并发创建者。
+        let directoryPreExisted = FileManager.default.fileExists(atPath: projectDirectory.path)
         do {
             try SecureFilePermissions.prepareDirectory(at: projectDirectory)
             try SecureFilePermissions.prepareDirectory(
@@ -594,7 +603,11 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
                 bindings: [projectID, relativePath, name, description, now, now]
             )
         } catch {
-            try? stageOrRemoveUnindexedProject(projectDirectory)
+            // 只清理本次调用创建的目录；预存在路径可能承载其它工程数据，
+            // 失败时原样上抛，不做破坏性补偿。
+            if !directoryPreExisted {
+                try? stageOrRemoveUnindexedProject(projectDirectory)
+            }
             throw error
         }
         guard let row = try await projectRow(projectID) else { throw missingProject() }

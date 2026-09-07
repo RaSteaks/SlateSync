@@ -26,11 +26,18 @@
 
 ### CARRY-03 — createProject 孤儿目录（审查遗留）
 - 来源：SM-01/02 审查 P3-9。
-- 描述：`ProjectLibraryStore.createProjectWithID` 先建项目目录后写库，
-  INSERT 失败时磁盘上留下无主目录，无补偿清理、无事务包裹。
-- 建议处置：INSERT 失败补偿删除已建目录（沿用 tombstone/迁移补偿先例），
-  并补失败注入回归。
-- 状态：待修复。
+- 描述修正（修复时核实）：SM-04（b23a83e）已为 `createProjectWithID` 加了
+  失败补偿（`stageOrRemoveUnindexedProject`：删除失败再暂存改名），原审查
+  描述的"无清理"在 HEAD 已不成立。修复时发现的真正缺口是：①补偿路径零
+  测试覆盖；②补偿无差别删除——调用前已存在于目标路径的目录也会被整目录
+  删除（对内部 API 调用方是破坏性的）。`importProject` 路径经核实自身有
+  while 循环保证 ID/目录均不存在，无需修改。
+- 建议处置：补偿精确化 + 失败注入回归。
+- 状态：**已修复**。实现：以 `directoryPreExisted` 存在性检查守卫补偿
+  （只删本次调用创建的目录，预存在路径原样保留并上抛原始错误）；
+  `createProjectWithID` 改为 internal 供失败注入测试；新增两个回归——
+  新建失败后 Projects/ 无孤儿残留、预存在目录及其文件在失败后原样保留。
+  验证：SlateSyncPersistenceTests 62/62 通过。
 
 ### CARRY-04 — defaultProjectID 悬空契约（审查遗留）
 - 来源：SM-01/02 审查 P3-9。

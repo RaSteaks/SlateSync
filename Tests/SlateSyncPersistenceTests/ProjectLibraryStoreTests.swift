@@ -33,6 +33,67 @@ final class ProjectLibraryStoreTests: XCTestCase {
         try await library.close()
     }
 
+    /// 仅对新建项目目录（Projects/ 下且非 bootstrap 播种的 project-default）
+    /// 抛错的写入器：让 bootstrap/manifest 写入照常成功，只命中
+    /// createProjectWithID 的 meta/manifest 写入，精确触发其补偿路径
+    /// （CARRY-03 回归）。
+    private struct ProjectScopedFailingWriter: AtomicFileWriting {
+        func writeAtomically(_ data: Data, to url: URL, permissions: Int) throws {
+            if url.path.contains("/Projects/"), !url.path.contains("project-default") {
+                throw SlateSyncError(code: "TEST_WRITE_FAILURE", message: "注入的项目写入失败")
+            }
+            try FileManagerAtomicFileWriter().writeAtomically(data, to: url, permissions: permissions)
+        }
+    }
+
+    func testCreateProjectFailureRemovesDirectoryCreatedHere() async throws {
+        // CARRY-03：目录创建与 Library 索引写入之间存在失败窗口；补偿必须
+        // 移除本次调用创建的目录，Projects/ 下不得残留孤儿条目。
+        let container = try PersistenceTestSupport.temporaryRoot("create-project-orphan-compensation")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let libraryRoot = container.appending(path: "Carry03.slatesync-library", directoryHint: .isDirectory)
+        let library = try ProjectLibraryStore(libraryRoot: libraryRoot, writer: ProjectScopedFailingWriter())
+
+        do {
+            _ = try await library.createProject(name: "孤儿目录补偿", description: "")
+            XCTFail("注入的写入失败必须上抛")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "TEST_WRITE_FAILURE")
+        }
+        let projectsRoot = libraryRoot.appending(path: "Projects", directoryHint: .isDirectory)
+        // bootstrap 播种的 project-default 合法存在；除它之外不得有任何孤儿。
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: projectsRoot.path)
+            .filter { $0 != ProjectLibraryStore.defaultProjectID }
+        XCTAssertEqual(leftovers, [])
+    }
+
+    func testCreateProjectFailureKeepsPreExistingDirectory() async throws {
+        // 补偿不得无差别删除：调用前已存在的路径可能承载其它工程数据，
+        // 失败时只能上抛原始错误，目录与其中文件必须原样保留。
+        let container = try PersistenceTestSupport.temporaryRoot("create-project-preexisting-guard")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let libraryRoot = container.appending(path: "Carry03Guard.slatesync-library", directoryHint: .isDirectory)
+        let library = try ProjectLibraryStore(libraryRoot: libraryRoot, writer: ProjectScopedFailingWriter())
+        // 先以默认写入路径之外的调用触发 bootstrap（manifest 不在 Projects/ 下）。
+        _ = try await library.libraryInfo()
+
+        let projectID = "project-manual"
+        let projectDirectory = libraryRoot.appending(path: "Projects/\(projectID)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        let sentinel = projectDirectory.appending(path: "data.txt")
+        try Data("预存在数据".utf8).write(to: sentinel)
+
+        do {
+            _ = try await library.createProjectWithID(projectID, name: "预存在目录", description: "", settings: .init())
+            XCTFail("注入的写入失败必须上抛")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "TEST_WRITE_FAILURE")
+        }
+        XCTAssertEqual(try Data(contentsOf: sentinel), Data("预存在数据".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectDirectory.path))
+        try await library.close()
+    }
+
     func testPortableLibraryRenamePreservesSuffixAndOpenSQLiteIdentity() async throws {
         let container = try PersistenceTestSupport.temporaryRoot("library-rename")
         defer { try? FileManager.default.removeItem(at: container) }
