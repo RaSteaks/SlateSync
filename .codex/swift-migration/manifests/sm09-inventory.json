@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-07T13:39:19Z",
-  "commit": "ede09a6190cb7c367cf47f62420c4e39c1b4dbde",
+  "generatedAt": "2026-09-07T14:25:11Z",
+  "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
   "sourceType": "working-tree",
   "dirtyWorkspace": true,
   "approvable": false,
@@ -16,13 +16,13 @@
     "decision-required"
   ],
   "summary": {
-    "total": 573,
-    "migration-history": 107,
+    "total": 581,
+    "migration-history": 110,
     "decision-required": 6,
-    "release-input": 20,
+    "release-input": 22,
     "legacy-remove": 233,
-    "native-product": 120,
-    "native-test": 85,
+    "native-product": 121,
+    "native-test": 87,
     "fixture-migrate": 2
   },
   "files": [
@@ -1134,11 +1134,32 @@
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 12582,
-      "sha256": "cfa71385012953173cc69129d4c94f0d8f6b074194178125e33245834dfd710a",
+      "bytes": 13651,
+      "sha256": "5f987c1337dcf4ff5573e92ec10bdc5ccd377c1b464e45cdb9df197a1a64217f",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-carry-closure.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3003,
+      "sha256": "1def1348daee6f28b9765818d02172f60c8285f7b97a71a8ec572cac13e794a0",
+      "referencers": []
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-coverage.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 117233,
+      "sha256": "7529239d102d90cae83db47acc55ab0f653662c2b72519a83da5f64aced6b937",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_coverage.py"
       ]
     },
     {
@@ -1148,7 +1169,21 @@
       "owner": "migration-governance",
       "hashDisposition": "self-excluded; hash externally when sealing evidence",
       "referencers": [
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-pre-cutover.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3366,
+      "sha256": "6638da8f1707f9de65eb6d83679ef5db9387caf339899270efa4e6c8a4a7bd7e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_coverage.py",
+        "script/sm09_seal_baseline.py"
       ]
     },
     {
@@ -1290,8 +1325,8 @@
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 44649,
-      "sha256": "2cdb0f6c5ee49b73a2b5a68d7ec2cfedc3afec198fae509ea5665cc004e66f16",
+      "bytes": 44894,
+      "sha256": "afdef5a474962c55d70e7428953754c3f00a203cb233a85378f7af702701889f",
       "referencers": [
         ".codex/swift-migration/CURRENT_STATE.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
@@ -1480,8 +1515,10 @@
         ".codex/refactor/packages/IP-0102-C01.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
+        "script/sm09_coverage.py",
         "script/tests/sm02_platform_contract.mjs",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -1499,8 +1536,10 @@
         ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
         ".codex/refactor/packages/IP-0102-C01.md",
         ".codex/refactor/packages/IP-0102.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
+        "script/sm09_coverage.py",
         "script/tests/sm02_platform_contract.mjs",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -1545,6 +1584,7 @@
       "sha256": "cc3d99ef8e6968fd3576cca61fb72f6e1c3e21309f6f869a5ef39d4420652c8c",
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -1556,6 +1596,7 @@
       "bytes": 659,
       "sha256": "147272396ddd05dc0cd588cd3222e53c39ab334c39fb6f23b609375001b228b6",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -1564,8 +1605,8 @@
       "category": "release-input",
       "note": "根目录项目方案（随阶段推进更新）",
       "owner": "native-release",
-      "bytes": 150477,
-      "sha256": "092ad7f28b6f658c16e5ea9a4e20a3cbcd1d7267bb7ebf66caebf41a089bef8a",
+      "bytes": 151313,
+      "sha256": "8eb34ef1e55a3856d2d669ddafd8b6152e0a8208be5857f3f04b36dc1d9bc661",
       "referencers": [
         ".codex/refactor/DECISION_QUEUE.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
@@ -1927,8 +1968,8 @@
       "category": "native-product",
       "note": "原生 Swift 业务模块",
       "owner": "native-product",
-      "bytes": 6541,
-      "sha256": "123a8273b066c75e0dda590d4d3cd90243a2bc0a5f8bddd8530f31e05bbe7d24",
+      "bytes": 7974,
+      "sha256": "8abb2903919cab198468655e8ec97cb43cc74cac5ac3abce7053a95ed8f9bdc7",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
@@ -2119,14 +2160,27 @@
       ]
     },
     {
+      "path": "Sources/SlateSyncMedia/OCRLeaseCoordinator.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7132,
+      "sha256": "f0201cfa8cce9f248095d591c5b7c58e8a8c3c6388ed4158d27ab20c9eb889fc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
       "path": "Sources/SlateSyncMedia/OCRProcessSupervisor.swift",
       "category": "native-product",
       "note": "原生 Swift 业务模块",
       "owner": "native-product",
-      "bytes": 8971,
-      "sha256": "30937a31ba2ed1005b798b2783d504e8b605d6fc7e0bb5160a9418a3ff6ebc43",
+      "bytes": 11634,
+      "sha256": "afd9efed677fabdd43806785cfff84ba707d4bfc9b2b621d50cce566b317800f",
       "referencers": [
-        ".codex/swift-migration/manifests/sm09-inventory.json"
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "Tests/SlateSyncMediaTests/OCRLeaseCoordinatorTests.swift",
+        "Tests/SlateSyncMediaTests/PaddleProcessTests.swift"
       ]
     },
     {
@@ -2226,11 +2280,12 @@
       "category": "native-product",
       "note": "原生 Swift 业务模块",
       "owner": "native-product",
-      "bytes": 9531,
-      "sha256": "e6042210a3abdec7d9b57492c97a6ad91e2b02444504b7e7593d9c7e32f968b2",
+      "bytes": 9630,
+      "sha256": "4dbf6f3ecd407efdcf5337edf2bdc2179d361949c1303604147dd3068468d045",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
-        ".codex/swift-migration/packages/SM-06.md"
+        ".codex/swift-migration/packages/SM-06.md",
+        "Tests/SlateSyncMediaTests/OCRLeaseCoordinatorTests.swift"
       ]
     },
     {
@@ -3566,6 +3621,17 @@
       ]
     },
     {
+      "path": "Tests/SlateSyncMediaTests/OCRLeaseCoordinatorTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 4453,
+      "sha256": "b529d82c654dd165043ed5433d077fb33d6eea3a28f8f1cf6d32e4783f537b4b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
       "path": "Tests/SlateSyncMediaTests/OCRPolicyTests.swift",
       "category": "native-test",
       "note": "SwiftPM 测试目标",
@@ -3581,8 +3647,8 @@
       "category": "native-test",
       "note": "SwiftPM 测试目标",
       "owner": "native-validation",
-      "bytes": 15298,
-      "sha256": "429c18c5782ac5256809951d8f7399b5c0dda7024ca14ad0555dd2770e508f1f",
+      "bytes": 19470,
+      "sha256": "821799f99be2f6ac5620648a4702d23c728cc7579b8065e2729a249fa657b980",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
@@ -3992,8 +4058,10 @@
       "bytes": 8671,
       "sha256": "71eb2512b321bf9b61c7a5a295acd74aef7bd70758f6c1ba2ea6cca868c51968",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
-        ".codex/swift-migration/packages/SM-06.md"
+        ".codex/swift-migration/packages/SM-06.md",
+        "script/sm09_coverage.py"
       ]
     },
     {
@@ -4195,11 +4263,13 @@
         ".codex/refactor/packages/IP-03-08-C01.md",
         ".codex/refactor/packages/IP-03-08-C02.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-02.md",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
         "script/phase_gate.sh",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "script/tests/sm02_platform_contract.mjs",
         "test-support/refactor/verify-ip0102-scope.mjs",
@@ -4219,6 +4289,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4236,6 +4307,7 @@
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json"
       ]
@@ -4249,6 +4321,7 @@
       "sha256": "757c67ac22503e36d20ef170188f367008cf74c24b62e6962a3f2d10d40711de",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/global-settings.test.mjs"
@@ -4263,6 +4336,7 @@
       "sha256": "3ae86cdfc3a3694dde49e14201069b013cd9e2386963050dcf5581f1d914e73a",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "Sources/SlateSyncDomain/GlobalSettingsContracts.swift",
@@ -4285,6 +4359,7 @@
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/reviews/GATE-01-02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "AGENT.md",
@@ -4308,6 +4383,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/electron-key-store.test.mjs"
@@ -4336,6 +4412,7 @@
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
         ".codex/refactor/reviews/GATE-01-02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "package.json",
@@ -4359,6 +4436,7 @@
       "sha256": "4734f766578c428bbc495296bc9d9d44b838df7dbd6c223d26267af2efcfb33a",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
         "package.json",
@@ -4385,6 +4463,7 @@
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/reviews/GATE-01-02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "electron/ipc-handlers.mjs",
         "test-support/refactor/verify-ip0102-scope.mjs",
@@ -4400,6 +4479,7 @@
       "bytes": 858,
       "sha256": "3e479c8c0ba48ea8252af468cfb24a9ce8bd90b29d9fde59670962aa7ba94743",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test/refactor/ip-03-08/electron-dev.test.ts"
       ]
@@ -4415,6 +4495,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/baseline-persistence.test.mjs",
@@ -4431,6 +4512,7 @@
       "referencers": [
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "package.json",
@@ -4449,6 +4531,7 @@
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         ".codex/swift-migration/packages/SM-07.md",
@@ -4472,6 +4555,7 @@
       "sha256": "db926f9fd18f6ee15815dbea23a1d3315ffbef9c33fec38ff4b4040b746f0467",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "electron/main.mjs",
@@ -4490,6 +4574,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         ".codex/swift-migration/packages/SM-07.md",
@@ -4517,6 +4602,7 @@
       "sha256": "355e78180f29337f429a550b9188534d0945f4e86e4c09cb8dce4e7c7c406612",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "AGENT.md",
@@ -4537,6 +4623,7 @@
       "referencers": [
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "electron/ipc-handlers.mjs",
@@ -4555,6 +4642,7 @@
       "sha256": "8caf17c7e008e9ccf238a65f4b48e973650756532cba998e5318c8edf626ad31",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4570,6 +4658,7 @@
       "bytes": 890,
       "sha256": "553198997e7d26406e5de0ec622d6dbaff8ba7701a9ea0de5fe0bcf699deeb23",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "electron/main.mjs",
         "package.json",
@@ -4589,6 +4678,7 @@
       "sha256": "4182d24462436f38a57ed245b9d54d8706d7327d4d3d161d2675b462454844bd",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4607,6 +4697,7 @@
       "sha256": "6502b932473136ac7a2bb1c23903e76ecf168201c800cbcbb328e0dfca5c1c4b",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4626,6 +4717,7 @@
       "sha256": "09d2387f8029611e43640078a9011a7ed24e09e07091bb9a6f39757818321af8",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4643,6 +4735,7 @@
       "bytes": 715,
       "sha256": "0745db2c9ad644978082cb682a9bf001257d5419c0ea8397ab3daf52a5233e45",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
         "electron/ipc-handlers.mjs",
@@ -4658,6 +4751,7 @@
       "sha256": "dcf3af303c6c847cc6f0182be85e611f2c8f7e8f77783777803fcd3b07dc6f7f",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
         "electron/paddleocr-installer.mjs",
@@ -4676,6 +4770,7 @@
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -4698,6 +4793,7 @@
       "bytes": 1736,
       "sha256": "9561a49a8cb1802843d89ddb217c1507ad37c97535d0683bad7ae6331cd59d14",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
         "electron/paddleocr-installer.mjs",
@@ -4713,6 +4809,7 @@
       "sha256": "0db47b44a91abc77d40c86e03aeb2b66de1effdb7bdb4c89074def1ca6e846e5",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -4732,6 +4829,7 @@
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -4752,6 +4850,7 @@
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "electron/main.mjs",
@@ -4774,6 +4873,7 @@
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
         ".codex/swift-migration/manifests/sm09-carried-issues.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "electron/main.mjs",
         "package.json",
@@ -4794,6 +4894,7 @@
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "electron/main.mjs",
         "package.json",
@@ -4811,6 +4912,7 @@
       "sha256": "175bd1f29016b36e74939b9c7bc5d707979ce13c782dceb71f341d61dd2308c0",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "electron/ipc-handlers.mjs",
         "electron/main.mjs",
@@ -4827,6 +4929,7 @@
       "sha256": "910324ca0b7280f90bb6f39ada8f758102b056cca90a3c00a2689db412ddd22d",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4847,6 +4950,7 @@
       "sha256": "e65d01b864ef401814d50571bdd26bd12c04963c39901d766dbb979cae474956",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         ".codex/swift-migration/packages/SM-07.md",
@@ -4866,6 +4970,7 @@
       "sha256": "77bfefccc2962049ae624b2762e1479f1f8b0d1928d0ffed862c04842b16d0df",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "AGENT.md",
@@ -4885,6 +4990,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
@@ -4906,6 +5012,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/baseline-contracts.test.mjs"
@@ -4922,6 +5029,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/baseline-contracts.test.mjs",
@@ -4950,10 +5058,12 @@
         ".codex/refactor/packages/IP-03-08-C01.md",
         ".codex/refactor/packages/IP-03-08-C02.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
         "script/phase_gate.sh",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -4986,11 +5096,13 @@
         ".codex/refactor/packages/IP-03-08-C01.md",
         ".codex/refactor/packages/IP-03-08-C02.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
         "electron-builder.yml",
         "script/phase_gate.sh",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "script/tests/sm02_platform_contract.mjs",
         "script/tests/sm03_contract.mjs",
@@ -5010,9 +5122,11 @@
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/WORKTREE-TRACKING-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "package.json",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -5050,6 +5164,7 @@
         ".codex/refactor/packages/IP-00.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "README.md",
         "package.json",
@@ -5071,6 +5186,7 @@
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-local-slate-oracle.json",
@@ -5094,6 +5210,7 @@
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -5117,6 +5234,7 @@
         ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "package.json",
@@ -5137,6 +5255,7 @@
       "sha256": "f73a88e1ab88e3267425059160172bbefe1d77beb9891811be816678dfe22cff",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/custom-provider-state.test.mjs"
@@ -5162,6 +5281,7 @@
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/reviews/GATE-01-02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "public/app.js",
@@ -5185,6 +5305,7 @@
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -5214,6 +5335,7 @@
         ".codex/refactor/packages/IP-00.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "README.md",
         "test/refactor/ip-01/skeleton.test.ts",
@@ -5229,6 +5351,7 @@
       "sha256": "6726a061b70f1d71ed107945aeff40a544b805c16b71310ebf13ce09177d7e60",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         ".codex/swift-migration/packages/SM-07.md",
@@ -5247,6 +5370,7 @@
       "sha256": "fef624f18e42e7308d6ed86ad3a6ad50db21afe133e0198b5a36fc5470b9561d",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "electron/slate-scanner.mjs",
         "package.json",
@@ -5262,6 +5386,7 @@
       "sha256": "af68088ea322453f97fda346b4858d68f6fbc691ff6f967e950f2cae8cc9b609",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5274,6 +5399,7 @@
       "sha256": "0246860b27c8e787e33ca43e493b901b77b9bdb0e8b307f8d7d5ec40d5a6bfe2",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "electron/slate-scanner.mjs",
@@ -5290,6 +5416,7 @@
       "sha256": "7ab1ba4e7e8b6e801aebfe9a1d428c35796b6924f82ebca3cf06ae8bb2c541c3",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/operation-token.test.mjs"
@@ -5306,6 +5433,7 @@
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         ".codex/swift-migration/packages/SM-07.md",
@@ -5330,6 +5458,7 @@
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/packages/IP-01——IP-08.md",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         ".codex/swift-migration/packages/SM-07.md",
@@ -5355,6 +5484,7 @@
       "sha256": "c9973aecfa9e5c0167c0eb98413dc9394ee8fefeeae8d549cb0b5604cf42a125",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-local-slate-oracle.json",
         "package.json"
@@ -5372,6 +5502,7 @@
         ".codex/refactor/packages/IP-00.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5384,6 +5515,7 @@
       "sha256": "09210e94672d6ecbfaefe421bc57ad95d34addb03e5060979f030f66c09a18e3",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/task-autosave.test.mjs"
@@ -5401,6 +5533,7 @@
         ".codex/refactor/MIGRATION_MATRIX.md",
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -5418,6 +5551,7 @@
       "sha256": "c4c8576d0030d13bb91819d1e2f3edbd062fd52297841e91bee666ba928092d1",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test/workflow-state.test.mjs"
@@ -5471,7 +5605,9 @@
       "bytes": 18921,
       "sha256": "9a53f4ed531861e2088a164c5e4a1cd4029b1d472f95e0a7931c0db1f11dd5cf",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_coverage.py",
         "script/tests/phase_gate_tests.zsh"
       ]
     },
@@ -5484,6 +5620,7 @@
       "sha256": "3dafdc9ade78e3ba500143d7e571f6ce215f9625376ff6878e3507ee97060ca0",
       "referencers": [
         ".codex/swift-migration/PHASE_GATES.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-01.md",
         ".codex/swift-migration/packages/SM-02.md",
@@ -5507,9 +5644,23 @@
         ".github/workflows/release.yml",
         "AGENT.md",
         "README.md",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "script/tests/phase_gate_tests.zsh",
         "script/tests/sm02_platform_contract.mjs"
+      ]
+    },
+    {
+      "path": "script/sm09_coverage.py",
+      "category": "release-input",
+      "note": "SM-09 legacy 删除项到原生验收的覆盖映射工具",
+      "owner": "native-release",
+      "bytes": 4468,
+      "sha256": "6b7cb7360ece5804de7e5f72c57ca91c2fac3fe967072be4adf18e56d02c193f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py",
+        "script/tests/sm09_coverage_tests.py"
       ]
     },
     {
@@ -5517,12 +5668,24 @@
       "category": "release-input",
       "note": "SM-09 原生清单与引用审计工具",
       "owner": "native-release",
-      "bytes": 10886,
-      "sha256": "10b21d3835088ce502e898f6683ba5ac4d0e9afc446033e86302d134beeeac33",
+      "bytes": 11196,
+      "sha256": "1d5b907645b41e5aaeee717636dcd74dee4447075e0842a3dcbd0213309fe6ec",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "script/tests/sm09_inventory_tests.py"
+      ]
+    },
+    {
+      "path": "script/sm09_seal_baseline.py",
+      "category": "release-input",
+      "note": "SM-09 删除前基线证据封存工具",
+      "owner": "native-release",
+      "bytes": 2346,
+      "sha256": "894726c7b8113978721cfb7c3414d94e08c8139195b6bad8a2782af308c8ec22",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py"
       ]
     },
     {
@@ -5533,10 +5696,12 @@
       "bytes": 24831,
       "sha256": "3b9bb2edf6c905b7a90d5c5d656f7e678c8bf64e757a244371f1451d5a4ce7f8",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/coverage.json",
         "script/phase_gate.sh",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py"
       ]
     },
@@ -5548,6 +5713,7 @@
       "bytes": 10583,
       "sha256": "756db7e2b02358cdd7175333d8ec3e20d771c6a5ac9786b5fd9e81a300b80dcd",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-02.md",
         "AGENT.md",
@@ -5562,6 +5728,7 @@
       "bytes": 11088,
       "sha256": "a2a6a5dd7a18b272e34d560bd96cbfd51a47a7dd5cc40bf91a67a566e4d620eb",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/reviews/SM-03.md",
         "AGENT.md",
@@ -5576,6 +5743,7 @@
       "bytes": 11844,
       "sha256": "8e7450079a9d30b6e90c1dbfa3d3fe8cea5b21db8707ae38b88ec93db735ae9a",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/phase_gate.sh"
       ]
@@ -5588,6 +5756,7 @@
       "bytes": 10331,
       "sha256": "aa31a46cabb478b60e5c0fc9e63438eb059cabeeb46091457d9f7e41eacf2d6d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         ".codex/swift-migration/reviews/SM-07.md",
@@ -5604,6 +5773,7 @@
       "bytes": 8012,
       "sha256": "097f61136d1d80a24f7b4a394ebc3b598156002404e10f6d5256ed2b2dfa9d1e",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/coverage.json",
@@ -5619,6 +5789,7 @@
       "bytes": 5792,
       "sha256": "5dea585ac9c53583347f7a71f4293eb9756ba8c33d0e27040403d38a02c61b3d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5630,6 +5801,7 @@
       "bytes": 3169,
       "sha256": "65583ab3eb357093b55f21dafcd58cd81be9d55d60cf1b6d17b5e2b3e9499c22",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5641,6 +5813,7 @@
       "bytes": 1475,
       "sha256": "1ed6c07ca4ab752bf880c933488aa287c8ccf2e5c47167ae054000f18946ad29",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/phase_gate.sh"
       ]
@@ -5653,6 +5826,7 @@
       "bytes": 3368,
       "sha256": "040d7b3a83d8f1024a55dfae79d6d2a40754487c8e5d839a18b37e1d6a1539f0",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5664,6 +5838,7 @@
       "bytes": 9879,
       "sha256": "7a69a139547f58d23dce67e931024ab8fa38fdb6e2ca6a4c6ee2136d482ec337",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         ".codex/swift-migration/reviews/SM-07.md",
@@ -5679,6 +5854,7 @@
       "bytes": 18678,
       "sha256": "57f015cf574c5314ba63e6634a4d8face7f47ab4300121a3fd580af005e09e77",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/reviews/SM-08-background-validation-20260906.md",
         "script/phase_gate.sh",
@@ -5693,9 +5869,22 @@
       "bytes": 20385,
       "sha256": "99b40e578a30695f5d174b17ebb63250ab9841722b0c6f4fa4cfebad8fb08f46",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/phase_gate.sh",
         "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm09_coverage_tests.py",
+      "category": "native-test",
+      "note": "覆盖映射完整性与故障回归",
+      "owner": "native-validation",
+      "bytes": 1501,
+      "sha256": "15e50058e8f1f179ea3e522f0ce04d39f55f8a64ca37fba9546bb55cde9ec8d7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py"
       ]
     },
     {
@@ -5706,6 +5895,7 @@
       "bytes": 2526,
       "sha256": "eb7494d19ccff895dbfd163874558912ae57bcb40d4bd5c0fbe3d5d13623d45e",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/sm09_inventory.py"
       ]
     },
@@ -5718,6 +5908,7 @@
       "sha256": "d368029038c4b231962ceb88a95036401a01abb68527af2b123168a76afde2e8",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         ".github/workflows/release.yml",
@@ -5738,6 +5929,7 @@
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "package.json"
@@ -5752,6 +5944,7 @@
       "sha256": "90e3a6efc38f1419dd083f39c22d67e384d7ad2bb043a1ebb43590a28a8634cd",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
@@ -5769,6 +5962,7 @@
       "sha256": "adf0027c435bb8f60b19c14ffdc03911070b8b0c90c19c29213a4764a7bb04ae",
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "AGENT.md",
@@ -5880,6 +6074,7 @@
       "bytes": 422,
       "sha256": "d587a38312460e99d9c5f955aa2530611b1e7a075258e6a9ffd9168e506cf85d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -5894,6 +6089,7 @@
       "sha256": "44da76f22b6e78884b4c81e7865b1f553cb5089865acf7a04c34aa8990c9894b",
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -5907,6 +6103,7 @@
       "bytes": 9348,
       "sha256": "b823e106a60dd9f7e98a3f95b511a1870107ddb801f6de3a4897b8711c8e14ca",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -5922,6 +6119,7 @@
       "bytes": 28995,
       "sha256": "f4b168c4a38ea32e420343a16d847a7b87687d44ce3064baba42bb8b087d5fc5",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-08.md",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
@@ -5938,6 +6136,7 @@
       "bytes": 52423,
       "sha256": "2e4f51c1b7e807c6ee93911d0706483e174dd771820860f55c03ef41472f5e36",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "test/refactor/ip-03-08/global-settings.test.tsx",
@@ -5952,6 +6151,7 @@
       "bytes": 607,
       "sha256": "0fcccccf1fe7655e64ac0a67641295b4b4edab181aefc4a0d51cca599bf21fd7",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5963,6 +6163,7 @@
       "bytes": 18767,
       "sha256": "26b59951368478fe83603f434b7f906a4c398121c5fa64c152b892d514b1c852",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test/refactor/ip-03-08/shell-layout.test.ts"
       ]
@@ -5975,6 +6176,7 @@
       "bytes": 4834,
       "sha256": "f0cb45c3bb8708ce9e2dd74c1a376469ef88d828d5edf0feaa9968e91cfe69ee",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5986,6 +6188,7 @@
       "bytes": 16404,
       "sha256": "146b4622faeb311ed5bda2a53ecc194602fea531319569fdcfd908f738ca6105",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -5997,6 +6200,7 @@
       "bytes": 30,
       "sha256": "0cd6f10b608309760abc24fa8d86bcc8bd9e7d00356eafa61ee9aad31e049719",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6008,6 +6212,7 @@
       "bytes": 5118,
       "sha256": "8fce3a7798eaac1c302a1d314272c758b01f07f457b5e078e87c7cbd4ccc4e04",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test/refactor/ip-03-08/shell-layout.test.ts"
       ]
@@ -6020,6 +6225,7 @@
       "bytes": 10383,
       "sha256": "8a06d3713f3f33eb4fa3126309f69af4669f427b6a244d5811bf8aed75980bae",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6031,6 +6237,7 @@
       "bytes": 27586,
       "sha256": "4bdff160ce417752d2a097ca1677c0c8d0be806517e41d8bea3e6d91df898c0e",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json"
       ]
@@ -6043,6 +6250,7 @@
       "bytes": 11183,
       "sha256": "967ad2d4e50a12b40d42e996e9878201c151682823c755ff6b0a7ad617470b5d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6054,6 +6262,7 @@
       "bytes": 10333,
       "sha256": "fd63e158bf7aad77c3adf3aab09935ce289122fad9e5d03d1709b82851f2e922",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6067,6 +6276,7 @@
       "bytes": 8975,
       "sha256": "e4b4b42dee48581b41e1a8e38eaf05aad45b6b3105a972fb6c4722adc7a7f3cc",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6079,6 +6289,7 @@
       "sha256": "94e6b84f72ab5a7ab53f9ffcb85c32d1739a90fe8d70ddf5be8b14cceadd90d3",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6091,6 +6302,7 @@
       "bytes": 4176,
       "sha256": "5f4f2a68bdaa5a6a02e919f0228c765d4cde06bf6f809827c5a657b3395abfab",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6102,6 +6314,7 @@
       "bytes": 1199,
       "sha256": "c9a2e00cc50e7376dc01ca6da8838678c7a668481695f5b2090b348e8035c92a",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6113,6 +6326,7 @@
       "bytes": 34922,
       "sha256": "755b0ffc9a488265ff37eabb8f5d42faf48c3c67e7d276fc9c52c5a4f03ecca9",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json"
       ]
@@ -6125,6 +6339,7 @@
       "bytes": 61017,
       "sha256": "7ea661fc271de0fc04cd471246d8269774b03d36b05a851067c3eee55ed9f6d5",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json"
       ]
@@ -6137,6 +6352,7 @@
       "bytes": 19296,
       "sha256": "a9c23f511665b689aa496eafea192a441b12211159b3eab0d13a247ccd320213",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json"
       ]
@@ -6150,6 +6366,7 @@
       "sha256": "f2942bd48f255f3194b667a0d5ea3dbf4f3236a55db69bb94f10e4618ca240bf",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6163,6 +6380,7 @@
       "sha256": "a699aa8a83702d1d22ce03c9cc3c5f3158289d4d44b3dbb49dc9a3b348ac1129",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -6178,6 +6396,7 @@
       "sha256": "b147058ba2e30b4e425edd39af37747fa8f74f59a1dfafc57678d1bbe01b5e58",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
         "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
@@ -6194,6 +6413,7 @@
       "bytes": 1191,
       "sha256": "648b1cf112d45451cd2a8239c2380a3dd7563fd7569adf3faaaf00da3562bf30",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6205,6 +6425,7 @@
       "bytes": 643,
       "sha256": "0669c40f6313da2280d2fca0082eef0e675a74af3a7c11e294fdc3de55581bf5",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test/refactor/ip-03-08/electron-dev.test.ts",
@@ -6220,6 +6441,7 @@
       "bytes": 576,
       "sha256": "2f95db9ed09f18bea1329769af1ebbaa6b9eb3cda92e8fb0ea03c9a0d653cf94",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6232,6 +6454,7 @@
       "bytes": 2526,
       "sha256": "81b5e9260cfbf4209a6a7ae6e1400e934cc543653708c3db2d001dcfb1839e65",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6243,6 +6466,7 @@
       "bytes": 1879,
       "sha256": "a5f373d96f6bb52ce4f1e87b0a7f5ef2e0b13419a5c6d41a042aa50a3e134324",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6257,6 +6481,7 @@
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6269,6 +6494,7 @@
       "bytes": 271,
       "sha256": "e3de23844bdfe1bda08683e6e0cf3560b5128340860d84679c898e8355245e40",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6280,6 +6506,7 @@
       "bytes": 306,
       "sha256": "ae99717436fc70110b18e267fb5961c21586c9e44983bb3696a140c2c7089547",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6292,6 +6519,7 @@
       "sha256": "a5677663def277045a9d036517ce4580d318cff6dcddfa387f215ad92c3981fd",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6306,6 +6534,7 @@
       "sha256": "aebe0499b07bcf45148d271614084316fc5c6ab1d212d5d1ef7fa572627fb105",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6319,6 +6548,7 @@
       "sha256": "5cf25da7368689cd54b8ef6bcc5344fd40123d6b45b60861471ae9f1765ef7a6",
       "referencers": [
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6331,6 +6561,7 @@
       "bytes": 423,
       "sha256": "bb8a257dcf22c33f4a53d52628e3485b541428586230c7ffc34e312faff78984",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6342,6 +6573,7 @@
       "bytes": 516,
       "sha256": "10b9a2136436cb759622e980c6560f901ee9c82f1b493562394e5e0e3cdd3677",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6354,6 +6586,7 @@
       "bytes": 1015,
       "sha256": "38cc5707f5b2c58a4be89d1e738026af81dffb288359547ff4452688571399d9",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6365,6 +6598,7 @@
       "bytes": 4078,
       "sha256": "0c192f61d45d49700600ec66b8995dcb7eafe102b07f2bd76c38ab465b2aa2dd",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6377,6 +6611,7 @@
       "bytes": 198,
       "sha256": "4e58d806dbbcae49431087e6d813fe42e83b655ded184e1c643c71ba9004a0bb",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6388,6 +6623,7 @@
       "bytes": 958,
       "sha256": "88ce77d07d91416d11586dac0b453e0b5d650072c4d10a4ce2203c2244fd604a",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6400,6 +6636,7 @@
       "bytes": 691,
       "sha256": "20b32e3caede9218b39af6ab501c0a1b631a7cf323d3808fe84a399c7e200209",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6412,6 +6649,7 @@
       "bytes": 5581,
       "sha256": "a9f9eb431ce4db63f973d1d7e6358389ddc06eca3a08e7bf4140ed24fbb99aac",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6424,6 +6662,7 @@
       "bytes": 604,
       "sha256": "327e6623cb3e6c62cbacfcaaa3a79139f29f608f0dc07b17e8583bebec2bc36b",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6435,6 +6674,7 @@
       "bytes": 1722,
       "sha256": "39d45a8e427d5c735bec84458f73fab305ce190aa7ec0357231ba3ccbc232705",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".storybook/preview.tsx",
         "test-support/refactor/verify-ip0102-scope.mjs"
@@ -6448,6 +6688,7 @@
       "bytes": 2417,
       "sha256": "d1426e2a0ea01e4f5c5321d2fde9f24d45bd859c91e1cee857ee54a6f0d21281",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -6465,6 +6706,7 @@
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
         ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -6482,6 +6724,7 @@
       "sha256": "3540b4161fa495b2b04c8ba23ee588a226fa3e02cde30f946aef1abc6591a27c",
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "AGENT.md",
@@ -6499,6 +6742,7 @@
       "bytes": 439,
       "sha256": "1780b5c5585e98e3a68c8bf8484ef00f1c176a909ca14e84dda934d20273e218",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6512,6 +6756,7 @@
       "bytes": 1586,
       "sha256": "ef1b0e3601965a667059bfeaff9ddad2d3fb98d3bc4103c395131fac7e85036e",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6525,6 +6770,7 @@
       "bytes": 222,
       "sha256": "1c37ac660bc330518890ece7485299dc6264ac0b7945eac8008f0454351b8371",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6546,6 +6792,7 @@
         ".codex/refactor/packages/IP-00-C01.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test/baseline-visual.test.mjs"
@@ -6560,6 +6807,7 @@
       "sha256": "23e9e84ac8523fd0c5386e82efb0d01902a8e0b7fa20532b515c9ef6761659b6",
       "referencers": [
         ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6574,6 +6822,7 @@
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/E2E-ISOLATION-INCIDENT.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/ACCEPTANCE-RERUNS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6585,6 +6834,7 @@
       "bytes": 1827,
       "sha256": "46c03c515453f63913c697543a0fa727ca346b7e3aeb08ec32182bcf5fa44cf2",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6598,6 +6848,7 @@
       "referencers": [
         ".codex/refactor/DECISION_QUEUE.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
@@ -6612,6 +6863,7 @@
       "bytes": 2412,
       "sha256": "59fabd27437debd6987dc6dfb8288168936d122829a4d2af00e93787975584fd",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6628,6 +6880,7 @@
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
@@ -6644,6 +6897,7 @@
       "referencers": [
         ".codex/refactor/baseline/contracts/build.json",
         ".codex/refactor/evidence/IP-03-08/PREPARATION.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6659,6 +6913,7 @@
       "referencers": [
         ".codex/refactor/evidence/IP-0102/START_INVENTORY.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/TEST-IMAGE-TRACKING-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6676,6 +6931,7 @@
         ".codex/refactor/evidence/IP-03-08/final-handoff/GITIGNORE-HYGIENE-AUTHORIZATION.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
         ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6688,6 +6944,7 @@
       "sha256": "7af46e5abd78b433210fa1d073f056a52c1a2c8abbeb054e4bbf4061c500ab41",
       "referencers": [
         ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test/ai-client.test.mjs",
         "test/resolve-csv.test.mjs"
@@ -6701,6 +6958,7 @@
       "bytes": 54270,
       "sha256": "039cbea77dbba92138e1a958aab9f21d4d527a11c3935c1e59d768cd9ce200d5",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md"
       ]
@@ -6713,6 +6971,7 @@
       "bytes": 10216,
       "sha256": "59b49758ab555e84c574abc253831b6fc535faa6e87613b5b07be56618af1aa9",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md"
       ]
@@ -6730,6 +6989,7 @@
         ".codex/refactor/packages/IP-00-C01.md",
         ".codex/refactor/packages/IP-0102-C01.md",
         ".codex/refactor/packages/IP-0102.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6745,6 +7005,7 @@
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/ACCEPTANCE-RERUNS.md",
         ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "test-support/refactor/verify-ip0102-scope.mjs"
@@ -6762,6 +7023,7 @@
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/ACCEPTANCE-RERUNS.md",
         ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6776,6 +7038,7 @@
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md",
         "test-support/refactor/verify-ip0102-scope.mjs"
@@ -6800,6 +7063,7 @@
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/reviews/GATE-00.md",
         ".codex/refactor/reviews/GATE-01-02.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6812,6 +7076,7 @@
       "bytes": 7183,
       "sha256": "b43803649484380d11ad9f7802a4c4ec57f2ba48b91068b8efbbcea6855c9f8c",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md"
       ]
@@ -6825,6 +7090,7 @@
       "sha256": "0452209fe7e38c76787af588b8fcd94f1ce8ee727215c6d73727b68bf0993bed",
       "referencers": [
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0308-scope.mjs"
       ]
@@ -6839,6 +7105,7 @@
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6850,6 +7117,7 @@
       "bytes": 1285,
       "sha256": "a51ffa0d3a8c7234cd2b69bf5cae56b7133e6882e0ae14e5d16cf77b000eca81",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6863,6 +7131,7 @@
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/CHECKPOINT-LEDGER.md",
         ".codex/refactor/evidence/IP-03-08/E2E-ISOLATION-INCIDENT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6881,6 +7150,7 @@
         ".codex/refactor/packages/IP-0102-C01.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -6895,6 +7165,7 @@
       "sha256": "1bd2e6908218b858c9ac8f906443379223a9b654af33cfe6821b112330d9874a",
       "referencers": [
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md"
       ]
@@ -6907,6 +7178,7 @@
       "bytes": 3031,
       "sha256": "dfa043eceeed867cbd34777b7117af9fe8f27064e020f28559b6eb92f57212e9",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6918,6 +7190,7 @@
       "bytes": 972,
       "sha256": "c57639e4552700269ef6909a170fc15f54afc2dad8a805d562fee45b8b43edbe",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -6930,6 +7203,7 @@
       "sha256": "6da395529c7b98e6e7acc0d3ca8a337fbf83ce7b16a7a9727a128bc90e546025",
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/final-handoff/WORKTREE-TRACKING-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-05.md",
         "Tests/SlateSyncWorkflowTests/Fixtures/SM05/coverage.json",
@@ -6944,6 +7218,7 @@
       "bytes": 118,
       "sha256": "a95565d61d2d377d213bc3f3ed3b5d2095e389b807e7b517e2d0d0816e6e842a",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6956,6 +7231,7 @@
       "bytes": 110,
       "sha256": "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6968,6 +7244,7 @@
       "bytes": 110,
       "sha256": "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6980,6 +7257,7 @@
       "bytes": 52,
       "sha256": "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -6992,6 +7270,7 @@
       "bytes": 156,
       "sha256": "6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7006,6 +7285,7 @@
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7018,6 +7298,7 @@
       "bytes": 130,
       "sha256": "47768d5aa7e4b1d943fbfbd73cd19fe8ba3c6a7dcc45bfe7973cdee8fc8332ec",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7030,6 +7311,7 @@
       "bytes": 250,
       "sha256": "2294865a931351ee6721ebff1dc9089e26ec604b153e159ca218edcf303c059c",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7042,6 +7324,7 @@
       "bytes": 173,
       "sha256": "69afc24cb2c71ac28a0aa4c1763e1084cd8173dd5b0667901081d19f5978a8cd",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7054,6 +7337,7 @@
       "bytes": 1571,
       "sha256": "636961ff1adbac3cd655bdc5980aa192a80c472cb1785023682f3002e7984573",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7066,6 +7350,7 @@
       "bytes": 790,
       "sha256": "29b7dac56def4652c3f4b6958f15ac9e2d67bcc5b545b77f19d873c1be3a49c0",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7078,6 +7363,7 @@
       "bytes": 829,
       "sha256": "353bb8cae6c9ac36009c13852168cc18fca66d6b8afbcb397869885ebb93da12",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7090,6 +7376,7 @@
       "bytes": 242,
       "sha256": "59b39f2b4e3976ca0e1ad33e53029d8a9091e0c941a8a405f5358946021e622b",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs"
       ]
@@ -7102,6 +7389,7 @@
       "bytes": 2583,
       "sha256": "d88af8f4d698f879e3653c76e1640a9674e40ac55bf92494ced39e6b7d63ec2d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
@@ -7116,6 +7404,7 @@
       "bytes": 5893,
       "sha256": "db30ddada87dab922e814f67d1f0b68b0bd89351cfc9242c7154509090e5c74f",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7127,6 +7416,7 @@
       "bytes": 676,
       "sha256": "5b460eec52b0c235725334773b4cde174b4db1ac626dbb679e0702d8bd5fca88",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md"
       ]
@@ -7139,6 +7429,7 @@
       "bytes": 2656,
       "sha256": "6a588bada1a0c3f60615eb2787618c5c985b6882a1ead8e14e1c5dbafa05804c",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
       ]
@@ -7151,6 +7442,7 @@
       "bytes": 1777,
       "sha256": "e7cbd2b9a4fc4eae8184a2dcf878d5723f3e5a8dac954607f5e612259a32feb0",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7162,6 +7454,7 @@
       "bytes": 1419,
       "sha256": "bf951f88b10db3cb806d0e84b6df40b3231887025d20ac7d110c5ab7ee838ed1",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7173,6 +7466,7 @@
       "bytes": 3965,
       "sha256": "fa1cc781b06eeab69ce02b453ef55a17092c7333ce6da59a0f01e0a294a8c8b3",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md"
       ]
@@ -7185,6 +7479,7 @@
       "bytes": 13594,
       "sha256": "c7f12a869c8dec651666aca0dcbc750f0f0388c045ee9052c9c58459d8a5deff",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-07.md"
       ]
@@ -7197,6 +7492,7 @@
       "bytes": 4792,
       "sha256": "ea98bd041149b698052bcaf35faef350dbe49b719dc7237c3936012aaca02fa7",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7209,6 +7505,7 @@
       "sha256": "3824c97ff81fd7812f312c52b0bc4aac519ba2d409df8b944815f50be811945c",
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md",
         "AGENT.md"
@@ -7222,6 +7519,7 @@
       "bytes": 632,
       "sha256": "2f255e0943a55decf84e96a52af96f5f8c400606647a320e071c3f3b585b784c",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7233,6 +7531,7 @@
       "bytes": 6727,
       "sha256": "e899cc7b46c41fd0271c4b0c079d5e715f80cb2a64e1096e26b540edbeec2fa8",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7244,6 +7543,7 @@
       "bytes": 2245,
       "sha256": "e5aea7e312c3c13dcb7618d29bb1bfa75feb8823e7f1a017d25a4993b10ae187",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7255,6 +7555,7 @@
       "bytes": 16419,
       "sha256": "fafbee9cb7527078ea286d9821991136941b12980bb1810dbf44c3282507ad89",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7267,6 +7568,7 @@
       "sha256": "1d6b7e138094194ee9690a8038aa9bcd8a1d4eb122eb2a861cfa220cf222042b",
       "referencers": [
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7278,6 +7580,7 @@
       "bytes": 1881,
       "sha256": "de2871c06ab390c8c3eb5f042950d3b3925756156e25a6d6a8ead79691bd5c77",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7289,6 +7592,7 @@
       "bytes": 5454,
       "sha256": "b260da4bba52f433cdc065d9b345142ca536967ded607d240228a70e912fd4b4",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md"
       ]
@@ -7301,6 +7605,7 @@
       "bytes": 2809,
       "sha256": "f7b52d48c66b4a70375e79cbb482e8db0209098fcec0f7c2ce401f133008a73e",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
       ]
@@ -7316,6 +7621,7 @@
         ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
         ".codex/refactor/DECISION_QUEUE.md",
         ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -7330,6 +7636,7 @@
       "sha256": "0755f88eb11b71249c2fcd089a40fd2f583df85ffcc2e4e52c526d35ba2a96b4",
       "referencers": [
         ".codex/refactor/adr/ADR-IP-0102-TYPED-GATEWAY.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -7343,6 +7650,7 @@
       "bytes": 2954,
       "sha256": "bc8bd563359e5875e6e8710ab8f45b78ea1b9763c55e51daa728cb6d04e183fd",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -7356,6 +7664,7 @@
       "bytes": 2200,
       "sha256": "d54df1c5cbb8d30fef7a636c855069617f5937065ab065a9cc9ba90133bb195d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7368,6 +7677,7 @@
       "sha256": "4cc8cfe4567d5ac43669c131d67016fb9ae9b0fe47b84c8184dd82b87ba82c15",
       "referencers": [
         ".codex/refactor/evidence/IP-03-08/final-handoff/WORKTREE-TRACKING-AUDIT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7379,6 +7689,7 @@
       "bytes": 6619,
       "sha256": "31c3ba607ff99d976818b8d87b3608b6ba922beb47694bd8f4b1605e9c9ca2ab",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7390,6 +7701,7 @@
       "bytes": 5249,
       "sha256": "b1aae31b824115aaf5f5f119b8fa755b1167e62c354c5d48619ff3864703b8c0",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7401,6 +7713,7 @@
       "bytes": 7881,
       "sha256": "8d6b4f342ac5cab36927f9bbb2a46d64b81d61d9117b3113f171ccb708dedef9",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7412,6 +7725,7 @@
       "bytes": 4461,
       "sha256": "9bc2f1d1e4bf05ce6d6987bd35a74f98ff2998fdf110b5289b7c0daa173321d1",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7423,6 +7737,7 @@
       "bytes": 20967,
       "sha256": "dd2a5b34373fa7fba6b3835eddacbff59b5821e6b1ed502ec7d91e179d8b0a20",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md"
       ]
@@ -7435,6 +7750,7 @@
       "bytes": 3418,
       "sha256": "11c287687210e0d14c86f6e8d7f374c62e970c2e4fa2b101446617a0efdb6978",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7446,6 +7762,7 @@
       "bytes": 1198,
       "sha256": "b44e4f4bf65731e3e5b2d250bc690288ddfb6b986e6c8219dabfaf70e8b4717c",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7457,6 +7774,7 @@
       "bytes": 4421,
       "sha256": "c17c1b278104b6c015584349803fa71d04ab8c24ec6c6aa6d1f563d44e054b74",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7468,6 +7786,7 @@
       "bytes": 5730,
       "sha256": "22ae259948618014229e9bfb5d0132f897f2a8370df551ea11ffa7fd8badb13d",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md"
       ]
@@ -7480,6 +7799,7 @@
       "bytes": 1641,
       "sha256": "4ad358a8adc7fbb1601e2c0185558243bd2bd192e841fe46080584f79872a509",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7491,6 +7811,7 @@
       "bytes": 2801,
       "sha256": "3379243edb8a96da6d14ec0b05a10c1f14cd1bd630331c6cec824226a124f7df",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7502,6 +7823,7 @@
       "bytes": 1458,
       "sha256": "729aa408bf355a73d0670e16e1484e36e90a48c53e51484ced8a451c93e46b52",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7513,6 +7835,7 @@
       "bytes": 5268,
       "sha256": "03b7bf0ae08354161932fce414aa346d0dcfdd197cf2a25028dd4fae96372e39",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
       ]
@@ -7525,6 +7848,7 @@
       "bytes": 4255,
       "sha256": "f51899c805afa857c1c955c7e535dfb4c38255d2f1164df4eff3a69702798e67",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7536,6 +7860,7 @@
       "bytes": 11385,
       "sha256": "f1633d604bf5498790464c63678ec1bacd8960ac62dfdb175ee041064b51985b",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7547,6 +7872,7 @@
       "bytes": 796,
       "sha256": "28c32bb46cd20d8238088a67a989189b9619652d8097f5450070c73e4143674c",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7558,6 +7884,7 @@
       "bytes": 10520,
       "sha256": "ee1f7f852046b596ac4d6f8ecca1091a9654301bf77c97f628b933c03ecda359",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7569,6 +7896,7 @@
       "bytes": 6515,
       "sha256": "3ba41b229ad31b9b1a27ab7a9d9856ea20a2ae50165aae26771c0466d6274273",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7580,6 +7908,7 @@
       "bytes": 8094,
       "sha256": "14c972a10078bb4e492090bd46349c6ad40ed7b0f2fc0b5bdff1e6bddaabcdbe",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7591,6 +7920,7 @@
       "bytes": 3195,
       "sha256": "d27f8bf56250b253b018e21594a66e3ad75e731e02dcdee764b90298d625d0d5",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7602,6 +7932,7 @@
       "bytes": 13597,
       "sha256": "181c7eb2ad98e6dc987330b360a7ed7ba1fefac86f25439b684b508328e059cd",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7613,6 +7944,7 @@
       "bytes": 1733,
       "sha256": "97f8fb40b6d66086d2f588a2999ded103cead63e21619ad6a91bce47d1bcfbaf",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7625,6 +7957,7 @@
       "sha256": "e4f71f2ccfd9a9176db45d6b0bb040dd68fbd9a5d4d1682d4afc5b13ea339a07",
       "referencers": [
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7636,6 +7969,7 @@
       "bytes": 3119,
       "sha256": "39d3e293cf6641a5648b53682dcddddbb170c03d7430a1457c9297372f50bbac",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7647,6 +7981,7 @@
       "bytes": 2947,
       "sha256": "bc926c42672da5aaf954b29aa01a9b14e0fe1bc7adcb3939016a8e8f72d3b620",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7658,6 +7993,7 @@
       "bytes": 1683,
       "sha256": "7cdaf765213f059370880adaff3cd9ac7112c0fe2d53cb3f6ee25eb937f8b7ca",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7670,6 +8006,7 @@
       "sha256": "920ee7a2f6556f2cd2c621931a1bd0e0572ac093a57b5ad81c9b6942a4f37544",
       "referencers": [
         ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-06.md"
       ]
@@ -7682,6 +8019,7 @@
       "bytes": 2446,
       "sha256": "2ed31c847ef88cdc5863227dbbbeb601f0db6fa500281867ea2f9d45eb89c2f1",
       "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json"
       ]
     },
@@ -7694,6 +8032,7 @@
       "sha256": "aa8c66b2e1182cd1b9f0ec646e0e1c7bb3d6e0e5a53a536d4abede2d5ac792ea",
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -7715,6 +8054,7 @@
         ".codex/refactor/packages/IP-0102-C01.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"
@@ -7730,6 +8070,7 @@
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
@@ -7746,6 +8087,7 @@
       "sha256": "5a23ce58246dbdcd80738220c8d9906b494b87c0508454f97b3a7f0f29b3ccb6",
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -7761,6 +8103,7 @@
       "sha256": "5f7173e27dc3c9c49946dd74de0c08abadb1f050ed3cf2dda16bfbe9cdb4f7fa",
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -7776,6 +8119,7 @@
       "sha256": "dd8418c907f755ae6b9ae0efe3d90fea63b0bfcde84f87983314f1e440e02d37",
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs",
@@ -7794,6 +8138,7 @@
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "package.json",
         "test-support/refactor/verify-ip0102-scope.mjs",
@@ -7810,6 +8155,7 @@
       "referencers": [
         ".codex/refactor/REPOSITORY_HYGIENE.md",
         ".codex/refactor/baseline/contracts/build.json",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "AGENT.md",
         "package.json",
@@ -7834,9 +8180,11 @@
         ".codex/refactor/packages/IP-0102-C01.md",
         ".codex/refactor/packages/IP-0102.md",
         ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md",
         "package.json",
+        "script/sm09_coverage.py",
         "script/sm09_inventory.py",
         "test-support/refactor/verify-ip0102-scope.mjs",
         "test-support/refactor/verify-ip0308-scope.mjs"

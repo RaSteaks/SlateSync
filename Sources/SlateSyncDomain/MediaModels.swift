@@ -99,13 +99,44 @@ public struct MediaProgress: Codable, Hashable, Sendable {
 }
 public typealias MediaProgressSink = @Sendable (MediaProgress) -> Void
 
-/// Cancellation is a value-only latch shared with synchronous framework work.
-/// No PDF/Vision/Process object crosses its owning execution domain.
+/// Cancellation is a value latch with one-shot observer edges. Observers carry
+/// no PDF/Vision/Process object across its owning execution domain.
 public final class MediaOperation: Sendable {
-    private let canceled = Mutex(false)
+    private struct CancellationState: Sendable {
+        var canceled = false
+        var handlers: [UUID: @Sendable () -> Void] = [:]
+    }
+    private let cancellation = Mutex(CancellationState())
     public init() {}
-    public func cancel() { canceled.withLock { $0 = true } }
-    public var isCanceled: Bool { canceled.withLock { $0 } }
+    public func cancel() {
+        // Copy callbacks while holding the latch, then invoke them outside the
+        // lock. FIFO lease coordinators use this edge to remove only their own
+        // waiter without polling or re-entering the operation lock.
+        let handlers = cancellation.withLock { state -> [@Sendable () -> Void] in
+            guard !state.canceled else { return [] }
+            state.canceled = true
+            let handlers = Array(state.handlers.values)
+            state.handlers.removeAll(keepingCapacity: false)
+            return handlers
+        }
+        for handler in handlers { handler() }
+    }
+    public var isCanceled: Bool { cancellation.withLock { $0.canceled } }
+    /// Registers a one-shot cancellation edge. A nil token means cancellation
+    /// had already happened and the callback was invoked synchronously.
+    public func addCancellationHandler(_ handler: @escaping @Sendable () -> Void) -> UUID? {
+        let token = UUID()
+        let registered = cancellation.withLock { state -> Bool in
+            guard !state.canceled else { return false }
+            state.handlers[token] = handler
+            return true
+        }
+        if !registered { handler(); return nil }
+        return token
+    }
+    public func removeCancellationHandler(_ token: UUID) {
+        _ = cancellation.withLock { $0.handlers.removeValue(forKey: token) }
+    }
     public func check() throws {
         if isCanceled || Task.isCancelled { throw MediaFailure.canceled }
     }

@@ -1,10 +1,13 @@
 # SlateSync 当前项目方案
 
-## 2026-09-07 SM-09 Gate 与 WP-0 审计加固（未提交）
+## 2026-09-07 SM-09 初始基线与 WP-1C 实施（当前有效）
 
-- 本轮阅读 SM-09 与当前方案后，保留既有工作树修复；当前尚无已封存的
-  WP-1 baseline，遵守其硬前置，未开始 CARRY-01/06、资源迁移或 legacy 删除。
-- CARRY-08 代码已实施：日志分类五处 rg 扫描均检查退出码；2+ 输出诊断并
+- 准备提交 `218b43c` 已创建；该精确 clean commit 的 SM-09 Gate 全项 PASS、
+  approvable=true，覆盖 SwiftPM、Xcode Unit/UI、真实 App 启动、Universal
+  Release/Archive、Node 324、Modern 118、TypeScript/build 和 Electron ABI。
+  27 份日志 hash 与 UI 运行条件封存在 `sm09-pre-cutover.json`。这是 WP-1
+  初始 baseline，WP-2～WP-5 后仍须 final refresh 才能进入 WP-6 删除。
+- CARRY-08 已在 `218b43c` 修复：日志分类五处 rg 扫描均检查退出码；2+ 输出诊断并
   返回 FAIL。移除 quiet 提前退出，避免匹配后输入故障被隐藏；既有真实断言、
   FAIL marker、BLOCKED_ENV marker 与环境分类优先级保持不变。
 - Gate 自测 106/106：新增逐扫描位置注入 2/127 与缺失日志的 11 项回归。
@@ -12,10 +15,18 @@
 - WP-0 清单生成器保留全部引用者，使用 NUL 分隔支持中文/换行文件名，
   git grep 故障不再吞成空引用；所有分类含 owner 与引用图。schema v2 明示
   working-tree、dirtyWorkspace、approvable=false；自身摘要明确排除，封存时
-  外部 hash，避免记录上一版清单摘要。5 项 Python 回归全部通过。
-- 清单仅为工作树审计快照，仍需完整 coverage、动态引用人工核查、WP-1
-  全矩阵与精确 SHA 封存；CARRY-08 尚待提交 SHA 和最终 Gate 才能正式闭合。
-  CURRENT_STATE 继续保持 SM-08 COMPLETE；本轮未 commit/push/tag/release。
+  外部 hash，避免记录上一版摘要。`sm09-coverage.json` 已为 233 个
+  legacy-remove 文件逐项记录 pre-cutover hash、原生 family、replacement 与
+  acceptance IDs，unowned=0；清单/覆盖回归 8/8 通过。
+- WP-1C 已实施 CARRY-01/06：Paddle wire 改为 typed payload 单次编码与
+  recognize envelope 单次拼接，约 18 MiB 图像数据的旧/新字节完全一致；
+  Paddle/Vision 改用 actor-owned continuation FIFO，单 waiter 取消、deadline、
+  close 唤醒和 active drain 均无生产忙轮询。媒体定向 28 项通过（1 项专用
+  离线 Paddle lane 跳过）。完整 dirty diagnostic Gate 全项 PASS，证据目录为
+  `.codex/gate-results/SM-09/20260907T141615Z-218b43c71bc8`；按设计退出 3、
+  approvable=false。代码仍待提交，legacy 源未删除。
+- CURRENT_STATE 继续保持 SM-08 COMPLETE；未 push/tag/release，未触碰用户
+  Library、Keychain 或安装目录。
 
 ## 2026-09-07 SM-09 开工（当前有效）
 

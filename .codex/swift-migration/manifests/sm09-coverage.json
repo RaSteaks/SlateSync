@@ -1,0 +1,3966 @@
+{
+  "schemaVersion": 1,
+  "sourceInventorySha256": "bdd983afcfa84e3f58fd023be47c2f910c53c48dda24bc344e5d1ffc8fe85eb0",
+  "baselineCommit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+  "status": "BASELINE_COVERED; FINAL_REFRESH_REQUIRED_BEFORE_WP6",
+  "summary": {
+    "legacyRemove": 233,
+    "families": {
+      "native-gate": 12,
+      "native-release": 19,
+      "app-shell-ui": 89,
+      "persistence-workflow": 28,
+      "csv-metadata-scenario": 29,
+      "media-ocr": 13,
+      "provider-recognition": 43
+    },
+    "unowned": 0
+  },
+  "entries": [
+    {
+      "path": ".storybook/main.ts",
+      "preCutoverSha256": "cc3d99ef8e6968fd3576cca61fb72f6e1c3e21309f6f869a5ef39d4420652c8c",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": ".storybook/preview.tsx",
+      "preCutoverSha256": "147272396ddd05dc0cd588cd3222e53c39ab334c39fb6f23b609375001b228b6",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "electron-builder.yml",
+      "preCutoverSha256": "0f7421eaddf66b8570962c647e5387d27b5d84d34be90f71897629c2f248d321",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "electron/env-loader.mjs",
+      "preCutoverSha256": "33d2fd3266b0da39439e181c6f97f1cdfcf7651d4b38431a534b25d57cb0bada",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/file-dialogs.mjs",
+      "preCutoverSha256": "14211f6d624b286e14732eaaeee0c6dea816633efacafa4802d0ec1e2616fee8",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/global-config-store.mjs",
+      "preCutoverSha256": "757c67ac22503e36d20ef170188f367008cf74c24b62e6962a3f2d10d40711de",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/global-settings.mjs",
+      "preCutoverSha256": "3ae86cdfc3a3694dde49e14201069b013cd9e2386963050dcf5581f1d914e73a",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/ipc-handlers.mjs",
+      "preCutoverSha256": "e1c9c83c914a2eb42283e2f229b1e53e7fd80f9e9c9af20521fc9454a8313025",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/key-store.mjs",
+      "preCutoverSha256": "1ced11e2fd7beb2756ec01ab004fa22246d50932496f207543b014572c6e50fc",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/main.mjs",
+      "preCutoverSha256": "fd5dc69d0c37b304de93f3ec5783f6c8cf77779c88bf8eed0da1da22819cd253",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/paddleocr-installer.mjs",
+      "preCutoverSha256": "4734f766578c428bbc495296bc9d9d44b838df7dbd6c223d26267af2efcfb33a",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/preload.cjs",
+      "preCutoverSha256": "c969d0eb3aca18eeed1aae4ee552cf0f6fb175ace84c25fb35c5069db549efb1",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/renderer-dev-url.mjs",
+      "preCutoverSha256": "3e479c8c0ba48ea8252af468cfb24a9ce8bd90b29d9fde59670962aa7ba94743",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/settings-store.mjs",
+      "preCutoverSha256": "f03d28de58ceb31b428b0b20e01d4315c14237af4b63f7d0947ac4ff9b6dfa44",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "electron/slate-scanner.mjs",
+      "preCutoverSha256": "38b753a8b859f1c489fa132bd2be0fa8dc8437ae1f6048889794c81c24c31af1",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "lib/ai-client.mjs",
+      "preCutoverSha256": "94243a91ac14726d253c0c372c9bdebf48c910f88562bcdc2d4cf58f9ef7b31a",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/app-logger.mjs",
+      "preCutoverSha256": "db926f9fd18f6ee15815dbea23a1d3315ffbef9c33fec38ff4b4040b746f0467",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/config.mjs",
+      "preCutoverSha256": "f879d022e63ce2b114abd7cdc394516762b7852eb91154075c65b85e2daf696e",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/custom-provider.mjs",
+      "preCutoverSha256": "355e78180f29337f429a550b9188534d0945f4e86e4c09cb8dce4e7c7c406612",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/diagnostics.mjs",
+      "preCutoverSha256": "df2df7c7afce70dec37cfbf7554c59913d9127b2d7420539133e0dad1162b250",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "lib/http-timeout.mjs",
+      "preCutoverSha256": "8caf17c7e008e9ccf238a65f4b48e973650756532cba998e5318c8edf626ad31",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/macos-platform-guard.mjs",
+      "preCutoverSha256": "553198997e7d26406e5de0ec622d6dbaff8ba7701a9ea0de5fe0bcf699deeb23",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "lib/model-capabilities.mjs",
+      "preCutoverSha256": "4182d24462436f38a57ed245b9d54d8706d7327d4d3d161d2675b462454844bd",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/model-catalog.mjs",
+      "preCutoverSha256": "6502b932473136ac7a2bb1c23903e76ecf168201c800cbcbb328e0dfca5c1c4b",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/model-discovery.mjs",
+      "preCutoverSha256": "09d2387f8029611e43640078a9011a7ed24e09e07091bb9a6f39757818321af8",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/ocr/cancellation.mjs",
+      "preCutoverSha256": "0745db2c9ad644978082cb682a9bf001257d5419c0ea8397ab3daf52a5233e45",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "lib/ocr/child-environment.mjs",
+      "preCutoverSha256": "dcf3af303c6c847cc6f0182be85e611f2c8f7e8f77783777803fcd3b07dc6f7f",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "lib/ocr/paddleocr.mjs",
+      "preCutoverSha256": "e22b30ee3ec9a95c36f7d0767e190b2af401a9c5cd7466a87ee80ec69f29b7b9",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "lib/ocr/runtime-paths.mjs",
+      "preCutoverSha256": "9561a49a8cb1802843d89ddb217c1507ad37c97535d0683bad7ae6331cd59d14",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "lib/ocr/selection.mjs",
+      "preCutoverSha256": "0db47b44a91abc77d40c86e03aeb2b66de1effdb7bdb4c89074def1ca6e846e5",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "lib/ocr/vision.mjs",
+      "preCutoverSha256": "714ce587c407b6274ef0fa96e7cf106644bb994cc56190eaf32a281b035becf3",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "lib/project-library-transfer.mjs",
+      "preCutoverSha256": "95c73d20cf0323a1b66fc882bd69c71c99e407b5a64b34c3d3b6a3005964a6dc",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "lib/project-library.mjs",
+      "preCutoverSha256": "7360ee9401ff40107a8c6a9b40004e13cf1127da09bdfc46ab56e52da5395f01",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "lib/project-runtime.mjs",
+      "preCutoverSha256": "044df152d43939a7dcc0136088b6948394888dc2d32ae886667b00ba3eaa6c40",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "lib/project-settings.mjs",
+      "preCutoverSha256": "175bd1f29016b36e74939b9c7bc5d707979ce13c782dceb71f341d61dd2308c0",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/provider-registry.mjs",
+      "preCutoverSha256": "910324ca0b7280f90bb6f39ada8f758102b056cca90a3c00a2689db412ddd22d",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "lib/scenario/profile.mjs",
+      "preCutoverSha256": "e65d01b864ef401814d50571bdd26bd12c04963c39901d766dbb979cae474956",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "lib/scenario/store.mjs",
+      "preCutoverSha256": "77bfefccc2962049ae624b2762e1479f1f8b0d1928d0ffed862c04842b16d0df",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "lib/schema.mjs",
+      "preCutoverSha256": "ccd3ad8bf485cd326aacd728bd97b0eeb3ded287bee838a60c050ca34bd860f3",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "lib/sqlite-store.mjs",
+      "preCutoverSha256": "f0ee05a12cf1c9b24c2e19931d0ac8ff97a4d7f53cff2a49748693c2d0b80bb3",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "lib/task-store.mjs",
+      "preCutoverSha256": "51fe949733215aa439e604c006f94ff8719160b2415d818c016052ea553d03ca",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "package-lock.json",
+      "preCutoverSha256": "b565f75dc35b55b5f524450871395968e27c010c609e95e98bac0a0954d2f250",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "package.json",
+      "preCutoverSha256": "23a76ea6e6d006f7626cd27725d25de3b21af7a26d0ca12a977b4de1df7be8d0",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "playwright.config.ts",
+      "preCutoverSha256": "5cd6119e0afd924221b5f6d5a9f3e02fdfe0c5a4fb31856d2835a69973e35e9e",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "public/app.js",
+      "preCutoverSha256": "84352a3825c7200fa61beb826149db7bb7ce53ca4402dd39aed26e3bf6b8fa04",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "public/csv-background-tasks.js",
+      "preCutoverSha256": "af1441d8a504b06f249310a40dd140adb1dcf9c4d242f503d1801550713bbe56",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/csv-worker-client.js",
+      "preCutoverSha256": "76a537750cc53b03c97e724ba8f82125681f53e1c5b07f76d691b692c5bba14b",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/csv-worker.js",
+      "preCutoverSha256": "4051f49af81cbf59b02f5291960d5a74c4a66d932b43da8bbdd9a50139bb1fd7",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/custom-provider-state.js",
+      "preCutoverSha256": "f73a88e1ab88e3267425059160172bbefe1d77beb9891811be816678dfe22cff",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "public/electron-bridge.js",
+      "preCutoverSha256": "6c3b33f27f1a5752c349d590c4d933f1562dbf8a1cd78f61e9f4d6821fce4a3b",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "public/image-preprocess.js",
+      "preCutoverSha256": "b8186c8afe284dab23ac7208325a9c0e79d5402f49987b1fbbf25bf0c89af4fd",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "public/index.html",
+      "preCutoverSha256": "b36873fd19ddd93b7e34e48b3928cf5fcae3a273ae97165cfcb0db07d0299fbe",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "public/metadata-common.js",
+      "preCutoverSha256": "6726a061b70f1d71ed107945aeff40a544b805c16b71310ebf13ce09177d7e60",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/metadata-sources/index.js",
+      "preCutoverSha256": "fef624f18e42e7308d6ed86ad3a6ad50db21afe133e0198b5a36fc5470b9561d",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/metadata-sources/kinefinity.js",
+      "preCutoverSha256": "af68088ea322453f97fda346b4858d68f6fbc691ff6f967e950f2cae8cc9b609",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/metadata-structure.js",
+      "preCutoverSha256": "0246860b27c8e787e33ca43e493b901b77b9bdb0e8b307f8d7d5ec40d5a6bfe2",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/operation-token.js",
+      "preCutoverSha256": "7ab1ba4e7e8b6e801aebfe9a1d428c35796b6924f82ebca3cf06ae8bb2c541c3",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "public/recognition-request.js",
+      "preCutoverSha256": "6ea0bc1c69c41f412147703ef2c7ee90902bf4fadcd515737c898a4261a95857",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "public/resolve-csv.js",
+      "preCutoverSha256": "24325b22c269e94e6712f2994cc459aa1a4eaed0fed0b33cde030640681fbb5b",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/slate-csv-parser.js",
+      "preCutoverSha256": "c9973aecfa9e5c0167c0eb98413dc9394ee8fefeeae8d549cb0b5604cf42a125",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "public/styles.css",
+      "preCutoverSha256": "217c362d4dd6f1691cabda3d4eb36bd34e6b12465835c4138f7f0b96f1481934",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "public/task-autosave.js",
+      "preCutoverSha256": "09210e94672d6ecbfaefe421bc57ad95d34addb03e5060979f030f66c09a18e3",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "public/task-persistence.js",
+      "preCutoverSha256": "61c8bd12964e82ee444b875796fbc9049ca0997d64f7b5a5ef5a9c81fcabb110",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "public/workflow-state.js",
+      "preCutoverSha256": "c4c8576d0030d13bb91819d1e2f3edbd062fd52297841e91bee666ba928092d1",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "script/tests/sm02_platform_contract.mjs",
+      "preCutoverSha256": "756db7e2b02358cdd7175333d8ec3e20d771c6a5ac9786b5fd9e81a300b80dcd",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm03_contract.mjs",
+      "preCutoverSha256": "a2a6a5dd7a18b272e34d560bd96cbfd51a47a7dd5cc40bf91a67a566e4d620eb",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm04_contract.mjs",
+      "preCutoverSha256": "8e7450079a9d30b6e90c1dbfa3d3fe8cea5b21db8707ae38b88ec93db735ae9a",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm05_contract.mjs",
+      "preCutoverSha256": "aa31a46cabb478b60e5c0fc9e63438eb059cabeeb46091457d9f7e41eacf2d6d",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_contract.mjs",
+      "preCutoverSha256": "097f61136d1d80a24f7b4a394ebc3b598156002404e10f6d5256ed2b2dfa9d1e",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_freeze_oracles.mjs",
+      "preCutoverSha256": "5dea585ac9c53583347f7a71f4293eb9756ba8c33d0e27040403d38a02c61b3d",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_make_media.py",
+      "preCutoverSha256": "65583ab3eb357093b55f21dafcd58cd81be9d55d60cf1b6d17b5e2b3e9499c22",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_offline_paddle.sh",
+      "preCutoverSha256": "1ed6c07ca4ab752bf880c933488aa287c8ccf2e5c47167ae054000f18946ad29",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_vision_oracle.mjs",
+      "preCutoverSha256": "040d7b3a83d8f1024a55dfae79d6d2a40754487c8e5d839a18b37e1d6a1539f0",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm07_contract.mjs",
+      "preCutoverSha256": "7a69a139547f58d23dce67e931024ab8fa38fdb6e2ca6a4c6ee2136d482ec337",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm08_contract.mjs",
+      "preCutoverSha256": "57f015cf574c5314ba63e6634a4d8face7f47ab4300121a3fd580af005e09e77",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm08_native_evidence.mjs",
+      "preCutoverSha256": "99b40e578a30695f5d174b17ebb63250ab9841722b0c6f4fa4cfebad8fb08f46",
+      "family": "native-gate",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ],
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "scripts/build-vision-ocr.mjs",
+      "preCutoverSha256": "d368029038c4b231962ceb88a95036401a01abb68527af2b123168a76afde2e8",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "scripts/copy-pdfjs.mjs",
+      "preCutoverSha256": "31e1110c85bde2adfb8f9ac0dc68edee87c3d04245872432945fd773a25fa2f8",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "scripts/electron-build-host.mjs",
+      "preCutoverSha256": "90e3a6efc38f1419dd083f39c22d67e384d7ad2bb043a1ebb43590a28a8634cd",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "scripts/electron-dev.mjs",
+      "preCutoverSha256": "adf0027c435bb8f60b19c14ffdc03911070b8b0c90c19c29213a4764a7bb04ae",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "src/main/index.ts",
+      "preCutoverSha256": "d587a38312460e99d9c5f955aa2530611b1e7a075258e6a9ffd9168e506cf85d",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/main/renderer-entry.ts",
+      "preCutoverSha256": "44da76f22b6e78884b4c81e7865b1f553cb5089865acf7a04c34aa8990c9894b",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/preload/index.ts",
+      "preCutoverSha256": "b823e106a60dd9f7e98a3f95b511a1870107ddb801f6de3a4897b8711c8e14ca",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/App.tsx",
+      "preCutoverSha256": "f4b168c4a38ea32e420343a16d847a7b87687d44ce3064baba42bb8b087d5fc5",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/app/app.module.css",
+      "preCutoverSha256": "2e4f51c1b7e807c6ee93911d0706483e174dd771820860f55c03ef41472f5e36",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/app/route-title.ts",
+      "preCutoverSha256": "0fcccccf1fe7655e64ac0a67641295b4b4edab181aefc4a0d51cca599bf21fd7",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/components.module.css",
+      "preCutoverSha256": "26b59951368478fe83603f434b7f906a4c398121c5fa64c152b892d514b1c852",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/components.stories.tsx",
+      "preCutoverSha256": "f0cb45c3bb8708ce9e2dd74c1a376469ef88d828d5edf0feaa9968e91cfe69ee",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/components.tsx",
+      "preCutoverSha256": "146b4622faeb311ed5bda2a53ecc194602fea531319569fdcfd908f738ca6105",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/index.ts",
+      "preCutoverSha256": "0cd6f10b608309760abc24fa8d86bcc8bd9e7d00356eafa61ee9aad31e049719",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/tokens.css",
+      "preCutoverSha256": "8fce3a7798eaac1c302a1d314272c758b01f07f457b5e078e87c7cbd4ccc4e04",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/csv/CsvVirtualTable.tsx",
+      "preCutoverSha256": "8a06d3713f3f33eb4fa3126309f69af4669f427b6a244d5811bf8aed75980bae",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/help/HelpPage.tsx",
+      "preCutoverSha256": "4bdff160ce417752d2a097ca1677c0c8d0be806517e41d8bea3e6d91df898c0e",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/logs/LogViewerPage.tsx",
+      "preCutoverSha256": "967ad2d4e50a12b40d42e996e9878201c151682823c755ff6b0a7ad617470b5d",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/projects/ProjectLibraryPage.tsx",
+      "preCutoverSha256": "fd63e158bf7aad77c3adf3aab09935ce289122fad9e5d03d1709b82851f2e922",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/ModelSelect.tsx",
+      "preCutoverSha256": "e4b4b42dee48581b41e1a8e38eaf05aad45b6b3105a972fb6c4722adc7a7f3cc",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/RecognitionResultPanel.tsx",
+      "preCutoverSha256": "94e6b84f72ab5a7ab53f9ffcb85c32d1739a90fe8d70ddf5be8b14cceadd90d3",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/model-options.ts",
+      "preCutoverSha256": "5f4f2a68bdaa5a6a02e919f0228c765d4cde06bf6f809827c5a657b3395abfab",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/use-recognition-draft.ts",
+      "preCutoverSha256": "c9a2e00cc50e7376dc01ca6da8838678c7a668481695f5b2090b348e8035c92a",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/settings/CustomProviderSettingsPanel.tsx",
+      "preCutoverSha256": "755b0ffc9a488265ff37eabb8f5d42faf48c3c67e7d276fc9c52c5a4f03ecca9",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/settings/GlobalSettingsPage.tsx",
+      "preCutoverSha256": "7ea661fc271de0fc04cd471246d8269774b03d36b05a851067c3eee55ed9f6d5",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/settings/ProjectSettingsPage.tsx",
+      "preCutoverSha256": "a9c23f511665b689aa496eafea192a441b12211159b3eab0d13a247ccd320213",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/features/slate/SlateInputPanel.tsx",
+      "preCutoverSha256": "f2942bd48f255f3194b667a0d5ea3dbf4f3236a55db69bb94f10e4618ca240bf",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/tasks/TaskRail.tsx",
+      "preCutoverSha256": "a699aa8a83702d1d22ce03c9cc3c5f3158289d4d44b3dbb49dc9a3b348ac1129",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "src/renderer/features/workspace/WorkspacePage.tsx",
+      "preCutoverSha256": "b147058ba2e30b4e425edd39af37747fa8f74f59a1dfafc57678d1bbe01b5e58",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/hooks/use-file-drop.ts",
+      "preCutoverSha256": "648b1cf112d45451cd2a8239c2380a3dd7563fd7569adf3faaaf00da3562bf30",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/index.html",
+      "preCutoverSha256": "0669c40f6313da2280d2fca0082eef0e675a74af3a7c11e294fdc3de55581bf5",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/main.tsx",
+      "preCutoverSha256": "2f95db9ed09f18bea1329769af1ebbaa6b9eb3cda92e8fb0ea03c9a0d653cf94",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/api.ts",
+      "preCutoverSha256": "81b5e9260cfbf4209a6a7ae6e1400e934cc543653708c3db2d001dcfb1839e65",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/appearance-preference.ts",
+      "preCutoverSha256": "a5f373d96f6bb52ce4f1e87b0a7f5ef2e0b13419a5c6d41a042aa50a3e134324",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/csv-worker-service.ts",
+      "preCutoverSha256": "70e1d721367c492a39fea3e354e8e41712510cb29386d6e3944760b739d1ff8c",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/keyboard-shortcuts.ts",
+      "preCutoverSha256": "e3de23844bdfe1bda08683e6e0cf3560b5128340860d84679c898e8355245e40",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/operation-guard.ts",
+      "preCutoverSha256": "ae99717436fc70110b18e267fb5961c21586c9e44983bb3696a140c2c7089547",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/preparation-service.ts",
+      "preCutoverSha256": "a5677663def277045a9d036517ce4580d318cff6dcddfa387f215ad92c3981fd",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/services/task-autosave.ts",
+      "preCutoverSha256": "aebe0499b07bcf45148d271614084316fc5c6ab1d212d5d1ef7fa572627fb105",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/export-store.ts",
+      "preCutoverSha256": "5cf25da7368689cd54b8ef6bcc5344fd40123d6b45b60861471ae9f1765ef7a6",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/index.ts",
+      "preCutoverSha256": "bb8a257dcf22c33f4a53d52628e3485b541428586230c7ffc34e312faff78984",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/metadata-store.ts",
+      "preCutoverSha256": "10b9a2136436cb759622e980c6560f901ee9c82f1b493562394e5e0e3cdd3677",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/project-store.ts",
+      "preCutoverSha256": "38cc5707f5b2c58a4be89d1e738026af81dffb288359547ff4452688571399d9",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/recognition-store.ts",
+      "preCutoverSha256": "0c192f61d45d49700600ec66b8995dcb7eafe102b07f2bd76c38ab465b2aa2dd",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/state/settings-store.ts",
+      "preCutoverSha256": "4e58d806dbbcae49431087e6d813fe42e83b655ded184e1c643c71ba9004a0bb",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "src/renderer/state/slate-store.ts",
+      "preCutoverSha256": "88ce77d07d91416d11586dac0b453e0b5d650072c4d10a4ce2203c2244fd604a",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/task-store.ts",
+      "preCutoverSha256": "20b32e3caede9218b39af6ab501c0a1b631a7cf323d3808fe84a399c7e200209",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/types.ts",
+      "preCutoverSha256": "a9f9eb431ce4db63f973d1d7e6358389ddc06eca3a08e7bf4140ed24fbb99aac",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/state/ui-store.ts",
+      "preCutoverSha256": "327e6623cb3e6c62cbacfcaaa3a79139f29f608f0dc07b17e8583bebec2bc36b",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/styles.css",
+      "preCutoverSha256": "39d45a8e427d5c735bec84458f73fab305ce190aa7ec0357231ba3ccbc232705",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/validation/input-validation.ts",
+      "preCutoverSha256": "d1426e2a0ea01e4f5c5321d2fde9f24d45bd859c91e1cee857ee54a6f0d21281",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/renderer/workers/preparation.worker.ts",
+      "preCutoverSha256": "482adbd3d9c2280d28c42772360422c0b93d4a23477ef564a06a30482858c316",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/shared/contracts/index.ts",
+      "preCutoverSha256": "3540b4161fa495b2b04c8ba23ee588a226fa3e02cde30f946aef1abc6591a27c",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/shared/domain/index.ts",
+      "preCutoverSha256": "1780b5c5585e98e3a68c8bf8484ef00f1c176a909ca14e84dda934d20273e218",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/shared/errors/index.ts",
+      "preCutoverSha256": "ef1b0e3601965a667059bfeaff9ddad2d3fb98d3bc4103c395131fac7e85036e",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "src/shared/index.ts",
+      "preCutoverSha256": "1c37ac660bc330518890ece7485299dc6264ac0b7945eac8008f0454351b8371",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/baseline/capture-visuals.mjs",
+      "preCutoverSha256": "401008999846e7fe86343a593a171a510295ade29e1a6d0fde8f4b1757502bb5",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/baseline/verify-scope.mjs",
+      "preCutoverSha256": "23e9e84ac8523fd0c5386e82efb0d01902a8e0b7fa20532b515c9ef6761659b6",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/e2e/capture-visual-baseline.mjs",
+      "preCutoverSha256": "8e52bcaea4c3a7887f2444eaa39760a766e7d064ef2ad62b82d9366aab5703c2",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/e2e/compare-visual-baseline.mjs",
+      "preCutoverSha256": "46c03c515453f63913c697543a0fa727ca346b7e3aeb08ec32182bcf5fa44cf2",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/refactor/electron-smoke.mjs",
+      "preCutoverSha256": "104ff652088cc10f3d9fcbcd8b7423cc53a195c0e3d75bceb8bfb8b3e273d152",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/refactor/gateway-performance.mjs",
+      "preCutoverSha256": "59fabd27437debd6987dc6dfb8288168936d122829a4d2af00e93787975584fd",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/refactor/legacy-test-gateway.mjs",
+      "preCutoverSha256": "ccc08dd49b4294a2273d569f0fcddd6ec4170c6a9a5cff5bc314eaf0720200bf",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/refactor/native-abi-lifecycle.mjs",
+      "preCutoverSha256": "7190933d9cb1763435343d05bb4be606b8a3e7dcb08d497e63fb6dba176f8db5",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/refactor/verify-ip0102-scope.mjs",
+      "preCutoverSha256": "d198736afe4474efa69d9b7630a46ed1487d619b3b224f4417f67114e9a611ab",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/refactor/verify-ip0308-scope.mjs",
+      "preCutoverSha256": "9248f819f80a484f90a02e4109d594e93053c4875c8aa7bf6984f7244c6faeb2",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test-support/synthetic-production-day.mjs",
+      "preCutoverSha256": "7af46e5abd78b433210fa1d073f056a52c1a2c8abbeb054e4bbf4061c500ab41",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/ai-client.test.mjs",
+      "preCutoverSha256": "039cbea77dbba92138e1a958aab9f21d4d527a11c3935c1e59d768cd9ce200d5",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/app-logger.test.mjs",
+      "preCutoverSha256": "59b49758ab555e84c574abc253831b6fc535faa6e87613b5b07be56618af1aa9",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/baseline-contracts.test.mjs",
+      "preCutoverSha256": "1dad3ec870e7e6cc5c7c3468512e3140e0fa46dbabc113d1d8ab9fa0d8d634a4",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/baseline-csv.test.mjs",
+      "preCutoverSha256": "cf2476511f93236a990965215d4e37191702316e4a6d2ba95c1b9a0db3833db1",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/baseline-persistence.test.mjs",
+      "preCutoverSha256": "2059397edf91fd0edd282a64b821d86e1ee96d116d4e45ac0147b039b1cb1aec",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/baseline-recognition.test.mjs",
+      "preCutoverSha256": "392545538d6312488af2f6485b1baf6b5df9e59587668a6c161a3e6e7991d36b",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/baseline-visual.test.mjs",
+      "preCutoverSha256": "b1877f7f824ab705a01a24cb78f1d6b4bccfc7bfd4bfe376fd6170cb5ad6e5a4",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/config.test.mjs",
+      "preCutoverSha256": "b43803649484380d11ad9f7802a4c4ec57f2ba48b91068b8efbbcea6855c9f8c",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/csv-background-tasks.test.mjs",
+      "preCutoverSha256": "0452209fe7e38c76787af588b8fcd94f1ce8ee727215c6d73727b68bf0993bed",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/csv-worker-client.test.mjs",
+      "preCutoverSha256": "c35e984b77980fcd17832122872d4c9724552af8fb50974b7b1322f28b8db140",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/custom-provider-state.test.mjs",
+      "preCutoverSha256": "a51ffa0d3a8c7234cd2b69bf5cae56b7133e6882e0ae14e5d16cf77b000eca81",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/e2e/electron.spec.ts",
+      "preCutoverSha256": "da1d960a358f9ad0f12612c1ac56fbffd711472c1110e7a9729a06144b6e8eb2",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/electron-bridge.test.mjs",
+      "preCutoverSha256": "81a712c650767325a1e26e344b7cc7f38126e77f06e74b47862fdf40dacfa869",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/electron-ipc.test.mjs",
+      "preCutoverSha256": "1bd2e6908218b858c9ac8f906443379223a9b654af33cfe6821b112330d9874a",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/electron-key-store.test.mjs",
+      "preCutoverSha256": "dfa043eceeed867cbd34777b7117af9fe8f27064e020f28559b6eb92f57212e9",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/electron-slate-scanner.test.mjs",
+      "preCutoverSha256": "c57639e4552700269ef6909a170fc15f54afc2dad8a805d562fee45b8b43edbe",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/manifest.json",
+      "preCutoverSha256": "6da395529c7b98e6e7acc0d3ca8a337fbf83ce7b16a7a9727a128bc90e546025",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-semicolon.csv",
+      "preCutoverSha256": "a95565d61d2d377d213bc3f3ed3b5d2095e389b807e7b517e2d0d0816e6e842a",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-utf16be.csv",
+      "preCutoverSha256": "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-utf16le.csv",
+      "preCutoverSha256": "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-utf8.csv",
+      "preCutoverSha256": "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source.csv",
+      "preCutoverSha256": "6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/legacy-migration.json",
+      "preCutoverSha256": "6e12b070469b385c14a850ef15e9c56177528825bff0f0df4a48d0593f1ed265",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/library.json",
+      "preCutoverSha256": "47768d5aa7e4b1d943fbfbd73cd19fe8ba3c6a7dcc45bfe7973cdee8fc8332ec",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/project.json",
+      "preCutoverSha256": "2294865a931351ee6721ebff1dc9089e26ec604b153e159ca218edcf303c059c",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/settings.json",
+      "preCutoverSha256": "69afc24cb2c71ac28a0aa4c1763e1084cd8173dd5b0667901081d19f5978a8cd",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/task.json",
+      "preCutoverSha256": "636961ff1adbac3cd655bdc5980aa192a80c472cb1785023682f3002e7984573",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/recognition/normalization.json",
+      "preCutoverSha256": "29b7dac56def4652c3f4b6958f15ac9e2d67bcc5b545b77f19d873c1be3a49c0",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/recognition/pages.json",
+      "preCutoverSha256": "353bb8cae6c9ac36009c13852168cc18fca66d6b8afbcb397869885ebb93da12",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/recognition/timeout.json",
+      "preCutoverSha256": "59b39f2b4e3976ca0e1ad33e53029d8a9091e0c941a8a405f5358946021e622b",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/fixtures/fake-paddleocr-runner.py",
+      "preCutoverSha256": "d88af8f4d698f879e3653c76e1640a9674e40ac55bf92494ced39e6b7d63ec2d",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "test/global-settings.test.mjs",
+      "preCutoverSha256": "db30ddada87dab922e814f67d1f0b68b0bd89351cfc9242c7154509090e5c74f",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/http-timeout.test.mjs",
+      "preCutoverSha256": "5b460eec52b0c235725334773b4cde174b4db1ac626dbb679e0702d8bd5fca88",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/image-preprocess.test.mjs",
+      "preCutoverSha256": "6a588bada1a0c3f60615eb2787618c5c985b6882a1ead8e14e1c5dbafa05804c",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "test/metadata-sources.test.mjs",
+      "preCutoverSha256": "e7cbd2b9a4fc4eae8184a2dcf878d5723f3e5a8dac954607f5e612259a32feb0",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/metadata-structure.test.mjs",
+      "preCutoverSha256": "bf951f88b10db3cb806d0e84b6df40b3231887025d20ac7d110c5ab7ee838ed1",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/model-capabilities.test.mjs",
+      "preCutoverSha256": "fa1cc781b06eeab69ce02b453ef55a17092c7333ce6da59a0f01e0a294a8c8b3",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/model-discovery.test.mjs",
+      "preCutoverSha256": "c7f12a869c8dec651666aca0dcbc750f0f0388c045ee9052c9c58459d8a5deff",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/ocr-settings.test.mjs",
+      "preCutoverSha256": "ea98bd041149b698052bcaf35faef350dbe49b719dc7237c3936012aaca02fa7",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "test/ocr.test.mjs",
+      "preCutoverSha256": "3824c97ff81fd7812f312c52b0bc4aac519ba2d409df8b944815f50be811945c",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "test/operation-token.test.mjs",
+      "preCutoverSha256": "2f255e0943a55decf84e96a52af96f5f8c400606647a320e071c3f3b585b784c",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/paddleocr-installer.test.mjs",
+      "preCutoverSha256": "e899cc7b46c41fd0271c4b0c079d5e715f80cb2a64e1096e26b540edbeec2fa8",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "test/persistence.test.mjs",
+      "preCutoverSha256": "e5aea7e312c3c13dcb7618d29bb1bfa75feb8823e7f1a017d25a4993b10ae187",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/project-library-transfer.test.mjs",
+      "preCutoverSha256": "fafbee9cb7527078ea286d9821991136941b12980bb1810dbf44c3282507ad89",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/project-library.test.mjs",
+      "preCutoverSha256": "1d6b7e138094194ee9690a8038aa9bcd8a1d4eb122eb2a861cfa220cf222042b",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/project-settings.test.mjs",
+      "preCutoverSha256": "de2871c06ab390c8c3eb5f042950d3b3925756156e25a6d6a8ead79691bd5c77",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/recognition-logging.test.mjs",
+      "preCutoverSha256": "b260da4bba52f433cdc065d9b345142ca536967ded607d240228a70e912fd4b4",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/recognition-request.test.mjs",
+      "preCutoverSha256": "f7b52d48c66b4a70375e79cbb482e8db0209098fcec0f7c2ce401f133008a73e",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-01/skeleton.test.ts",
+      "preCutoverSha256": "a1f3affabbf37be5aec509ad1f27cd436b620375eef7fdcf241d9e00c761c884",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-02/contract.test.ts",
+      "preCutoverSha256": "0755f88eb11b71249c2fcd089a40fd2f583df85ffcc2e4e52c526d35ba2a96b4",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-02/destroyed-sender.test.mjs",
+      "preCutoverSha256": "bc8bd563359e5875e6e8710ab8f45b78ea1b9763c55e51daa728cb6d04e183fd",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/appearance-preference.test.ts",
+      "preCutoverSha256": "d54df1c5cbb8d30fef7a636c855069617f5937065ab065a9cc9ba90133bb195d",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/csv-worker-service.test.ts",
+      "preCutoverSha256": "4cc8cfe4567d5ac43669c131d67016fb9ae9b0fe47b84c8184dd82b87ba82c15",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/custom-provider-settings.test.tsx",
+      "preCutoverSha256": "31c3ba607ff99d976818b8d87b3608b6ba922beb47694bd8f4b1605e9c9ca2ab",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/design-system.test.tsx",
+      "preCutoverSha256": "b1aae31b824115aaf5f5f119b8fa755b1167e62c354c5d48619ff3864703b8c0",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/electron-build.test.ts",
+      "preCutoverSha256": "8d6b4f342ac5cab36927f9bbb2a46d64b81d61d9117b3113f171ccb708dedef9",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/electron-dev.test.ts",
+      "preCutoverSha256": "9bc2f1d1e4bf05ce6d6987bd35a74f98ff2998fdf110b5289b7c0daa173321d1",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/global-settings.test.tsx",
+      "preCutoverSha256": "dd2a5b34373fa7fba6b3835eddacbff59b5821e6b1ed502ec7d91e179d8b0a20",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/help-page.test.tsx",
+      "preCutoverSha256": "11c287687210e0d14c86f6e8d7f374c62e970c2e4fa2b101446617a0efdb6978",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/input-validation.test.ts",
+      "preCutoverSha256": "b44e4f4bf65731e3e5b2d250bc690288ddfb6b986e6c8219dabfaf70e8b4717c",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/legacy-project-library.test.ts",
+      "preCutoverSha256": "c17c1b278104b6c015584349803fa71d04ab8c24ec6c6aa6d1f563d44e054b74",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/log-viewer.test.tsx",
+      "preCutoverSha256": "22ae259948618014229e9bfb5d0132f897f2a8370df551ea11ffa7fd8badb13d",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/model-options.test.ts",
+      "preCutoverSha256": "4ad358a8adc7fbb1601e2c0185558243bd2bd192e841fe46080584f79872a509",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/model-select.test.tsx",
+      "preCutoverSha256": "3379243edb8a96da6d14ec0b05a10c1f14cd1bd630331c6cec824226a124f7df",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/performance.test.tsx",
+      "preCutoverSha256": "729aa408bf355a73d0670e16e1484e36e90a48c53e51484ced8a451c93e46b52",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/preparation-service.test.ts",
+      "preCutoverSha256": "03b7bf0ae08354161932fce414aa346d0dcfdd197cf2a25028dd4fae96372e39",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/project-library.test.tsx",
+      "preCutoverSha256": "f51899c805afa857c1c955c7e535dfb4c38255d2f1164df4eff3a69702798e67",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/project-settings.test.tsx",
+      "preCutoverSha256": "f1633d604bf5498790464c63678ec1bacd8960ac62dfdb175ee041064b51985b",
+      "family": "provider-recognition",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ],
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/route-title.test.ts",
+      "preCutoverSha256": "28c32bb46cd20d8238088a67a989189b9619652d8097f5450070c73e4143674c",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/shell-layout.test.ts",
+      "preCutoverSha256": "ee1f7f852046b596ac4d6f8ecca1091a9654301bf77c97f628b933c03ecda359",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/state-lifecycle.test.ts",
+      "preCutoverSha256": "3ba41b229ad31b9b1a27ab7a9d9856ea20a2ae50165aae26771c0466d6274273",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/task-lifecycle.test.ts",
+      "preCutoverSha256": "14c972a10078bb4e492090bd46349c6ad40ed7b0f2fc0b5bdff1e6bddaabcdbe",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/task-rail.test.tsx",
+      "preCutoverSha256": "d27f8bf56250b253b018e21594a66e3ad75e731e02dcdee764b90298d625d0d5",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/virtual-table.test.tsx",
+      "preCutoverSha256": "181c7eb2ad98e6dc987330b360a7ed7ba1fefac86f25439b684b508328e059cd",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/repository-hygiene.test.mjs",
+      "preCutoverSha256": "97f8fb40b6d66086d2f588a2999ded103cead63e21619ad6a91bce47d1bcfbaf",
+      "family": "app-shell-ui",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ],
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ]
+    },
+    {
+      "path": "test/resolve-csv.test.mjs",
+      "preCutoverSha256": "e4f71f2ccfd9a9176db45d6b0bb040dd68fbd9a5d4d1682d4afc5b13ea339a07",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/scenario-profile.test.mjs",
+      "preCutoverSha256": "39d3e293cf6641a5648b53682dcddddbb170c03d7430a1457c9297372f50bbac",
+      "family": "csv-metadata-scenario",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ],
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ]
+    },
+    {
+      "path": "test/task-autosave.test.mjs",
+      "preCutoverSha256": "bc926c42672da5aaf954b29aa01a9b14e0fe1bc7adcb3939016a8e8f72d3b620",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/task-persistence.test.mjs",
+      "preCutoverSha256": "7cdaf765213f059370880adaff3cd9ac7112c0fe2d53cb3f6ee25eb937f8b7ca",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "test/vision-ocr.test.mjs",
+      "preCutoverSha256": "920ee7a2f6556f2cd2c621931a1bd0e0572ac093a57b5ad81c9b6942a4f37544",
+      "family": "media-ocr",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ]
+    },
+    {
+      "path": "test/workflow-state.test.mjs",
+      "preCutoverSha256": "2ed31c847ef88cdc5863227dbbbeb601f0db6fa500281867ea2f9d45eb89c2f1",
+      "family": "persistence-workflow",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ],
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ]
+    },
+    {
+      "path": "tsconfig.base.json",
+      "preCutoverSha256": "aa8c66b2e1182cd1b9f0ec646e0e1c7bb3d6e0e5a53a536d4abede2d5ac792ea",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "tsconfig.json",
+      "preCutoverSha256": "616d5629fac4863a1b905755ea63b578fb45e880ac94f9b1f8ef047b366def88",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "tsconfig.main.json",
+      "preCutoverSha256": "21cc092e4f9c8dbe944e20d411b932e176a923ea8e83efaeb327ee41f3c15ffe",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "tsconfig.preload.json",
+      "preCutoverSha256": "5a23ce58246dbdcd80738220c8d9906b494b87c0508454f97b3a7f0f29b3ccb6",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "tsconfig.renderer.json",
+      "preCutoverSha256": "5f7173e27dc3c9c49946dd74de0c08abadb1f050ed3cf2dda16bfbe9cdb4f7fa",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "tsconfig.shared.json",
+      "preCutoverSha256": "dd8418c907f755ae6b9ae0efe3d90fea63b0bfcde84f87983314f1e440e02d37",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "vite.preload.config.ts",
+      "preCutoverSha256": "143d2b4162dc8d92ceeb0bc83f021db4fb1597faaf8f256a97cf1570046e534d",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "vite.renderer.config.ts",
+      "preCutoverSha256": "75bd31fbd3c5e7e1877b598b5be567950d155526b9a042577edbb3da4866ed8d",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    },
+    {
+      "path": "vitest.config.ts",
+      "preCutoverSha256": "c4d883e3e346b68085124cb2a9aa00197337426e933c6f9f5230f04c9de25ca9",
+      "family": "native-release",
+      "disposition": "remove-after-final-pre-cutover-pass",
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ],
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ]
+    }
+  ]
+}

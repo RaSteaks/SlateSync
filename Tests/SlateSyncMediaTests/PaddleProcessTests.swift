@@ -35,6 +35,68 @@ struct FakePaddleRuntime: Sendable {
     private func assertExited(_ runtime: FakePaddleRuntime) {
         for pid in Set(runtime.events().map(\.pid)) { XCTAssertEqual(Darwin.kill(pid,0),-1,"child \(pid) survived close") }
     }
+    private func legacyPayload(_ configuration: PaddleOCRConfiguration, document: PreparedDocument?) throws -> Data {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys,.withoutEscapingSlashes]
+        var object = try JSONDecoder().decode([String: JSONValue].self, from: encoder.encode(configuration))
+        object.removeValue(forKey: "timeout"); object.removeValue(forKey: "preset")
+        if let document {
+            object["pages"] = .array(document.pages.map { page in
+                .object(["pageNumber": .number(Double(page.pageNumber)), "images": .array(page.views.map { .string($0.image.dataURL) })])
+            })
+        }
+        return try encoder.encode(object)
+    }
+    private func legacyEnvelope(_ payload: Data, type: String, id: String) throws -> Data {
+        let value = try JSONDecoder().decode(JSONValue.self, from: payload)
+        var object: [String: JSONValue]
+        if type == "recognize" { object = ["payload": value] }
+        else if case .object(let fields) = value { object = fields }
+        else { throw MediaFailure.protocolError }
+        object["type"] = .string(type); object["requestId"] = .string(id)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys,.withoutEscapingSlashes]
+        return try encoder.encode(object) + Data([10])
+    }
+
+    func testWireConstructionIsByteExactWithoutLargePayloadReparse() throws {
+        let values = GlobalSettingValues([
+            .paddleOCRLanguage: "中文\n\"quoted\"",
+            .paddleOCRModelVersion: "PP/OCR-v6",
+            .paddleOCRDetectionModel: "det/模型",
+            .paddleOCRRecognitionModel: "rec/模型",
+        ])
+        let configuration = PaddleOCRConfiguration(values)
+        let imageBytes = Data([0xff, 0xd8, 0xff]) + Data(repeating: 0x41, count: 6 * 1024 * 1024) + Data([0xff, 0xd9])
+        let image = try PreparedImage(jpeg: imageBytes, width: 4096, height: 4096)
+        let document = PreparedDocument(filename: "大 payload.pdf", pages: [
+            .init(pageNumber: 1, views: (0..<3).map {
+                .init(viewIndex: $0, viewType: $0 == 0 ? .full : .coreDetail, image: image)
+            })
+        ])
+        let requestID = "请求/\n\"id\""
+        let legacyKey = try legacyPayload(configuration, document: nil)
+        let legacyDocument = try legacyPayload(configuration, document: document)
+        let currentKey = try OCRProcessSupervisor.payload(configuration, document: nil)
+        let currentDocument = try OCRProcessSupervisor.payload(configuration, document: document)
+        XCTAssertEqual(currentKey, legacyKey)
+        XCTAssertEqual(currentDocument, legacyDocument)
+        XCTAssertEqual(try OCRProcessSupervisor.warmupEnvelope(configuration, id: requestID), try legacyEnvelope(legacyKey, type: "warmup", id: requestID))
+        XCTAssertEqual(try OCRProcessSupervisor.recognitionEnvelope(currentDocument, id: requestID), try legacyEnvelope(legacyDocument, type: "recognize", id: requestID))
+        XCTAssertEqual(try OCRProcessSupervisor.shutdownEnvelope(id: requestID), try legacyEnvelope(Data("{}".utf8), type: "shutdown", id: requestID))
+
+        // Source-level pass counts protect the memory fix: WirePayload is
+        // encoded once, the large bytes are appended once, and no JSONDecoder
+        // is allowed back into the construction section.
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/SlateSyncMedia/OCRProcessSupervisor.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let construction = try XCTUnwrap(source.range(of: "static func payload"))
+        let end = try XCTUnwrap(source.range(of: "static func requireSuccess"))
+        let section = String(source[construction.lowerBound..<end.lowerBound])
+        XCTAssertEqual(section.components(separatedBy: "encode(WirePayload").count - 1, 1)
+        XCTAssertEqual(section.components(separatedBy: "data.append(payload)").count - 1, 1)
+        XCTAssertFalse(section.contains("JSONDecoder"))
+    }
     func testSingleWarmupConfigurationSwitchAndBundleEnvironment() async throws {
         let runtime = try FakePaddleRuntime(bundle:true); defer { runtime.cleanup() }
         let supervisor = OCRProcessSupervisor(paths:runtime.paths)

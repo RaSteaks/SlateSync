@@ -78,7 +78,7 @@ public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing 
     private let source: any VisionObservationSource
     private let clock: any OCRClock
     private let bridge: VisionBridgeAdapter?
-    private var active: MediaOperation?
+    private let leases = OCRLeaseCoordinator()
     private var closed = false
     public init(configuration: VisionOCRConfiguration = .init(), source: (any VisionObservationSource)? = nil, clock: any OCRClock = SystemOCRClock(), runtimeDirectory: URL? = nil, environment: [String: String] = [:]) {
         self.configuration = configuration; self.clock = clock
@@ -97,37 +97,40 @@ public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing 
         try document.validate()
         let deadline = OCRDeadline(clock: clock, timeoutMilliseconds: configuration.timeoutMilliseconds(views: document.viewCount))
         return try await withTaskCancellationHandler {
-            while active != nil {
-                try deadline.check(clock: clock, operation: operation)
-                if closed { throw MediaFailure.closed }
-                do { try await clock.sleep(milliseconds: 5) }
-                catch is CancellationError { throw MediaFailure.canceled }
-            }
             guard !closed else { throw MediaFailure.closed }
-            try deadline.check(clock: clock, operation: operation)
-            active = operation
-            defer { active = nil }
-            if !configuration.binary.isEmpty {
-                guard let bridge else { throw SlateSyncError(code: "VISIONOCR_BINARY", message: "Vision OCR 相对路径缺少基准目录") }
-                return try await bridge.recognize(document, configuration: configuration, deadline: deadline, operation: operation, progress: progress)
+            let lease = try await leases.acquire(operation: operation, deadline: deadline, clock: clock)
+            do {
+                let result = try await performRecognition(document, operation: operation, progress: progress, deadline: deadline)
+                await leases.release(lease)
+                return result
+            } catch {
+                await leases.release(lease)
+                throw error
             }
-            var pages: [OCRPageEvidence] = [], completed = 0
-            let start = clock.nowMilliseconds()
-            for page in document.pages {
-                var views: [OCRViewEvidence] = []
-                for view in page.views {
-                    try deadline.check(clock: clock, operation: operation)
-                    let observations = try await source.observations(view.image, configuration: configuration, deadline: deadline, operation: operation)
-                    try deadline.check(clock: clock, operation: operation)
-                    views.append(VisionObservationNormalizer.normalize(observations, view: view, configuration: configuration))
-                    completed += 1
-                    progress?(.init(stage: "vision", completed: completed, total: document.viewCount))
-                }
-                pages.append(.init(pageNumber: page.pageNumber, views: views))
-            }
-            try deadline.check(clock: clock, operation: operation)
-            return .init(engine: .vision, modelVersion: "macOS-Vision", pages: pages, durationMs: Int(clock.nowMilliseconds() - start))
         } onCancel: { operation.cancel() }
+    }
+
+    private func performRecognition(_ document: PreparedDocument, operation: MediaOperation, progress: MediaProgressSink?, deadline: OCRDeadline) async throws -> OCREngineResult {
+        if !configuration.binary.isEmpty {
+            guard let bridge else { throw SlateSyncError(code: "VISIONOCR_BINARY", message: "Vision OCR 相对路径缺少基准目录") }
+            return try await bridge.recognize(document, configuration: configuration, deadline: deadline, operation: operation, progress: progress)
+        }
+        var pages: [OCRPageEvidence] = [], completed = 0
+        let start = clock.nowMilliseconds()
+        for page in document.pages {
+            var views: [OCRViewEvidence] = []
+            for view in page.views {
+                try deadline.check(clock: clock, operation: operation)
+                let observations = try await source.observations(view.image, configuration: configuration, deadline: deadline, operation: operation)
+                try deadline.check(clock: clock, operation: operation)
+                views.append(VisionObservationNormalizer.normalize(observations, view: view, configuration: configuration))
+                completed += 1
+                progress?(.init(stage: "vision", completed: completed, total: document.viewCount))
+            }
+            pages.append(.init(pageNumber: page.pageNumber, views: views))
+        }
+        try deadline.check(clock: clock, operation: operation)
+        return .init(engine: .vision, modelVersion: "macOS-Vision", pages: pages, durationMs: Int(clock.nowMilliseconds() - start))
     }
     public func recognize(images: [Data]) async throws -> [OCRPageResult] {
         // Legacy flat API retains bottom-left xywh Codable semantics through one
@@ -141,7 +144,9 @@ public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing 
         return try result.pages.map { .init(page: $0.pageNumber, blocks: try $0.views.flatMap(\.blocks).map { try $0.legacyBlock() }) }
     }
     public func close() async {
-        closed = true; active?.cancel(); await bridge?.close()
-        while active != nil { try? await Task.sleep(for: .milliseconds(5)) }
+        closed = true
+        await leases.beginClose(permanent: true)
+        await bridge?.close()
+        await leases.finishClose()
     }
 }
