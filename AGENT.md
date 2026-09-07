@@ -21,6 +21,10 @@
 - SM-09 剩余 WP-0 项：sm09-coverage.json（旧测试 family → Swift/fixture/
   history-only 映射）随 WP-1 baseline 产出；decision-required 六项在 WP-6
   删除前需 Owner 一次性确认。
+- SM-00～08 全部遗留问题已按 Owner 指令并入 SM-09 统一台账
+  `manifests/sm09-carried-issues.md`（CARRY-01～14：代码遗留 7 项、Gate/
+  治理 2 项、已裁决不修 4 项、环境观察 1 项，另附已闭合 8+2 项备查）。
+  Owner 要求台账建立后暂停修复、待指示再逐项实施。
 
 ## 2026-09-07 分支审查修复（当前有效）
 
