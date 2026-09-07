@@ -36,7 +36,21 @@ struct SlateSyncApp: App {
         // Explicit UI-test roots isolate every side effect, including secrets
         // and preferences; changing a filesystem path alone is insufficient.
         let isolated = usesDegradedRoot || ProcessInfo.processInfo.environment["SLATESYNC_TEST_ROOT"]?.isEmpty == false
-        preferences = isolated ? UserDefaults(suiteName: "SlateSync.isolated.\(locator.url.lastPathComponent)")! : .standard
+        // 隔离运行的偏好 suite。UserDefaults(suiteName:) 仅对空 suite 名返回
+        // nil，而两个备选名都是非空常量（主名由非空的隔离根目录名拼接，
+        // degraded 分支是 UUID 命名目录），nil 链实际不可达。CARRY-07：以
+        // 显式回退链替代强制解包；回退终点仍是备用隔离 suite，任何隔离
+        // 运行都不会写真实用户偏好，隔离承诺不因回退而破坏。
+        let isolatedSuiteName = "SlateSync.isolated.\(locator.url.lastPathComponent)"
+        let isolatedPreferences = UserDefaults(suiteName: isolatedSuiteName)
+            ?? UserDefaults(suiteName: "SlateSync.isolated.ephemeral")
+        if isolated {
+            // 终极回退不可达：两个非空常量 suite 名不会同时创建失败；若真
+            // 发生，宁可隔离启动显式失败，也不静默写真实 .standard 破坏
+            // 测试隔离承诺。
+            precondition(isolatedPreferences != nil, "无法创建隔离偏好 suite")
+        }
+        preferences = isolated ? (isolatedPreferences ?? .standard) : .standard
         let runtime = SlateSyncRuntime(
             locator: locator,
             environment: isolated ? [:] : ProcessInfo.processInfo.environment,

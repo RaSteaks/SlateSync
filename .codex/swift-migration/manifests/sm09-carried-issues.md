@@ -64,7 +64,11 @@
   （suiteName 为非空常量拼接，实际不可达 nil，但与 Gate 禁止不安全构造的
   精神不一致）。
 - 建议处置：显式分支去掉 `!`；隔离语义不得静默降级到 `.standard`。
-- 状态：待修复。
+- 状态：**已修复**（Owner 指定先修本项）。实现：主 suite（原名保留）→
+  `SlateSync.isolated.ephemeral` 备用 suite 的显式回退链替代 `!`；隔离
+  运行下以 `precondition` 保证终极回退显式失败——任何隔离运行都不写真实
+  用户偏好。验证：Xcode Debug 构建 + 完整 Test Plan（含隔离启动路径的
+  8 项 UI 用例）通过。
 
 ## 二、Gate/治理遗留（随对应 WP 收敛时修复）
 
