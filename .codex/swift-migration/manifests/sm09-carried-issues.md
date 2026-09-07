@@ -58,7 +58,16 @@
   上层无法区分，也影响重试提示语义。
 - 建议处置：区分映射——引擎关闭保留原错误码，仅真实取消报 canceled；
   补充对应回归。
-- 状态：待修复。
+- 状态：**已修复**。实现：`LocalOCRService.recognize` 的 terminal 归并中，
+  无真实取消标记（operation 未取消、会话代际未推进）且错误为引擎关闭
+  （`MediaFailure.isEngineClosed`，OCR_CLOSED）时保留原错误码向上传播；
+  仅真实取消（operation 取消/代际推进/CancellationError）归并 canceled，
+  与 close() 先取消后关引擎的既有链路语义一致；缓存移除在两种终态前
+  统一执行。新增 `OCRPolicyTests.
+  testEngineClosedKeepsOriginalCodeDistinctFromCancellation`（已验证对
+  修复前代码失败：旧代码抛 RECOGNITION_CANCELED），锁定"closed 保留
+  原码、取消竞态仍报 canceled"两个契约面。
+  验证：全量 swift test 231 项通过（2 项环境门控跳过）。
 
 ### CARRY-06 — OCR 等待队列忙轮询、非 FIFO（审查遗留）
 - 来源：SM-05/06 审查 P3-8。

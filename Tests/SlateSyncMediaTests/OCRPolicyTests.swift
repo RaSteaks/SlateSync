@@ -4,7 +4,7 @@ import SlateSyncDomain
 import XCTest
 
 actor PolicyEngine: LocalOCREngine {
-    enum Behavior: Sendable { case success, empty, unused, failure, cancellation, delayed }
+    enum Behavior: Sendable { case success, empty, unused, failure, cancellation, delayed, closed, closedAfterCancel }
     var behavior: Behavior
     private(set) var calls = 0
     var released = false
@@ -13,6 +13,10 @@ actor PolicyEngine: LocalOCREngine {
         calls += 1
         if behavior == .delayed { while !released { try await Task.sleep(for:.milliseconds(5)) } }
         if behavior == .failure { throw MediaFailure.protocolError }
+        // CARRY-05 回归行为：closed 模拟引擎在未被取消时报告服务关闭；
+        // closedAfterCancel 模拟关闭与取消竞态（先取消再抛关闭）。
+        if behavior == .closed { throw MediaFailure.closed }
+        if behavior == .closedAfterCancel { operation.cancel();throw MediaFailure.closed }
         if behavior == .cancellation { operation.cancel();throw MediaFailure.canceled }
         progress?(.init(stage:"late-fake",completed:1,total:1))
         return .init(engine:.vision,modelVersion:"fake",used:behavior != .unused,pages:document.pages.map { page in
@@ -48,6 +52,28 @@ actor PolicyEngine: LocalOCREngine {
         let absent = LocalOCRService(vision:nil,paddle:nil,settings:.init([.visionOCRRequired:"true"]),visionAvailable:false,paddleAvailable:false)
         do { _ = try await absent.recognize(document,session:"project",operation:.init());XCTFail() } catch { XCTAssertEqual((error as? SlateSyncError)?.code,"OCR_REQUIRED") }
         await disabled.close();await absent.close()
+    }
+    func testEngineClosedKeepsOriginalCodeDistinctFromCancellation() async throws {
+        // CARRY-05 回归：引擎关闭（OCR_CLOSED）与用户取消（RECOGNITION_CANCELED）
+        // 是两种终态——服务终止必须保留原错误码供上层区分提示/重试语义，
+        // 仅真实取消才归并为 canceled。
+        let document = try await document()
+        let closed = PolicyEngine(.closed)
+        let service = LocalOCRService(vision:closed,paddle:nil,settings:.init(),visionAvailable:true,paddleAvailable:false)
+        do {
+            _ = try await service.recognize(document,session:"closed",operation:.init())
+            XCTFail("Expected OCR_CLOSED terminal failure")
+        } catch { XCTAssertEqual((error as? SlateSyncError)?.code,"OCR_CLOSED") }
+        await service.close()
+        // 关闭与取消竞态：真实取消（operation 已取消）优先按 canceled 归并，
+        // 与 close() 先取消后关引擎的既有链路语义一致。
+        let raced = PolicyEngine(.closedAfterCancel)
+        let racedService = LocalOCRService(vision:raced,paddle:nil,settings:.init(),visionAvailable:true,paddleAvailable:false)
+        do {
+            _ = try await racedService.recognize(document,session:"raced",operation:.init())
+            XCTFail("Expected cancellation to win over engine closed")
+        } catch { XCTAssertEqual((error as? SlateSyncError)?.code,"RECOGNITION_CANCELED") }
+        await racedService.close()
     }
     func testStructuredKeysLRUEvictionAndClearGeneration() async throws {
         let document = try await document(), settings = GlobalSettingValues()

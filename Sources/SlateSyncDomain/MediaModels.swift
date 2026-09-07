@@ -121,4 +121,10 @@ public enum MediaFailure {
     public static func isTerminal(_ error: any Error) -> Bool {
         error is CancellationError || ["RECOGNITION_CANCELED", "OCR_CLOSED"].contains((error as? SlateSyncError)?.code ?? "")
     }
+    /// CARRY-05：引擎关闭（OCR_CLOSED）与用户取消是两种不同终态——前者意味着
+    /// 服务终止、不可重试，后者是用户主动停止。判定错误是否属于引擎关闭，
+    /// 供归并逻辑保留原错误码向上传播，而不是误报为 canceled。
+    public static func isEngineClosed(_ error: any Error) -> Bool {
+        (error as? SlateSyncError)?.code == closed.code
+    }
 }

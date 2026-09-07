@@ -69,6 +69,13 @@ public actor LocalOCRService {
                 // If cancellation won while the cache actor committed, remove
                 // this result before reporting the operation as canceled.
                 if cacheEnabled { await cache.remove(key, engine: engineID) }
+                // CARRY-05：真实取消（operation 被取消、会话代际推进、
+                // CancellationError/RECOGNITION_CANCELED）才归并 canceled；
+                // 引擎关闭（OCR_CLOSED，如 Paddle worker 进程消失）保留原错误码
+                // 向上传播，让上层能区分"服务终止"与"用户取消"并采用不同提示。
+                if !operation.isCanceled, generation == captured, MediaFailure.isEngineClosed(error) {
+                    throw error
+                }
                 throw MediaFailure.canceled
             }
             if selection.required { throw SlateSyncError(code: "OCR_REQUIRED", message: "必需的本地 OCR 未产生有效证据", retryable: true) }
