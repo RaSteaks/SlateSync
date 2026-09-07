@@ -14,12 +14,13 @@
   峰值；stderrTail 部分已于本轮修复。
 - 建议处置：payload/envelope 单次构造的字节等价重构（splice 或 JSONValue
   树直传），必须以现有 wire 黄金测试 + 新增等价对照测试锁定字节。
-- 状态：代码已实施，尚待提交 SHA。精确基线提交 `218b43c` 的完整 SM-09
+- 状态：**已修复**（提交 `2679db6`）。精确基线提交 `218b43c` 的完整 SM-09
   Gate 先行 PASS；随后改为 typed `WirePayload` 单次编码、recognize envelope
   单次字节拼接，warmup/control 直接编码，不再把大块 Base64 送入 JSONDecoder。
   旧实现对照覆盖中文、转义、空文档和约 18 MiB 图像数据，payload 与三种
   envelope 字节完全一致；源级 pass-count 回归锁定一次 payload encode、一次
-  append、零 decode。SlateSyncMediaTests 28 项通过（1 项专用 Paddle lane 跳过）。
+  append、零 decode。SlateSyncMediaTests 28 项通过（1 项专用 Paddle lane 跳过），
+  提交 `2679db6` 的 clean SM-09 Gate 全项 PASS、approvable=true。
 
 ### CARRY-02 — CI timeout 偏紧（审查遗留提示）
 - 来源：SM-01/02 审查 P3-10。
@@ -96,12 +97,13 @@
   实现，多等待者按唤醒顺序抢占，无先到先得保证；规模小影响有限。
 - 建议处置：改造成基于 continuation 的 FIFO 等待；并发敏感，必须在 WP-1
   baseline 之后实施并配确定性回归（排队顺序/取消不误杀）。
-- 状态：代码已实施，尚待提交 SHA。新增 actor-owned `OCRLeaseCoordinator`，
+- 状态：**已修复**（提交 `2679db6`）。新增 actor-owned `OCRLeaseCoordinator`，
   Paddle/Vision 以 continuation FIFO 获取单飞租约；`MediaOperation` 提供一次性
   取消边沿，外部取消只移除对应 waiter；deadline task、close 唤醒与 drain
   continuation 取代生产路径 5ms 轮询。确定性回归覆盖 FIFO、取消不误杀、
   permanent close 唤醒队列并等待 active release，以及生产源静态无轮询检查。
-  SlateSyncMediaTests 28 项通过（1 项专用 Paddle lane 跳过）。
+  SlateSyncMediaTests 28 项通过（1 项专用 Paddle lane 跳过），提交 `2679db6`
+  的 clean SM-09 Gate 全项 PASS、approvable=true。
 
 ### CARRY-07 — App 组合根强制解包（审查遗留）
 - 来源：SM-08 审查 P3 观察。

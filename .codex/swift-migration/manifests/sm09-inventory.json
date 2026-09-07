@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-07T14:25:11Z",
-  "commit": "218b43c71bc8d58771f70e654fe3349b8174097e",
+  "generatedAt": "2026-09-07T14:34:31Z",
+  "commit": "2679db6e4d4c0f698a73388370bb5a0c8dc6c7d6",
   "sourceType": "working-tree",
   "dirtyWorkspace": true,
   "approvable": false,
@@ -1134,8 +1134,8 @@
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 13651,
-      "sha256": "5f987c1337dcf4ff5573e92ec10bdc5ccd377c1b464e45cdb9df197a1a64217f",
+      "bytes": 13798,
+      "sha256": "08606a399d7f86502d1d9321a312bf934ac0d516315743ad39d9a8ce6efc5093",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         ".codex/swift-migration/packages/SM-09.md"
@@ -1146,9 +1146,11 @@
       "category": "migration-history",
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
-      "bytes": 3003,
-      "sha256": "1def1348daee6f28b9765818d02172f60c8285f7b97a71a8ec572cac13e794a0",
-      "referencers": []
+      "bytes": 3445,
+      "sha256": "9c3c11acc244c8813013afbee2fad5870b52e4372f7a41c3e48a159ba9bdd531",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
     },
     {
       "path": ".codex/swift-migration/manifests/sm09-coverage.json",
@@ -1156,7 +1158,7 @@
       "note": "迁移治理：packages/reviews/manifests/状态文件",
       "owner": "migration-governance",
       "bytes": 117233,
-      "sha256": "7529239d102d90cae83db47acc55ab0f653662c2b72519a83da5f64aced6b937",
+      "sha256": "f21c7c3c7a7ab2f3f9a7fdf979016dfa2f0240108925258d38330c19d59d229a",
       "referencers": [
         ".codex/swift-migration/manifests/sm09-inventory.json",
         "script/sm09_coverage.py"
@@ -1605,8 +1607,8 @@
       "category": "release-input",
       "note": "根目录项目方案（随阶段推进更新）",
       "owner": "native-release",
-      "bytes": 151313,
-      "sha256": "8eb34ef1e55a3856d2d669ddafd8b6152e0a8208be5857f3f04b36dc1d9bc661",
+      "bytes": 151488,
+      "sha256": "77b44ffc568332daa6ff2b79ab9f077e726f8ff0a9ac0b6653157be0191d4f84",
       "referencers": [
         ".codex/refactor/DECISION_QUEUE.md",
         ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",

@@ -1,15 +1,24 @@
 {
   "schemaVersion": 1,
-  "status": "WP-1C_IMPLEMENTED; FINAL_REFRESH_AND_LATER_WP_EVIDENCE_PENDING",
+  "status": "WP-1C_PASS; FINAL_REFRESH_AND_LATER_WP_EVIDENCE_PENDING",
   "baselineCommit": "218b43c71bc8d58771f70e654fe3349b8174097e",
   "diagnosticGate": {
     "result": "PASS",
     "approvable": false,
     "directory": ".codex/gate-results/SM-09/20260907T141615Z-218b43c71bc8"
   },
+  "cleanWP1CGate": {
+    "result": "PASS",
+    "approvable": true,
+    "commit": "2679db6e4d4c0f698a73388370bb5a0c8dc6c7d6",
+    "directory": ".codex/gate-results/SM-09/20260907T142544Z-2679db6e4d4c",
+    "resultSha256": "923c4b79ad71a64d7772e2571c1a28e2cd116ad2b68e29759ccc0caa85e2da31",
+    "checksSha256": "9c1eee03a33c205b4b1b92acac8295ad98eb0314a14f08d59371ea9e9ef40b34"
+  },
   "closures": {
     "CARRY-01": {
-      "status": "IMPLEMENTED_PENDING_COMMIT_SHA",
+      "status": "PASS",
+      "commit": "2679db6e4d4c0f698a73388370bb5a0c8dc6c7d6",
       "tests": [
         "PaddleProcessTests.testWireConstructionIsByteExactWithoutLargePayloadReparse",
         "swift test"
@@ -25,7 +34,8 @@
     "CARRY-04": {"status": "PASS", "commit": "218b43c71bc8d58771f70e654fe3349b8174097e", "result": "Fresh Library default project and protection contract passed"},
     "CARRY-05": {"status": "PASS", "commit": "ede09a6", "result": "OCR_CLOSED remains distinct from cancellation; full Swift suite passed"},
     "CARRY-06": {
-      "status": "IMPLEMENTED_PENDING_COMMIT_SHA",
+      "status": "PASS",
+      "commit": "2679db6e4d4c0f698a73388370bb5a0c8dc6c7d6",
       "tests": [
         "OCRLeaseCoordinatorTests.testFIFOAndCancelingOneWaiterDoesNotAffectAnotherLease",
         "OCRLeaseCoordinatorTests.testCloseWakesQueueAndDrainsActiveLeaseWithoutPolling",

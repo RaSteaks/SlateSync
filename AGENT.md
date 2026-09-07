@@ -22,9 +22,12 @@
   recognize envelope 单次拼接，约 18 MiB 图像数据的旧/新字节完全一致；
   Paddle/Vision 改用 actor-owned continuation FIFO，单 waiter 取消、deadline、
   close 唤醒和 active drain 均无生产忙轮询。媒体定向 28 项通过（1 项专用
-  离线 Paddle lane 跳过）。完整 dirty diagnostic Gate 全项 PASS，证据目录为
+  离线 Paddle lane 跳过）。实现提交为 `2679db6`；其 clean SM-09 Gate 全项
+  PASS、approvable=true，证据目录为
+  `.codex/gate-results/SM-09/20260907T142544Z-2679db6e4d4c`。此前完整 dirty
+  diagnostic Gate 也全项 PASS，证据目录为
   `.codex/gate-results/SM-09/20260907T141615Z-218b43c71bc8`；按设计退出 3、
-  approvable=false。代码仍待提交，legacy 源未删除。
+  approvable=false。CARRY-01/06 已闭合；legacy 源未删除。
 - CURRENT_STATE 继续保持 SM-08 COMPLETE；未 push/tag/release，未触碰用户
   Library、Keychain 或安装目录。
 
