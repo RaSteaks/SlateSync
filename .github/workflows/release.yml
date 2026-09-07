@@ -12,7 +12,10 @@ jobs:
   build:
     name: Build macOS ${{ matrix.arch }}
     runs-on: macos-14
-    timeout-minutes: 30
+    # 与 ci.yml 同理：job 内嵌完整 Gate（~15-20 分钟本地实测）加打包与
+    # artifact 上传，30 分钟余量不足（CARRY-02）；WP-5 重写 release lane
+    # 为单次 Universal 构建后按实测定值。
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

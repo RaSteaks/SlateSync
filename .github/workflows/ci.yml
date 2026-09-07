@@ -11,7 +11,11 @@ permissions:
 jobs:
   test:
     runs-on: macos-14
-    timeout-minutes: 15
+    # 完整 Gate 含 swift build/test（228 项，含规模与性能车道）、Xcode Debug
+    # 构建 + Test Plan（8 项 UI）、Release 构建与 Universal Archive，以及
+    # npm 兼容矩阵；本地实测 15-20 分钟，GitHub 托管 runner 更慢，15 分钟
+    # 必然超时（CARRY-02）。WP-4 切换 native-only 步骤后按实测定值。
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

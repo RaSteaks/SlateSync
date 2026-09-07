@@ -28,7 +28,10 @@
   回退链替代 `UserDefaults(suiteName:)!`，隔离运行永不写真实 `.standard`；
   CARRY-03（createProject 孤儿目录）已完成——修复时核实 SM-04 已加补偿，
   本轮补上精确性守卫（预存在目录不再被无差别删除）与两个失败注入回归，
-  SlateSyncPersistenceTests 62/62；其余项仍按台账暂停，待指示逐项实施。
+  SlateSyncPersistenceTests 62/62；CARRY-02（CI timeout）已完成——
+  ci.yml 15→60、release.yml 30→60（完整 Gate 本地实测 15-20 分钟，托管
+  runner 更慢），WP-4/WP-5 重写时再按 native-only 步骤核定；其余项仍按
+  台账暂停，待指示逐项实施。
 
 ## 2026-09-07 分支审查修复（当前有效）
 

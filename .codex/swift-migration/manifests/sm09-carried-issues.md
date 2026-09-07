@@ -19,10 +19,13 @@
 ### CARRY-02 — CI timeout 偏紧（审查遗留提示）
 - 来源：SM-01/02 审查 P3-10。
 - 描述：`ci.yml` `timeout-minutes: 15`，而完整 Gate（swift build/test +
-  Xcode Debug + UI Test plan + Release/Archive + npm 全家桶）在 macos-14
-  runner 上很可能超时；CI 解析器修复后该风险变为现实。
-- 建议处置：WP-4 重写 CI 为 native-only 步骤时按实测定值；过渡期可临时放宽。
-- 状态：待修复（WP-4）。
+  Xcode Debug + UI Test plan + Release/Archive + npm 全家桶）本地实测
+  15-20 分钟，GitHub 托管 runner 更慢；CI 解析器修复后该风险变为现实。
+- 建议处置：WP-4 重写 CI 为 native-only 步骤时按实测定值。
+- 状态：**已修复**（Owner 指定本项）。`ci.yml` test job 15→60、
+  `release.yml` build job 30→60，均附实测依据注释；WP-4/WP-5 重写对应
+  workflow 时按 native-only 步骤重新核定。验证：YAML 语法通过，
+  sm02 平台契约（断言 workflows 调用共享 Gate 且未硬编码阶段）通过。
 
 ### CARRY-03 — createProject 孤儿目录（审查遗留）
 - 来源：SM-01/02 审查 P3-9。
