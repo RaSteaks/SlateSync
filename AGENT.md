@@ -21,6 +21,12 @@
   `SHA256SUMS`、JSON manifest 和中英 release notes。fake tool 自测覆盖单架构、
   错误资源、symlink、签名/hardened runtime 失败、mount/DMG 失败、并发输出、
   partial cleanup，共 16/16 通过。
+- 默认 Gate 结果目录可能位于仓库内的忽略目录，而 release packager 必须拒绝任何
+  仓库内输出。`phase_gate.sh` 因此先在系统临时目录完成 ZIP/DMG 构建、挂载与
+  lineage 回验，成功后才把审计过的候选包复制到本次唯一 Gate evidence 目录；CI
+  仍可上传 evidence，packager 的仓库边界保持不变。SM-09 有意修改过的 Vision/Paddle
+  compatibility sources 已同步到 SM-06/08 冻结清单；全量 manifest hash scan、
+  Gate helper 106/106、SM-06/08 负例与 release pipeline 16/16 均通过。
 - 本机真实 Xcode 26.3 archive 已生成并验证为 arm64+x86_64、macOS 15.0、
   `flags=adhoc,runtime`、空 entitlements，依赖仅为系统 framework/dylib；同一 app
   的真实 ZIP（约 7.0 MiB）与 DMG（约 8.4 MiB）均通过解压/只读挂载、签名、

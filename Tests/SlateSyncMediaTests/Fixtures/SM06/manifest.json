@@ -34,8 +34,8 @@
     },
     {
       "path": "scripts/vision_ocr.swift",
-      "bytes": 11473,
-      "sha256": "7e65a0b4c9a86fa1eba0264ff6ea12ad4737c801e6721ad58cd9118f15063296"
+      "bytes": 11482,
+      "sha256": "4c7d06d96b90bd0385f4caca68eedf94c55c4805aad9a4eaf266f21bec419e3e"
     },
     {
       "path": "lib/ocr/vision.mjs",
@@ -44,8 +44,8 @@
     },
     {
       "path": "lib/ocr/paddleocr.mjs",
-      "bytes": 51115,
-      "sha256": "e22b30ee3ec9a95c36f7d0767e190b2af401a9c5cd7466a87ee80ec69f29b7b9"
+      "bytes": 51111,
+      "sha256": "d6f1dda740a107c9555a95278c67a320b87d3a22ff4398d7268eca0e570ebe77"
     },
     {
       "path": "SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py",
@@ -64,8 +64,8 @@
     },
     {
       "path": "lib/ocr/runtime-paths.mjs",
-      "bytes": 1736,
-      "sha256": "9561a49a8cb1802843d89ddb217c1507ad37c97535d0683bad7ae6331cd59d14"
+      "bytes": 2178,
+      "sha256": "66e3386a9f45ba241761ca4284903c13b61a07cfc0912390d45ea5b75a889ab3"
     },
     {
       "path": "lib/ocr/child-environment.mjs",

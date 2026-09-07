@@ -55,7 +55,7 @@
     },
     {
       "path": "electron/paddleocr-installer.mjs",
-      "sha256": "4734f766578c428bbc495296bc9d9d44b838df7dbd6c223d26267af2efcfb33a"
+      "sha256": "62166db3ec9276c4190fa050eaeb789213378cb1da1388e1f35d0f51526d3876"
     },
     {
       "path": "SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt",

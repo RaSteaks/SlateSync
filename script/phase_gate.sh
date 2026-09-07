@@ -359,6 +359,24 @@ sm01_archive_artifact_check() {
   [[ "$signing_details" == *"Signature=adhoc"* ]]
 }
 
+sm09_package_artifacts_check() {
+  local package_root package_output status=0
+  package_root="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-gate-package.XXXXXX")" || return 1
+  package_output="${package_root}/artifacts"
+
+  # The release packager deliberately rejects repository-local output. Build
+  # and verify outside the checkout, then retain only the audited evidence in
+  # this unique, ignored Gate result directory for CI upload and review.
+  ./script/package_release.sh \
+    "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" \
+    "$package_output" 1.0.0 1 || status=$?
+  if (( status == 0 )); then
+    /usr/bin/ditto "$package_output" "${result_dir}/artifacts" || status=$?
+  fi
+  rm -rf "$package_root"
+  return "$status"
+}
+
 phase_specific_gate_missing() {
   print -u2 -r -- "phase-specific Gate is not implemented for ${phase}; add it only when that phase begins"
   return 1
@@ -710,9 +728,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
       ./script/verify_bundle.sh \
         "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.0.0 1 adhoc
     run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
-      ./script/package_release.sh \
-        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" \
-        "${result_dir}/artifacts" 1.0.0 1
+      sm09_package_artifacts_check
   fi
 fi
 
