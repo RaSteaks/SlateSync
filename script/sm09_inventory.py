@@ -21,10 +21,6 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 OUTPUT = REPO / ".codex/swift-migration/manifests/sm09-inventory.json"
 
-# legacy-remove / fixture-migrate / decision-required 三类需要引用图：
-# rg 命中只是候选，删除前必须确认动态路径/资源查找（WP-0 第 2 条）。
-NEEDS_REFERENCERS = {"legacy-remove", "fixture-migrate", "decision-required"}
-
 # (前缀或文件名精确匹配, 分类, 备注)。规则按顺序首次命中。
 RULES = [
     (".codex/refactor/", "migration-history", "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）"),
@@ -43,6 +39,8 @@ RULES = [
     ("script/lib/", "release-input", "Gate 共享函数库"),
     ("script/build_and_run.sh", "release-input", "原生 build/run/debug/verify 开发入口"),
     ("script/tests/phase_gate_tests.zsh", "release-input", "Gate 自测（zsh，native 工具集）"),
+    ("script/sm09_inventory.py", "release-input", "SM-09 原生清单与引用审计工具"),
+    ("script/tests/sm09_inventory_tests.py", "native-test", "清单故障与完整引用回归"),
     ("script/tests/", "legacy-remove", "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除"),
     ("scripts/paddleocr_runner.py", "fixture-migrate", "WP-2 迁入 SlateSyncApp/Resources/PaddleOCR/ 唯一 canonical 位置"),
     ("requirements-ocr.txt", "fixture-migrate", "WP-2 与 runner 一起迁入 App Resources；不捆绑 venv/cache/模型"),
@@ -106,13 +104,43 @@ def referencers_of(path: str, tracked: set[str]) -> list[str]:
     # 在 tracked 文本中搜索该路径字符串，给出删除前引用图候选。
     # -I 跳过二进制；自身排除；动态拼接路径仍需人工确认（见 note）。
     result = subprocess.run(
-        ["git", "grep", "-l", "-I", "-F", path, "--", "."],
+        ["git", "grep", "-z", "-l", "-I", "-F", "-e", path, "--", "."],
         cwd=REPO, capture_output=True, text=True,
     )
-    if result.returncode != 0:
-        return []
-    hits = [line for line in result.stdout.splitlines() if line and line != path]
-    return [hit for hit in hits if hit in tracked][:12]
+    # Exit 1 means no references; every other failure invalidates the audit.
+    # NUL delimiters preserve Unicode/newline paths without Git quote escaping.
+    if result.returncode not in (0, 1):
+        raise RuntimeError(f"reference scan failed for {path}: exit {result.returncode}")
+    hits = result.stdout.split("\0")
+    return sorted({hit for hit in hits if hit != path and hit in tracked})
+
+
+def audit_entry(relative: str, tracked: set[str]) -> dict:
+    category, note = classify(relative)
+    absolute = REPO / relative
+    entry = {
+        "path": relative,
+        "category": category,
+        "note": note,
+        "owner": {
+            "native-product": "native-product",
+            "native-test": "native-validation",
+            "release-input": "native-release",
+            "migration-history": "migration-governance",
+            "legacy-remove": "WP-6-coverage-review",
+            "fixture-migrate": "WP-2-resource-migration",
+            "decision-required": "Owner-decision-pending",
+        }[category],
+    }
+    # A manifest cannot contain its own final hash. Explicitly exclude that
+    # digest instead of silently recording the previous generation's bytes.
+    if absolute == OUTPUT:
+        entry["hashDisposition"] = "self-excluded; hash externally when sealing evidence"
+    else:
+        entry.update(bytes=absolute.stat().st_size, sha256=sha256_of(absolute))
+    # Native/release resources also need incoming references, not just removals.
+    entry["referencers"] = referencers_of(relative, tracked)
+    return entry
 
 
 def main() -> int:
@@ -122,24 +150,24 @@ def main() -> int:
     inventory = []
     counts: dict[str, int] = {}
     for relative in sorted(files):
-        category, note = classify(relative)
-        absolute = REPO / relative
-        entry = {
-            "path": relative,
-            "bytes": absolute.stat().st_size,
-            "sha256": sha256_of(absolute),
-            "category": category,
-            "note": note,
-        }
-        if category in NEEDS_REFERENCERS:
-            entry["referencers"] = referencers_of(relative, tracked_set)
+        entry = audit_entry(relative, tracked_set)
         inventory.append(entry)
+        category = entry["category"]
         counts[category] = counts.get(category, 0) + 1
 
+    workspace_status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=normal"],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    ).stdout
+
     document = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "commit": commit,
+        "sourceType": "working-tree",
+        "dirtyWorkspace": bool(workspace_status),
+        "approvable": False,
+        "referenceScope": "tracked literal path references; dynamic references require manual review",
         "categories": ["native-product", "native-test", "release-input", "migration-history", "fixture-migrate", "legacy-remove", "decision-required"],
         "summary": {"total": len(inventory), **counts},
         "files": inventory,

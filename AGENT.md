@@ -1,10 +1,28 @@
 # SlateSync 当前项目方案
 
+## 2026-09-07 SM-09 Gate 与 WP-0 审计加固（未提交）
+
+- 本轮阅读 SM-09 与当前方案后，保留既有工作树修复；当前尚无已封存的
+  WP-1 baseline，遵守其硬前置，未开始 CARRY-01/06、资源迁移或 legacy 删除。
+- CARRY-08 代码已实施：日志分类五处 rg 扫描均检查退出码；2+ 输出诊断并
+  返回 FAIL。移除 quiet 提前退出，避免匹配后输入故障被隐藏；既有真实断言、
+  FAIL marker、BLOCKED_ENV marker 与环境分类优先级保持不变。
+- Gate 自测 106/106：新增逐扫描位置注入 2/127 与缺失日志的 11 项回归。
+  `node script/tests/sm02_platform_contract.mjs`、zsh 语法检查通过。
+- WP-0 清单生成器保留全部引用者，使用 NUL 分隔支持中文/换行文件名，
+  git grep 故障不再吞成空引用；所有分类含 owner 与引用图。schema v2 明示
+  working-tree、dirtyWorkspace、approvable=false；自身摘要明确排除，封存时
+  外部 hash，避免记录上一版清单摘要。5 项 Python 回归全部通过。
+- 清单仅为工作树审计快照，仍需完整 coverage、动态引用人工核查、WP-1
+  全矩阵与精确 SHA 封存；CARRY-08 尚待提交 SHA 和最终 Gate 才能正式闭合。
+  CURRENT_STATE 继续保持 SM-08 COMPLETE；本轮未 commit/push/tag/release。
+
 ## 2026-09-07 SM-09 开工（当前有效）
 
-- Owner 已授权进入 SM-09（cutover and release）。准入条件核对通过：SM-08
+- Owner 已授权进入 SM-09（cutover and release）。授权时准入条件核对通过：SM-08
   COMPLETE、状态与 review 指向同一已批准 commit 链、原生 App 覆盖全部
-  表面、旧兼容源完整、工作树干净。
+  表面、旧兼容源完整；当前施工工作树因 carry/Gate 修复和本计划更新已变脏，正式
+  Gate 前必须重新形成精确 SHA 的 clean commit。
 - CI/Gate 解析器升级为"工作阶段"语义：上一阶段 COMPLETE 且下一阶段已开工
   （有施工包、尚无 review）时，CI 跑下一阶段 Gate 的预准入模式
   （`gate_validate_phase_state` 接受 {N-1, N}，approval_freshness 只在
@@ -30,8 +48,25 @@
   本轮补上精确性守卫（预存在目录不再被无差别删除）与两个失败注入回归，
   SlateSyncPersistenceTests 62/62；CARRY-02（CI timeout）已完成——
   ci.yml 15→60、release.yml 30→60（完整 Gate 本地实测 15-20 分钟，托管
-  runner 更慢），WP-4/WP-5 重写时再按 native-only 步骤核定；其余项仍按
-  台账暂停，待指示逐项实施。
+  runner 更慢），WP-4/WP-5 重写时再按 native-only 步骤核定；CARRY-04
+  （defaultProjectID 悬空契约）已完成——修复时核实自 SM-04 起 bootstrap
+  即对每个 Library 幂等播种 default 行（与旧版 Electron 语义逐字一致），
+  原审查描述在 HEAD 不成立，无需行为变更；本轮以注释固化不变量并新增
+  全新 Library 的 default 契约回归（存在+canArchive+归档/删除保护），
+  SlateSyncPersistenceTests 63/63；CARRY-09（阶段状态断言时序刚性）已按
+  Owner 治理决策修复——引入 `lifecycleState: "PASS"` 合法中间态：批准窗口
+  内"状态阶段 == 请求阶段"的 Gate 重跑被接受，预准入仍严格要求 COMPLETE；
+  `approval_freshness` 门控改 JSON 精确判断（PASS 窗口记 NOT_APPLICABLE），
+  ci/release 解析在 PASS 窗口跑状态阶段自身 Gate（不硬编码 SM-XX），
+  PHASE_GATES.md 固化语义；Gate 自测 95/95（新增 8 项正负例）；其余项仍按
+  台账保留为未闭合状态，待对应施工包实施。
+- 已将 CARRY-01～14 逐项插入 `.codex/swift-migration/packages/SM-09.md`：WP-1
+  baseline 后新增强制 WP-1C，集中处理 CARRY-01 wire payload、CARRY-06 FIFO
+  continuation，并复验 CARRY-03/04/05；CARRY-02 随 WP-4/WP-5 重新测定 timeout，
+  CARRY-07 随 WP-2 复验，CARRY-08 在 WP-9 final Gate 收敛，CARRY-09 回填治理提交
+  SHA，CARRY-10～14 分别进入兼容矩阵、历史 allowlist、coverage 和 UI 运行条件证据。
+  计划同时要求 `sm09-carry-closure.json` 和台账精确 SHA；本次仅更新施工计划，未把
+  CARRY-01/06/08/14 标为已解决，也未修改产品代码。
 
 ## 2026-09-07 分支审查修复（当前有效）
 

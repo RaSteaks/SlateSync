@@ -33,6 +33,45 @@ final class ProjectLibraryStoreTests: XCTestCase {
         try await library.close()
     }
 
+    func testFreshLibraryDefaultProjectContractIsNotDangling() async throws {
+        // CARRY-04：default 行不得只存在于迁移路径——全新 Library（从未调用
+        // migrateLegacyData）bootstrap 后该行必须存在，canArchive/归档/删除
+        // 保护据此成立且拒绝后状态不变。
+        let container = try PersistenceTestSupport.temporaryRoot("library-fresh-default-contract")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let libraryRoot = container.appending(path: "Fresh.slatesync-library", directoryHint: .isDirectory)
+        let library = try ProjectLibraryStore(libraryRoot: libraryRoot)
+        _ = try await library.libraryInfo()
+
+        let defaultProject = try await library.getProject(ProjectLibraryStore.defaultProjectID)
+        XCTAssertFalse(defaultProject.canArchive)
+        XCTAssertNil(defaultProject.archivedAt)
+
+        do {
+            _ = try await library.archiveProject(ProjectLibraryStore.defaultProjectID)
+            XCTFail("归档默认项目必须被拒绝")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "PROJECT_DEFAULT_PROTECTED")
+        }
+        do {
+            _ = try await library.deleteProject(ProjectLibraryStore.defaultProjectID)
+            XCTFail("删除默认项目必须被拒绝")
+        } catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "PROJECT_DEFAULT_PROTECTED")
+        }
+
+        // 两次拒绝后行仍在、未归档、无删除墓碑目录残留。
+        let survived = try await library.getProject(ProjectLibraryStore.defaultProjectID)
+        XCTAssertFalse(survived.canArchive)
+        XCTAssertNil(survived.archivedAt)
+        let projectsRoot = libraryRoot.appending(path: "Projects", directoryHint: .isDirectory)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: projectsRoot.path),
+            [ProjectLibraryStore.defaultProjectID]
+        )
+        try await library.close()
+    }
+
     /// 仅对新建项目目录（Projects/ 下且非 bootstrap 播种的 project-default）
     /// 抛错的写入器：让 bootstrap/manifest 写入照常成功，只命中
     /// createProjectWithID 的 meta/manifest 写入，精确触发其补偿路径

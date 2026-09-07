@@ -35,6 +35,8 @@ jobs:
       # approval_freshness 只在 Gate 阶段 == 状态阶段时生效。因此实施期的
       # 新提交不再击穿上一阶段的批准检查，而批准后仅治理元数据漂移仍会被
       # 上一阶段 Gate 拦截；两条路径都不硬编码 SM-XX。
+      # 另接受 PASS 合法中间态（Gate PASS 后、Owner 批准前，CARRY-09）：
+      # 批准窗口内 CI 跑状态阶段自身的 Gate 重跑，不被预准入分支抢走。
       - name: Resolve the active migration phase
         id: phase
         run: |
@@ -47,7 +49,15 @@ jobs:
           work = f"SM-{number + 1:02d}"
           packages = ".codex/swift-migration/packages"
           reviews = ".codex/swift-migration/reviews"
-          if os.path.exists(f"{packages}/{work}.md") and not os.path.exists(f"{reviews}/{work}.md"):
+          # lifecycleState=PASS 是"Gate PASS 后、Owner 批准前"的合法中间态：
+          # 批准窗口内 CI 继续跑状态阶段自身的 Gate（与 gate_validate_phase_state
+          # 接受本阶段 PASS 的语义对应）；下一阶段预准入仍要求上一阶段 COMPLETE。
+          approval_pending = state.get("lifecycleState") == "PASS"
+          if (
+              not approval_pending
+              and os.path.exists(f"{packages}/{work}.md")
+              and not os.path.exists(f"{reviews}/{work}.md")
+          ):
               phase = work
           print(f"phase={phase}")
           PY

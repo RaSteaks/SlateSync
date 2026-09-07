@@ -49,7 +49,23 @@
   中不存在对应行。
 - 建议处置：核实迁移语义后二选一——文档注释澄清"仅迁移路径产生该行"，或
   在 bootstrap 时保证播种。禁止运行时静默造行。
-- 状态：待修复（含核实）。
+- 状态：**已修复**。描述修正（修复时核实）：原审查描述在 HEAD 不成立——
+  自 SM-04（b23a83e）引入 `ProjectLibraryStore` 起，
+  `performBootstrap()` 即无条件调用 `ensureDefaultProject()`，对**每个**
+  Library（全新或迁移而来）幂等播种 default 行，与旧版 Electron
+  `initializeLibrary`（`lib/project-library.mjs:499`）语义逐字一致；
+  `testConcurrentFirstUseSharesOneBootstrapAndDefaultProject` 早已锁定
+  全新 Library 列表恰为 [defaultProjectID]。故处置二选一中的
+  "bootstrap 保证播种"已是实现与测试既定事实，无需行为变更；"禁止运行时
+  静默造行"亦已满足（造行仅存在于 bootstrap 单飞任务与迁移路径内）。
+  本轮修复真正补上的缺口：①契约完全隐式——在 `defaultProjectID` 声明、
+  bootstrap 播种点、`ensureDefaultProject`、`migrateLegacyData` 幂等空读处
+  与 canArchive 判定点补注释固化不变量；②原生测试从未覆盖 default 项目的
+  归档/删除保护——新增
+  `ProjectLibraryStoreTests.testFreshLibraryDefaultProjectContractIsNotDangling`
+  （全新 Library：行存在、canArchive=false、归档/删除均抛
+  PROJECT_DEFAULT_PROTECTED、拒绝后行未归档且 Projects/ 无墓碑残留）。
+  验证：SlateSyncPersistenceTests 63/63 通过。
 
 ### CARRY-05 — OCR 关闭/取消错误不可区分（审查遗留）
 - 来源：SM-05/06 审查 P3-7。
@@ -97,7 +113,10 @@
   退出码防护；rg 故障会被当"无匹配"，最终方向仍收敛 FAIL（不会放行真实
   失败），但可能把 BLOCKED_ENV 场景误报为 FAIL（更严不是更松）。
 - 建议处置：WP-9 final Gate 收敛时并入 `assert_scan_healthy` 模式。
-- 状态：待修复（WP-9）。
+- 状态：代码已实施，尚未正式闭合（未提交）。五处分类扫描均接入
+  `assert_scan_healthy`；rg 2+ 输出诊断并返回 FAIL，移除 quiet 提前退出，
+  保持既有分类优先级。Gate 自测 106/106（新增逐扫描 2/127 故障注入及
+  缺失日志共 11 项）。仍待精确提交 SHA 和最终 Gate evidence。
 
 ### CARRY-09 — 阶段状态断言的时序刚性
 - 来源：SM-01/02 审查 P2-4。
@@ -105,7 +124,22 @@
   "Gate PASS → Owner 批准"的中间态无法通过任何 Gate 重跑；这是 SM-02
   无效准入作废风波的深层原因之一，治理流程被迫把两步压缩进单一提交。
 - 建议处置：WP-9 final Gate/治理语义统一时裁决是否引入合法中间态。
-- 状态：待修复（WP-9，需 Owner 治理决策）。
+- 状态：**已修复**（Owner 2026-09-07 治理决策：引入合法中间态）。实现：
+  ① `gate_validate_phase_state` 接受 `lifecycleState: "PASS"`，但仅限
+  "状态阶段 == 请求阶段"的批准窗口 Gate 重跑；预准入（状态阶段 =
+  请求阶段 − 1）仍严格要求 COMPLETE，下一阶段开工前置不放松。
+  ② `approval_freshness` 门控由 rg 子串匹配改为新增
+  `gate_state_is_complete` 的 JSON 精确判断：PASS 窗口内批准检查按
+  NOT_APPLICABLE 记录，COMPLETE 状态才执行 `gate_validate_approval_state`。
+  ③ ci.yml / release.yml 阶段解析在 PASS 窗口指向状态阶段自身的 Gate，
+  不进入下一阶段预准入；两条路径均不硬编码 SM-XX（sm02 平台契约通过）。
+  ④ `PHASE_GATES.md` 生命周期章节固化中间态语义与批准窗口行为。
+  验证：Gate 自测 95/95（新增 8 项正负例：PASS 同阶段重跑、PASS 预准入
+  拒绝、PASS 包指针校验、上一阶段 PASS 不得预准入、approval 门控
+  COMPLETE 触发 / PASS 跳过 / 跨阶段跳过 / 缺文件 fail-closed）；
+  sm05 技术合同通过；workflow YAML 语法通过；本地模拟确认
+  COMPLETE→SM-09 预准入、PASS→SM-08 自身 Gate 的 CI 路由。
+  提交 SHA 待提交后回填。
 
 ## 三、已裁决不修 / 历史封存（无 HEAD 动作）
 

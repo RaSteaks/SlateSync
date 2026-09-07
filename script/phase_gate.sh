@@ -680,16 +680,17 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_archive_artifact_check
 fi
 
-if rg -q '"phase"[[:space:]]*:[[:space:]]*"'"${phase}"'"' \
-  .codex/swift-migration/CURRENT_STATE.json && \
-  rg -q '"lifecycleState"[[:space:]]*:[[:space:]]*"COMPLETE"' \
-  .codex/swift-migration/CURRENT_STATE.json; then
+# 批准检查仅在"状态阶段 == 本阶段且 lifecycleState == COMPLETE"时生效；
+# PASS 合法中间态（Gate PASS 后、Owner 批准前）窗口内按 NOT_APPLICABLE
+# 记录，门控用 JSON 精确判断而非子串匹配（见 lib 中 gate_state_is_complete）。
+if gate_state_is_complete \
+  .codex/swift-migration/CURRENT_STATE.json "$phase"; then
   run_check approval_freshness true "COMPLETE 状态包含匹配当前提交的 Owner 批准" \
     gate_validate_approval_state \
     .codex/swift-migration/CURRENT_STATE.json "$review_commit" "$project_root" "$phase"
 else
   record_check approval_freshness true NOT_APPLICABLE \
-    "Owner 批准在 Gate PASS 后执行；当前状态尚非 COMPLETE" ""
+    "Owner 批准在 Gate PASS 后执行；当前状态尚非 COMPLETE（PASS 中间态窗口内不执行批准检查）" ""
 fi
 
 overall_result="PASS"

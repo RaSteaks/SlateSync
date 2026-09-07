@@ -15,6 +15,14 @@ and editing `CURRENT_STATE.json` does not manufacture evidence.
 - `COMPLETE` requires `PASS`, an evidence report, and Repository Owner approval.
 - The next phase may become `IN_PROGRESS` only after the current phase is
   `COMPLETE`.
+- `PASS` is a legal recorded intermediate state (CARRY-09 governance
+  decision, 2026-09-07): recording approval necessarily creates a new commit,
+  so `CURRENT_STATE.json` may report `lifecycleState: PASS` for the reviewed
+  phase while Owner approval is pending. During that window a Gate rerun for
+  the same phase stays valid and `approval_freshness` is `NOT_APPLICABLE`
+  until approval is recorded; CI resolves the Gate to the state phase itself.
+  Pre-admission of the next phase (state phase = requested phase − 1) still
+  requires `COMPLETE` and never accepts `PASS`.
 
 Rewriting history or adding product/source changes after review makes approval
 stale. Because recording tracked approval metadata necessarily creates a new

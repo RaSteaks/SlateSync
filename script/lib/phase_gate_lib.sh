@@ -51,12 +51,22 @@ gate_valid_phase() {
 gate_classify_failure() {
   local log_path="$1"
   local exit_status="$2"
+  local scan_status
+
+  # Do not use rg -q: an early match can hide a later input error. Every
+  # completed scan must be healthy before a marker can classify the failure.
 
   # Real assertions, crashes, and failed tests outrank every marker. A runner
   # can emit environment text after an application has already failed.
-  if rg -qi \
+  scan_status=0
+  rg -i \
     'XCTAssert[A-Za-z0-9_]*[[:space:]]+failed|assertion[[:space:]]+(failed|failure)|failedTests[[:space:]]*=[[:space:]]*[1-9]|Test Case .+ failed|application code (crashed|failed)|uncaught exception|fatal error|EXC_CRASH|signal[[:space:]]+[0-9]+' \
-    "$log_path"; then
+    "$log_path" >/dev/null || scan_status=$?
+  if ! assert_scan_healthy "failure classification" "$scan_status"; then
+    print -r -- "FAIL"
+    return 0
+  fi
+  if (( scan_status == 0 )); then
     print -r -- "FAIL"
     return 0
   fi
@@ -64,11 +74,23 @@ gate_classify_failure() {
   # xcode_test_plan_check emits an explicit result marker after inspecting the
   # xcresult. It must outrank textual environment hints so a real assertion
   # failure cannot be hidden by an incidental Testing.framework line.
-  if rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=FAIL' "$log_path"; then
+  scan_status=0
+  rg 'SLATESYNC_XCODE_TEST_CLASSIFICATION=FAIL' "$log_path" >/dev/null || scan_status=$?
+  if ! assert_scan_healthy "failure classification" "$scan_status"; then
     print -r -- "FAIL"
     return 0
   fi
-  if rg -q 'SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV' "$log_path"; then
+  if (( scan_status == 0 )); then
+    print -r -- "FAIL"
+    return 0
+  fi
+  scan_status=0
+  rg 'SLATESYNC_XCODE_TEST_CLASSIFICATION=BLOCKED_ENV' "$log_path" >/dev/null || scan_status=$?
+  if ! assert_scan_healthy "failure classification" "$scan_status"; then
+    print -r -- "FAIL"
+    return 0
+  fi
+  if (( scan_status == 0 )); then
     print -r -- "BLOCKED_ENV"
     return 0
   fi
@@ -76,7 +98,13 @@ gate_classify_failure() {
   # Xcode emits "** TEST FAILED **" even if its UI runner never initialized.
   # Only the parsed xcresult can disambiguate that banner. Without a summary
   # marker, generic failure text still fails closed before environment hints.
-  if rg -qi 'test(s)?[[:space:]]+(failed|failure)' "$log_path"; then
+  scan_status=0
+  rg -i 'test(s)?[[:space:]]+(failed|failure)' "$log_path" >/dev/null || scan_status=$?
+  if ! assert_scan_healthy "failure classification" "$scan_status"; then
+    print -r -- "FAIL"
+    return 0
+  fi
+  if (( scan_status == 0 )); then
     print -r -- "FAIL"
     return 0
   fi
@@ -89,9 +117,15 @@ gate_classify_failure() {
   # Xcode may fail while copying its signed Testing.framework or cancel the
   # UI runner before assertions execute; both are environment blocks, not code
   # regressions, and must remain visible as BLOCKED_ENV in Gate artifacts.
-  if rg -qi \
+  scan_status=0
+  rg -i \
     'operation not permitted|permission denied|not accessible or not writable|missing required tool|xcode license|unable to load standard library|cannot open file .+ for diagnostics emission|no graphical login session|not authorized to send apple events|requires a development team|no signing certificate|core simulator service connection became invalid|testing was (canceled|cancelled)|sandbox_apply|sandbox-exec|the following command failed with exit code 0|((copy|copying|copied|install|sign|codesign).{0,120}Testing[.]framework.{0,120}(fail|error|unable))|((fail|error|unable).{0,120}(copy|copying|copied|install|sign).{0,120}Testing[.]framework)' \
-    "$log_path"; then
+    "$log_path" >/dev/null || scan_status=$?
+  if ! assert_scan_healthy "failure classification" "$scan_status"; then
+    print -r -- "FAIL"
+    return 0
+  fi
+  if (( scan_status == 0 )); then
     print -r -- "BLOCKED_ENV"
   else
     print -r -- "FAIL"
@@ -279,12 +313,23 @@ with open(state_path, encoding="utf-8") as handle:
 
 state_phase = state.get("phase")
 state_match = phase_pattern.fullmatch(state_phase or "")
-if state_match is None or state.get("lifecycleState") != "COMPLETE":
+lifecycle_state = state.get("lifecycleState")
+# lifecycleState 合法取值：COMPLETE（已批准）与 PASS（Gate 已通过该精确
+# 提交、Owner 批准尚未落盘的合法中间态，见 PHASE_GATES.md 生命周期）。
+# 中间态存在前，批准窗口内任何 Gate 重跑/CI 都会失败，治理被迫把
+# "记录 PASS"与"记录批准"压缩进单一 COMPLETE 提交（CARRY-09）。
+if state_match is None or lifecycle_state not in {"COMPLETE", "PASS"}:
     raise SystemExit(1)
 
 requested_number = int(requested_match.group(1))
 state_number = int(state_match.group(1))
 if state_number not in {requested_number - 1, requested_number}:
+    raise SystemExit(1)
+
+# PASS 中间态只对"状态阶段 == 请求阶段"的批准窗口重跑可接受；预准入
+# （状态阶段 = 请求阶段 - 1）仍严格要求 COMPLETE——下一阶段开工的
+# IN_PROGRESS 前置条件不变，不得因中间态而提前放行。
+if lifecycle_state == "PASS" and state_number != requested_number:
     raise SystemExit(1)
 
 expected_active = f".codex/swift-migration/packages/{state_phase}.md"
@@ -298,6 +343,30 @@ if state.get("activePackage") != expected_active or state.get("nextPackage") != 
 if state_number == requested_number - 1 and expected_next != f".codex/swift-migration/packages/{requested_phase}.md":
     raise SystemExit(1)
 raise SystemExit(0)
+PY
+}
+
+# 仅做 JSON 精确判断：状态阶段是否为请求阶段且 lifecycleState == COMPLETE。
+# approval_freshness 的门控原先用 rg 子串匹配，无法区分 PASS 合法中间态，
+# 也会被文件里其他位置的 "COMPLETE" 字样误触发；改为解析 JSON 后，
+# 批准窗口（PASS）内批准检查稳定路由为 NOT_APPLICABLE，COMPLETE 状态
+# 才执行 gate_validate_approval_state。
+gate_state_is_complete() {
+  local state_path="$1"
+  local requested_phase="$2"
+
+  python3 - "$state_path" "$requested_phase" <<'PY'
+import json
+import sys
+
+state_path, requested_phase = sys.argv[1:]
+with open(state_path, encoding="utf-8") as handle:
+    state = json.load(handle)
+ok = (
+    state.get("phase") == requested_phase
+    and state.get("lifecycleState") == "COMPLETE"
+)
+raise SystemExit(0 if ok else 1)
 PY
 }
 

@@ -322,6 +322,68 @@ JSON
 assert_failure "incorrect next package" gate_validate_phase_state \
   "${fixture_root}/phase-state.json" SM-02
 
+# CARRY-09：PASS 是"Gate PASS 后、Owner 批准前"的合法中间态。批准窗口内
+# 本阶段 Gate 重跑必须通过；预准入（N-1）与包指针一致性不因中间态放松。
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-03",
+  "lifecycleState": "PASS",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md"
+}
+JSON
+assert_success "PASS pending-approval state admits same phase" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-03
+assert_failure "PASS pending-approval state cannot pre-admit next phase" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-04
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-03",
+  "lifecycleState": "PASS",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-05.md"
+}
+JSON
+assert_failure "PASS state with wrong next package rejected" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-03
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-02",
+  "lifecycleState": "PASS",
+  "activePackage": ".codex/swift-migration/packages/SM-02.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-03.md"
+}
+JSON
+assert_failure "PASS previous phase cannot pre-admit" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-03
+
+# approval_freshness 门控：只在状态阶段 == 请求阶段且 COMPLETE 时生效；
+# PASS 中间态窗口必须路由为 NOT_APPLICABLE（返回失败），不得执行批准检查。
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-03",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md"
+}
+JSON
+assert_success "approval gate fires on COMPLETE same phase" gate_state_is_complete \
+  "${fixture_root}/phase-state.json" SM-03
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-03",
+  "lifecycleState": "PASS",
+  "activePackage": ".codex/swift-migration/packages/SM-03.md",
+  "nextPackage": ".codex/swift-migration/packages/SM-04.md"
+}
+JSON
+assert_failure "approval gate skips PASS pending-approval window" gate_state_is_complete \
+  "${fixture_root}/phase-state.json" SM-03
+assert_failure "approval gate skips other phase" gate_state_is_complete \
+  "${fixture_root}/phase-state.json" SM-04
+assert_failure "approval gate fails closed on missing state file" gate_state_is_complete \
+  "${fixture_root}/phase-state-missing.json" SM-03
+
 assert_success "exact built executable command" slatesync_command_matches_executable \
   "/tmp/SlateSync.app/Contents/MacOS/SlateSync" \
   "/tmp/SlateSync.app/Contents/MacOS/SlateSync"
@@ -474,5 +536,25 @@ assert_success "forbidden items check passes on clean sources" forbidden_items_c
 rg() { return 2; }
 assert_failure "forbidden items check fails closed when rg errors" forbidden_items_check
 unfunction rg
+# Inject errors into each of the five ordered classifier scans. Earlier scans
+# miss; later scans would match, proving an error cannot fall through to an
+# environment marker. Subshells keep the rg override out of other fixtures.
+for scan_index in {1..5}; do
+  for injected_status in 2 127; do
+    classification="$(
+      scan_calls=0
+      rg() {
+        (( scan_calls += 1 ))
+        (( scan_calls == scan_index )) && return "$injected_status"
+        (( scan_calls < scan_index )) && return 1
+        return 0
+      }
+      gate_classify_failure "${fixture_root}/environment.log" 1
+    )"
+    assert_equal "classifier scan ${scan_index} error ${injected_status} fails closed" FAIL "$classification"
+  done
+done
+assert_equal "classifier unreadable log fails closed before missing-tool classification" FAIL \
+  "$(gate_classify_failure "${fixture_root}/missing.log" 127 2>/dev/null)"
 print -r -- "Gate helper tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

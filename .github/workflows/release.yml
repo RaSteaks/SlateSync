@@ -50,7 +50,14 @@ jobs:
           work = f"SM-{number + 1:02d}"
           packages = ".codex/swift-migration/packages"
           reviews = ".codex/swift-migration/reviews"
-          if os.path.exists(f"{packages}/{work}.md") and not os.path.exists(f"{reviews}/{work}.md"):
+          # 与 ci.yml 相同：PASS 合法中间态（批准窗口）内跑状态阶段自身的
+          # Gate，不进入下一阶段预准入；预准入仍要求上一阶段 COMPLETE。
+          approval_pending = state.get("lifecycleState") == "PASS"
+          if (
+              not approval_pending
+              and os.path.exists(f"{packages}/{work}.md")
+              and not os.path.exists(f"{reviews}/{work}.md")
+          ):
               phase = work
           print(f"phase={phase}")
           PY

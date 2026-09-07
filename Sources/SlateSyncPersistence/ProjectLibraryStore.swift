@@ -42,6 +42,11 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
     public static let projectFormatVersion = 1
     public static let defaultLibraryName = "Local SlateSync Library"
     public static let legacyDefaultLibraryName = "Local SlateSync Library.slatesync-library"
+    /// CARRY-04 契约：该行由 `performBootstrap` 对**每个** Library（全新或
+    /// 迁移而来）幂等播种保证存在，与旧版 Electron `initializeLibrary` 的
+    /// `ensureDefaultProject` 语义逐字对齐；`canArchive` 判定及归档/删除
+    /// 保护守卫均依赖此不变量。行只能在内建的 bootstrap/迁移路径中创建，
+    /// 普通读写路径禁止静默造行。
     public static let defaultProjectID = "project-default"
     public static let libraryExtension = ".slatesync-library"
 
@@ -153,6 +158,9 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         try await SQLiteV1.bootstrapLibrary(database)
         try await cleanupStagedProjectDirectories()
         manifest = try loadOrCreateLibraryManifest()
+        // CARRY-04：default 行的播种点。放在单飞的 bootstrap 内而非各读路径，
+        // 保证并发首用不会双建，也使"每个 Library 都有该行"成为 bootstrap
+        // 后即可依赖的不变量（canArchive/归档/删除保护的前提）。
         _ = try await ensureDefaultProject()
     }
 
@@ -439,6 +447,8 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             return report
         }
 
+        // 入口 bootstrap 已播种 default 行，此处是幂等空读；保留调用使
+        // 迁移路径不依赖调用时序也自足（行必然存在才可写入其项目库）。
         let defaultProject = try await ensureDefaultProject()
         guard let defaultRow = try await projectRow(defaultProject.id) else { throw missingProject() }
         let projectDirectory = try checkedProjectDirectory(defaultRow)
@@ -530,6 +540,9 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         isClosed = true
     }
 
+    /// 幂等保证 default 项目行存在（CARRY-04 不变量的实现体）：行缺失时
+    /// 经 `createProjectWithID` 补齐。名称/描述是旧版 Electron 冻结文案，
+    /// 全新 Library 同样使用——为兼容逐字对齐，不因"无迁移数据"改写。
     private func ensureDefaultProject() async throws -> ProjectData {
         if let row = try await projectRow(Self.defaultProjectID) {
             return try await projectData(row)
@@ -652,6 +665,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             updatedAt: updatedAt,
             taskCount: taskCount,
             latestTaskAt: latestTaskAt,
+            // CARRY-04：default 行由 bootstrap 保证存在，此判定因此不悬空。
             canArchive: id != Self.defaultProjectID
         )
     }
