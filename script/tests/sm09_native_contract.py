@@ -63,8 +63,53 @@ def validate_provenance(cutover, seal, result):
         require(entry['replacement'] and entry['acceptanceIDs'] and entry['reason'], 'unowned removal')
 
 
+# These six Owner decisions have distinct destinations; a generic existing
+# file cannot stand in for an archive, configuration store or OCR service.
+DECISION_REPLACEMENTS = {'.env.example': (['Sources/SlateSyncPersistence/GlobalConfigStore.swift',
+                   'Tests/SlateSyncPersistenceTests/ConfigurationStoreTests.swift'],
+                  ['CUT-01', 'CUT-02']),
+ 'build/entitlements.mac.plist': (['SlateSyncApp/SlateSync.entitlements',
+                                   'script/verify_bundle.sh'],
+                                  ['CUT-01', 'CUT-02', 'SIG-01']),
+ 'premium-ui.json': (['.codex/swift-migration/manifests/sm09-premium-ui-history.json'],
+                     ['CUT-01', 'CUT-02']),
+ 'scripts/setup-paddleocr.sh': (['Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift',
+                                 'Tests/SlateSyncUIUnitTests/SM08OwnershipTests.swift'],
+                                ['CUT-01', 'CUT-02', 'CUT-05']),
+ 'scripts/vision_ocr.swift': (['Sources/SlateSyncMedia/VisionOCRService.swift',
+                               'Tests/SlateSyncMediaTests/OCRContractTests.swift'],
+                              ['CUT-01', 'CUT-02']),
+ 'slatesync.config.json': (['Sources/SlateSyncPersistence/ConfigurationResolver.swift',
+                            'Tests/SlateSyncPersistenceTests/ConfigurationStoreTests.swift'],
+                           ['CUT-01', 'CUT-02'])}
+
+
+def validate_decisions(cutover):
+    entries = {e['path']: e for e in cutover['removed']}
+    for path, (replacements, acceptance) in DECISION_REPLACEMENTS.items():
+        entry = entries[path]
+        require(entry['replacement'] == replacements, f'incorrect decision replacement: {path}')
+        require(entry['acceptanceIDs'] == acceptance, f'incorrect decision acceptance: {path}')
+        require(all((ROOT / p).is_file() for p in replacements), f'missing decision destination: {path}')
+        require(not re.search('待引用|需决策|需 Owner|确认后|确认是否|确认归档', entry['reason']), 'unresolved decision')
+    archive = entries['premium-ui.json']
+    verify_bytes((ROOT / archive['replacement'][0]).read_bytes(), archive['preCutoverSha256'], 'archived premium UI')
+
+
+def validate_coverage(attestation, seal, coverage_bytes):
+    require(attestation['status'] == seal['status'] == 'PASS', 'coverage not attested')
+    require(attestation['commit'] == seal['commit'] == BASE, 'coverage commit drift')
+    require(attestation['coverageSha256'] == seal['coverageSha256'], 'coverage seal mismatch')
+    require(attestation['coveragePath'] == '.codex/swift-migration/manifests/sm09-coverage.json', 'coverage path drift')
+    verify_bytes(coverage_bytes, seal['coverageSha256'], 'final coverage snapshot')
+
+
 def validate_fixtures(contract):
+    require(set(contract['fixtureSourceCommits']) == set(contract['fixtureSha256']), 'fixture provenance gap')
     for path, expected in contract['fixtureSha256'].items():
+        commit = contract['fixtureSourceCommits'][path]
+        git('merge-base', '--is-ancestor', commit, 'HEAD')
+        verify_bytes(git('show', f'{commit}:{path}'), expected, f'fixture origin: {path}')
         verify_bytes((ROOT / path).read_bytes(), expected, path)
     # Provenance records remain unchanged, including removed paths. Resolve
     # their original bytes from Git so an absent oracle cannot bypass a check.
@@ -235,6 +280,9 @@ def run(result_dir=None, before_removal=False):
     require(seal_bytes == git('show','1f28a36:.codex/swift-migration/manifests/sm09-final-pre-cutover.json'), 'rewritten seal')
     require(git('rev-parse','HEAD:.codex/refactor').decode().strip() == contract['historyTree'], 'rewritten historical tree')
     require(not git('status','--porcelain','--','.codex/refactor').strip(), 'dirty immutable history')
+    validate_decisions(cutover)
+    validate_coverage(document(MANIFESTS / 'sm09-final-coverage-attestation.json'), seal,
+                      (MANIFESTS / 'sm09-coverage.json').read_bytes())
     validate_fixtures(contract)
     validate_oracles()
     validate_source_boundaries()
@@ -246,6 +294,29 @@ def run(result_dir=None, before_removal=False):
 
 
 class ContractTests(unittest.TestCase):
+    def test_decision_mapping_mutations_rejected(self):
+        original = document(MANIFESTS / 'sm09-cutover.json')
+        validate_decisions(original)
+        for path in DECISION_REPLACEMENTS:
+            for field, value in [('replacement', ['SlateSyncApp/SlateSync.entitlements']),
+                                 ('acceptanceIDs', ['CUT-05']), ('reason', '确认后删除')]:
+                changed = copy.deepcopy(original)
+                next(e for e in changed['removed'] if e['path'] == path)[field] = value
+                with self.assertRaises(AssertionError, msg=f'{path}: {field}'):
+                    validate_decisions(changed)
+
+    def test_coverage_attestation_mutations_rejected(self):
+        attestation = document(MANIFESTS / 'sm09-final-coverage-attestation.json')
+        seal = document(MANIFESTS / 'sm09-final-pre-cutover.json')
+        data = (MANIFESTS / 'sm09-coverage.json').read_bytes()
+        validate_coverage(attestation, seal, data)
+        for field, value in [('status', 'PENDING'), ('commit', '0'*40), ('coverageSha256', '0'*64)]:
+            changed = dict(attestation, **{field: value})
+            with self.assertRaises(AssertionError):
+                validate_coverage(changed, seal, data)
+        with self.assertRaises(AssertionError):
+            validate_coverage(attestation, seal, data + b' ')
+
     def test_absent_execution_rejected(self):
         with self.assertRaises(AssertionError):
             pass_line('', 'Suite/testMissing')

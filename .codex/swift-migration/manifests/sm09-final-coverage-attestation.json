@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "commit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+  "coverageSha256": "5ca3f20cc1fe810935994889ab584f400c044d236084e4c39fb1f9c3721426e9",
+  "coveragePath": ".codex/swift-migration/manifests/sm09-coverage.json",
+  "sealPath": ".codex/swift-migration/manifests/sm09-final-pre-cutover.json",
+  "note": "Historical coverage snapshot remains unchanged; the final clean compatibility refresh attests this exact snapshot."
+}

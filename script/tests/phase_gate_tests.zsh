@@ -89,6 +89,15 @@ assert_equal "passing summary classification ignores non-diagnostic environment 
   "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-passed-environment-word.json")"
 
 print -r -- '{"result":"Failed","failedTests":1,"testsCount":2}' > "${fixture_root}/xcode-assertion-failure.json"
+# Exercise the packaged caller's summary-to-log-to-outer-classifier boundary
+# even when xcresult supplies no individual assertion details.
+print -r -- '{"result":"Failed","failedTests":1,"testsCount":2,"testFailures":[]}' > "${fixture_root}/xcode-empty-failures.json"
+(
+  print -r -- 'error: Copy Testing.framework failed with exit code 0'
+  gate_validate_xcode_test_summary "${fixture_root}/xcode-empty-failures.json"
+) > "${fixture_root}/packaged-empty-failures.log" 2>&1 || true
+assert_equal "packaged failed count survives environment noise without details" FAIL \
+  "$(gate_classify_failure "${fixture_root}/packaged-empty-failures.log" 1)"
 # This validator is called after an exit-zero xcodebuild invocation, so a
 # failed xcresult must still prevent the wrapper from reporting PASS.
 assert_failure "exit-zero Xcode result summary failure" gate_validate_xcode_test_summary \

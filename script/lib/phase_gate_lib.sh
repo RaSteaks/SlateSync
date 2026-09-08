@@ -195,7 +195,11 @@ PY
 
 gate_validate_xcode_test_summary() {
   local summary_path="$1"
-  if [[ "$(gate_classify_xcode_test_summary "$summary_path")" != "PASS" ]]; then
+  local classification="$(gate_classify_xcode_test_summary "$summary_path")"
+  if [[ "$classification" != "PASS" ]]; then
+    # Preserve structured failures across callers that classify captured logs;
+    # incidental Testing.framework messages must not downgrade a failed count.
+    print -u2 -r -- "SLATESYNC_XCODE_TEST_CLASSIFICATION=${classification}"
     print -u2 -r -- "Xcode test result is not passing"
     return 1
   fi

@@ -8,16 +8,15 @@
       "path": ".env.example",
       "preCutoverSha256": "bc8038170cbfa53203204766ed34d8e1e0bb9c17a0e36f6a2bd781a2734c2a61",
       "bytes": 4553,
-      "reason": "Electron 环境变量模板：SM-03 原生 GlobalConfig 已覆盖其非敏感项",
+      "reason": "Owner 已确认删除 Electron 环境模板；非敏感配置由 GlobalConfigStore 提供，凭据保留 Keychain 边界。",
       "family": "native-release",
       "replacement": [
-        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
-        "Sources/SlateSyncMedia/VisionOCRService.swift",
-        "SlateSyncApp/SlateSync.entitlements"
+        "Sources/SlateSyncPersistence/GlobalConfigStore.swift",
+        "Tests/SlateSyncPersistenceTests/ConfigurationStoreTests.swift"
       ],
       "acceptanceIDs": [
-        "CUT-02",
-        "CUT-05"
+        "CUT-01",
+        "CUT-02"
       ]
     },
     {
@@ -64,16 +63,16 @@
       "path": "build/entitlements.mac.plist",
       "preCutoverSha256": "6122138a42c27155c0151325516de052fe43be31e07577b07172108f8c0893ac",
       "bytes": 523,
-      "reason": "Electron 签名 entitlements：与原生 SlateSync entitlements 的取舍需逐项判定",
+      "reason": "Owner 已确认删除 Electron 专用权限；原生候选使用独立 entitlements 并由 bundle 审计验证。",
       "family": "native-release",
       "replacement": [
-        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
-        "Sources/SlateSyncMedia/VisionOCRService.swift",
-        "SlateSyncApp/SlateSync.entitlements"
+        "SlateSyncApp/SlateSync.entitlements",
+        "script/verify_bundle.sh"
       ],
       "acceptanceIDs": [
+        "CUT-01",
         "CUT-02",
-        "CUT-05"
+        "SIG-01"
       ]
     },
     {
@@ -832,16 +831,14 @@
       "path": "premium-ui.json",
       "preCutoverSha256": "8359659d4164646d4947c06bf3e9a8516336aecec90c3da849af816e5a4773c1",
       "bytes": 907,
-      "reason": "历史 UI 审计工件：确认归档或删除",
+      "reason": "Owner 已确认将历史 UI 审计配置逐字节归档，删除根目录副本；无运行时替代。",
       "family": "native-release",
       "replacement": [
-        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
-        "Sources/SlateSyncMedia/VisionOCRService.swift",
-        "SlateSyncApp/SlateSync.entitlements"
+        ".codex/swift-migration/manifests/sm09-premium-ui-history.json"
       ],
       "acceptanceIDs": [
-        "CUT-02",
-        "CUT-05"
+        "CUT-01",
+        "CUT-02"
       ]
     },
     {
@@ -1493,14 +1490,14 @@
       "path": "scripts/setup-paddleocr.sh",
       "preCutoverSha256": "1c487066e63db5a2c08f7cb7c68e70f46f1692171338efdc48ea7c8c236c656c",
       "bytes": 746,
-      "reason": "旧 Paddle 安装入口：SM-08 原生 installer 已替代，确认后删除",
+      "reason": "Owner 已确认删除旧安装脚本；原生安装服务及其失败清理测试承担安装职责。",
       "family": "native-release",
       "replacement": [
         "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
-        "Sources/SlateSyncMedia/VisionOCRService.swift",
-        "SlateSyncApp/SlateSync.entitlements"
+        "Tests/SlateSyncUIUnitTests/SM08OwnershipTests.swift"
       ],
       "acceptanceIDs": [
+        "CUT-01",
         "CUT-02",
         "CUT-05"
       ]
@@ -1509,32 +1506,30 @@
       "path": "scripts/vision_ocr.swift",
       "preCutoverSha256": "4c7d06d96b90bd0385f4caca68eedf94c55c4805aad9a4eaf266f21bec419e3e",
       "bytes": 11482,
-      "reason": "旧 Vision 桥源码：SM-06 显式 binary 兼容车道（VISIONOCR_BINARY）是否随 cutover 保留需 Owner 决策",
+      "reason": "Owner 已确认删除旧 Vision 桥源码；默认 OCR 由原生 Vision 服务及真实识别测试承担。",
       "family": "native-release",
       "replacement": [
-        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
         "Sources/SlateSyncMedia/VisionOCRService.swift",
-        "SlateSyncApp/SlateSync.entitlements"
+        "Tests/SlateSyncMediaTests/OCRContractTests.swift"
       ],
       "acceptanceIDs": [
-        "CUT-02",
-        "CUT-05"
+        "CUT-01",
+        "CUT-02"
       ]
     },
     {
       "path": "slatesync.config.json",
       "preCutoverSha256": "7f79acced6d756021178a2d176cf764c109b389aec36d443a627ad74238d6846",
       "bytes": 328,
-      "reason": "根目录配置：确认是否仍被任何入口读取",
+      "reason": "Owner 已确认删除无原生启动读取入口的根配置；显式路径配置仍由 ConfigurationResolver 提供。",
       "family": "native-release",
       "replacement": [
-        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
-        "Sources/SlateSyncMedia/VisionOCRService.swift",
-        "SlateSyncApp/SlateSync.entitlements"
+        "Sources/SlateSyncPersistence/ConfigurationResolver.swift",
+        "Tests/SlateSyncPersistenceTests/ConfigurationStoreTests.swift"
       ],
       "acceptanceIDs": [
-        "CUT-02",
-        "CUT-05"
+        "CUT-01",
+        "CUT-02"
       ]
     },
     {

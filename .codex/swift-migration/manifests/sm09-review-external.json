@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-08T14:19:06.030253+00:00",
+  "repository": "RaSteaks/SlateSync",
+  "scope": "read-only; no remote mutation or workflow dispatch",
+  "branches": {
+    "main": {
+      "protection": {
+        "message": "Branch not protected",
+        "documentation_url": "https://docs.github.com/rest/branches/branch-protection#get-branch-protection",
+        "status": "404"
+      },
+      "effectiveRules": []
+    },
+    "swift-rewrite": {
+      "protection": {
+        "message": "Branch not protected",
+        "documentation_url": "https://docs.github.com/rest/branches/branch-protection#get-branch-protection",
+        "status": "404"
+      },
+      "effectiveRules": []
+    }
+  },
+  "recentSwiftRewriteRuns": [],
+  "requiredCheck": "Swift, Xcode and local package validation",
+  "status": "PENDING_OWNER_CONFIGURATION",
+  "nextAction": "Owner must configure required check protection and authorize remote CI execution, or explicitly resolve external configuration scope before COMPLETE.",
+  "manualRecheck": {
+    "candidateCommit": "01d8bce558f4adfb6a0da4e7c2c72462afa6c4b8",
+    "isolatedApp": "/private/tmp/slatesync-sm09-review-consumer/SlateSync.app",
+    "Dock": "PENDING: CUA com.apple.dock timeoutReached",
+    "Spotlight": "PENDING: CUA com.apple.Spotlight timeoutReached; shortcut did not expose a controllable search surface",
+    "observed": "Isolated legacy project and one task visible; candidate process stopped after attempt."
+  }
+}

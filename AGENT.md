@@ -1,5 +1,17 @@
 # SlateSync 当前项目方案
 
+## SM-09 双模型 review 修复（2026-09-08）
+
+结构化 XCTest 失败始终向外层 Gate 传递分类标记，覆盖失败计数非零但明细为空的边界。
+六项 Owner 删除决定逐项绑定真实实现/测试或原样归档；合同拒绝模板替代映射。
+历史 coverage 保持不变，新增 final coverage attestation 并核对 seal 哈希与提交；
+49 项夹具逐项记录并验证实际 Git 来源，两个 SM09 夹具冻结于 c9a4004。
+定向验证：Gate helper 103、release pipeline 16、native contract 7 项通过。
+全部技术/方案文件先提交，再于精确干净 SHA 跑完整 Gate；其后只更新阶段 review，
+防止再次因 manifest/AGENT 变更使证据过期。Dock/Spotlight CUA 再次超时，
+远端保护与 CI 的只读结果记录在 sm09-review-external.json；待办不转换成通过。
+
+
 ## SM-09 打包测试目标绑定修复
 
 收尾 clean Gate 在 `c6e1634` 的 packaged UI 新增用例失败；旧版源夹具本身未漂移。
