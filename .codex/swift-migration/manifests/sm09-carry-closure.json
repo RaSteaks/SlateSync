@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "WP-6_IMPLEMENTED; FINAL_NATIVE_GATE_PENDING",
+  "status": "FINAL_NATIVE_GATE_PASS; INDEPENDENT_REVIEW_AND_OWNER_APPROVAL_PENDING",
   "baselineCommit": "218b43c71bc8d58771f70e654fe3349b8174097e",
   "diagnosticGate": {
     "result": "PASS",
@@ -112,5 +112,12 @@
       "failed": 0
     }
   },
-  "wp6OwnerDecision": "2026-09-08: 确认，继续推进SM09阶段代码实施"
+  "wp6OwnerDecision": "2026-09-08: 确认，继续推进SM09阶段代码实施",
+  "finalNativeGate": {
+    "commit": "c9a400435200484db049b03f1cd2f2b2b266bb4d",
+    "result": "PASS",
+    "approvable": true,
+    "manifest": "sm09-final-native.json",
+    "resultSha256": "852e9951660ced31440a70627db4d49785fd7370e74bac6eaf4bb8e00a69a7af"
+  }
 }

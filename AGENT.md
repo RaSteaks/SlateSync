@@ -1,9 +1,10 @@
 # SlateSync 当前项目方案
 
-## 2026-09-08 SM-09 WP-6～WP-9 原生切换（施工中）
+## 2026-09-08 SM-09 原生切换（技术 Gate PASS，待审查）
 
-Owner 已确认继续实施 WP-6，包括六项待决文件。239 个旧生产/构建/测试输入按
-`sm09-cutover.json` 逐项记录 SHA、原因和原生替代后暂存删除，可从 Git 恢复。
+Owner 已确认继续实施 WP-6，包括六项待决文件。代码提交 `c9a4004` 的最终 clean Gate PASS，详情见 `.codex/swift-migration/reviews/SM-09.md`。
+239 个旧生产/构建/测试输入按
+`sm09-cutover.json` 逐项记录 SHA、原因和原生替代后提交删除，可从 Git 恢复。
 原始 `.codex/refactor` 保持不变；旧 UI 审计配置另存 `sm09-premium-ui-history.json`。
 
 当前构建和测试入口只使用 Swift/Xcode/macOS 工具。共享 `phase_gate.sh SM-09`
