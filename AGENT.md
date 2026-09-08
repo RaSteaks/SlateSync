@@ -7,14 +7,14 @@
 目标与 URL 启动目标同为 Release app。保留测试运行器 App Sandbox 与其临时目录，
 不扩大 App 权限。修复后同一 ZIP 的9项 UI与进程清理通过。
 同时将 xcresult 的断言详情输出到 Gate 日志；旧失败日志加上真实断言后，分类验证
-为 FAIL，不能再被旁侧环境日志覆盖为 BLOCKED_ENV。新提交仍须完整 clean Gate。
+为 FAIL，不能再被旁侧环境日志覆盖为 BLOCKED_ENV。修复提交 `01d8bce` 已通过完整 clean Gate，证据见 `sm09-closure-gate.json`。
 
-## 2026-09-08 SM-09 收尾补验（进行中）
+## 2026-09-08 SM-09 收尾补验（clean Gate PASS，待独立审查）
 
 新增旧版真实 Library 在 App 内打开、CSV 导入/导出及退出重开的 XCUI 验收，
 检查默认 Shot/Take 格式、CRLF 和源 CSV 不变，单项已通过。
 打包 smoke 将临时根规范化为真实路径，并把应用进程退出作为成功条件，修复
-`/var` 与 `/private/var` 不一致造成的清理遗漏。新的最终 Gate 必须执行该新增测试。
+`/var` 与 `/private/var` 不一致造成的清理遗漏。干净提交 `01d8bce` 的最终 Gate 已执行并通过新增测试及打包进程退出检查。
 隔离旧包替换、提示词恢复和 Finder 无窗口重开已有 CUA 观察；Dock/Spotlight
 接口超时，仍待验收。独立审查与最终 Owner 批准保持待办，不能标记 COMPLETE。
 自动提交使用 Conventional Commits，并在正文补足原因、验证及影响范围。

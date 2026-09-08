@@ -1,0 +1,4894 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-08T04:54:02Z",
+  "commit": "01d8bce558f4adfb6a0da4e7c2c72462afa6c4b8",
+  "sourceType": "working-tree",
+  "dirtyWorkspace": true,
+  "approvable": false,
+  "referenceScope": "tracked literal path references; dynamic references require manual review",
+  "categories": [
+    "native-product",
+    "native-test",
+    "release-input",
+    "migration-history",
+    "fixture-migrate",
+    "legacy-remove",
+    "decision-required"
+  ],
+  "summary": {
+    "total": 366,
+    "migration-history": 122,
+    "release-input": 28,
+    "native-product": 123,
+    "native-test": 93
+  },
+  "files": [
+    {
+      "path": ".codex/environments/environment.toml",
+      "category": "migration-history",
+      "note": "Codex 环境配置（.codex 治理范围）",
+      "owner": "migration-governance",
+      "bytes": 175,
+      "sha256": "0088a305d13f4706cf93ec8ce6d3633601e7950cbf19a2f78d1515b27aea3f12",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-01.md"
+      ]
+    },
+    {
+      "path": ".codex/refactor/ARCHITECTURE_INVARIANTS.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3428,
+      "sha256": "489146dc6deac6ce05a98e4efd09181102a422e5002ea01ad59c689bd863bdc5",
+      "referencers": [
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 22677,
+      "sha256": "7ca5e91bad8abc1ec9346567ff340b7d7f0081882aaddfb88808959712741fae",
+      "referencers": [
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/refactor/packages/IP-0102-C01.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 13131,
+      "sha256": "9b0111b971d3281c1f9d678c384d8cad49f885f25da4d1507289ffa775ebd9e7",
+      "referencers": [
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/CURRENT_STATE.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3323,
+      "sha256": "f61a8bb9301dfd3b4b471fb06d1d4858d0651468c2813421cd21f3bb48118147",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/DECISION_QUEUE.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 35465,
+      "sha256": "152fc4d022827d98a11895315cab5d767ad85455d013358d807923035f52aa41",
+      "referencers": [
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/refactor/packages/IP-0102-C01.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/EXECUTION_GUIDE.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 11802,
+      "sha256": "dffd50e44a9745614c0930f8623ec77e926e8f58d91b703e4c9276588f7cc538",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/IP-03-08-TRACEABILITY.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 5807,
+      "sha256": "be6320d2e1e9246c3eacd430677a3f8f790b63180672c8cfc050312bad61f0a3",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/MASTER_PLAN.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 15385,
+      "sha256": "77987a0b1cafebf4a8f5a6c6f84faa2bf2909912e170c868043e68391041cd1c",
+      "referencers": [
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/MIGRATION_MATRIX.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 5089,
+      "sha256": "7f0e17f2495d6b9ee5e5e1e38b5fb087e9ef9c35b2310e94f167428388b17c7f",
+      "referencers": [
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/README.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 4727,
+      "sha256": "0075ac3963bd75e91b910e3015ea9ed947de3449c415aff705fa5609a7f28d62",
+      "referencers": [
+        ".codex/refactor/baseline/WORKTREE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/REPOSITORY_HYGIENE.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 4251,
+      "sha256": "395c3f95da7d2456361bb1cba3298d83a8d5e10251d8b377c5919d885a0b5069",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/additive/contracts/ipc.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2293,
+      "sha256": "790996d5c5b9df7c18739c8e80c7a19517ff4da8ece90c27fe2da0998df3b4d1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/adr/ADR-DATABASE-RUNTIME-ABI.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 5457,
+      "sha256": "dbc8ef44762da736206ef634551f75428c1108b476220f258b27b2548e41770b",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/adr/ADR-IP-0102-TYPED-GATEWAY.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2943,
+      "sha256": "3368a37942aec54b9ebfb6a2beb0d1c1fb77e8d9f25db73c546222a87ce1ce18",
+      "referencers": [
+        ".codex/refactor/packages/IP-0102-C01.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/BASELINE_MANIFEST.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3146,
+      "sha256": "bb31cc88c170ded363c8910de862d4593eef9cc513237ae8ed848e54aca6e11f",
+      "referencers": [
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/WORKTREE.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2153,
+      "sha256": "48982f8382d57e3a3c7b0bc4ba14973991a3ee058f675cea15ba0b2b04eebbb3",
+      "referencers": [
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/contracts/build.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 9560,
+      "sha256": "9a60dd34f5588d8b6fa2cfdc9e094bc0c3c2678fa19c1198901dc5fb85acc68f",
+      "referencers": [
+        ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/packages/IP-0102-C01.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/contracts/electron.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 694,
+      "sha256": "e0e0c2948ba80688346a0808bcec68409d7a06b2ef8ef1370446cae7aa876c11",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/contracts/environment.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 4617,
+      "sha256": "3723495f1384930980a496e06e9b1a6ec86a54740a120005354079d8813c89a9",
+      "referencers": [
+        ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/contracts/ipc.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3382,
+      "sha256": "d941f79e2f8a09b54e66fb97cac3dafb02e3c4c203523e38a31a8966424fde1c",
+      "referencers": [
+        ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/contracts/providers.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 1208,
+      "sha256": "6e71e8f183bda964fe16288956ec842e4128b03f5557c499ec18ac0dcc6b891c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/persistence/schema.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 5077,
+      "sha256": "c3c35e51f54c9c5dbc01d0ec3637beae3cfbf6764f98a426d885559dd1cf8ea8",
+      "referencers": [
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/README.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 1885,
+      "sha256": "5aa956a997437f5e82319ec5ec3fa8c7b4ada23118b88dac0271ae8e5b2c490d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/csv-preview.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 256837,
+      "sha256": "900dea530ee484334266f7db1b7e5bafd0ba9d47cee25993eab0b374991ebe1b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/global-settings.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 72936,
+      "sha256": "2c7ccb373301f56df02a03d9657dd0ee7aa1ad811e47f774b2627ddbd6db1cc4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/manifest.json",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3783,
+      "sha256": "60fd0734e0b3ef231f62077cccc144c0e855081ee47bcfc4bddbc57c6dfe10c2",
+      "referencers": [
+        ".codex/refactor/evidence/IP-00/VISUAL_CAPTURE_FAILURE.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/refactor/reviews/GATE-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/new-project-dialog.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 109172,
+      "sha256": "bb0d148d9470b5d955251f8a59b2fa5d7382d0db6ce7ece03c2c15c1acf4e120",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/ocr-setup-dialog.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 121499,
+      "sha256": "9d9f31be28f5256bca584d6e9bb9476212968a3466bffaab075f12ab1478e76b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/project-library.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 70587,
+      "sha256": "8e3773b8b9882ee411d007d43d860a46dece6f1f2a0c14b28719197e47a48992",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/project-settings.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 90721,
+      "sha256": "56a9d822cf0ad542f93817103cf84fb1fbd61698a818bd6a4e8e0f24c9c571e5",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/IMAGE-IGNORE-RESULT.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/recognition-progress.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 149382,
+      "sha256": "311ecd89027ec80f36b70f4864a9027532e057242f7c8dd03714a45da4164e2e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/result-detail.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 290289,
+      "sha256": "05979970a4a57d51cc220532014a024fe8944e811326a3b7db1643208a3dfe66",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/workspace-empty.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 351278,
+      "sha256": "7b2330d2562250dba76af2e9c2490d954a7ed42326f22d34677ea76d6ce15c9c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/baseline/visual/workspace-ready.png",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 178031,
+      "sha256": "4f106fd8d231792b821f87aea7660d23c564f2cb02e86a1661bbfa713e27fa3f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-00/VISUAL_CAPTURE_FAILURE.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3576,
+      "sha256": "92634172b5013e495b46bd6b0d3685cc330a1e6ee04fef6d59efb0b74e8db874",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-00/VISUAL_REVIEW.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 1588,
+      "sha256": "2ed691d2b0f68d762e093e98ef4967ee40b772c26b3091ef1ff2e0f2e03aa254",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-00/VISUAL_VALIDATION.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2463,
+      "sha256": "85122b0db4b5e6dba52153ea39ca3b0d727042242192e11663cba50a77b8c5d3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-01/COMPLETION.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2833,
+      "sha256": "94653e6ef6fcf90a185c6db96345c235458bee0df8eda7e30f4d2ccd2a0145cc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-0102/COMPLETION_REPORT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3301,
+      "sha256": "95c83716698f54983613f02667d7850c8fc8885cd58bdc3f875d0635c495fd5c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-0102/START_INVENTORY.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 1699,
+      "sha256": "d305d280df2a90f2215bdcc4ee4c11916afe90e4891c73efd764d85433c558da",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-02/COMPLETION.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2657,
+      "sha256": "518a7b7999f9a369ff637cb64af0adc232437b946fc27827c077e91beb207338",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/CHECKPOINT-LEDGER.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 16210,
+      "sha256": "f6550713716f7824dce3139bb24a0b976652b7a59bd9950727cb652b0d8cef94",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/CONTINUOUS_COMPLETION_REPORT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 8599,
+      "sha256": "62ff39aff4e16b59a088ecb19df6b13ab0ef93952d9ebc1be94c46dfcb701295",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/verify-current-state.mjs",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/E2E-ISOLATION-INCIDENT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 1978,
+      "sha256": "b1a9b0383054fb90a3c2c9cf258d246bdb17e0ecde6d538abc4e4ae3372b62c4",
+      "referencers": [
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/LIBRARY-IMPACT-AUDIT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2837,
+      "sha256": "efa0f7d59b955f9431e01618bb6cf1048d9301113b15f75d0e7b8a6afa95a769",
+      "referencers": [
+        ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/ORPHAN-AUDIT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 4690,
+      "sha256": "58d330a5175d51231458ab15c252ac51330c2a6c62bdd54eb91c8dda65ea14af",
+      "referencers": [
+        ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/PACKAGE-SECURITY-INSPECTION.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2938,
+      "sha256": "18f36375c1094ed908186163a0499f83673671ddfb7ac87c71a65e784bc9842e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/PREPARATION.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2862,
+      "sha256": "c1b5aab6afe783cefcd5972d285fbdb74733245908d74d2b9082df7520ce9c2d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/START_INVENTORY.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2609,
+      "sha256": "251d143c549e00f65905cf2b66c13c1d83c3780e0ed81583e5d75de88c07cdb4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/VISUAL-ACCESSIBILITY-REVIEW.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2433,
+      "sha256": "077523997240756a92faa96f0b98963de8744b75bcbaef5ded7577cd605ee5df",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/ACCEPTANCE-RERUNS.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 6575,
+      "sha256": "0bbe39c7cdfc8b4ba894f7de9e1061dd53a5bcb4cf7182babf64138dc45bb123",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/C01-STOP-001.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 1917,
+      "sha256": "8e5d6b2b40ebd676cc6d8e65c602927f5275fda097c3aa105433e62113c48a77",
+      "referencers": [
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/GITIGNORE-HYGIENE-AUTHORIZATION.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2164,
+      "sha256": "2ff1eabc4bc9b14c21283846f1c6a64c8a249be187358606a54ae76f7b76a4bd",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/REPOSITORY_HYGIENE.md",
+        ".codex/refactor/verify-current-state.mjs",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/IMAGE-IGNORE-RESULT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 4217,
+      "sha256": "e48cafba67a0c8b504da271ec4b0acd6ec8b36d6083ed7ffca9c426f43b39858",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3257,
+      "sha256": "82d0d3f2e8b5dd892d1688679eeb5ae4f4e3f1bcf370e1929d060f826f740811",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2532,
+      "sha256": "515f6d7b462135380950f27fc34c351a3dfa1949961bc91afd0514319cb9a08e",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/TEST-IMAGE-TRACKING-AUDIT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 3413,
+      "sha256": "4e74fd1f01503abb23c67f2fd00a3e290cb1a1cd4d169f1fcf9981d50ddb668d",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/VISUAL-STABILITY-RERUN.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2162,
+      "sha256": "c952be9809d86f4b43b844b50bcd0fca1347b77bdc8440eb0af009891b0d35e6",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/evidence/IP-03-08/final-handoff/WORKTREE-TRACKING-AUDIT.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2637,
+      "sha256": "23bc9b601dea2b6b05ecd9b2699446e3dfe1d50396c02f673399ba6b088a669d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-00-C01.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 15884,
+      "sha256": "4f5e7030cb41e602e60d55ff3f790ad6bb5b8014d74819494610f2295e764812",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-00.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 32261,
+      "sha256": "2c9c42483532ccad9e0fa6e3e6b16ecad08d2d5716447f5d9b4a5e3c379d7795",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/baseline/BASELINE_MANIFEST.json",
+        ".codex/refactor/baseline/WORKTREE.md",
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-0102-C01.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 12469,
+      "sha256": "6d38b65b33267b7ec65cff99fd03802ce402affd5636f3abe34d50c6cd9a06ae",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-0102.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 36994,
+      "sha256": "cf806273aaaf56c978263bb69f90d53b4ed00f314601842990a36e0292299707",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-01——IP-08.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 74375,
+      "sha256": "42d1de4cb95a1e36cec133f499f950637e872ed5ff01cd6c829b2198aca51e34",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-03-08-C01.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 9754,
+      "sha256": "d0511f6f01cb779c63cc988b6a0b1bce6770ce340a5cc9397d96b880b2664deb",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-03-08-C02.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 12540,
+      "sha256": "8d1721ecc34934ef8058b0d0c560d97a96d5f7be77b0d39713a1f66df963fae6",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-03-08-C03.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 2896,
+      "sha256": "8c29a3923f7a400780c9f82856ccdff0ebb26d1fdaf8b473965730a49438a6c1",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/reviews/FINAL-IP-03-08.md",
+        ".codex/refactor/verify-current-state.mjs",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 37835,
+      "sha256": "67a4d98e90950a78a04e4ab2b5a6b6a164408567dee83f6d211b2b4e54a2c164",
+      "referencers": [
+        ".codex/refactor/CONTINUOUS_CLEANUP_MANIFEST.md",
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/CHECKPOINT-LEDGER.md",
+        ".codex/refactor/evidence/IP-03-08/START_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/refactor/reviews/GATE-01-02.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/reviews/FINAL-IP-03-08.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 10509,
+      "sha256": "bebf910f65aa926a10e8dfaef3f3c4cd5866febec968bd2ba7bfff0a177592ce",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/reviews/GATE-00.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 7918,
+      "sha256": "e64a29b1ef81371840fa843e358cbde5b02d711cc693685adf0a145f60218886",
+      "referencers": [
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/reviews/GATE-01-02.md",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 9809,
+      "sha256": "90970da3a353f44b9cdce7d087c54458056da3a448e4e5b9345d479cac3e33f5",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/START_INVENTORY.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/refactor/verify-current-state.mjs",
+      "category": "migration-history",
+      "note": "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）",
+      "owner": "migration-governance",
+      "bytes": 5682,
+      "sha256": "36b3400b36273a10035cca84f2e747b0c6dddb3272cfd50f8779bea380a0f3a8",
+      "referencers": [
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/CONTINUOUS_COMPLETION_REPORT.md",
+        ".codex/refactor/evidence/IP-03-08/START_INVENTORY.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/ACCEPTANCE-RERUNS.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/C01-STOP-001.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/GITIGNORE-HYGIENE-AUTHORIZATION.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/ARCHITECTURE.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1400,
+      "sha256": "d45f7d00cd1641f8d16696c4b47897c71e0d8c1553d2ca0a3fa11a4fe535fe27",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/COMPATIBILITY_CONTRACT.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1696,
+      "sha256": "e8cbafc0c645115b3deb95af8847a290bd46b23c823ac4b5fe50050926e1db47",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/CURRENT_STATE.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3632,
+      "sha256": "2050d39eeb2619d9699f1f7f54df97ee4916dd4e0eb540dd25bb5e9a0dcf3593",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/lib/phase_gate_lib.sh",
+        "script/phase_gate.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/DECISION_QUEUE.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 516,
+      "sha256": "7d66a656e92cfe757e69edbf34febcea62fc95cd50a818a4ab49fd21a35eeefe",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/MASTER_PLAN.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1595,
+      "sha256": "5fdbc4241cc038a72e48b0949a1ba68f86e8c71609de68e66462a49428da78b4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/MIGRATION_MATRIX.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 710,
+      "sha256": "218c0349138779ddb491c661155ef6c812ca8c18dcfa05caac312749ddd4fad5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/PHASE_GATES.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 4871,
+      "sha256": "53bfbb8f4b00b14fe6999071a947cc23d3f5f66884af1c17bca2a6cb91124f2e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/README.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3474,
+      "sha256": "95ded89217016efaf852f4170cc79b807b40669f66d2591f002c018b9dc78841",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-carried-issues.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 14425,
+      "sha256": "9f18cc82567433ae02513809e62f775cb70186fdb7a2fa793b7492ac576d1927",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-09.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-carry-closure.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 5276,
+      "sha256": "9152306dbe1af446804ab393dfe573be7f1d002c93ee9023bf1ecdfedde9be09",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-closure-manual.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1790,
+      "sha256": "7d5d394599503f59fa090d132953efa806e76e027069315ab07b98791cde3c99",
+      "referencers": []
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-closure-runner-fix.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1660,
+      "sha256": "d568ab74508ecc91b1eceeb6b081d25fde79fc7b0fc87ff3bca597c71581c8ae",
+      "referencers": []
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-coverage.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 117233,
+      "sha256": "5ca3f20cc1fe810935994889ab584f400c044d236084e4c39fb1f9c3721426e9",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_coverage.py"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-cutover.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 130970,
+      "sha256": "1b386d9f3072813dfeec6416aa9409fb4a5000a937cdc2383a3a8d16d9fc6a3e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-final-inventory.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 172256,
+      "sha256": "3c2562ea26f483b5e3195b09b6bbdbc23d54b3f0128621eeb58e7f050ab38c74",
+      "referencers": [
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-final-native.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 27464,
+      "sha256": "2929d721411fcf2d6592ae953ef395746497d641d12d09ee006009c5de03a008",
+      "referencers": []
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-final-pre-cutover-result.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 11191,
+      "sha256": "1cc72422c5e63edf72f3d159c4e85c65d514ec3e8ef3687116c968c3189e29fa",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-final-pre-cutover.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 6377,
+      "sha256": "25e5f86661048d85ea252183622b4d86e767e1ed3185e538ca65c0b99a17c5d1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-carry-closure.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "AGENT.md",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-inventory.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 333112,
+      "sha256": "6bcda63ca1d26422943a0c979d14c5a2491cd5e7530ae776bdfa7ac7288184d1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "script/sm09_coverage.py"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-native-contract.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 31965,
+      "sha256": "6e0dd4aab4f115b4ffecc055b099505b1db9d298d79068d7d99e85ce150dd3d4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "script/phase_gate.sh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-native-resources.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1785,
+      "sha256": "11c045c4da945488377be331ea19559a727b0c67c345df166075f6a165d40123",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/package_release.sh",
+        "script/tests/sm09_release_contract.py",
+        "script/verify_bundle.sh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-pre-cutover.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3366,
+      "sha256": "6638da8f1707f9de65eb6d83679ef5db9387caf339899270efa4e6c8a4a7bd7e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_coverage.py",
+        "script/sm09_seal_baseline.py"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-premium-ui-history.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 907,
+      "sha256": "8359659d4164646d4947c06bf3e9a8516336aecec90c3da849af816e5a4773c1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-release-notes.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1044,
+      "sha256": "0e00b69dcada223c9d01ecda4b8414949e879abd5b8ac3011d28efad8a2e8690",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/package_release.sh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/manifests/sm09-wp0-decisions.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3736,
+      "sha256": "5c88b386a3f6284a9f40eba247eb995360acae193655a05b70fba01b4599f68f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-00.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 266,
+      "sha256": "b6a99fbe2bc333ffaff0ad94d91c9319afe9dc98a94ffc84fc282e2c8cf33a61",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-01.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 2655,
+      "sha256": "0a020175f0d5224795e05b454a03864a636127aa146d635f238ba0ef7371ade9",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-02.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1143,
+      "sha256": "306e636374b18a8576f15f924f519984a788eb12f380b25054ee5a6b4dc86f47",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-03.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 2996,
+      "sha256": "cdf314e7522fb561235cf3046c9fd46375a7c0ee85075316d5bee8a529ffe5bf",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-04.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 5385,
+      "sha256": "7dd8d00e6a8c1684154900c65549b38028b25713fa2646a8c01ccbd5ddee6fdc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-05.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 29529,
+      "sha256": "f066bd29d1892ace46ee8f107be9d8d315c432c075ff8ce05cdc152068beb6f2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-06.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 33302,
+      "sha256": "69293b3f27ec8e375cd1029301764da750099b6295bcbfaaaa8f13cf610c9dfb",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-07.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 44709,
+      "sha256": "fa1d5c5bc7b74be312dfc08afdeee8f0c2b9aa14c9b26d41187227e260756f95",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-08.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 37741,
+      "sha256": "3c9ce7576b7a25dcb9e302ab3447cecd6610ae91b3df1094b7b19f7f89e38046",
+      "referencers": [
+        ".codex/swift-migration/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/packages/SM-09.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 46911,
+      "sha256": "baf2b0e65cbd8087faad55a5b7a7b96c3e559e5e3bed605a5d53dda2debc2d8e",
+      "referencers": [
+        ".codex/swift-migration/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/EQUIVALENT_EVIDENCE.template.json",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 596,
+      "sha256": "7308a8ebd1589cc04705754dc1a3651ec126b1a86ddfff9b69849c21fe789cff",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-01.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 3234,
+      "sha256": "e14f552a9c496f2b952a1d3cff78930b9e50b6856de98fa77db554e6bb470536",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-02.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 4984,
+      "sha256": "6ffa9f92547ce508a3747d8b4986729e6e9ff546d37547613973be0331e18488",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-03.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 4464,
+      "sha256": "2eafa597a2b6f8caa214fbf84df799605e6c159f8d7a91b91d32c22c7c006668",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-04.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 6174,
+      "sha256": "afbe4a732bfa5f474dbc47d67b950aa4e176ebf969235d299894eab3a85faae6",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-05.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 5897,
+      "sha256": "61e4aacf6d623f7809781b16b965125b85a3935a861a2c9a4f8c88ea6faf7b93",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-06.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 10365,
+      "sha256": "22e5eecfda88e80af637ff2f3b4a8265e53fba8b9decf3d372d388cbcf1f9c92",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-07.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 16664,
+      "sha256": "30c1040bd752c7b64b089762833e9c52493970d20cdda3caaa9594ba2bbc92f8",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-08-background-validation-20260906.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 12804,
+      "sha256": "a4b7bc8485dad2c6c727d7d4f436d1a113e871f6994dbbd8c6357cbccee7e354",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-08.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 10484,
+      "sha256": "31ee9042e43619c09c51ede5ff8623a7a6b1097943c05cbad4bfc7a6d7a07eb8",
+      "referencers": [
+        ".codex/swift-migration/CURRENT_STATE.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/reviews/SM-08-background-validation-20260906.md",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/SM-09.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 6243,
+      "sha256": "b9139937a1b922b3ffbea823687b15b9422bc82ca69871b5ed2f17db33a002ea",
+      "referencers": [
+        ".codex/swift-migration/packages/SM-09.md",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": ".codex/swift-migration/reviews/TEMPLATE.md",
+      "category": "migration-history",
+      "note": "迁移治理：packages/reviews/manifests/状态文件",
+      "owner": "migration-governance",
+      "bytes": 1754,
+      "sha256": "97265fe343473fad9391a24f5a8d882b5ae5396246d223179460eaba653eba46",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": ".gitattributes",
+      "category": "release-input",
+      "note": "二进制标记等仓库属性",
+      "owner": "native-release",
+      "bytes": 168,
+      "sha256": "d740907e5f20dbf4f8e6e4de21b3e5a13ba544cabc2cc73daadc880c8e8ae06b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/reviews/SM-06.md",
+        "AGENT.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "category": "release-input",
+      "note": "CI/release lane，WP-4/WP-5 切换为 native-only",
+      "owner": "native-release",
+      "bytes": 1858,
+      "sha256": "5891f4abf6d787c52cc5f2b28d23483bb2222ab7c4a8358cf7a58f6ac05d4411",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-0102-C01.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-09.md",
+        "script/sm09_coverage.py",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "category": "release-input",
+      "note": "CI/release lane，WP-4/WP-5 切换为 native-only",
+      "owner": "native-release",
+      "bytes": 2471,
+      "sha256": "b5e0201128c953d004a403c8a12e092ce294ea742de84ffa9a2239852b5963ae",
+      "referencers": [
+        ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-0102-C01.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-09.md",
+        "script/sm09_coverage.py",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": ".gitignore",
+      "category": "release-input",
+      "note": "WP-6.6 清理 Node ignores，保留 Swift/Xcode/Gate/Paddle 需要",
+      "owner": "native-release",
+      "bytes": 1705,
+      "sha256": "bae1ca389beebe83652db62206f1493c5658d97dca849938d73cb6fffa282ec0",
+      "referencers": [
+        ".codex/refactor/CURRENT_STATE.json",
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/REPOSITORY_HYGIENE.md",
+        ".codex/refactor/evidence/IP-03-08/CHECKPOINT-LEDGER.md",
+        ".codex/refactor/evidence/IP-03-08/CONTINUOUS_COMPLETION_REPORT.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/GITIGNORE-HYGIENE-AUTHORIZATION.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/IMAGE-IGNORE-RESULT.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/TEST-IMAGE-TRACKING-AUDIT.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/WORKTREE-TRACKING-AUDIT.md",
+        ".codex/refactor/packages/IP-00-C01.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/refactor/reviews/FINAL-IP-03-08.md",
+        ".codex/refactor/verify-current-state.mjs",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-09.md",
+        "AGENT.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "AGENT.md",
+      "category": "release-input",
+      "note": "根目录项目方案（随阶段推进更新）",
+      "owner": "native-release",
+      "bytes": 160388,
+      "sha256": "8e7e72331f20dfdd4836cd29f9dbd1e95c8eefd3373011be5a206beadc01d7da",
+      "referencers": [
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C02.md",
+        ".codex/swift-migration/manifests/sm09-carried-issues.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md",
+        ".codex/swift-migration/packages/SM-07.md",
+        ".codex/swift-migration/packages/SM-08.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        ".codex/swift-migration/reviews/SM-08.md",
+        "AGENTS.md",
+        "README.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "AGENTS.md",
+      "category": "release-input",
+      "note": "仓库协作说明（保留并随 WP-8 收敛为 native-only）",
+      "owner": "native-release",
+      "bytes": 135,
+      "sha256": "a0ab4e763cfe56f4fe41a220811cc5479ec4f1c4379ced69343c2e52d9d0fd84",
+      "referencers": [
+        ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/refactor/packages/IP-0102.md",
+        ".codex/refactor/packages/IP-01——IP-08.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/refactor/reviews/GATE-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "DESIGN.md",
+      "category": "migration-history",
+      "note": "保留为设计/审查输入，不进 bundle（WP-6.3）",
+      "owner": "migration-governance",
+      "bytes": 3770,
+      "sha256": "186528730e83ad655eb22038c94abedd31bc9232a484c0974d756a41bdbffe2f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-08.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        "AGENT.md",
+        "README.md",
+        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+        "UX-CONTRACT.md",
+        "script/sm09_inventory.py",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "LICENSE",
+      "category": "release-input",
+      "note": "分发许可",
+      "owner": "native-release",
+      "bytes": 1065,
+      "sha256": "4d28a782df94edbddfab1dccfd285e6fa536121b7996950ca1206c743c1c33e5",
+      "referencers": [
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "README.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "Package.swift",
+      "category": "release-input",
+      "note": "SwiftPM 五模块定义",
+      "owner": "native-release",
+      "bytes": 2695,
+      "sha256": "21752cd4aadf2d255ef2407239847c5963e20fa4ba513b5afa7ba69b4492d100",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-01.md",
+        ".codex/swift-migration/packages/SM-06.md",
+        ".codex/swift-migration/packages/SM-08.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        "script/lib/phase_gate_lib.sh",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "README.md",
+      "category": "release-input",
+      "note": "WP-8 改写为原生唯一入口文档",
+      "owner": "native-release",
+      "bytes": 4373,
+      "sha256": "40eadc7aa1039c94b4fdfba6fcca0c15cbb54bd8bc22ca105d26e565e620b5b1",
+      "referencers": [
+        ".codex/refactor/ARCHITECTURE_INVARIANTS.md",
+        ".codex/refactor/COMPATIBILITY_CONTRACT.md",
+        ".codex/refactor/DECISION_QUEUE.md",
+        ".codex/refactor/EXECUTION_GUIDE.md",
+        ".codex/refactor/MASTER_PLAN.md",
+        ".codex/refactor/adr/ADR-DATABASE-RUNTIME-ABI.md",
+        ".codex/refactor/baseline/WORKTREE.md",
+        ".codex/refactor/evidence/IP-03-08/PREPARATION.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/POST_CORRECTION_INVENTORY.md",
+        ".codex/refactor/evidence/IP-03-08/final-handoff/PRE_CORRECTION_INVENTORY.md",
+        ".codex/refactor/packages/IP-00.md",
+        ".codex/refactor/packages/IP-03-08-C01.md",
+        ".codex/refactor/packages/IP-03-08-C03.md",
+        ".codex/refactor/packages/IP-03-08-CONTINUOUS.md",
+        ".codex/refactor/verify-current-state.mjs",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        "AGENT.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "RELEASE.md",
+      "category": "release-input",
+      "note": "原生发布与支持说明",
+      "owner": "native-release",
+      "bytes": 3093,
+      "sha256": "8a24f96607e09e854f132543ffaff7eec41c2cb499f3936ffae35cca86f02653",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "AGENT.md",
+        "README.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "SlateSync.xcodeproj/project.pbxproj",
+      "category": "release-input",
+      "note": "唯一 App 构建/测试入口（scheme/test plan），WP-2 冻结发布设置",
+      "owner": "native-release",
+      "bytes": 17989,
+      "sha256": "4205b5a57007ddf48ced5a63fdef68eb8cb69d5336e3d652cef9d9570135566e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSync.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+      "category": "release-input",
+      "note": "唯一 App 构建/测试入口（scheme/test plan），WP-2 冻结发布设置",
+      "owner": "native-release",
+      "bytes": 118,
+      "sha256": "2f22dc4829e4beacca8aad49a8d4f72e8541fc59578010fa9398477b5277c8ad",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "SlateSync.xcodeproj/xcshareddata/xcschemes/SlateSync.xcscheme",
+      "category": "release-input",
+      "note": "唯一 App 构建/测试入口（scheme/test plan），WP-2 冻结发布设置",
+      "owner": "native-release",
+      "bytes": 2334,
+      "sha256": "8e698f56948f7d2ddd875d5ace937ae3be6afad0da04f1ee5fb95381b35daa81",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh"
+      ]
+    },
+    {
+      "path": "SlateSync.xctestplan",
+      "category": "release-input",
+      "note": "共享 Test Plan",
+      "owner": "native-release",
+      "bytes": 935,
+      "sha256": "0f3595e417978056b132dc2044c5ba9b4f117c5576722f61114e066c77b71c86",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-01.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        "SlateSync.xcodeproj/project.pbxproj",
+        "SlateSync.xcodeproj/xcshareddata/xcschemes/SlateSync.xcscheme",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/App/SlateSyncApp.swift",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 17058,
+      "sha256": "4a2b32bc81f1a497917a710b59e7308c50986fbf88d47366694c0cd2b39c211c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/Info.plist",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 1291,
+      "sha256": "260445deedeeadc7542196c0b4cf4698d4fc9ba794d7eba7d21384460930b723",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "SlateSync.xcodeproj/project.pbxproj",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 18698,
+      "sha256": "fa5c1abd9c467ab0117fa9a56a211db108b545861fae9ed34b50418e0341d1e3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
+        "Sources/SlateSyncMedia/OCRRuntimePaths.swift",
+        "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
+        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+        "script/tests/release_pipeline_tests.zsh",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 37,
+      "sha256": "d2ace10a8d8a06dd39a51e39fe5b0db9df0b334d7464d229532fe075e0d93f17",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
+        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+        "script/tests/release_pipeline_tests.zsh",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncApp/SlateSync.entitlements",
+      "category": "native-product",
+      "note": "原生 App（含 Resources；WP-2 增补 PaddleOCR canonical 资源）",
+      "owner": "native-product",
+      "bytes": 188,
+      "sha256": "d9b06c202956033b01e62b21c727eea89b6a4fd456ef71d420c39f460426b9f3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "SlateSync.xcodeproj/project.pbxproj",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "SlateSyncTests/SlateSyncTests.swift",
+      "category": "native-test",
+      "note": "Xcode 单元测试目标",
+      "owner": "native-validation",
+      "bytes": 3925,
+      "sha256": "aaff2e24e206ea028824ceb154d3be8b68fadecde0faf1e2eb8678fbb4b991a9",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "SlateSyncUITests/SlateSyncUITests.swift",
+      "category": "native-test",
+      "note": "Xcode UI 测试目标",
+      "owner": "native-validation",
+      "bytes": 15586,
+      "sha256": "274b259e49e36223070b09974f71a1299da6e16101be8d0192b70ccc8b8aab12",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-premium-ui-history.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/AdditionalContracts.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 12959,
+      "sha256": "db7bd3b4d026218159d9fda2f587613630a3c94d2dcbca64f5ae6e720f170011",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/CustomProviderValidation.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8024,
+      "sha256": "04b801fd79b6d3a045a49f72afa992bf086fdf91abd4b9f2c8cded75104e9f86",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/DiscriminatedResultSupport.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 607,
+      "sha256": "9ca7f05e11553c6283edcae00f8191a64550a7343bf6a4fbcfb211bbcb586032",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/DomainContracts.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 53194,
+      "sha256": "d4a9f4356bc3bf664e382afba5aa0553eb213a6de0800bc21e46645a4301648c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/ExtendedContracts.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 35956,
+      "sha256": "af740de7d34a8a2a427416b7520e93c4594685f2b032052a0dbe42b47cc68a42",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/GlobalSettingsContracts.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 20668,
+      "sha256": "4ee5fb11ffffa4e81215eeea9f828f5287dc1d30b6c6a257b68c479dbf95f520",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/HTTPURLNormalizer.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 13615,
+      "sha256": "29ee294ac4ff9d6d673213462afab4747ef7e72c3ccf012a56e2a41053f31546",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/JSONValue.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 1919,
+      "sha256": "44b16aed497f09775062a2fc98a29ac10e3aca2240d59ca6d3235d187a1e3cee",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/JavaScriptCompatibility.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7746,
+      "sha256": "b35ece3e6021c2463eeecb92d9b646ec073faddd7912b902a2d7068c9d03c488",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/MediaModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7974,
+      "sha256": "8abb2903919cab198468655e8ec97cb43cc74cac5ac3abce7053a95ed8f9bdc7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/OCRConfiguration.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7304,
+      "sha256": "34d2a47ded7869f9d0ba453b02b9f2c44f411feca5d94cc12488e1502842cfe0",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/OCRModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7717,
+      "sha256": "1c05c3777d18af541841a31bb1ebc0dc894fd5b04f4385f8efe0cf42901818ae",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/ProductPrivacy.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2565,
+      "sha256": "6569f4ed8ef6af02a0d1a5de5771fff2d61167ba113013c14f0767df426c5bb4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/ProjectModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 20849,
+      "sha256": "7abda462bae94ebdf03fb67b96f40743a3041d74ca3430ca1a0e764a1603c05d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/ProviderModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7886,
+      "sha256": "12f1593cb3d31d60533d1d87a159a515bb59a46f964f5c2057e2c58ef1c55ad4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/RecognitionModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8867,
+      "sha256": "627dbeb74316180b1d4764066df4d099d963359c359f576b48670341dc3d5d72",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/SM05WorkflowModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 9630,
+      "sha256": "f1aab1b25bcae07c5a8fcb50f7c1ebbdb5b89614f43ba6df0206a36dc26e8c48",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/ServiceProtocols.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4985,
+      "sha256": "eef2716b5853590a4959aa97596d92af1139ab6759ebd3ee71cbb3add6492d9b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/SlateSyncError.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 998,
+      "sha256": "6b350b3d03c3dbc027bd1186fd9c84a864c45abea28e6575a1cc0eaaa65c2784",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/StructuredLogging.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8867,
+      "sha256": "6dc412a3a1773ae68ae9d22fd952769b6d167c3167fa3482339cb6f4f0520940",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/UIWorkflowContracts.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 9327,
+      "sha256": "d2dba9f8b59f95581fcd18070d3a38d31cef918e6782fffa958cdc26b3a6d2f3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncDomain/WorkflowModels.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5893,
+      "sha256": "7c58d0bba07995d095b667b0bc6a8f323a3a2ca1f3352c94ed5fd2aab48086b9",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/ImagePreprocessing.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3092,
+      "sha256": "0abfe85dfa1838ea4a6b333f40d3846729c81cdda3e65c175b497871694b5c9e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/ImageRasterizer.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2377,
+      "sha256": "f908c4665500d30961ad34556662335c6e335584200ce831c243a676589e9266",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/MediaPreparationService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7010,
+      "sha256": "661955d944a9a6e44bff641b39fdc5b0ba4fce013459fbdd02a7694e52455fa5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCREvidenceFormatter.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4157,
+      "sha256": "7453c67aac40172e767e14128ee5f33f9222858e0d87205926e9bc9ae6513a12",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCRLeaseCoordinator.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7132,
+      "sha256": "f0201cfa8cce9f248095d591c5b7c58e8a8c3c6388ed4158d27ab20c9eb889fc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCRProcessSupervisor.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 11634,
+      "sha256": "afd9efed677fabdd43806785cfff84ba707d4bfc9b2b621d50cce566b317800f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "Tests/SlateSyncMediaTests/OCRLeaseCoordinatorTests.swift",
+        "Tests/SlateSyncMediaTests/PaddleProcessTests.swift"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCRProcessTransport.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 11484,
+      "sha256": "ad6e4d14da2e4b506cdbe7044f82585409096c25ce6e4f2e310220d00fee00d7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCRResultCache.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2306,
+      "sha256": "dcfe704d71ade2620d16a71236610cb6b1accb3d3cbe74c608897723fb90acbd",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCRRuntimePaths.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3240,
+      "sha256": "c1adb7d45121007b414286487534f3d64ea8f761eb90fc18be34d33c64c9ae61",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/OCRSelection.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 6763,
+      "sha256": "3bf8f64c9b7db021800cf6f7bae074368c72ae8fbd7ef30e07b4993a5e37b382",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/PDFRasterizer.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5268,
+      "sha256": "32d4c4e2248e19606759070431c528f506125ebf31046bcd65f69768e0c3fd33",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/PaddleOCRService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4870,
+      "sha256": "dc8200f6232ee6200e8838938bfb998f27fdb3a4cbabb7931f1dd41f104ce543",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/PreparedImageEncoder.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5431,
+      "sha256": "1375dcdb80cf8a337f17ceeb557edc5301477288828013483b72097fa4c3bd58",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/VisionBridgeAdapter.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3144,
+      "sha256": "15b2b947657d303360788f6f3e226f9cfed2597bdb0bcbb5ac75902ff161ddde",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/VisionOCRService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 9630,
+      "sha256": "4dbf6f3ecd407efdcf5337edf2bdc2179d361949c1303604147dd3068468d045",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md",
+        "Tests/SlateSyncMediaTests/OCRLeaseCoordinatorTests.swift"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncMedia/VisionObservationNormalizer.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2827,
+      "sha256": "84fcd2822f9621d2ad6f2d6cc4195f668c0176bcefa1dc8290c0b86865b8bb9f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ApplicationSupportLocator.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 1347,
+      "sha256": "de521ec507b40144e2165195ce52772baf6733c4b2a3398f78813e307d21b755",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/AtomicFileWriter.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 6268,
+      "sha256": "cc05edd4aba244f8b66bf9619b1c667d237475e707aec33576d4649c6614b780",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ConfigurationResolver.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8606,
+      "sha256": "b1c8c49365a719a6e0bda285ea814c3994d4433b15fda1c9a3313fb38b0d6761",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/DiagnosticsStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7840,
+      "sha256": "c60b749ef5c64af4edf3807050c071834995286fe167ab338af31791c1e6eb49",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/GlobalConfigStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8099,
+      "sha256": "25239b04cd281c6249593a0f378a83bdd1847b1bb1fdfa7b2691cb4d4efac0d2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/KeychainCredentialStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 35377,
+      "sha256": "3b4169feccf9d61e9690b49410ec7fe3d1a856394c4c311b51ca0b74775671d0",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/LocalLogStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7925,
+      "sha256": "f90ffab70b7ef2fc76d72ab1b0df86e81ad9cc94d6deedb4174c01eb931d6081",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/MachineSettingsStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3397,
+      "sha256": "5055bc3fb41a703e99d33a886145a288451de19ab08aa6ddf9e62c73e8ccb497",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/PersistenceJSON.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3581,
+      "sha256": "7a2ed1553276280f2c544c2f4d8f31b9695f40230b861e30e5484b0559a86e0d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ProjectLibraryActivationCoordinator.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5486,
+      "sha256": "09312c2164c3c0e44a52f8084cbc224fc45d1ef76812bee34e1023ab5629aa7c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ProjectLibraryStartupService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 10107,
+      "sha256": "7fef9f1f76380744ed9f3710b888f4680bfe1843baf696a7eab1171a88f825a6",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ProjectLibraryStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 45057,
+      "sha256": "82ae5955f0fee8d7cf0942f1d55c313c77e03c0038ecb07063d7d02f08f3c245",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ProjectLibraryTransfer.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 36934,
+      "sha256": "1c58f9f943002a43c07e75859394fd488166a52db96c9a94ed94a7498e78d7b9",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ProjectRuntime.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 15073,
+      "sha256": "0bfe0a5675e3bd0622f0354b3157f3c9c170de99a8953ad77cb406d741d5e7de",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ProjectTaskStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8211,
+      "sha256": "e6fc1a0e0ca930ada0ef60d9a2f0df431ffd2cce2291836a1d41ffee371d6d8b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/SQLiteDatabase.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 15040,
+      "sha256": "f2f44cfecb8499c348638c15038a941d45ef3debc9d793a3e89de110dfecf593",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/SQLiteSchema.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3190,
+      "sha256": "83be49c89b313a172619b8b54956b1d44871386657d3966a8a9c06426e45f13f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/ScenarioStore.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 10402,
+      "sha256": "54753372b97f63274d480b02b83800149fdf348b9fd9b8f99db86c8468e7138c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncPersistence/SlateSyncRuntime.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 13369,
+      "sha256": "56edf1f33fb0ba7772b3863cba898868f848fc5cd5d4419f4cc732837dedced2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/App/FocusedActions.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3492,
+      "sha256": "135949b9a8500ae6ded49b450e2d5b503f7f001cdf0748a684f7630a71de6aec",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/App/ProjectWindowOwnership.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 904,
+      "sha256": "0c7ec827d084b24df276ee6264ca31e5ba6555e9a4bcf2a2e8a04b0007b61823",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/App/TerminationCoordinator.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5400,
+      "sha256": "7ed90e0a01235c75d91027a106e727f65efb147d4404a409d2a13be7ca6c4437",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/App/WindowLifecycleBridge.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 6674,
+      "sha256": "84364f27bb8bb627566ef72eb04149833b0975395b6aa3a921ed60238c807bd3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/CSV/EditableCSVTableRepresentable.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 17158,
+      "sha256": "bf0f2a0e12022c85f2ae3118b39450be8db77ccde96df60e3cb0eed571257f1e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/CSV/ResolveCSVModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7348,
+      "sha256": "569baf08e1a4db496da21ffdc894813be77e7fb9b0270804e90ecec2fe50a795",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Components/SlateSyncTheme.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 764,
+      "sha256": "a70a6130b64b464407a3855cd94157cf9455858d6aaf76b750cc04faf102c526",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Help/HelpModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 1948,
+      "sha256": "edf6fe5e3d14bdf8b31d5554705e2ea57297d5fdfeab8b0b140500bfd06696d1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Logs/LogsModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2436,
+      "sha256": "581c3f9d487b090a8aab5f7f383cc2ac70f542254d5cc16178169d7dabb31ba6",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Models/AppNavigationModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 928,
+      "sha256": "d07a7988312c9ba13ce26a9ace7e3a073fe91e89e91ad1e789ee701c17dfba15",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Models/AppSessionModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3919,
+      "sha256": "e5d3cfb68b893bd9860bae52cdb2a7fcc409a0513daa84bb1a5de4ede92861dd",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Models/ProjectLibraryModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 10318,
+      "sha256": "2b9690eaf4b8157999ea4f9b3fb5d85b5ea43513fbc9c60938931b461cdea991",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Recognition/RecognitionModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 17749,
+      "sha256": "fbb0267d63ddebb50dd3ad0d6051afcbc6382651d9549ff1d7d9c69d32f06f2d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Resources/help-sections.json",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2999,
+      "sha256": "792972dbd70a44e9a289aa5d74d68175c5bda45983703b9d11c06da719099ea8",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Settings/GlobalSettingsModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 15803,
+      "sha256": "8e3094c4e3f7c909051b5e213283cd747030ca02c3d26f344ecdc6a7a3ae29c2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Settings/PaddleInstallerModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3262,
+      "sha256": "6c834766ad318c28a245dbf1b409bdb7626b28821c7a224bc55de25245a129ce",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Settings/ProjectSettingsModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3569,
+      "sha256": "203b72e0e8f68805771f485137b343cb6e4a84294e85f2bd0ce8173ce116c305",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Shared/OperationState.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 1079,
+      "sha256": "960773645521daaf899bab49c4e17dca940ed1f130c3fe5fcfb6c0927edb9509",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Shared/SystemWorkspaceOpener.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 437,
+      "sha256": "ebf2b06e40fcf77c671cce2f2f8e5bbb5924cd2249af426a54e01941f99e1849",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/AppRootView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 6609,
+      "sha256": "35c93b7dbb1099840fde16ee284bba7bcfd2a8c0da9dd579528009ebe992c497",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/HelpView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2313,
+      "sha256": "9b9f2d437f9ed7a95e8f7b16c314d922f61ee69157a0e35c627f69de0c41733c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/LogsView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3958,
+      "sha256": "04f38c34ee4153dd05b49fc578d03bc3412185e66d24de4cc9e3c8fb18a2dd1b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/ProjectLibraryView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 12230,
+      "sha256": "024ebbacd9fde90b5f26bd1bee327fd47fdc72c3b7cc7fe1e62ba1a18bfd7b5f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/ProjectSettingsView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 6764,
+      "sha256": "3b4ec39d14d7aa0d950e84fdfd40ffefcc5c45693a942cdabae9820639c2e2c2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/ResolveCSVView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5615,
+      "sha256": "33f9fcef68418e6e796a94b4d620e1906015e43fd52ca803885c1113a5009c4a",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/SettingsRootView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 18146,
+      "sha256": "33dfa218dbcde5a1354911be703cdde668ee6b47bb865913a6b92532a545b540",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/SidebarView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 989,
+      "sha256": "8831e8e9b9d8ba3498b272e233aae0f6857ce43adcb83ed44dbe4ce9286a970e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/TaskRailView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3554,
+      "sha256": "394c89b9630572eb550f8dc7119044e596b531521042a5446adf78bac5302145",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Views/WorkspaceView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 17712,
+      "sha256": "065262231fcc779cec47aad9c6b35da72b631528d33636ca2de876ba2d4b8847",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Workspace/MediaInputModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3224,
+      "sha256": "7e4b20e7b417b1a664534c5a081a1b696863d3f23f72585233ae7b71b7f7e20f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Workspace/MediaPreviewView.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 2190,
+      "sha256": "23098ecda641dd1cac12d56da7a4c77a8c1c9397909eef931965deb8fd350311",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Workspace/MetadataScanModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 3814,
+      "sha256": "643b36e7a863d4f0da485f7ea58c0d2e0b9bdae766c0a3dec68288cff4848fc7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Workspace/WorkspaceAutosave.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4274,
+      "sha256": "3890bc44b03975ee61eb576b2ec6dafd71ac1814d631e9d709145ca87cb48ccf",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncUI/Workspace/WorkspaceModel.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 21643,
+      "sha256": "b92ead7f49b36bc7c682779b97dac2984074012ea3fb3930dac10f37dfc83ed7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/MediaOCRWorkflow.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4810,
+      "sha256": "602eed3830cddd6d742f438f23252a825170236c699fb23c674b454d990970fe",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/MetadataStructure.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 957,
+      "sha256": "3a042f765b350af4e0b667ecf614f176973b0e6d508fc7f86f8f5048878e593d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ModelCapabilityProbeService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8004,
+      "sha256": "be5a83e5ab5ff5a7dda058293949ad99f52d2b6e52a3a58bf75a4e45147ef8f9",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ModelDiscoveryService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 17398,
+      "sha256": "f4c8ec34d56dcb824c4f7568d3e3d23cf59a5b5da6e70fccee092130c2e63394",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/NativeRecognitionPersistence.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 1249,
+      "sha256": "f87432b26784e4d08a77886f7386e66f88b3beb5e9ff587518fb3ff99143b711",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 17564,
+      "sha256": "8b311f57e3898f557410d2d305f3170cee9e52db10f67f3cae30104927f18bdc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ProviderCatalog.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 14375,
+      "sha256": "4cfebc5fbc376651d08d754235b58a9c6d8ac14c2cf219fbce327f0ae8393127",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ProviderPayloadBuilder.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 11799,
+      "sha256": "eebc8c99929200f18b4a7add215ea293308b21c1ac135b26a77a3967bad67448",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ProviderRegistry.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 11397,
+      "sha256": "bf8cfdf28c83054e59429630b8effc43460e59ca3a7898a3adab3ff97ba4fab7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/RecognitionCoordinator.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 20840,
+      "sha256": "436ecde65ff747dfe041da8ff999ef5466050c4206cfa6a0d25f227137ceb13e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/RecognitionNormalizer.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 8456,
+      "sha256": "175043303fb20cb449518fc40462361743f26638b59e0909a58e62aaae76d92c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/RecognitionPagePipeline.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 9275,
+      "sha256": "226bbe7e6aa34e4f5a7d514d86792d6771147dc466af76b6fcd9df64455270d7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/RecognitionPostprocessor.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 15452,
+      "sha256": "07d0c42d1da6227f39942bc7a68b626dde9456d396302cea36e5d3fbf8c12802",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/RecognitionPrompts.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 14606,
+      "sha256": "cc698c621f0db40e63b659edbbc32e30b89471907c34c623826918884477fa2f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/RecognitionSchemas.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5768,
+      "sha256": "bd170828d5ae4dd4ba0bf40d9a90e2353250ef265698b49db586e8d2fa44e604",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ResolveCSVEngine.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 11852,
+      "sha256": "f6957fa37336082cbec778967ea11459052c9fb253ab2da59743c98e1515ecea",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ResolveCSVMerger.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 27312,
+      "sha256": "55d466371ed7fb33b9ed25bcc70b28e1eafbe37fb2bc78c6b63395d795ca6570",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ResolveCSVNormalization.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 19997,
+      "sha256": "d4e3908996f7d85be581a12357f8127046e1cb25ce43905550f37e881a351352",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/SM05WorkflowServices.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5171,
+      "sha256": "d4b816d986ac8c04d41742192d716db0bc2fc1c24eadf537d96d321bf8143235",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ScenarioMatchingService.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4075,
+      "sha256": "ff4d8e9128a76b35f06d5d6060a52dcc4b8cc9ed87dd5f69c17c7d79680fd38e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ScenarioOCRAdapter.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 879,
+      "sha256": "b4c2cdd3f58f2c771e46bddea81336a4d3787edd0e773f49a8143818d41c592c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/ScenarioProfileEngine.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 18694,
+      "sha256": "6279aa9d24e64058fa436780dffffa7d16ebedec06fc355f389715e4bcf6fd51",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/SlateCSVWorkflow.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 5146,
+      "sha256": "c4289307fcf619f0144b5844a940fd082891a77ce77253aa90eb4716ca83df15",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/SlateMetadataParser.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 4679,
+      "sha256": "3b346f8716497c21adbb97b0387c2aedd8cbbd688ffa1d1ff196e305b45a5894",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/SlateMetadataScanner.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 7305,
+      "sha256": "d287a16e07e9a65d034283724777a9ac69bd5c70056af566e4173fd36af5b1fc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-05.md"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/SlateSyncWorkflowFacade.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 30302,
+      "sha256": "413cde7d7a0930269a88655f949171e476f56c57e056d62e09a5e78a552f5ad8",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Sources/SlateSyncWorkflow/URLSessionProviderTransport.swift",
+      "category": "native-product",
+      "note": "原生 Swift 业务模块",
+      "owner": "native-product",
+      "bytes": 9380,
+      "sha256": "9fbe263c7d1cce3e18eea0c11e1ac73524c4cd3bacb29d2b2c26d47ae6923db5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-07.md"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/CustomProviderValidationTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 11073,
+      "sha256": "bebdf4b4ddd61d36b3891b32b21a3ec722b6cb01b083e57898a93023272460e0",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/DomainContractTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 15588,
+      "sha256": "79c51f2cc781441ac6281ea1afb069e0d953b3ddc47c88b779147300a7903faf",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/Fixtures/legacy-project.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 495,
+      "sha256": "3e57e912260a91362e656b35c63916cc17d9901183e3a57cbb1558726712e437",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/Fixtures/legacy-task.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1691,
+      "sha256": "3484016b6cb1f933c47dcc07e3bc0fe5c5d7269e8660622df2537300ecc1e9b5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/GlobalSettingsTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 5587,
+      "sha256": "2d785985267d40ca63e695e3a81e079f2215b937537129026536b7de9e916884",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/JavaScriptCompatibilityTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1862,
+      "sha256": "6bb91730e40ff0befa80c957957472535b7c5daddcbe39da994ac24403700777",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/SlateSyncErrorTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 427,
+      "sha256": "a2ead660478dc6e78c541d882a6d709b7c5b268c470aaf390fc4fa2579028420",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncDomainTests/StructuredLoggingTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 3579,
+      "sha256": "7c3ac0fdb8311d33b706a29df66893ab2123f47ddb9b7a071975aa700f54f878",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/broken.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 23,
+      "sha256": "5870df335041bbe3acb086b9263f67447fc34ebaba0e6fd6dcdb76b1c99a4799",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/coverage.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 6921,
+      "sha256": "f800e3c9eb0c60d3c0552776926668f5922104f40d0f9c8ff8a637f2fa704959",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/crop.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1058,
+      "sha256": "2ae86fd8dc31249dfaeb11ef62b6c1360006e7387c57b3f357dfa07b67af794b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/empty.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 311,
+      "sha256": "c1770c29539e4267a02e8d2257ff36d606f3e72701f923c90ef73fb2b6058b9d",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/evidence.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 27046,
+      "sha256": "303075a8326e638b7be57dae195cfa087e346c577ab90cc91741c4234d3dec31",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/geometry.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 11958,
+      "sha256": "c4ec46d20d7abc6c683c9181dcb9dfedff46771bc7a3e757172cd1213406ab22",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/huge-bounds.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 445,
+      "sha256": "a0dbbaaa1a08bf0406ed30e62f1fd94a2c07eb31f64551f95576c049c2c207d5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/invalid-bounds.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 431,
+      "sha256": "456fb5694bfa01dee44f86168c93edd6b65c55dd0a9f1b111e080790e8a31d01",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/locked.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1429,
+      "sha256": "b609d966dd3a480a609e286958ff3079d9264741577f90680247573c553e677c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 6246,
+      "sha256": "819f7c984e552af45f5e44347a5f8099fe6956ff6d141b93e078e3fa174a5784",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        ".codex/swift-migration/packages/SM-06.md",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/paddle-config.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 33479,
+      "sha256": "4ded5e6ff80a75c5bbc8a79ac9c0e531f9ef575e298ca656d050904d38333081",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/pages-1.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1457,
+      "sha256": "aafb365654c8076e50dcd53925906462c5c6e9f5022712685b48fdc5713f2b2b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/pages-20.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 11913,
+      "sha256": "b671c040ef2ab81e6f619a27ee20d8d914310fa568f28926f6e45abd7bb25a1e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/pages-21.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 12467,
+      "sha256": "55eb0c39f840fbfdf9367667305b25edff8b6acc15299d4d90a84df6e83a9309",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/rotated.pdf",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1032,
+      "sha256": "ea33c24abd00bcb4618018fe3cb0f58fe6a1cb3eda5166ca91fcbee508e69073",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/selection.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 78534,
+      "sha256": "13bd391cf3ca2269d5c58a977f86a326ee17842ba7efe0d542f70a9919e4f328",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/slate-alpha.png",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 66744,
+      "sha256": "b49de7072c5f8e1160b394640f457026ac22485ff120bc7e08b97f3afc518313",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/slate-exif6.jpg",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 172874,
+      "sha256": "150e4731c3f38b78463a4178af837b657ccd7e15136e11d9c9aae23fdf3a4497",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/slate.jpg",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 172838,
+      "sha256": "6e12317617b63c706da92ddb96fe0bc8e52bcfa96d2c5baa6989fb5caf5bd6cc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/slate.webp",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 8494,
+      "sha256": "92118c7d638ecb8669b3fe7397213e6863f7c742d8bb9e2a095708ba1fc5e6a2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/sm06-fake-runner.py",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 3877,
+      "sha256": "f9b710255bc839d25e4e58561bcb7e04e895e4ab67fb9dbc252e899776cb69d5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/tiny.png",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 69,
+      "sha256": "e878950f8091ec010cf5cc723bdea027a8539cf7147cfea199c2f666232dcd4e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/Fixtures/SM06/vision-oracle.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 10105,
+      "sha256": "1a24e5b14f6f835533c5e5d13605ac6b7c0a95701bfae974492e969ecad6ca58",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/MediaPreparationTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 12982,
+      "sha256": "32d70828895fab17f8f671542d1d871c0be02e6ac48510aca543029d05e81da3",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/MediaResourceTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 3098,
+      "sha256": "d570e81b1dfa29b2eba62f40749b5e925296e7fcf74f1861f93e6a76fc04279a",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/OCRContractTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 11927,
+      "sha256": "2c2511f58d78083235e55cfcb112f8c398519179521cee5791c3aef451d9ca35",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/OCRLeaseCoordinatorTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 4453,
+      "sha256": "b529d82c654dd165043ed5433d077fb33d6eea3a28f8f1cf6d32e4783f537b4b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/OCRPolicyTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 10882,
+      "sha256": "a207af7cf325870592b3a9420a2103ab25a0dec351f0c92296e7e2fb15c67cbc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncMediaTests/PaddleProcessTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 19695,
+      "sha256": "830ef346221db855a6cb13c4ba983c129d3d261c44980f8ba67f1f63ef20ace0",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/ConfigurationStoreTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 12258,
+      "sha256": "ed3d9a67d4b87e7ca92ab32e333cedaa2f8b73f3eefaaa716f4db50cd5494825",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 355274,
+      "sha256": "15daba02abca6d1f1eda8c61377996e59ee3e4b346c3a7c6ff5cf1ea77124408",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        "SlateSyncUITests/SlateSyncUITests.swift"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/Fixtures/global-config-v2.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 320,
+      "sha256": "e10d304ea04df6dea763d62b7eaf1fbd6d89dd197c654645003a0b7c800a4041",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/KeychainMigrationTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 17386,
+      "sha256": "324e6fc9ff7047547d7cce4aa6000f488ded17355663209ac888272b125f78e5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/ProjectLibraryStartupServiceTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 8636,
+      "sha256": "0ca1abc3a306bcfb730b88a6bee24637787c54d4153cc5c49fbf0c0c744253da",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/ProjectLibraryStoreTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 26257,
+      "sha256": "6d09aed2345894ebeae2e4dd1e967e2594b199b09738222df6e3f567fa0f7126",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/ProjectLibraryTransferTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 19087,
+      "sha256": "108bf1f7455f868330dc43d9281e6b904e2b66565380c0ec9b30ac8172e3bdf2",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/ProjectStoresTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 10205,
+      "sha256": "f59e00148d29aae18bb57e8f42575a815b56bb75281a5fe59e1cd073a2ac93b6",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/SM09LegacyPackageTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 5174,
+      "sha256": "50378b34344abb73ba1d4ffadec103b1e80da6f57b762ae8210134cd9808c463",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/SQLiteDatabaseTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 4157,
+      "sha256": "a67d360681746d14f599f41c7a0d830963e3f53754484a84466114508de8523a",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/SlateSyncRuntimeTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 4347,
+      "sha256": "a8c42fa83bdee4c4e763cfb21e6554a36c958ba2cbd2649dad88abd6a49a5ae4",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/Support/InMemoryKeychainBackend.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 5649,
+      "sha256": "a1ef87704e17313749b734601db24de42ec897cd1a4ddb9c673fb4c48eeda327",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncPersistenceTests/Support/PersistenceTestSupport.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 2411,
+      "sha256": "e38252cc53b178ff9aea86cc820bb03b0406a942606a9c415141ffd29515c4fb",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/fixture-manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 598,
+      "sha256": "621f82dd1e70a706c50cd7dc1731a7fe5df163daa26bbf9d843a7fdb4cabb4c1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/performance-budget.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 501,
+      "sha256": "27f12f9807cb3fb1f046ed2e2ef0f1f3bdbea5e495b8945990491a8531cb11bb",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-coverage.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 7997,
+      "sha256": "fb35602013a63c43f1bdd4ff67e32f79148c4d77042ce1102c94080dc7761757",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-local-slate-oracle.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 5029,
+      "sha256": "81509a7b81de9812edf39a45019b8db6289826ffd128a2c6b9b72596ca44c557",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-requirements-ocr.txt",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 151,
+      "sha256": "605c63b86e6d7d80909f5c799c8c98bb38506428c151d3564f4bca2437bfc5ca",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 2462,
+      "sha256": "b7ca91b1da680d72a903066a269424f49cff2eecc258647d5f11cc0de1364065",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM08/state-focus-matrix.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1178,
+      "sha256": "a7b3f69cc9b56f50e4363866f8dddf8331a744c200d59227efd8e53eec5f2f5b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/Fixtures/SM09/sm09-native-evidence-plan.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 15768,
+      "sha256": "0b1bbf26941052e7a9f872317cabf524fe27caa924d3d28f218593c06e98f0cc",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/SM08FixtureFactory.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 1371,
+      "sha256": "3dc25eb0c2df7acba52dcb76ba65cab218a2f89770a9cbc7cba28769d240e8c1",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/SM08NativeSurfaceTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 20571,
+      "sha256": "19bb018f531b2d48ddc202073b3f8a9979a33788342cc75605ca54c1d5251b60",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncUIUnitTests/SM08OwnershipTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 83216,
+      "sha256": "d2c641f4a4b9ed18eef63b4a1a931711075bc9c0493631b282a1a646fb1346f8",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-premium-ui-history.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/CSV/manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 3858,
+      "sha256": "6da395529c7b98e6e7acc0d3ca8a337fbf83ce7b16a7a9727a128bc90e546025",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/CSV/resolve-source-semicolon.csv",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 118,
+      "sha256": "a95565d61d2d377d213bc3f3ed3b5d2095e389b807e7b517e2d0d0816e6e842a",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/CSV/resolve-source-utf16be.csv",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 110,
+      "sha256": "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/CSV/resolve-source-utf16le.csv",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 110,
+      "sha256": "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/CSV/resolve-source-utf8.csv",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 52,
+      "sha256": "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/CSV/resolve-source.csv",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 156,
+      "sha256": "6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/Metadata/kinefinity-revision-2.txt",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 147,
+      "sha256": "534f8c96fcb88bab95959cb60911a45d592e89ad27cbdbf3fbc54e8aef2167a0",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/Performance/performance-manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 294,
+      "sha256": "670032da4f7b4b3da2a8b4ea72f11f09c14f1e677caf15d5e1c0ebfeab400475",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/ScannerTree/scanner-tree-manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 231,
+      "sha256": "2f66160ad38a38e4561cde0d0383af68d35d1fe57e4ebfc2e46ea9f68241da2c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/Scenario/observation.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 928,
+      "sha256": "bfd3a093d2bda9df6274b31d70d45ba5c2c988d3a7558a594ade371cc25e0277",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/coverage.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 3538,
+      "sha256": "9d10b82e2c3b30f3ca58b0cbd0443053958b72bb21264d3dcbf09fbc1e410f86",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM05/fixture-manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 480,
+      "sha256": "4c6cab711d643111969bfe653ec18251d972a23d2d99e86ff6bcb2bef89999a8",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-coverage.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 9173,
+      "sha256": "4ed47bbebbe988887b7f4db4df2aad2b0c48cdd7ef0c52919db508d7a2c14346",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/Fixtures/SM07/sm07-manifest.json",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 2965,
+      "sha256": "3180a02f4a816b624a189f4a1f85a950693de2b0b33192d1c072d53aa9ebb9ad",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-contract.json",
+        ".codex/swift-migration/packages/SM-07.md",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 8671,
+      "sha256": "71eb2512b321bf9b61c7a5a295acd74aef7bd70758f6c1ba2ea6cca868c51968",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-06.md",
+        "script/sm09_coverage.py"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/ResolveCSVEngineTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 5625,
+      "sha256": "4523de13abdf94baccdbe001a3c009c80f2ba18b4e97eef23b19b2bbd2d33732",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/ResolveCSVMergerTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 15635,
+      "sha256": "1efe7bc0b353a1bbb27a6c0e61fac7599b0a7866fae18668e81e0517f9855604",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SM05WorkflowServiceTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 3591,
+      "sha256": "d6137b108e4e74eb917cb31bddb5b7d1e634b125b3655c4a9beb4ddfa427409e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SM07CoordinatorTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 10711,
+      "sha256": "3856b8c0930f29e6e7d5f078afc4ff8a8b43ad75a9dc757847091d670ca1f5be",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SM07PagePipelineTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 4300,
+      "sha256": "eba6e77cf86e8a821c7f5c75e57193e55366043e1307cc158c0bbd8a09d345ba",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SM07PayloadNormalizationTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 10342,
+      "sha256": "aaa8ac23a376148c6e1cedc4ac6dd76b091b267f541f6700894c6f74132898ec",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SM07RegistryTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 6918,
+      "sha256": "5aec7ab0690ced7109952a2466031d50cb83677aa349f6a5550e3d512cfb0d07",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SM07TransportDiscoveryTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 16712,
+      "sha256": "77d2ab19914646e08f6ca3e7476b2403b6cb1df2644373b13a06c9ad065ed7a5",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/ScenarioProfileEngineTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 12431,
+      "sha256": "e5bdcbdac49359a96ef990f6be600a0ede603fba6c8d4e6338ce746c6a7fdbea",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "Tests/SlateSyncWorkflowTests/SlateMetadataTests.swift",
+      "category": "native-test",
+      "note": "SwiftPM 测试目标",
+      "owner": "native-validation",
+      "bytes": 7248,
+      "sha256": "325e66294e0acbdab3afa337b278af6e27c3d08eb2a4f800935fb0ac1a5c1185",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json"
+      ]
+    },
+    {
+      "path": "UX-CONTRACT.md",
+      "category": "migration-history",
+      "note": "保留为设计/审查输入，不进 bundle（WP-6.3）",
+      "owner": "migration-governance",
+      "bytes": 4699,
+      "sha256": "19009c54e195611d13198c0ff1a6bde896eea67309945a830d4bf567ce59f5f7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-premium-ui-history.json",
+        ".codex/swift-migration/packages/SM-08.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        "AGENT.md",
+        "README.md",
+        "Tests/SlateSyncUIUnitTests/Fixtures/SM08/source-manifest.json",
+        "script/sm09_inventory.py",
+        "script/tests/sm09_native_contract.py"
+      ]
+    },
+    {
+      "path": "build/slatesync.icon/Assets/icon.png",
+      "category": "release-input",
+      "note": "图标等发布资源（引用情况见 referencers，WP-2 收敛为唯一来源）",
+      "owner": "native-release",
+      "bytes": 3213643,
+      "sha256": "105825999127f602b81aaf223d94db292c46b6ef41aeabd025e150cfcd01d3be",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json",
+        "AGENT.md"
+      ]
+    },
+    {
+      "path": "build/slatesync.icon/icon.json",
+      "category": "release-input",
+      "note": "图标等发布资源（引用情况见 referencers，WP-2 收敛为唯一来源）",
+      "owner": "native-release",
+      "bytes": 600,
+      "sha256": "9c4a6cecb7c3ba52a7edff060ea0cc45b2b8133f18dd4ad56b2e8ecb5a051081",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/manifests/sm09-native-resources.json"
+      ]
+    },
+    {
+      "path": "script/archive_release.sh",
+      "category": "release-input",
+      "note": "原生 Universal Release archive 入口",
+      "owner": "native-release",
+      "bytes": 2125,
+      "sha256": "fad166ce3f626cc6a910972adaa6ce6d0a3fe0c66c0c4c632849e633cfc11f08",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-09.md",
+        "AGENT.md",
+        "README.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/build_and_run.sh",
+      "category": "release-input",
+      "note": "原生 build/run/debug/verify 开发入口",
+      "owner": "native-release",
+      "bytes": 3332,
+      "sha256": "d4e6dabe918bc9b0ec7f27daf84cff895b1bd090481bd50eebaf244d4268e691",
+      "referencers": [
+        ".codex/environments/environment.toml",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-01.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        "README.md",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/lib/phase_gate_lib.sh",
+      "category": "release-input",
+      "note": "Gate 共享函数库",
+      "owner": "native-release",
+      "bytes": 18921,
+      "sha256": "9a53f4ed531861e2088a164c5e4a1cd4029b1d472f95e0a7931c0db1f11dd5cf",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_coverage.py",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/package_release.sh",
+      "category": "release-input",
+      "note": "同源 ZIP/DMG、checksum 与 manifest 打包入口",
+      "owner": "native-release",
+      "bytes": 6680,
+      "sha256": "d0bc91ff9bd2815217d45d1469bfe71fb72e883756afb5f1c496ae9a16f5a83a",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "README.md",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py",
+        "script/tests/release_pipeline_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/package_smoke.sh",
+      "category": "release-input",
+      "note": "ZIP app 的隔离 XCUI 交付验收",
+      "owner": "native-release",
+      "bytes": 4513,
+      "sha256": "182c9ca1f4836afe3be808f1e1a86f9784b8af1b8397597a0349e0e9fa10cf50",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/paddle_offline_check.sh",
+      "category": "release-input",
+      "note": "显式环境下的离线模型验收",
+      "owner": "native-release",
+      "bytes": 1475,
+      "sha256": "1ed6c07ca4ab752bf880c933488aa287c8ccf2e5c47167ae054000f18946ad29",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "AGENT.md",
+        "README.md",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/phase_gate.sh",
+      "category": "release-input",
+      "note": "统一 Gate 入口，WP-9 收敛为 native-only",
+      "owner": "native-release",
+      "bytes": 25004,
+      "sha256": "5d228a0c30e18a4789a6a69857a0ed5d1c928471f19da721d8647dc1f8aa7411",
+      "referencers": [
+        ".codex/swift-migration/PHASE_GATES.md",
+        ".codex/swift-migration/manifests/sm09-coverage.json",
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        ".codex/swift-migration/packages/SM-01.md",
+        ".codex/swift-migration/packages/SM-02.md",
+        ".codex/swift-migration/packages/SM-03.md",
+        ".codex/swift-migration/packages/SM-04.md",
+        ".codex/swift-migration/packages/SM-05.md",
+        ".codex/swift-migration/packages/SM-06.md",
+        ".codex/swift-migration/packages/SM-07.md",
+        ".codex/swift-migration/packages/SM-08.md",
+        ".codex/swift-migration/packages/SM-09.md",
+        ".codex/swift-migration/reviews/SM-01.md",
+        ".codex/swift-migration/reviews/SM-02.md",
+        ".codex/swift-migration/reviews/SM-03.md",
+        ".codex/swift-migration/reviews/SM-04.md",
+        ".codex/swift-migration/reviews/SM-05.md",
+        ".codex/swift-migration/reviews/SM-06.md",
+        ".codex/swift-migration/reviews/SM-07.md",
+        ".codex/swift-migration/reviews/SM-08.md",
+        ".codex/swift-migration/reviews/SM-09.md",
+        ".codex/swift-migration/reviews/TEMPLATE.md",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "AGENT.md",
+        "README.md",
+        "RELEASE.md",
+        "script/sm09_coverage.py",
+        "script/sm09_inventory.py",
+        "script/tests/phase_gate_tests.zsh",
+        "script/tests/sm09_release_contract.py"
+      ]
+    },
+    {
+      "path": "script/sm09_coverage.py",
+      "category": "release-input",
+      "note": "SM-09 legacy 删除项到原生验收的覆盖映射工具",
+      "owner": "native-release",
+      "bytes": 4468,
+      "sha256": "6b7cb7360ece5804de7e5f72c57ca91c2fac3fe967072be4adf18e56d02c193f",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py",
+        "script/tests/sm09_coverage_tests.py"
+      ]
+    },
+    {
+      "path": "script/sm09_inventory.py",
+      "category": "release-input",
+      "note": "SM-09 原生清单与引用审计工具",
+      "owner": "native-release",
+      "bytes": 12106,
+      "sha256": "31ee2047b492de66c7c269d753e4fb6f6ce08445d034b18252dc0ed0cf475fec",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/tests/sm09_inventory_tests.py"
+      ]
+    },
+    {
+      "path": "script/sm09_seal_baseline.py",
+      "category": "release-input",
+      "note": "SM-09 删除前基线证据封存工具",
+      "owner": "native-release",
+      "bytes": 2346,
+      "sha256": "894726c7b8113978721cfb7c3414d94e08c8139195b6bad8a2782af308c8ec22",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/phase_gate_tests.zsh",
+      "category": "release-input",
+      "note": "Gate 自测（zsh，native 工具集）",
+      "owner": "native-release",
+      "bytes": 24082,
+      "sha256": "842b7ccd0c31e9cf4186cde8f0b9153832e099be5a95362752cd59f0016b341c",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-coverage.json",
+        ".codex/swift-migration/manifests/sm09-cutover.json",
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "README.md",
+        "Tests/SlateSyncMediaTests/Fixtures/SM06/coverage.json",
+        "script/phase_gate.sh",
+        "script/sm09_coverage.py",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/release_pipeline_tests.zsh",
+      "category": "native-test",
+      "note": "原生归档/打包负向与清理自测",
+      "owner": "native-validation",
+      "bytes": 6139,
+      "sha256": "37483cb2fd2c9238c0f66791e3617f9c5d17d24141bc8ad61022160855a7af5e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/sm09_coverage_tests.py",
+      "category": "native-test",
+      "note": "覆盖映射完整性与故障回归",
+      "owner": "native-validation",
+      "bytes": 1501,
+      "sha256": "15e50058e8f1f179ea3e522f0ce04d39f55f8a64ca37fba9546bb55cde9ec8d7",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/sm09_inventory_tests.py",
+      "category": "native-test",
+      "note": "清单故障与完整引用回归",
+      "owner": "native-validation",
+      "bytes": 2526,
+      "sha256": "eb7494d19ccff895dbfd163874558912ae57bcb40d4bd5c0fbe3d5d13623d45e",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/tests/sm09_native_contract.py",
+      "category": "native-test",
+      "note": "原生覆盖、来源与最终切换合同",
+      "owner": "native-validation",
+      "bytes": 16910,
+      "sha256": "47378b11efe4c445b870d8728d39e5774894a9ee292f24656b84c001fac77bc8",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py",
+        "script/tests/phase_gate_tests.zsh"
+      ]
+    },
+    {
+      "path": "script/tests/sm09_release_contract.py",
+      "category": "native-test",
+      "note": "Xcode/resources/workflow 原生发布合同",
+      "owner": "native-validation",
+      "bytes": 8857,
+      "sha256": "6e3dd72712cf639d03c5735beeeeeea796c2cdbd38ba611bd8deb8a6ff589989",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py"
+      ]
+    },
+    {
+      "path": "script/verify_bundle.sh",
+      "category": "release-input",
+      "note": "原生 bundle 架构/版本/资源/依赖/签名审计",
+      "owner": "native-release",
+      "bytes": 6814,
+      "sha256": "e0eee823d41a9eb0ce2947ec0c7c7f43cce4bf8157399418679a2c6c4a4a1a45",
+      "referencers": [
+        ".codex/swift-migration/manifests/sm09-final-inventory.json",
+        ".codex/swift-migration/manifests/sm09-inventory.json",
+        "AGENT.md",
+        "script/phase_gate.sh",
+        "script/sm09_inventory.py",
+        "script/tests/release_pipeline_tests.zsh"
+      ]
+    }
+  ]
+}

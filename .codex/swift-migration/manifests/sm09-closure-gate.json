@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "kind": "SM09_CLOSURE_GATE",
+  "commit": "01d8bce558f4adfb6a0da4e7c2c72462afa6c4b8",
+  "result": "PASS",
+  "approvable": true,
+  "generatedAt": "2026-09-08T04:53:59.118548+00:00",
+  "counts": {
+    "PASS": 26,
+    "NOT_APPLICABLE": 1
+  },
+  "directory": ".codex/gate-results/SM-09/20260908T044410Z-01d8bce558f4",
+  "sha256": {
+    "clean_review_target.log": "f6b2d4baa507d0c13511f51a04001c422a9624ffecda53596c2195198c2d6ad2",
+    "sm09_package_self_tests.log": "deb523a1d790aacd355d8659b2b6953f63575806a9a1f94faf63ba92a2b8fe79",
+    "swift_build.log": "a3c31ad781fb73e482dd3991e734d0b99001cf58ab9f8d35f62a39cb27946cfd",
+    "forbidden_items.log": "536fc08c0a0c179a418eb114731ce76a9128c49764cc3d1d58d575d9ca2c39c4",
+    "required_tools.log": "838808dd7ef5e1851f8e97db4008ba06524b0f2848c5c3d346e12763d8debef4",
+    "sm01_real_app_launch.log": "5462a00f78a16695a3a18d6fc450dfd312942eb788b10b6b8c23964acfadaca9",
+    "sm01_foundation_contract.log": "7192387d6616b000e9bffda804e517aee5406396d36cdd8a13b713e1adcb3c52",
+    "xcode_test_plan.log": "250f5fa34672e01a65d91db996663748f6721b94cae348303a37bd0e688f723a",
+    "sm09_release_tools.log": "9c98d1741e0c529102fb8640b482b0afc9be4a1ce9b726b26e8bfae98dac14cf",
+    "packaged_ui_xcodebuild.log": "79df85334cfe829a4f13cdf0b965244217fc5cff1ec881fd9757d61e4bbe0747",
+    "sm09_release_contract.log": "44e1fae4879ccbbe6258bcdd81f6a1ff03aee8205675581b0354f4e12c308e27",
+    "sm05_release_performance.log": "3c340539039615e910d18ceed72bc883660f2c8ce5fa5440a03d9b6337cdb805",
+    "workspace_layout.log": "89733fb07d469d04cb654fe72a0b41b402a5f3b896b7aefda2174ed885da4e64",
+    "xcode_test_plan_xcodebuild.log": "cd49ce55a7d1161c3d5fd9d973f72922839466bb22e512542a37700fbba2c132",
+    "sm09_archive_bundle_audit.log": "c978ada0a618514076491656f92738a48a2f171e60166a6c2104aeee8a92155f",
+    "swift_test.log": "e605ecb019695c2c97465d094e93f01e2228834af450ecd5812dc47a51464bc8",
+    "sm01_release_artifact.log": "0b419c3c4b147b02a65c21c2886d870b4d0c23d9886ed95d295e1067f01537dd",
+    "sm09_native_contract.log": "6f49cd5bc83aa84a8e490d369e22f9a7436719f74fe7f1be9b3c065285eb8cca",
+    "sm01_release_build.log": "f2ffa52d2d4de250599806d379eb4491479b1ad3a913ef04bffdcba0ee5377c4",
+    "sm01_scope_contract.log": "518f07e9ea0734baaa2b4f6e302c7c990c77938951037f402cae43582d551d1a",
+    "sm09_package_artifacts.log": "0e8dfafb450844617a414a6a964b6cc640d36d0347934789a50589e50498d30b",
+    "gate_self_tests.log": "7acb6c0625e8514aa28c24fd01d74691e2fdd040d20d12bf228257f1d9f2c9a0",
+    "sm01_archive.log": "fb2ffb30a3ee335774ee57c8becaf0baf8fa03bf4fa0ade2d6e39df66da56611",
+    "sm01_archive_artifact.log": "ff0bf3750ef5bc4f0a766948b2a66d7a3a7f4128379f5f44c690a6679fc1b892",
+    "sm09_packaged_ui.log": "662cc5132c684ee7d81108fc8d388d28ad21adb2e087b64255cfd6a54c791911",
+    "xcode_debug_build.log": "e6a32e2b3e610c47b002a1b633b98a2a7f4d6fc0d362e76ad6bb6ab9fc2c79d0",
+    "sm01_debug_settings.log": "a4a61767e57a9354c2076f701b46af9f6e63429fd65923c5fe49eb4a32bdfe16",
+    "diff_integrity.log": "39b06cf5bf88ae14e9cf3e51f655969adb5ea2e7101b1de0b970a4cd6c9658d2",
+    "result.json": "c52db0b1c9caa58a4f2feba8be1a83d44dad4d6afa4a1367aee1fe490d316b6c",
+    "packaged_ui_summary.json": "f7b42ad8a843cb182e43bb0b9e8738aaf24f0251f728c80df4afce62cc548c9a",
+    "native-evidence.json": "dab16f18995864de04cf5a75d821826c4ff29faaeac229c9850c03d9d3030e96",
+    "xcode_test_summary.json": "ba7a1250f84dcd3c576ccafa8289a23ecca8d3625b975f9e35f86abd40924676",
+    "checks.tsv": "78acafd7b2806b38be688225ba82d2c595d96b5c6aac3692617ae8e9ad6bb47c",
+    "sm08-metrics/projects-500.json": "4e67300ea157fc8cfb83ce8ec20f3a7d77bfc8990ad08acbf21615d9db1f3e98",
+    "sm08-metrics/native-project-task-scale.json": "c6de716ca98ec42da6db4111017ad36a59e9767d3b37947a3c08eefaef504878",
+    "sm08-metrics/native-csv-scale.json": "ee640d82b542dccd1f2c77d6482059e2bdf89e118732fda256ca90b07629c2b5",
+    "sm08-metrics/tasks-1000.json": "0bc358be56f86e0481c622ee1394abe1cbc51b6cdb9d977df504ad670aa9518d",
+    "sm08-metrics/real-sqlite-scale.json": "9f4ca187b2ccb98f6e7539ddabc1c088d868a94816b324c8786e4425ec23aca5",
+    "sm08-metrics/native-csv-foreground.json": "a2711a0a9c5109860c7dc5e414a9584af45fd63edb69277c305f162f51038838",
+    "artifacts/SlateSync-1.0.0-release-notes.md": "0e00b69dcada223c9d01ecda4b8414949e879abd5b8ac3011d28efad8a2e8690",
+    "artifacts/SlateSync-1.0.0-manifest.json": "4fb5cea3c3d5f5ed591b36afdaab4b74011e5076b0bf061512c566b44d21f54d",
+    "artifacts/SlateSync-1.0.0-macOS-universal.dmg": "e52209f81f876b603c6e8c549312146045b2f8026abdea88f85cfaaa5b65c59a",
+    "artifacts/SHA256SUMS": "d735f0287f16f996e26222a19022f50c04f59e1bd27ee6252e1f86f288faf230",
+    "artifacts/SlateSync-1.0.0-macOS-universal.zip": "f027d9743caafd212c807fb6b1e411ae658751e0824b4f9b7909b498687bedd3"
+  },
+  "xcode": {
+    "devicesAndConfigurations": [
+      {
+        "device": {
+          "architecture": "arm64",
+          "deviceId": "00006031-001849601E88001C",
+          "deviceName": "My Mac",
+          "modelName": "MacBook Pro",
+          "osBuildNumber": "24G419",
+          "osVersion": "15.7.3",
+          "platform": "macOS"
+        },
+        "expectedFailures": 0,
+        "failedTests": 0,
+        "passedTests": 11,
+        "skippedTests": 0,
+        "testPlanConfiguration": {
+          "configurationId": "1",
+          "configurationName": "Default"
+        }
+      }
+    ],
+    "environmentDescription": "SlateSync · Built with macOS 15.7.3",
+    "expectedFailures": 0,
+    "failedTests": 0,
+    "finishTime": 1788842858.376,
+    "passedTests": 11,
+    "result": "Passed",
+    "skippedTests": 0,
+    "startTime": 1788842739.167,
+    "statistics": [],
+    "testFailures": [],
+    "title": "Test - SlateSync",
+    "topInsights": [],
+    "totalTestCount": 11
+  },
+  "packagedUI": {
+    "devicesAndConfigurations": [
+      {
+        "device": {
+          "architecture": "arm64e",
+          "deviceId": "00006031-001849601E88001C",
+          "deviceName": "My Mac",
+          "modelName": "MacBook Pro",
+          "osBuildNumber": "24G419",
+          "osVersion": "15.7.3",
+          "platform": "macOS"
+        },
+        "expectedFailures": 0,
+        "failedTests": 0,
+        "passedTests": 9,
+        "skippedTests": 0,
+        "testPlanConfiguration": {
+          "configurationId": "1",
+          "configurationName": "Default"
+        }
+      }
+    ],
+    "environmentDescription": "SlateSync · Built with macOS 15.7.3",
+    "expectedFailures": 0,
+    "failedTests": 0,
+    "finishTime": 1788843179.846,
+    "passedTests": 9,
+    "result": "Passed",
+    "skippedTests": 0,
+    "startTime": 1788843017.098,
+    "statistics": [],
+    "testFailures": [],
+    "title": "Test - SlateSync",
+    "topInsights": [],
+    "totalTestCount": 9
+  },
+  "manualEvidence": "sm09-closure-manual.json",
+  "manualEvidenceSha256": "7d5d394599503f59fa090d132953efa806e76e027069315ab07b98791cde3c99",
+  "independentReview": "PENDING",
+  "ownerApproval": "PENDING",
+  "remaining": [
+    "Dock/Spotlight activation not witnessed: CUA surfaces timed out.",
+    "Independent review authorization or external review result required.",
+    "Final Owner approval must follow completed acceptance and review."
+  ]
+}
