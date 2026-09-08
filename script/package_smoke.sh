@@ -36,6 +36,11 @@ for config in value['TestConfigurations']:
     for target in config['TestTargets']:
         if target.get('BlueprintName')=='SlateSyncUITests':
             target.setdefault('EnvironmentVariables',{})['SLATESYNC_PACKAGED_APP']=sys.argv[2]
+            # Register the shipped bundle as XCTest's target too. A URL-only
+            # launch leaves the harness associated with the Debug app.
+            prior=target['UITargetAppPath']
+            target['UITargetAppPath']=sys.argv[2]
+            target['DependentProductPaths']=[sys.argv[2] if p==prior else p for p in target.get('DependentProductPaths',[])]
             updated+=1
 if updated!=1: raise RuntimeError('packaged app injection failed')
 p.write_bytes(plistlib.dumps(value))
@@ -49,6 +54,13 @@ xcodebuild -quiet test-without-building -xctestrun "$xctestrun[1]" \
 ditto "${smoke_root}/Packaged.xcresult" "${result_dir}/Packaged.xcresult"
 xcrun xcresulttool get test-results summary --path "${smoke_root}/Packaged.xcresult" \
   --format json > "${result_dir}/packaged_ui_summary.json"
+# Quiet xcodebuild can hide an assertion behind unrelated environment logging.
+# Surface XCTest's actual failure text before classification or early exit.
+python3 - "${result_dir}/packaged_ui_summary.json" <<'PY'
+import json,sys
+for failure in json.load(open(sys.argv[1])).get('testFailures', []):
+    print('Packaged XCTest failure: '+failure['failureText'])
+PY
 gate_validate_xcode_test_summary "${result_dir}/packaged_ui_summary.json"
 (( smoke_status == 0 )) || exit "$smoke_status"
 # Parallel XCTest keeps stdout inside xcresult even when xcodebuild is quiet.

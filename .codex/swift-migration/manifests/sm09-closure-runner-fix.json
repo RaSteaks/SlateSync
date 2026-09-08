@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "kind": "TARGETED_PACKAGED_RUNNER_FIX",
+  "sourceCommit": "c6e163406e5b8b8c2df8e9972d233a115bc76bf1",
+  "dirtyWorkspace": true,
+  "approvable": false,
+  "summary": {
+    "devicesAndConfigurations": [
+      {
+        "device": {
+          "architecture": "arm64e",
+          "deviceId": "00006031-001849601E88001C",
+          "deviceName": "My Mac",
+          "modelName": "MacBook Pro",
+          "osBuildNumber": "24G419",
+          "osVersion": "15.7.3",
+          "platform": "macOS"
+        },
+        "expectedFailures": 0,
+        "failedTests": 0,
+        "passedTests": 9,
+        "skippedTests": 0,
+        "testPlanConfiguration": {
+          "configurationId": "1",
+          "configurationName": "Default"
+        }
+      }
+    ],
+    "environmentDescription": "SlateSync · Built with macOS 15.7.3",
+    "expectedFailures": 0,
+    "failedTests": 0,
+    "finishTime": 1788842523.16,
+    "passedTests": 9,
+    "result": "Passed",
+    "skippedTests": 0,
+    "startTime": 1788842396.682,
+    "statistics": [],
+    "testFailures": [],
+    "title": "Test - SlateSync",
+    "topInsights": [],
+    "totalTestCount": 9
+  },
+  "checks": {
+    "packagedURLWitnesses": "9 passed",
+    "processCleanup": "PASS; no matching process after completion",
+    "failureClassificationReplay": "FAIL using original failed xcresult assertion plus original log"
+  },
+  "logs": {
+    "/private/tmp/slatesync-sm09-packaged-binding-recheck.log": "8a5745958d9bdfa958f667cd4c6dd0211893e905e45f4b5855a0613e93f146b7",
+    "/private/tmp/slatesync-sm09-classification-replay.log": "e6aae4b32bbd82d40d2857c9fa016f3e364bda0b959461151335680c6f30831f"
+  }
+}

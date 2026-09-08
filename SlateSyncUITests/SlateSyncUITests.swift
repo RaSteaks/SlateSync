@@ -5,6 +5,8 @@ final class SlateSyncUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // Stay within the runner's writable sandbox; the packaged xctestrun
+        // binds its actual target app so XCTest can coordinate access.
         testRoot = FileManager.default.temporaryDirectory
             .appending(path: "SlateSyncUITests-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
@@ -234,6 +236,7 @@ final class SlateSyncUITests: XCTestCase {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let app = launchIsolatedApp()
         defer { app.terminate() }
+        print("SM09_ISOLATED_ROOT \(testRoot.path)")
         let project = app.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "SM09 兼容项目")).firstMatch
         XCTAssertTrue(project.waitForExistence(timeout: 8))
         app.activate()

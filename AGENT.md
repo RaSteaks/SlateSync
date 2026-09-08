@@ -1,5 +1,14 @@
 # SlateSync 当前项目方案
 
+## SM-09 打包测试目标绑定修复
+
+收尾 clean Gate 在 `c6e1634` 的 packaged UI 新增用例失败；旧版源夹具本身未漂移。
+修复 `.xctestrun` 的 `UITargetAppPath` 和对应 dependent product，使 XCTest 的正式
+目标与 URL 启动目标同为 Release app。保留测试运行器 App Sandbox 与其临时目录，
+不扩大 App 权限。修复后同一 ZIP 的9项 UI与进程清理通过。
+同时将 xcresult 的断言详情输出到 Gate 日志；旧失败日志加上真实断言后，分类验证
+为 FAIL，不能再被旁侧环境日志覆盖为 BLOCKED_ENV。新提交仍须完整 clean Gate。
+
 ## 2026-09-08 SM-09 收尾补验（进行中）
 
 新增旧版真实 Library 在 App 内打开、CSV 导入/导出及退出重开的 XCUI 验收，
