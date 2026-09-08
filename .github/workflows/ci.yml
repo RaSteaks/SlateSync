@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Provenance and cutover ancestry must be available on cold runners.
+          fetch-depth: 0
 
       - name: Verify pinned Apple toolchain
         run: |
@@ -32,7 +35,6 @@ jobs:
 
       - name: Run shared native SM-09 Gate
         env:
-          SLATESYNC_NATIVE_ONLY: "1"
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
         run: ./script/phase_gate.sh SM-09
 

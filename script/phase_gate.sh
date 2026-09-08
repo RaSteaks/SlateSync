@@ -183,13 +183,8 @@ sm01_scope_contract_check() {
       return 1
     }
   fi
-  local legacy_path
-  for legacy_path in electron src public lib package.json package-lock.json electron-builder.yml .github; do
-    [[ -e "$legacy_path" ]] || {
-      print -u2 "missing legacy compatibility baseline: $legacy_path"
-      return 1
-    }
-  done
+  # Compatibility inputs now live in the verified pre-cutover Git tree.
+  # The native contract below validates their hashes and removal ancestry.
   # The Gate must accept both sides of a valid admission transition: the
   # previous COMPLETE phase before approval and this COMPLETE phase afterward.
   gate_validate_phase_state \
@@ -220,7 +215,7 @@ sm01_scope_contract_check() {
   assert_scan_healthy "credential path scan failed" "$changed_status" || return 1
   sensitive_content="$(git grep -n -I -E \
     'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9]{20,}' \
-    "$review_commit" -- . ':!.env.example' 2>/dev/null)"
+    "$review_commit" -- . ':!.codex/swift-migration/manifests/sm09-native-contract.json' 2>/dev/null)"
   local content_status=$?
   assert_scan_healthy "credential content scan failed" "$content_status" || return 1
   if [[ -n "$sensitive_content" ]]; then
@@ -228,7 +223,7 @@ sm01_scope_contract_check() {
     print -u2 "tracked source contains a credential-like value"
     return 1
   fi
-  print "scope protected; phase state valid; legacy baseline present; generated artifacts untracked"
+  print "scope protected; phase state valid; historical provenance retained; generated artifacts untracked"
 }
 
 sm01_real_app_launch_check() {
@@ -492,6 +487,11 @@ gate_valid_phase "$phase" || { usage; exit "$exit_usage"; }
 }
 
 cd "$project_root"
+if [[ "$phase" != SM-09 ]]; then
+  print -u2 "Historical phase Gates must run from their approved Git commit; current entry is SM-09"
+  exit "$exit_usage"
+fi
+
 review_commit="$(git rev-parse HEAD 2>/dev/null)" || {
   print -u2 -r -- "当前目录不是有效 Git 工作区"
   exit "$exit_blocked_environment"
@@ -552,26 +552,6 @@ run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
 run_check xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
   xcode_test_plan_check
 
-sm08_native_evidence_check() {
-  # Generate acceptance-scoped, hashed evidence only after both test runners
-  # have completed. The output lives under the ignored Gate result root.
-  node script/tests/sm08_native_evidence.mjs \
-    --swift-log "${result_dir}/swift_test.log" \
-    --xcode-log "${result_dir}/xcode_test_plan_xcodebuild.log" \
-    --xcode-summary "${result_dir}/xcode_test_summary.json" \
-    --metrics-dir "${result_dir}/sm08-metrics" \
-    --output "${result_dir}/native-evidence.json"
-}
-
-sm06_offline_paddle_check() {
-  local resources="${result_dir}/DerivedData/Debug/Build/Products/Debug/SlateSync.app/Contents/Resources"
-  # The actual bundle must carry the shared runner byte-for-byte. Inference
-  # uses this read-only resource with an unrelated, injected cwd/model cache.
-  cmp SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py "${resources}/PaddleOCR/paddleocr_runner.py" || return 1
-  cmp SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt "${resources}/PaddleOCR/requirements-ocr.txt" || return 1
-  SM06_BUNDLE_RESOURCES="${resources}/PaddleOCR" ./script/tests/sm06_offline_paddle.sh
-}
-
 sm09_release_tools_check() {
   local tool
   for tool in ditto hdiutil otool file shasum; do
@@ -582,139 +562,17 @@ sm09_release_tools_check() {
   done
 }
 
-case "$phase" in
-  SM-02)
-    run_check sm02_platform_contract true "当前入口、CI/release、平台拒绝策略与历史基线完整" \
-      node script/tests/sm02_platform_contract.mjs
-    ;;
-  SM-03)
-    run_check sm03_contract true "领域合同、设置优先级、OSLog 脱敏、Keychain 迁移事务与兼容边界完整" \
-      node script/tests/sm03_contract.mjs
-    ;;
-  SM-04)
-    run_check sm04_contract true "SQLite/Project Library v1、快照、迁移与删除安全合同完整" \
-      node script/tests/sm04_contract.mjs
-    run_check sm04_node_compatibility true "Electron 持久化兼容基线继续通过" \
-      npm run test:node
-    run_check sm04_modern_compatibility true "Modern Renderer 兼容基线继续通过" \
-      npm run test:modern
-    run_check sm04_static_checks true "Electron/TypeScript 静态检查继续通过" \
-      npm run check
-    run_check sm04_typecheck true "现代 TypeScript 类型检查继续通过" \
-      npm run typecheck
-    run_check sm04_modern_build true "现代 Renderer 生产构建继续通过" \
-      npm run build:modern
-    run_check sm04_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" \
-      npm run test:native:abi
-    ;;
-  SM-05)
-    run_check sm05_contract true "CSV/metadata/Scenario 兼容、事务与性能合同完整" \
-      node script/tests/sm05_contract.mjs
-    run_check sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
-      env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling
-    run_check sm05_node_compatibility true "Electron CSV/Scenario 兼容基线继续通过" \
-      npm run test:node
-    run_check sm05_modern_compatibility true "Modern Renderer 兼容基线继续通过" \
-      npm run test:modern
-    run_check sm05_static_checks true "Electron/TypeScript 静态检查继续通过" \
-      npm run check
-    run_check sm05_typecheck true "现代 TypeScript 类型检查继续通过" \
-      npm run typecheck
-    run_check sm05_modern_build true "现代 Renderer 生产构建继续通过" \
-      npm run build:modern
-    run_check sm05_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" \
-      npm run test:native:abi
-    ;;
-  SM-06)
-    run_check sm06_offline_paddle true "原生 bundle runner、隔离离线 Paddle 预热/两次推理/关闭通过" sm06_offline_paddle_check
-    run_check sm06_contract true "媒体/OCR 冻结夹具、实际执行覆盖与阶段准入合同完整" \
-      node script/tests/sm06_contract.mjs --swift-log "${result_dir}/swift_test.log" --paddle-log "${result_dir}/sm06_offline_paddle.log"
-    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
-      node script/tests/sm05_contract.mjs --technical-only
-    run_check sm06_node_compatibility true "Electron 媒体/OCR 兼容基线继续通过" npm run test:node
-    run_check sm06_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
-    run_check sm06_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
-    run_check sm06_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
-    run_check sm06_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
-    run_check sm06_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
-    ;;
-  SM-07)
-    run_check sm07_contract true "Provider/发现/探针/Prompt/识别编排的冻结 oracle、57 项实际执行覆盖与资源边界完整" \
-      node script/tests/sm07_contract.mjs --swift-log "${result_dir}/swift_test.log"
-    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
-      node script/tests/sm05_contract.mjs --technical-only
-    run_check sm07_node_compatibility true "Electron Provider/识别兼容基线继续通过" npm run test:node
-    run_check sm07_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
-    run_check sm07_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
-    run_check sm07_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
-    run_check sm07_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
-    run_check sm07_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
-    ;;
-  SM-08)
-    # SM-07 合同在 SM-08 Gate 中是跨阶段技术回归：与 sm05 一致用
-    # --technical-only 跳过准入窗口断言，源审计与 57 项执行覆盖仍强制。
-    run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
-      node script/tests/sm07_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
-    run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
-      node script/tests/sm05_contract.mjs --technical-only
-    run_check sm08_node_compatibility true "Electron 数据/Provider/媒体兼容基线继续通过" npm run test:node
-    run_check sm08_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
-    run_check sm08_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
-    run_check sm08_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
-    run_check sm08_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
-    run_check sm08_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
-    ;;
-  SM-09)
-    # SM-09 预准入脚手架（WP-0/WP-1，2026-09-07）：CI 解析器在 SM-08 COMPLETE
-    # 且 SM-09 已开工时指向本 case，实施期提交由此获得有效门禁。检查集沿用
-    # 删除前矩阵：sm05/sm07/sm08 合同全部 technical-only（准入断言只在各自
-    # 阶段生效），Node/Modern 兼容车道保留到 WP-6 删除时再收敛；native
-    # evidence 属 SM-08 批准上下文，不在此重跑。WP-1/WP-3/WP-4/WP-9 将逐步
-    # 加入 pre-cutover 差分、bundle audit 与 native-only 检查并最终移除 Node。
-    run_check sm09_release_tools true "原生归档、依赖与 ZIP/DMG 审计工具可用" sm09_release_tools_check
-    run_check sm09_release_contract true "Xcode、资源、版本、workflow 与发布边界合同完整" \
-      python3 -B script/tests/sm09_release_contract.py
-    run_check sm09_inventory_contract true "SM-09 inventory 分类与引用图完整" \
-      python3 -B script/tests/sm09_inventory_tests.py
-    run_check sm09_coverage_contract true "legacy family 到原生覆盖的映射完整" \
-      python3 -B script/tests/sm09_coverage_tests.py
-    run_check sm09_package_self_tests true "包审计失败、并发和清理路径自测通过" \
-      ./script/tests/release_pipeline_tests.zsh
-    if [[ "${SLATESYNC_NATIVE_ONLY:-0}" == 1 ]]; then
-      # WP-4 CI executes this shared Gate without requiring Node. The default
-      # local path retains all compatibility lanes until WP-6 freezes them.
-      record_check sm09_pre_cutover_compatibility true NOT_APPLICABLE \
-        "native-only CI lane; legacy compatibility executes in the final pre-cutover refresh" ""
-    else
-      run_check sm05_technical_regression true "SM-05 CSV/metadata/Scenario 技术合同继续通过" \
-        node script/tests/sm05_contract.mjs --technical-only
-      run_check sm07_technical_regression true "SM-07 Provider/识别编排合同继续通过" \
-        node script/tests/sm07_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
-      run_check sm08_technical_regression true "SM-08 原生 UI fixture/验收映射/执行覆盖继续通过" \
-        node script/tests/sm08_contract.mjs --technical-only --swift-log "${result_dir}/swift_test.log"
-      run_check sm09_node_compatibility true "Electron 数据/Provider/媒体兼容基线继续通过" npm run test:node
-      run_check sm09_modern_compatibility true "Modern Renderer 兼容基线继续通过" npm run test:modern
-      run_check sm09_static_checks true "Electron/TypeScript 静态检查继续通过" npm run check
-      run_check sm09_typecheck true "TypeScript 类型检查继续通过" npm run typecheck
-      run_check sm09_modern_build true "Modern Renderer 生产构建继续通过" npm run build:modern
-      run_check sm09_native_abi true "Electron/Node SQLite ABI 生命周期继续通过" npm run test:native:abi
-    fi
-    ;;
-  SM-01) ;;
-  *)
-    run_check "${phase:l}_specific_gate" true "阶段专用 Gate 已定义" phase_specific_gate_missing
-    ;;
-esac
-
-if [[ "$phase" == "SM-08" ]]; then
-  # Evidence generation consumes the completed Swift/Xcode logs; the contract
-  # check follows it so missing or stale acceptance artifacts fail closed.
-  run_check sm08_native_evidence true "45 项 SM-08 原生验收证据按测试日志、指标与源指纹生成" \
-    sm08_native_evidence_check
-  run_check sm08_contract true "原生 UI fixture、验收映射、AppKit allowlist、执行证据与准入合同完整" \
-    node script/tests/sm08_contract.mjs --swift-log "${result_dir}/swift_test.log" \
-      --native-evidence "${SLATESYNC_SM08_NATIVE_EVIDENCE:-${result_dir}/native-evidence.json}"
-fi
+# The final entry always executes native contracts. Historical phase runners
+# are reproducible from their approved Git commits, not from deleted inputs.
+run_check sm09_release_tools true "原生归档、依赖与 ZIP/DMG 审计工具可用" sm09_release_tools_check
+run_check sm09_release_contract true "原生资源、版本、workflow 与发布边界完整" \
+  python3 -B script/tests/sm09_release_contract.py
+run_check sm09_native_contract true "删除来源、冻结夹具、235 项原生回归与45项界面验收有实际证据" \
+  python3 -B script/tests/sm09_native_contract.py --result-dir "$result_dir"
+run_check sm09_package_self_tests true "包审计失败、并发和清理路径自测通过" \
+  ./script/tests/release_pipeline_tests.zsh
+run_check sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
+  env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling
 
 # Milestone phases retain the real executable and distributable artifact
 # checks. SM-08 adds the final native UI to the same signed app surface.
@@ -750,6 +608,8 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
         "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.0.0 1 adhoc
     run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
       sm09_package_artifacts_gate_check
+    run_check sm09_packaged_ui true "ZIP 内 Release app 使用临时 Library 完成界面与退出重开回归" \
+      ./script/package_smoke.sh "$result_dir"
   fi
 fi
 

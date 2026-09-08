@@ -41,7 +41,7 @@ project 后打包。
   按实测工具链要求修正：
   <https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md>。
 
-## 5. decision-required 清单处理（recommendation 待 Owner 确认）
+## 5. decision-required 清单处理（Owner 2026-09-08 已确认）
 
 | 路径 | 建议 | 理由 |
 | --- | --- | --- |
@@ -52,7 +52,9 @@ project 后打包。
 | `premium-ui.json` | 归档删除 | 历史 UI 审计工件，无 runtime 引用 |
 | `slatesync.config.json` | 待引用核查 | 以 inventory referencers 为准，确认无入口读取后删除 |
 
-以上建议在 WP-6 实施前需 Owner 一次性确认；未确认前这些文件保持原样。
+Owner 于 2026-09-08 回复“确认，继续推进SM09阶段代码实施”，确认进入 WP-6。
+六项按建议处置：原生启动不读取仓库根配置；显式路径的 WorkflowConfigProvider 保留。
+premium-ui.json 原样归档至 sm09-premium-ui-history.json，其余五项删除。
 
 ## 6. 覆盖映射（WP-0 第 5 条）状态
 

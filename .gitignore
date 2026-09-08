@@ -1,9 +1,6 @@
 .env
-# Keep local environment variants and credentials out of commits while retaining the safe template.
 .env.*
-!.env.example
 .DS_Store
-node_modules/
 .venv-paddleocr/
 .paddlex-cache/
 __pycache__/
@@ -12,20 +9,8 @@ data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-coverage/
 tmp/
-bin/
-dist/
-out/
-public/vendor/
 
-# Rebuildable Storybook, Playwright, Vite, and TypeScript validation output.
-/storybook-static/
-/test-results/
-/playwright-report/
-/blob-report/
-/.vite/
-*.tsbuildinfo
 
 # Raw validation output belongs under ignored test-results, never in source
 # control. Keep only executable baselines and curated Markdown summaries.
@@ -79,8 +64,6 @@ xcuserdata/
 *.swo
 *~
 
-# The premium UI audit is regenerated from the committed premium-ui.json policy.
-/premium-audit.json
 
 # Phase Gate raw logs, DerivedData, Archives, and JSON runs are local/CI evidence.
 /.codex/gate-results/

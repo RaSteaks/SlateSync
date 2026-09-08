@@ -1,0 +1,380 @@
+{
+  "APP-01": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testLaunchesMainWindowAndProjectLibrary",
+      "SlateSyncUITests.SlateSyncUITests/testMinimumWindowAccessibilityAndLightDarkAppearance"
+    ],
+    "expected": "main window and Settings appearance remain within the declared minimum bounds"
+  },
+  "APP-02": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testLaunchesMainWindowAndProjectLibrary",
+      "SlateSyncUITests.SlateSyncUITests/testHelpRouteUsesBundleLocalSearch"
+    ],
+    "expected": "project-library and Help routes are reachable through the native sidebar"
+  },
+  "APP-03": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testSettingsCanOpenAndCloseWithoutReplacingHelpRoute"
+    ],
+    "expected": "Command-, opens an independent Settings window and closing it restores Help"
+  },
+  "APP-04": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testIndependentWindowsAndNewWindowAfterClosingLastWindow",
+      "SlateSyncUITests.SlateSyncUITests/testChineseKeyboardWorkflowAndApplicationReopen"
+    ],
+    "expected": "focused commands act on the current window and the focused Workspace owner"
+  },
+  "APP-06": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testIndependentWindowsAndNewWindowAfterClosingLastWindow",
+      "SlateSyncUITests.SlateSyncUITests/testChineseKeyboardWorkflowAndApplicationReopen"
+    ],
+    "expected": "window close, last-window reopen, and application quit/relaunch complete"
+  },
+  "PRJ-01": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testLaunchesMainWindowAndProjectLibrary"
+    ],
+    "expected": "isolated project library launches with a stable project route"
+  },
+  "PRJ-02": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testCreatesProjectAndOpensWorkspaceInIsolatedLibrary"
+    ],
+    "expected": "Chinese project creation completes through the validated sheet"
+  },
+  "PRJ-03": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testCreatesProjectAndOpensWorkspaceInIsolatedLibrary",
+      "SlateSyncUITests.SlateSyncUITests/testChineseKeyboardWorkflowAndApplicationReopen"
+    ],
+    "expected": "project open and Workspace activation use the current project"
+  },
+  "PRJ-04": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncPersistenceTests.ProjectLibraryTransferTests/testOpenProjectPackageRoundTripRebindsOwnershipAndPreservesSource"
+    ],
+    "expected": "project package round trip preserves source and ownership"
+  },
+  "PRJ-05": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncPersistenceTests.ProjectLibraryTransferTests/testActivationRenameDrainsSnapshotWritesBeforeMovingLibrary"
+    ],
+    "expected": "library activation and rename drain writes before moving the store"
+  },
+  "PRJ-06": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testInvalidSettingsNeverReachTolerantPersistence",
+      "SlateSyncPersistenceTests.ProjectStoresTests/testProjectRuntimeExposesCompleteStoreMutationSurface"
+    ],
+    "expected": "project settings validation and complete runtime mutation surface remain atomic"
+  },
+  "PRJ-07": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncPersistenceTests.ProjectLibraryStoreTests/testDeleteRestoresDirectoryWhenLibraryIndexRejectsDeletion",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testProjectOwnershipRejectsSecondWriterAndReleasesOnlyItsOwner"
+    ],
+    "expected": "delete failure recovery and exclusive project ownership are retained"
+  },
+  "PRJ-08": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testFiveSampleProjectAndTaskNativeListScale",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testRealSQLiteProjectAndTaskScaleLoad"
+    ],
+    "metrics": [
+      "native-project-task-scale.json",
+      "real-sqlite-scale.json"
+    ],
+    "expected": "500-project native list and SQLite scale measurements stay within budget"
+  },
+  "TSK-01": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testCreatesProjectAndOpensWorkspaceInIsolatedLibrary",
+      "SlateSyncUITests.SlateSyncUITests/testChineseKeyboardWorkflowAndApplicationReopen"
+    ],
+    "expected": "Workspace task creation and project task restoration are reachable"
+  },
+  "TSK-02": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testFiveSampleProjectAndTaskNativeListScale"
+    ],
+    "metrics": [
+      "native-project-task-scale.json"
+    ],
+    "expected": "1,000 tasks remain lazy, selectable, and within the visible-row budget"
+  },
+  "TSK-03": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testInputAdmissionBlocksPickerAndDropDuringRecognition"
+    ],
+    "expected": "file input admission and cancellation are blocked during recognition"
+  },
+  "TSK-04": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncMediaTests.MediaResourceTests/testTwentyPagesThreeRoundsDrainOwnedResources",
+      "SlateSyncWorkflowTests.MediaOCRWorkflowTests/testProjectSwitchCacheIsolationAndCloseDrain"
+    ],
+    "expected": "preview/media owners drain across repeated rounds and project switching"
+  },
+  "TSK-08": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncMediaTests.MediaResourceTests/testTwentyPagesThreeRoundsDrainOwnedResources",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testCSVDrainJoinsDecoderAndRejectsLatePublication"
+    ],
+    "expected": "scoped media and late decoder resources release on close"
+  },
+  "REC-02": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testRecognitionOptionRestorationNeverSubstitutesUnavailableValues"
+    ],
+    "expected": "recognition refuses unavailable persisted options instead of substituting them"
+  },
+  "REC-03": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testSettingsAndInstallerProgressCannotRegressAfterActorHop",
+      "SlateSyncWorkflowTests.SM07CoordinatorTests/testFLW01FLW03FLW04FLW06FLW08FLW09FLW10RES01EndToEndPersistenceAndProgress"
+    ],
+    "expected": "recognition progress remains ordered and reconnects to the active operation"
+  },
+  "REC-04": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testRecognitionCancellationBlocksNewLocalOperationUntilServiceDrain",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testRecognitionCancellationTicketInvalidatesOnlyQueuedProject"
+    ],
+    "expected": "recognition cancellation and ticket races drain without stale side effects"
+  },
+  "REC-05": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncMediaTests.OCRPolicyTests/testRequiredOptionalDisabledAndCancellationPolicies",
+      "SlateSyncWorkflowTests.SM07CoordinatorTests/testFLW05FLW07GlobalFailFastAndProjectCancellationDrain"
+    ],
+    "expected": "required/optional OCR and global fail-fast policy remain compatible"
+  },
+  "REC-06": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testResultEditIsCanonicalAndFlushJoinsPendingCommit",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVMarkedTextDoesNotCommitAndFlushRetainsComposition"
+    ],
+    "expected": "result edits flush safely and marked Chinese composition is not destructive"
+  },
+  "REC-07": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testLocalSlateCSVMatchesRetainedWorkerOracle",
+      "SlateSyncWorkflowTests.ResolveCSVMergerTests/testAliasesIdentityMetadataCommentsEditsAndSequenceAudits"
+    ],
+    "expected": "local merge and remote result paths share the canonical CSV model"
+  },
+  "REC-08": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testPrivacyIsEnforcedAtLogSinkAndReadBoundary",
+      "SlateSyncWorkflowTests.SM07RegistryTests/testREG05PublicProjectionRedactsSecretsAndPrices"
+    ],
+    "expected": "recognition public surfaces and logs remain secret-free"
+  },
+  "CSV-01": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncWorkflowTests.ResolveCSVEngineTests/testReviewedFixturesMatchSourceAndRoundTripByteGoldens",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testLocalSlateCSVMatchesRetainedWorkerOracle"
+    ],
+    "expected": "CSV parsing and encoding retain the frozen byte-compatible oracle"
+  },
+  "CSV-02": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners"
+    ],
+    "metrics": [
+      "native-csv-scale.json"
+    ],
+    "expected": "10,000-row NSTableView reuses visible views within the frozen limit"
+  },
+  "CSV-03": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVExposesAccessibleHeadersAndEditableCells",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVReplacesRowsWhenIdentityChangesAtSameRevision"
+    ],
+    "expected": "headers, editable cells, and same-revision identity replacement remain stable"
+  },
+  "CSV-05": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testCSVKeyboardNavigationUsesGridOrderAndBounds",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testCSVKeyboardSelectorsPreserveIMEAndNativeClipboardRouting",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVMarkedTextDoesNotCommitAndFlushRetainsComposition"
+    ],
+    "expected": "CSV keyboard selectors, native clipboard, and Chinese IME preserve editing safety"
+  },
+  "CSV-06": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVExposesAccessibleHeadersAndEditableCells"
+    ],
+    "expected": "native table, headers, and editable cells expose accessibility semantics"
+  },
+  "CSV-07": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testMetadataMatchingUsesCanonicalResolveMaterialKeys",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testMetadataPersistsAndResetsWithTaskSelection",
+      "SlateSyncWorkflowTests.SlateMetadataTests/testBoundedScannerPrunesAndReportsMissing"
+    ],
+    "expected": "metadata canonical matching, persistence, missing keys, and bounded scanning pass"
+  },
+  "CSV-08": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVMarkedTextDoesNotCommitAndFlushRetainsComposition",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVExposesAccessibleHeadersAndEditableCells",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVReplacesRowsWhenIdentityChangesAtSameRevision",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testForegroundCSVMeetsDisplayCadenceBudget"
+    ],
+    "metrics": [
+      "native-csv-scale.json",
+      "native-csv-foreground.json"
+    ],
+    "expected": "10,000-row edit, cadence, view count, memory, and release budgets pass"
+  },
+  "SET-01": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testInvalidSettingsNeverReachTolerantPersistence",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testCredentialRefreshRetainsUnrelatedSettingsDraft"
+    ],
+    "expected": "typed settings validation and unrelated draft preservation remain atomic"
+  },
+  "SET-02": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncPersistenceTests.KeychainMigrationTests/testLegacyCredentialsMigrateAndRemoveSourceOnlyAfterVerification",
+      "SlateSyncPersistenceTests.KeychainMigrationTests/testMalformedEmptyAndDuplicateLegacyFilesNeverExposeSecrets"
+    ],
+    "expected": "Keychain migration preserves ownership and never exposes secrets"
+  },
+  "SET-06": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncMediaTests.OCRContractTests/testPaddleSettingsAndSelectionOracles",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testPaddleInstallerUsesPinnedOfflineStagesAndSanitizedEnvironment"
+    ],
+    "expected": "Vision/Paddle preference and pinned installer checks remain offline"
+  },
+  "LOG-03": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testLogsRouteRendersLocalLogSurface"
+    ],
+    "expected": "Logs route renders its local refresh surface"
+  },
+  "LOG-04": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testPrivacyIsEnforcedAtLogSinkAndReadBoundary",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testLogRetentionBadUTF8NewestFirstAndHardCap"
+    ],
+    "expected": "log payload/path/secret negative coverage remains redacted and bounded"
+  },
+  "A11Y-01": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVExposesAccessibleHeadersAndEditableCells"
+    ],
+    "expected": "Chinese table labels and editable-cell semantics are exposed to accessibility"
+  },
+  "A11Y-02": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testChineseKeyboardWorkflowAndApplicationReopen",
+      "SlateSyncUITests.SlateSyncUITests/testIndependentWindowsAndNewWindowAfterClosingLastWindow"
+    ],
+    "expected": "keyboard-only creation, close, reopen, and project restoration complete"
+  },
+  "A11Y-03": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testMinimumWindowAccessibilityAndLightDarkAppearance"
+    ],
+    "expected": "light and dark appearances retain the native route and controls"
+  },
+  "A11Y-04": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVMarkedTextDoesNotCommitAndFlushRetainsComposition",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testCSVKeyboardSelectorsPreserveIMEAndNativeClipboardRouting"
+    ],
+    "expected": "marked Chinese composition survives cancel/flush without accidental commit"
+  },
+  "A11Y-05": {
+    "runner": "xcode",
+    "tests": [
+      "SlateSyncUITests.SlateSyncUITests/testHelpRouteUsesBundleLocalSearch"
+    ],
+    "expected": "offline Help route and Chinese searchable catalog render"
+  },
+  "PERF-01": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testRealSQLiteProjectAndTaskScaleLoad",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testFiveSampleProjectAndTaskNativeListScale"
+    ],
+    "metrics": [
+      "real-sqlite-scale.json",
+      "native-project-task-scale.json"
+    ],
+    "expected": "500 projects and 1,000 tasks stay below load and selection budgets"
+  },
+  "PERF-02": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testForegroundCSVMeetsDisplayCadenceBudget"
+    ],
+    "metrics": [
+      "native-csv-scale.json",
+      "native-csv-foreground.json"
+    ],
+    "expected": "10,000-row CSV render, scroll, edit, FPS, memory, and release budgets pass"
+  },
+  "PERF-03": {
+    "runner": "swift",
+    "tests": [
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testNativeCSVReusesViewsForTenThousandRowsAndReleasesOwners",
+      "SlateSyncUIUnitTests.SM08NativeSurfaceTests/testWindowCloseVetoRetainsWindowUntilRetrySucceeds",
+      "SlateSyncUIUnitTests.SM08OwnershipTests/testConcurrentTerminationRequestsJoinOneLifecycleDrain",
+      "SlateSyncMediaTests.MediaResourceTests/testTwentyPagesThreeRoundsDrainOwnedResources"
+    ],
+    "metrics": [
+      "native-csv-scale.json"
+    ],
+    "expected": "window close, repeated termination, native owners, and timers drain"
+  }
+}

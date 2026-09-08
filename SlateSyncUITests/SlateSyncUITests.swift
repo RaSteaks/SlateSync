@@ -69,7 +69,15 @@ final class SlateSyncUITests: XCTestCase {
 
     @MainActor
     private func launchIsolatedApp() -> XCUIApplication {
-        let app = XCUIApplication()
+        // The packaging Gate injects an extracted Release app URL. The same
+        // assertions then exercise shipped bytes with a temporary data root.
+        let app: XCUIApplication
+        if let path = ProcessInfo.processInfo.environment["SLATESYNC_PACKAGED_APP"] {
+            print("SM09_PACKAGED_APP \(path)")
+            app = XCUIApplication(url: URL(fileURLWithPath: path))
+        } else {
+            app = XCUIApplication()
+        }
         app.launchEnvironment["SLATESYNC_TEST_ROOT"] = testRoot.path
         // Consecutive Gate runs can persist a prior no-window termination in
         // SwiftUI's restoration domain, which launches only the menu bar.

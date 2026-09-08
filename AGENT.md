@@ -1,5 +1,32 @@
 # SlateSync 当前项目方案
 
+## 2026-09-08 SM-09 WP-6～WP-9 原生切换（施工中）
+
+Owner 已确认继续实施 WP-6，包括六项待决文件。239 个旧生产/构建/测试输入按
+`sm09-cutover.json` 逐项记录 SHA、原因和原生替代后暂存删除，可从 Git 恢复。
+原始 `.codex/refactor` 保持不变；旧 UI 审计配置另存 `sm09-premium-ui-history.json`。
+
+当前构建和测试入口只使用 Swift/Xcode/macOS 工具。共享 `phase_gate.sh SM-09`
+验证删除前提交 `52b2a78` 的 ancestry、PASS 与哈希，运行原生测试、Release CSV
+性能、45 项原生界面证据、Universal Archive、ZIP/DMG 审计，以及从 ZIP 解压出的
+Release app 的完整 XCUI 路径。CI 获取完整 Git 历史以验证来源；不再提供旧阶段
+运行入口，历史阶段从其批准提交重放。
+
+新增原生合同冻结了49份夹具及235项既有XCTest成功用例，并拒绝来源/夹具/
+Prompt漂移、缺失执行、性能超限和删除映射缺口。旧 Node 合同的执行覆盖迁入
+Python 标准库检查，来源文本只从已验证 Git 对象读取，不执行旧代码。
+
+真实旧版导出的项目/项目库作为离线 base64+SHA JSON 夹具保留。SM09 原生测试验证
+导入、未知字段、编辑、关闭重开、再次导出/导入以及原包不变；所有数据在临时根。
+可选 Paddle 真实模型测试仍通过 `script/paddle_offline_check.sh` 显式注入离线环境。
+唯一发布资源位于 `SlateSyncApp/Resources/PaddleOCR`，不捆绑 Python/venv/模型。
+
+五个 Swift 模块与 SQLite v1/Keychain 语义保持原有架构；说明见 README.md、RELEASE.md。
+当前只验证 ad-hoc 本地候选包；最终 clean Gate 与审查完成前不标记 SM-09 COMPLETE。
+
+## 历史方案记录（以下内容只描述当时阶段，不是当前操作入口）
+
+
 ## 2026-09-08 SM-09 最终删除前兼容刷新（当前有效）
 
 - WP-2～WP-5 与后续 Gate fail-closed 修复已收敛到精确提交

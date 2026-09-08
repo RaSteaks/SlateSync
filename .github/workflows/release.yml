@@ -27,6 +27,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Provenance and cutover ancestry must be available on cold runners.
+          fetch-depth: 0
 
       - name: Validate requested version and toolchain
         env:
@@ -43,7 +46,6 @@ jobs:
 
       - name: Build, audit and package one Universal app
         env:
-          SLATESYNC_NATIVE_ONLY: "1"
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
         run: ./script/phase_gate.sh SM-09
 

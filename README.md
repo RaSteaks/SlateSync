@@ -1,315 +1,92 @@
-<div align="center">
-
-<img src="./build/slatesync.icon/Assets/icon.png" alt="SlateSync 图标" width="112" />
-
 # SlateSync
 
-**场记单识别 · 结构校对 · Resolve CSV 回填**
+SlateSync 是用于影视场记识别、项目与任务管理、Resolve CSV 编辑和导出的原生 macOS 应用。
 
-识别 PDF 或图片场记单，复核场、镜、次及条次状态，
-再将确认后的结果写回 DaVinci Resolve CSV。
+## 环境与运行
 
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A5%2020.19-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Platform](https://img.shields.io/badge/Platform-macOS-111827?logo=apple&logoColor=white)](https://github.com/RaSteaks/SlateSync)
-[![Electron](https://img.shields.io/badge/Desktop-Electron-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![License](https://img.shields.io/badge/License-MIT-2563eb)](./LICENSE)
+- macOS 15.0 或更高版本。
+- 开发与测试使用 Xcode 26.3（17C529）、Swift 6.2.4、macOS 26.2 SDK。
+- Release 为一个包含 arm64 与 x86_64 的 Universal app。
 
-<br />
+在仓库根目录执行：
 
-[快速开始](#快速开始) · [项目包](#项目包导入与导出) · [工作流](#工作流) · [架构](#架构) · [开发与验证](#开发与验证)
-
-</div>
-
----
-
-## 一眼了解
-
-| 输入 | 处理 | 输出 |
-| --- | --- | --- |
-| PDF、JPEG、PNG、WebP 场记单 | 本地逐页栅格化、OCR evidence、视觉模型识别、字段校验、版式 Profile 复用 | 保留原格式的 Resolve CSV |
-| Resolve CSV、素材目录 | 条号对账、场镜次序检查、`slate.txt` 元数据读取 | 可预览、可校对、可导出的回填结果 |
-
-> [!NOTE]
-> SlateSync 是本地 Electron 桌面应用。未配置模型密钥时，仍可执行本地 CSV 合并；发送给模型的内容取决于用户选择的识别服务。
-
-## 核心能力
-
-| 识别与理解 | 校对与回填 | 项目与安全 |
-| --- | --- | --- |
-| 支持 macOS Vision OCR、PaddleOCR，以及 OpenAI、OpenRouter、Token Plan、DashScope 和 OpenAI 兼容视觉模型。 | 导入 Resolve CSV，校验条号、场镜次序和识别完整性，确认后再导出。 | Project Library 使用 SQLite 保存项目、任务、诊断和场记结构 Profile。 |
-| 根据 OCR 表头、坐标和页面版式学习并复用场记结构 Profile。 | 读取素材目录中的 `slate.txt`，补充 `Camera FPS` 和 `Shoot Day`。 | API Key 只由 Main 进程读取；Renderer 不直接访问密钥或 Node.js 能力。 |
-| 单个 PDF 最多 20 页，支持逐页准备和识别。 | 保留原 CSV 的编码、换行和未匹配字段，仅更新匹配到的字段。 | Project Library 可导入、导出或更换存储位置；项目也可独立导入/导出。 |
-
-## 快速开始
-
-### 原生 Swift 工程（SM-01）
-
-原生重写骨架要求 Xcode 26.3、Swift 6.2，并固定最低系统为 macOS 15.0。打开
-`SlateSync.xcodeproj`，选择共享的 `SlateSync` Scheme：`Cmd-R` 运行和断点调试，
-`Cmd-U` 执行 Unit/UI Test，Profile 与 Archive 使用 Release 配置。
-
-```bash
-swift build
-swift test
-xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -destination 'platform=macOS' build
-xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -destination 'platform=macOS' test
+```sh
+./script/build_and_run.sh
 ./script/build_and_run.sh --verify
-./script/phase_gate.sh SM-01 --allow-dirty # 开发期诊断，不能批准阶段
+./script/build_and_run.sh --logs
 ```
 
-SM-01 工程实现已进入审查准备状态；只有在独立提交上执行正式 Gate 并由 Owner
-批准后才算完成。Electron 仍作为后续兼容迁移基线保留，不代表后续阶段已经完成。
+也可以用 Xcode 打开 `SlateSync.xcodeproj`，选择共享 `SlateSync` Scheme，然后使用
+Run、Test、Profile 或 Archive。Codex 的 Run 按钮使用同一个开发脚本。
 
-### 1. 环境要求
+## 验证
 
-- macOS：开发和当前打包目标平台。
-- Node.js `>=20.19` 与 npm。
-- Vision OCR：Xcode Command Line Tools 和 `swiftc`。
-- PaddleOCR：Python 3 和可用的 `venv` 模块（可选）。
-
-### 2. 安装依赖
-
-```bash
-git clone https://github.com/RaSteaks/SlateSync.git
-cd SlateSync
-npm ci
+```sh
+swift test
+./script/tests/phase_gate_tests.zsh
+./script/phase_gate.sh SM-09
 ```
 
-启动应用后进入“全局设置”，即可填写 API Key、接口地址、运行参数和 OCR 配置，普通桌面用户不需要寻找或编辑 `.env`。完整变量模板仍见 [.env.example](./.env.example)；开发、CI 或需要预置环境的场景可以选择复制它：
+正式 Gate 要求干净的已提交工作区。施工诊断可加 `--allow-dirty`，此时结果不可用于批准。
+Gate 验证删除前 Git 来源、冻结夹具、原生测试实际执行、界面与性能预算、Universal
+Archive、ZIP/DMG 回验，以及 ZIP 中 Release app 的独立 UI 启动和退出重开。
+历史迁移阶段的命令应从各自已批准的 Git 提交重放。新 checkout 需要完整 Git 历史；
+CI 使用 `fetch-depth: 0`。原始结果位于忽略目录 `.codex/gate-results/`。
 
-```bash
-cp .env.example .env
+## 使用与数据
+
+在项目库中新建项目，打开工作区后新建任务、导入场记素材，选择已配置的 Provider/模型，
+或使用本地 CSV 合并。结果可编辑并导出 Resolve CSV。设置通过 ⌘, 打开；帮助和运行日志
+可从侧栏访问。保存使用 ⌘S，新建项目使用 ⇧⌘N，新建窗口使用 ⌥⌘N。
+
+机器设置与日志保留在 `~/Library/Application Support/SlateSync/`；默认项目库位于
+`~/Library/Application Support/Local SlateSync Library/`，也支持用户选定的项目库。
+API key 由 macOS Keychain 保存；不要把 key 写入项目包或提交到仓库。
+项目库/项目导入导出格式仍为 v1。备份优先使用应用的导出功能；手工复制数据库前应退出
+应用，避免遗漏 WAL 中尚未合并的修改。升级或回退前请保存独立备份。
+
+自动测试只使用临时数据根；手工隔离运行可设置：
+
+```sh
+SLATESYNC_TEST_ROOT=/private/tmp/slatesync-manual-test ./script/build_and_run.sh --verify
 ```
 
-API Key 也可以直接在“全局设置”中保存；保存后不会回显。
+Vision 使用系统能力。PaddleOCR 是可选功能，可在设置中显式安装/检查：固定版本为
+paddlepaddle 3.3.1、paddleocr 3.7.0。App 只携带 runner 源码和依赖清单，
+不携带 Python、虚拟环境或模型缓存。安装需要用户选择的 Python 环境和网络；自动 Gate
+不执行联网安装。真实离线模型推理另需显式提供隔离的 `SM06_PADDLE_RUNTIME_FILE`：
 
-开发环境如果需要 PaddleOCR，可手动创建环境并检查：
-
-```bash
-npm run ocr:setup
-npm run ocr:check
+```sh
+./script/paddle_offline_check.sh
 ```
 
-打包版会把 PaddleOCR runner 和固定依赖清单放入 App 资源，但不会把 Python 解释器、PaddlePaddle
-或 PaddleOCR wheel 预先塞进 App。用户不需要自己创建虚拟环境：打开“全局设置 → 本地 OCR”，
-点击“安装 PaddleOCR”，App 会检查本机 Python 3.10+，在用户目录创建独立环境并在线安装
-`paddlepaddle==3.3.1` 与 `paddleocr==3.7.0`，验证通过后自动保存路径。首次安装需要网络；如果
-电脑没有 Python，仍需先由用户安装 Python，安装 PaddleOCR 本身不需要管理员权限。
-安装过程支持进度、取消和失败重试；也可以继续填写已有环境的 Python 路径后点击“验证并保存环境”。
-若选择“自动”，macOS 会在 Vision bridge 不可用时转用已配置的 PaddleOCR。
+## 本地候选包
 
-### 3. 启动应用
-
-```bash
-npm start
+```sh
+./script/archive_release.sh /private/tmp/SlateSync-release 1.0.0 1
+./script/package_release.sh /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app /private/tmp/SlateSync-artifacts 1.0.0 1
 ```
 
-`npm start` 会构建 Main/Preload、重建 Electron 原生依赖，然后启动 Vite Renderer 开发服务器和 Electron。修改 `src/renderer` 后会通过 HMR 自动更新窗口；也可以显式启动 Modern Renderer：
+输出必须是仓库外的新目录。ZIP 和 DMG 来自同一 app，附 `SHA256SUMS`、JSON manifest
+及中英 release notes。详细步骤见 [发布与支持说明](RELEASE.md)。
 
-```bash
-npm run electron:dev:modern
-```
+当前仅验证 ad-hoc 本地候选包，尚未完成 Developer ID 签名、公证或公开发布。
+普通用户分发前需要独立的签名、公证、Gatekeeper 与发布授权验证。
 
-修改 Main 或 Preload 后必须完全退出旧 Electron 进程再重启；Renderer HMR 只作用于
-`src/renderer`，仅刷新窗口不会重新加载 Preload。遇到“版本不一致”提示时，重新执行
-`npm run electron:dev:modern` 即可让启动钩子重新构建 Main/Preload。
+## 结构
 
-## 项目包导入与导出
+- `SlateSyncDomain`：类型、验证、设置和错误合同。
+- `SlateSyncPersistence`：SQLite v1、项目包、设置、Keychain 和日志。
+- `SlateSyncMedia`：媒体渲染、Vision/Paddle OCR 与资源生命周期。
+- `SlateSyncWorkflow`：CSV、场景、Provider、识别与安装编排。
+- `SlateSyncUI`：原生窗口、项目库、工作区、CSV、设置、帮助和日志。
+- `SlateSyncApp/Resources/PaddleOCR`：唯一 Paddle runner/requirements 来源。
 
-在 Modern 或 Legacy 的项目卡片上打开“项目设置”，即可在“项目包”区域点击“导入项目”或
-“导出项目”。导出允许活动项目、已归档项目和默认项目，默认写入 Downloads 下经过文件名清理的
-`<项目名>.slatesync-project`；选择器取消不会改变项目或列表状态，已有目标也不会被覆盖。
+当前方案见 [AGENT.md](AGENT.md)，迁移证据与逐项删除来源见 `.codex/swift-migration/`。
+`.codex/refactor/`、`DESIGN.md`、`UX-CONTRACT.md` 是历史设计/兼容审查材料，不参与运行或打包。
 
-导入永远创建新的 `project-*` ID，因此同名项目可以并存，原项目不会被覆盖。项目的任务、
-诊断证据、场记结构 Profile、设置、时间戳、归档状态，以及任务中已保存的图片和 CSV 数据
-都会保留；归档副本仍显示在“已归档项目”，导入成功后留在项目库并刷新列表，不会自动打开。
+## 许可
 
-v1 使用目录包而不是 ZIP，结构固定为：
-
-```text
-<项目名>.slatesync-project/
-├── slatesync-project.json
-├── project.json
-├── project.sqlite
-├── tasks/*.json
-└── diagnostics/*.json
-```
-
-项目库导入/导出不包含全局配置、API Key、OCR 环境与路径、日志或项目库索引。操作开始前
-工作台会等待自动保存；识别、保存或其他项目写入进行时会提示稍候。项目数据通过临时目录、
-SQLite online backup 和原子重命名完成传输，包校验会拒绝符号链接、非法未来版本、同路径、
-嵌套路径和已存在目标。
-
-## 工作流
-
-```text
-导入场记单
-    ↓
-PDF 逐页栅格化 → 本地 Vision/PaddleOCR → OCR evidence + 页面图片 → 视觉模型 → 字段归一化与版式匹配
-    ↓
-载入 Resolve CSV + 可选扫描 slate.txt
-    ↓
-条号对账 / 场镜次序检查 / 完整性告警
-    ↓
-回填预览 → 人工校对 → 导出 CSV
-```
-
-| 阶段 | SlateSync 会做什么 |
-| --- | --- |
-| 识别 | PDF 先在本地逐页栅格化；本地 OCR 提取文字、置信度和坐标后，与页面图片一起交给视觉模型抽取场、镜、次和条次状态。 |
-| 学习 | 从 OCR 表头、坐标和版式生成场记结构 Profile，并在相似任务中复用。 |
-| 对账 | 载入 Resolve CSV，检查条号缺失、场镜次序异常和识别完整性。 |
-| 回填 | 只更新匹配到的素材与允许写入的字段，保留原 CSV 的其他内容。 |
-
-### 支持的识别方式
-
-| 方式 | 位置 | 适合场景 |
-| --- | --- | --- |
-| macOS Vision OCR | 本地 | macOS 环境下的基础文字与坐标识别 |
-| PaddleOCR | 本地，可选安装 | 需要额外 OCR 引擎或本地处理能力 |
-| OpenAI / OpenRouter / Token Plan / DashScope | 云端 | 需要视觉模型理解复杂版式、中文或手写内容 |
-| OpenAI 兼容视觉接口 | 按服务商配置 | 使用兼容 OpenAI 协议的模型服务 |
-
-## 架构
-
-```text
-Electron Main
-  ├─ Project Library / SQLite / 文件与配置访问
-  ├─ IPC handlers
-  └─ Preload → window.slateSync
-
-Modern React Renderer（默认）
-  ├─ Zustand 状态切片
-  ├─ Project Library、Workspace、Settings、Recognition UI
-  └─ CSV Worker / Preparation Worker
-
-Legacy Renderer（受限回退路径）
-  └─ public/index.html 与 public/app.js
-```
-
-- Main 进程是 SQLite、Project Library、密钥和文件系统的权威所有者。
-- Renderer 只能通过 Preload 暴露的 `window.slateSync` 访问桌面能力。
-- CSV 处理和 PDF/图片准备在 Worker 中执行，Renderer 只负责交互和状态投影。
-- Modern Renderer 默认启动；显式指定 legacy 或 Modern 资源不可用时，才使用 Legacy Renderer 回退。
-
-## 配置
-
-工作流配置文件为 [slatesync.config.json](./slatesync.config.json)，可配置：
-
-- 素材目录扫描深度；
-- 场、镜、次的最小位数；
-- `Comments` 中过条和保条的标记。
-
-常用环境变量：
-
-| 变量 | 作用 |
-| --- | --- |
-| `SLATESYNC_CONFIG_PATH` | 工作流配置文件路径 |
-| `MODEL_REQUEST_TIMEOUT_MS` | 单次模型请求超时 |
-| `MODEL_REQUEST_MAX_RETRIES` | 模型请求重试次数 |
-| `MODEL_PAGE_CONCURRENCY` | 并行提交的页面数 |
-| `MAX_CONCURRENT_RECOGNITIONS` | 并行识别任务数 |
-| `VISIONOCR_ENABLED` | Vision OCR 开关 |
-| `PADDLEOCR_ENABLED` | PaddleOCR 开关 |
-| `VISIONOCR_REQUIRED` | Vision OCR 必需模式；失败时停止识别 |
-| `PADDLEOCR_REQUIRED` | PaddleOCR 必需模式；失败时停止识别 |
-
-### Resolve 字段回填
-
-| Resolve 字段 | 数据来源 |
-| --- | --- |
-| `Scene` | 场记单中的场次 |
-| `Shot` | 场记单中的镜 |
-| `Take` | 场记单中的次 |
-| `Comments` | 按配置写入过条、保条标记；其他情况为空 |
-| `Camera FPS` | 素材目录 `slate.txt` 的 `Sensor FPS` |
-| `Shoot Day` | 素材目录 `slate.txt` 的 `Shot Date` |
-
-字段无法确认时不会被强行写入，必须人工校对。原 CSV 的编码、换行和未匹配字段保持不变。
-
-### 全局设置与配置优先级
-
-“全局设置”覆盖 `.env.example` 中除 API Key 外的全部可配置项，包括服务商 Base URL、OpenAI 兼容接口参数、模型请求并发/超时、Vision OCR、PaddleOCR 和模型缓存路径。API Key 使用同一页面的独立凭据入口。
-
-配置按以下优先级生效：普通配置为“全局设置覆盖 > 操作系统进程环境变量 > `.env` > 内置默认值”；通过页面保存的 Provider API Key 则为“本机凭据 > 操作系统进程环境变量 > `.env`”，并由 Main 进程单独管理。
-
-普通配置存放在 Electron 的 `<userData>/global-config.json`：带版本号、只保存已校验的非敏感覆盖项、写入采用临时文件加原子重命名，并使用 `0600` 权限。Provider 密钥仍放在独立的 `<userData>/provider-keys.json`，不会混入全局配置、Project Library、任务数据或 Renderer IPC 的普通配置 DTO。点击“恢复环境默认”只删除全局覆盖，之后回退到 `.env` 和内置默认值。
-
-全局配置按机器用户保存，不随 Project Library 导入/导出；因此同一台机器的多个项目共享它，而项目包仍可独立迁移。若未来需要更高等级的凭据保护，可将现有独立密钥文件迁移到 macOS Keychain/系统安全存储，普通配置文件无需改变。
-
-#### 多自定义 OpenAI 兼容接口
-
-全局设置的“自定义模型接口”支持任意数量的连接，每条记录使用
-`openai-compatible:<uuid>` 稳定 ID，可自定义名称、Base URL、Chat Completions/Responses、
-JSON 模式、图片细节和多个手动模型 ID。`global-config.json` 已升级为 v2；v1 或早期
-direct-object 文件会兼容读取并在下一次保存时写入 v2。删除接口只清理该接口的 Key、
-发现和能力缓存，不改写项目数据库，旧项目引用会提示重新选择。
-
-模型检测先读取 `/models`。明确声明图像输入+文本输出、维护模型族推断或已验证的模型
-进入“可用于识别”；未声明 modality 的模型进入“待验证”，由用户选择后使用不含项目数据
-的合成图片与最小 JSON 探针验证。探针并发上限为 2、单模型超时 30 秒，支持进度、取消和
-逐项重试。精度/性价比只展示带来源和日期的参考评级；未知模型显示“精度暂无数据”“价格未知”。
-
-## 数据与安全
-
-- 默认 Project Library 位于 macOS Application Support 下的 `Local SlateSync Library`。
-- Project Library 使用 SQLite 保存任务、诊断、项目设置和场记结构 Profile。
-- 旧版本 JSON 数据会按兼容规则迁移，并保留兼容快照。
-- API Key 只由 Main 进程读取；Renderer 不直接访问密钥或 Node.js 能力。
-- PDF 原始字节只用于本地逐页栅格化；模型请求统一只发送页面图片与本地 OCR evidence，不发送原始 PDF 文件。
-- OCR 引擎未启用、不可用、超时、失败或没有文字块时，会显示“本地 OCR 不可用，已改用页面图片直接识别；识别精度可能下降。”并降级为页面图片识别；设置为必需时则停止识别。
-- 历史客户端提交原始 `pdfDataUrl` 会在 Main 模型调用前收到 400；旧 direct-PDF 路由已退役，不能通过环境变量重新启用。
-- 不要将 `.env`、本地 Project Library、`data/` 或任何用户数据提交到 Git。
-
-## 开发与验证
-
-```bash
-npm run check                 # JavaScript、Electron 和 Python 语法检查
-npm run typecheck             # TypeScript 项目引用检查
-npm test                      # Node 基线测试与 Modern 测试
-npm run test:e2e              # Electron Playwright E2E
-npm run test:native:abi       # Node/Electron 原生 ABI 生命周期检查
-npm run validate:modern       # typecheck、Modern 测试和 Modern 构建
-npm run build:storybook      # Storybook 构建
-```
-
-测试使用临时用户数据和临时 Project Library，不应指向个人 Library。
-
-## 构建与打包
-
-当前产品、CI 和 GitHub Release 只面向 macOS 15.0+；Electron 过渡打包入口固定生成
-macOS DMG/ZIP，并保留 arm64 与 x86_64 两个架构。其他宿主系统和非 macOS 打包参数
-会在构建开始前拒绝，不会生成其他平台应用。
-
-构建 Modern 产物：
-
-```bash
-npm run build:modern
-```
-
-生成 macOS 未签名应用目录：
-
-```bash
-CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:build:dir
-```
-
-生成 macOS 安装包：
-
-```bash
-npm run electron:build
-```
-
-输出目录为 `dist/`。签名、公证和发布需要单独配置 Apple 发布凭据。
-
-
-
-## 限制
-
-- 单个 PDF 最多 20 页，单个上传文件最大 20 MB。
-- 当前输入格式为 PDF、JPEG、PNG 和 WebP。
-- 无法确认的识别字段不会被强行写入，必须人工校对。
-- 只有配置允许的条次标记或空值会写入 Resolve `Comments`。
-
-## License
-
-[MIT](./LICENSE)
+项目许可见 [LICENSE](LICENSE)。系统 frameworks 与 SQLite 通过 macOS 系统链接；
+可选 Paddle Python 依赖由用户安装，其上游许可和 notices 以固定版本分发内容
+为准。模型与 Python 环境不包含在本 App 的 ZIP/DMG 中。

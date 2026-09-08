@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "phase": "SM-09",
+  "reviewCommit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+  "generatedAt": "2026-09-07T15:59:28Z",
+  "overallResult": "PASS",
+  "approvable": true,
+  "diagnosticDirtyWorkspace": false,
+  "checks": [
+    {
+      "id": "workspace_layout",
+      "critical": true,
+      "result": "PASS",
+      "message": "必需工程、Scheme、Test Plan 与运行入口存在",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/workspace_layout.log"
+    },
+    {
+      "id": "required_tools",
+      "critical": true,
+      "result": "PASS",
+      "message": "Swift/Xcode/Git 与产物检查工具可用",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/required_tools.log"
+    },
+    {
+      "id": "clean_review_target",
+      "critical": true,
+      "result": "PASS",
+      "message": "审查目标的提交状态符合当前正式/诊断运行模式",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/clean_review_target.log"
+    },
+    {
+      "id": "forbidden_items",
+      "critical": true,
+      "result": "PASS",
+      "message": "原生代码不存在冲突标记或禁止的不安全构造",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/forbidden_items.log"
+    },
+    {
+      "id": "diff_integrity",
+      "critical": true,
+      "result": "PASS",
+      "message": "Git diff 不含空白错误",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/diff_integrity.log"
+    },
+    {
+      "id": "gate_self_tests",
+      "critical": true,
+      "result": "PASS",
+      "message": "Gate 分类、证据替代与批准新鲜度测试通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/gate_self_tests.log"
+    },
+    {
+      "id": "sm01_foundation_contract",
+      "critical": true,
+      "result": "PASS",
+      "message": "五模块、macOS 15、Swift 6 与 Xcode 基础契约完整",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_foundation_contract.log"
+    },
+    {
+      "id": "sm01_scope_contract",
+      "critical": true,
+      "result": "PASS",
+      "message": "SM-01 范围、历史基线与生成物边界完整",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_scope_contract.log"
+    },
+    {
+      "id": "swift_build",
+      "critical": true,
+      "result": "PASS",
+      "message": "SwiftPM Debug 构建通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/swift_build.log"
+    },
+    {
+      "id": "swift_test",
+      "critical": true,
+      "result": "PASS",
+      "message": "SwiftPM 核心测试通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/swift_test.log"
+    },
+    {
+      "id": "xcode_debug_build",
+      "critical": true,
+      "result": "PASS",
+      "message": "共享 Scheme 的 Xcode Debug 构建通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/xcode_debug_build.log"
+    },
+    {
+      "id": "xcode_test_plan",
+      "critical": true,
+      "result": "PASS",
+      "message": "共享 Test Plan 的 Unit/UI Test 通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/xcode_test_plan.log"
+    },
+    {
+      "id": "sm09_release_tools",
+      "critical": true,
+      "result": "PASS",
+      "message": "原生归档、依赖与 ZIP/DMG 审计工具可用",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_release_tools.log"
+    },
+    {
+      "id": "sm09_release_contract",
+      "critical": true,
+      "result": "PASS",
+      "message": "Xcode、资源、版本、workflow 与发布边界合同完整",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_release_contract.log"
+    },
+    {
+      "id": "sm09_inventory_contract",
+      "critical": true,
+      "result": "PASS",
+      "message": "SM-09 inventory 分类与引用图完整",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_inventory_contract.log"
+    },
+    {
+      "id": "sm09_coverage_contract",
+      "critical": true,
+      "result": "PASS",
+      "message": "legacy family 到原生覆盖的映射完整",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_coverage_contract.log"
+    },
+    {
+      "id": "sm09_package_self_tests",
+      "critical": true,
+      "result": "PASS",
+      "message": "包审计失败、并发和清理路径自测通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_package_self_tests.log"
+    },
+    {
+      "id": "sm05_technical_regression",
+      "critical": true,
+      "result": "PASS",
+      "message": "SM-05 CSV/metadata/Scenario 技术合同继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm05_technical_regression.log"
+    },
+    {
+      "id": "sm07_technical_regression",
+      "critical": true,
+      "result": "PASS",
+      "message": "SM-07 Provider/识别编排合同继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm07_technical_regression.log"
+    },
+    {
+      "id": "sm08_technical_regression",
+      "critical": true,
+      "result": "PASS",
+      "message": "SM-08 原生 UI fixture/验收映射/执行覆盖继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm08_technical_regression.log"
+    },
+    {
+      "id": "sm09_node_compatibility",
+      "critical": true,
+      "result": "PASS",
+      "message": "Electron 数据/Provider/媒体兼容基线继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_node_compatibility.log"
+    },
+    {
+      "id": "sm09_modern_compatibility",
+      "critical": true,
+      "result": "PASS",
+      "message": "Modern Renderer 兼容基线继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_modern_compatibility.log"
+    },
+    {
+      "id": "sm09_static_checks",
+      "critical": true,
+      "result": "PASS",
+      "message": "Electron/TypeScript 静态检查继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_static_checks.log"
+    },
+    {
+      "id": "sm09_typecheck",
+      "critical": true,
+      "result": "PASS",
+      "message": "TypeScript 类型检查继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_typecheck.log"
+    },
+    {
+      "id": "sm09_modern_build",
+      "critical": true,
+      "result": "PASS",
+      "message": "Modern Renderer 生产构建继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_modern_build.log"
+    },
+    {
+      "id": "sm09_native_abi",
+      "critical": true,
+      "result": "PASS",
+      "message": "Electron/Node SQLite ABI 生命周期继续通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_native_abi.log"
+    },
+    {
+      "id": "sm01_debug_settings",
+      "critical": true,
+      "result": "PASS",
+      "message": "Debug 为活动架构、-Onone、macOS 15 和完整并发检查",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_debug_settings.log"
+    },
+    {
+      "id": "sm01_real_app_launch",
+      "critical": true,
+      "result": "PASS",
+      "message": "隔离数据根中启动并确认本次构建的真实 SlateSync 进程",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_real_app_launch.log"
+    },
+    {
+      "id": "sm01_release_build",
+      "critical": true,
+      "result": "PASS",
+      "message": "Release generic macOS 构建通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_release_build.log"
+    },
+    {
+      "id": "sm01_release_artifact",
+      "critical": true,
+      "result": "PASS",
+      "message": "Release 为 Universal、macOS 15.0 且签名有效",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_release_artifact.log"
+    },
+    {
+      "id": "sm01_archive",
+      "critical": true,
+      "result": "PASS",
+      "message": "共享 Scheme 可生成 Release Archive",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_archive.log"
+    },
+    {
+      "id": "sm01_archive_artifact",
+      "critical": true,
+      "result": "PASS",
+      "message": "Archive 为 Universal、macOS 15.0 且签名有效",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm01_archive_artifact.log"
+    },
+    {
+      "id": "sm09_archive_bundle_audit",
+      "critical": true,
+      "result": "PASS",
+      "message": "Archive hardened runtime、entitlements、依赖和资源审计通过",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_archive_bundle_audit.log"
+    },
+    {
+      "id": "sm09_package_artifacts",
+      "critical": true,
+      "result": "PASS",
+      "message": "同一 audited app 生成并回验 Universal ZIP/DMG",
+      "log": "/Users/rasteaks/Desktop/个人/GitHub/SlateSync-Swift/.codex/gate-results/SM-09/20260907T155254Z-52b2a78f6619/sm09_package_artifacts.log"
+    },
+    {
+      "id": "approval_freshness",
+      "critical": true,
+      "result": "NOT_APPLICABLE",
+      "message": "Owner 批准在 Gate PASS 后执行；当前状态尚非 COMPLETE（PASS 中间态窗口内不执行批准检查）",
+      "log": null
+    }
+  ]
+}

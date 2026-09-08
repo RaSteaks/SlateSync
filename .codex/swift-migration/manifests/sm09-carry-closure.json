@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "WP-2_TO_WP-5_AND_FINAL_PRE_CUTOVER_REFRESH_PASS; WP-6_OWNER_DECISION_PENDING",
+  "status": "WP-6_IMPLEMENTED; FINAL_NATIVE_GATE_PENDING",
   "baselineCommit": "218b43c71bc8d58771f70e654fe3349b8174097e",
   "diagnosticGate": {
     "result": "PASS",
@@ -111,5 +111,6 @@
       "notApplicable": 1,
       "failed": 0
     }
-  }
+  },
+  "wp6OwnerDecision": "2026-09-08: 确认，继续推进SM09阶段代码实施"
 }

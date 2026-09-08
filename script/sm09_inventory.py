@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""SM-09 WP-0 清单生成器（只读审计，不修改任何被扫描文件）。
+"""SM-09 最终工作树清单生成器（只读审计，不修改任何被扫描文件）。
 
 按 SM-09 施工包 WP-0 的要求，对全部 tracked 文件生成删除/保留分类清单：
-- 输出 `.codex/swift-migration/manifests/sm09-inventory.json`（tracked、可 hash）；
+- 输出 `.codex/swift-migration/manifests/sm09-final-inventory.json`（tracked、可 hash）；
 - 每个文件记录 path、bytes、sha256、category、note 与引用者（referencers）；
 - 分类规则按顺序首次命中；无法机械判定的落入 decision-required，
   不得仅凭扩展名批量删除（WP-0 明确要求逐项判定）。
@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUTPUT = REPO / ".codex/swift-migration/manifests/sm09-inventory.json"
+OUTPUT = REPO / ".codex/swift-migration/manifests/sm09-final-inventory.json"
 
 # (前缀或文件名精确匹配, 分类, 备注)。规则按顺序首次命中。
 RULES = [
@@ -49,6 +49,10 @@ RULES = [
     ("script/sm09_inventory.py", "release-input", "SM-09 原生清单与引用审计工具"),
     ("script/tests/sm09_coverage_tests.py", "native-test", "覆盖映射完整性与故障回归"),
     ("script/tests/sm09_inventory_tests.py", "native-test", "清单故障与完整引用回归"),
+    ("script/package_smoke.sh", "release-input", "ZIP app 的隔离 XCUI 交付验收"),
+    ("script/paddle_offline_check.sh", "release-input", "显式环境下的离线模型验收"),
+    ("script/tests/sm09_native_contract.py", "native-test", "原生覆盖、来源与最终切换合同"),
+    ("RELEASE.md", "release-input", "原生发布与支持说明"),
     ("script/tests/", "legacy-remove", "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除"),
     ("scripts/paddleocr_runner.py", "fixture-migrate", "WP-2 迁入 SlateSyncApp/Resources/PaddleOCR/ 唯一 canonical 位置"),
     ("requirements-ocr.txt", "fixture-migrate", "WP-2 与 runner 一起迁入 App Resources；不捆绑 venv/cache/模型"),

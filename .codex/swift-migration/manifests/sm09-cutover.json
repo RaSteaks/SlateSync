@@ -1,0 +1,4289 @@
+{
+  "schemaVersion": 1,
+  "preCutoverCommit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+  "preCutoverManifestSha256": "25e5f86661048d85ea252183622b4d86e767e1ed3185e538ca65c0b99a17c5d1",
+  "ownerDecision": "2026-09-08: 确认，继续推进SM09阶段代码实施",
+  "removed": [
+    {
+      "path": ".env.example",
+      "preCutoverSha256": "bc8038170cbfa53203204766ed34d8e1e0bb9c17a0e36f6a2bd781a2734c2a61",
+      "bytes": 4553,
+      "reason": "Electron 环境变量模板：SM-03 原生 GlobalConfig 已覆盖其非敏感项",
+      "family": "native-release",
+      "replacement": [
+        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+        "Sources/SlateSyncMedia/VisionOCRService.swift",
+        "SlateSyncApp/SlateSync.entitlements"
+      ],
+      "acceptanceIDs": [
+        "CUT-02",
+        "CUT-05"
+      ]
+    },
+    {
+      "path": ".storybook/main.ts",
+      "preCutoverSha256": "cc3d99ef8e6968fd3576cca61fb72f6e1c3e21309f6f869a5ef39d4420652c8c",
+      "bytes": 408,
+      "reason": "Storybook 配置",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": ".storybook/preview.tsx",
+      "preCutoverSha256": "147272396ddd05dc0cd588cd3222e53c39ab334c39fb6f23b609375001b228b6",
+      "bytes": 659,
+      "reason": "Storybook 配置",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "build/entitlements.mac.plist",
+      "preCutoverSha256": "6122138a42c27155c0151325516de052fe43be31e07577b07172108f8c0893ac",
+      "bytes": 523,
+      "reason": "Electron 签名 entitlements：与原生 SlateSync entitlements 的取舍需逐项判定",
+      "family": "native-release",
+      "replacement": [
+        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+        "Sources/SlateSyncMedia/VisionOCRService.swift",
+        "SlateSyncApp/SlateSync.entitlements"
+      ],
+      "acceptanceIDs": [
+        "CUT-02",
+        "CUT-05"
+      ]
+    },
+    {
+      "path": "electron-builder.yml",
+      "preCutoverSha256": "809d4073df99f4586cd5d9aa75599e5b9eccd4b7687ee2c228416eba3fe0e9a1",
+      "bytes": 1468,
+      "reason": "Electron 打包入口，WP-3 原生 archive/package 管线替代",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "electron/env-loader.mjs",
+      "preCutoverSha256": "33d2fd3266b0da39439e181c6f97f1cdfcf7651d4b38431a534b25d57cb0bada",
+      "bytes": 2726,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/file-dialogs.mjs",
+      "preCutoverSha256": "14211f6d624b286e14732eaaeee0c6dea816633efacafa4802d0ec1e2616fee8",
+      "bytes": 4436,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/global-config-store.mjs",
+      "preCutoverSha256": "757c67ac22503e36d20ef170188f367008cf74c24b62e6962a3f2d10d40711de",
+      "bytes": 4134,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/global-settings.mjs",
+      "preCutoverSha256": "3ae86cdfc3a3694dde49e14201069b013cd9e2386963050dcf5581f1d914e73a",
+      "bytes": 9543,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/ipc-handlers.mjs",
+      "preCutoverSha256": "e1c9c83c914a2eb42283e2f229b1e53e7fd80f9e9c9af20521fc9454a8313025",
+      "bytes": 70071,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/key-store.mjs",
+      "preCutoverSha256": "1ced11e2fd7beb2756ec01ab004fa22246d50932496f207543b014572c6e50fc",
+      "bytes": 2118,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/main.mjs",
+      "preCutoverSha256": "fd5dc69d0c37b304de93f3ec5783f6c8cf77779c88bf8eed0da1da22819cd253",
+      "bytes": 24105,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/paddleocr-installer.mjs",
+      "preCutoverSha256": "62166db3ec9276c4190fa050eaeb789213378cb1da1388e1f35d0f51526d3876",
+      "bytes": 14942,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/preload.cjs",
+      "preCutoverSha256": "c969d0eb3aca18eeed1aae4ee552cf0f6fb175ace84c25fb35c5069db549efb1",
+      "bytes": 319,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/renderer-dev-url.mjs",
+      "preCutoverSha256": "3e479c8c0ba48ea8252af468cfb24a9ce8bd90b29d9fde59670962aa7ba94743",
+      "bytes": 858,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/settings-store.mjs",
+      "preCutoverSha256": "f03d28de58ceb31b428b0b20e01d4315c14237af4b63f7d0947ac4ff9b6dfa44",
+      "bytes": 1901,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "electron/slate-scanner.mjs",
+      "preCutoverSha256": "38b753a8b859f1c489fa132bd2be0fa8dc8437ae1f6048889794c81c24c31af1",
+      "bytes": 6740,
+      "reason": "Electron main/preload 运行时",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "lib/ai-client.mjs",
+      "preCutoverSha256": "94243a91ac14726d253c0c372c9bdebf48c910f88562bcdc2d4cf58f9ef7b31a",
+      "bytes": 55830,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/app-logger.mjs",
+      "preCutoverSha256": "db926f9fd18f6ee15815dbea23a1d3315ffbef9c33fec38ff4b4040b746f0467",
+      "bytes": 9800,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/config.mjs",
+      "preCutoverSha256": "f879d022e63ce2b114abd7cdc394516762b7852eb91154075c65b85e2daf696e",
+      "bytes": 17675,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/custom-provider.mjs",
+      "preCutoverSha256": "355e78180f29337f429a550b9188534d0945f4e86e4c09cb8dce4e7c7c406612",
+      "bytes": 8169,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/diagnostics.mjs",
+      "preCutoverSha256": "df2df7c7afce70dec37cfbf7554c59913d9127b2d7420539133e0dad1162b250",
+      "bytes": 7409,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "lib/http-timeout.mjs",
+      "preCutoverSha256": "8caf17c7e008e9ccf238a65f4b48e973650756532cba998e5318c8edf626ad31",
+      "bytes": 2369,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/macos-platform-guard.mjs",
+      "preCutoverSha256": "553198997e7d26406e5de0ec622d6dbaff8ba7701a9ea0de5fe0bcf699deeb23",
+      "bytes": 890,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "lib/model-capabilities.mjs",
+      "preCutoverSha256": "4182d24462436f38a57ed245b9d54d8706d7327d4d3d161d2675b462454844bd",
+      "bytes": 17346,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/model-catalog.mjs",
+      "preCutoverSha256": "6502b932473136ac7a2bb1c23903e76ecf168201c800cbcbb328e0dfca5c1c4b",
+      "bytes": 24047,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/model-discovery.mjs",
+      "preCutoverSha256": "09d2387f8029611e43640078a9011a7ed24e09e07091bb9a6f39757818321af8",
+      "bytes": 27930,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/ocr/cancellation.mjs",
+      "preCutoverSha256": "0745db2c9ad644978082cb682a9bf001257d5419c0ea8397ab3daf52a5233e45",
+      "bytes": 715,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "lib/ocr/child-environment.mjs",
+      "preCutoverSha256": "dcf3af303c6c847cc6f0182be85e611f2c8f7e8f77783777803fcd3b07dc6f7f",
+      "bytes": 2134,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "lib/ocr/paddleocr.mjs",
+      "preCutoverSha256": "d6f1dda740a107c9555a95278c67a320b87d3a22ff4398d7268eca0e570ebe77",
+      "bytes": 51111,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "lib/ocr/runtime-paths.mjs",
+      "preCutoverSha256": "66e3386a9f45ba241761ca4284903c13b61a07cfc0912390d45ea5b75a889ab3",
+      "bytes": 2178,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "lib/ocr/selection.mjs",
+      "preCutoverSha256": "0db47b44a91abc77d40c86e03aeb2b66de1effdb7bdb4c89074def1ca6e846e5",
+      "bytes": 3007,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "lib/ocr/vision.mjs",
+      "preCutoverSha256": "714ce587c407b6274ef0fa96e7cf106644bb994cc56190eaf32a281b035becf3",
+      "bytes": 21161,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "lib/project-library-transfer.mjs",
+      "preCutoverSha256": "95c73d20cf0323a1b66fc882bd69c71c99e407b5a64b34c3d3b6a3005964a6dc",
+      "bytes": 36643,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "lib/project-library.mjs",
+      "preCutoverSha256": "7360ee9401ff40107a8c6a9b40004e13cf1127da09bdfc46ab56e52da5395f01",
+      "bytes": 31442,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "lib/project-runtime.mjs",
+      "preCutoverSha256": "044df152d43939a7dcc0136088b6948394888dc2d32ae886667b00ba3eaa6c40",
+      "bytes": 2252,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "lib/project-settings.mjs",
+      "preCutoverSha256": "175bd1f29016b36e74939b9c7bc5d707979ce13c782dceb71f341d61dd2308c0",
+      "bytes": 4014,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/provider-registry.mjs",
+      "preCutoverSha256": "910324ca0b7280f90bb6f39ada8f758102b056cca90a3c00a2689db412ddd22d",
+      "bytes": 17535,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "lib/scenario/profile.mjs",
+      "preCutoverSha256": "e65d01b864ef401814d50571bdd26bd12c04963c39901d766dbb979cae474956",
+      "bytes": 15531,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "lib/scenario/store.mjs",
+      "preCutoverSha256": "77bfefccc2962049ae624b2762e1479f1f8b0d1928d0ffed862c04842b16d0df",
+      "bytes": 6979,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "lib/schema.mjs",
+      "preCutoverSha256": "ccd3ad8bf485cd326aacd728bd97b0eeb3ded287bee838a60c050ca34bd860f3",
+      "bytes": 23868,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "lib/sqlite-store.mjs",
+      "preCutoverSha256": "f0ee05a12cf1c9b24c2e19931d0ac8ff97a4d7f53cff2a49748693c2d0b80bb3",
+      "bytes": 6210,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "lib/task-store.mjs",
+      "preCutoverSha256": "51fe949733215aa439e604c006f94ff8719160b2415d818c016052ea553d03ca",
+      "bytes": 5419,
+      "reason": "Electron 主进程业务库（OCR/CSV/SQLite/Provider 的 JS 实现）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "package-lock.json",
+      "preCutoverSha256": "b565f75dc35b55b5f524450871395968e27c010c609e95e98bac0a0954d2f250",
+      "bytes": 318346,
+      "reason": "Node 锁文件",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "package.json",
+      "preCutoverSha256": "24778b68c3e46d30187782af0498bffbeb7ce7d66e5e2c78d40a6ddda475323b",
+      "bytes": 7032,
+      "reason": "Node 依赖与脚本（WSL 兼容矩阵在 pre-cutover 后失效）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "playwright.config.ts",
+      "preCutoverSha256": "5cd6119e0afd924221b5f6d5a9f3e02fdfe0c5a4fb31856d2835a69973e35e9e",
+      "bytes": 221,
+      "reason": "E2E 配置",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "premium-ui.json",
+      "preCutoverSha256": "8359659d4164646d4947c06bf3e9a8516336aecec90c3da849af816e5a4773c1",
+      "bytes": 907,
+      "reason": "历史 UI 审计工件：确认归档或删除",
+      "family": "native-release",
+      "replacement": [
+        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+        "Sources/SlateSyncMedia/VisionOCRService.swift",
+        "SlateSyncApp/SlateSync.entitlements"
+      ],
+      "acceptanceIDs": [
+        "CUT-02",
+        "CUT-05"
+      ]
+    },
+    {
+      "path": "public/app.js",
+      "preCutoverSha256": "84352a3825c7200fa61beb826149db7bb7ce53ca4402dd39aed26e3bf6b8fa04",
+      "bytes": 212883,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "public/csv-background-tasks.js",
+      "preCutoverSha256": "af1441d8a504b06f249310a40dd140adb1dcf9c4d242f503d1801550713bbe56",
+      "bytes": 5900,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/csv-worker-client.js",
+      "preCutoverSha256": "76a537750cc53b03c97e724ba8f82125681f53e1c5b07f76d691b692c5bba14b",
+      "bytes": 1960,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/csv-worker.js",
+      "preCutoverSha256": "4051f49af81cbf59b02f5291960d5a74c4a66d932b43da8bbdd9a50139bb1fd7",
+      "bytes": 1373,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/custom-provider-state.js",
+      "preCutoverSha256": "f73a88e1ab88e3267425059160172bbefe1d77beb9891811be816678dfe22cff",
+      "bytes": 1279,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "public/electron-bridge.js",
+      "preCutoverSha256": "6c3b33f27f1a5752c349d590c4d933f1562dbf8a1cd78f61e9f4d6821fce4a3b",
+      "bytes": 8651,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "public/image-preprocess.js",
+      "preCutoverSha256": "b8186c8afe284dab23ac7208325a9c0e79d5402f49987b1fbbf25bf0c89af4fd",
+      "bytes": 4054,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "public/index.html",
+      "preCutoverSha256": "b36873fd19ddd93b7e34e48b3928cf5fcae3a273ae97165cfcb0db07d0299fbe",
+      "bytes": 34768,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "public/metadata-common.js",
+      "preCutoverSha256": "6726a061b70f1d71ed107945aeff40a544b805c16b71310ebf13ce09177d7e60",
+      "bytes": 4996,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/metadata-sources/index.js",
+      "preCutoverSha256": "fef624f18e42e7308d6ed86ad3a6ad50db21afe133e0198b5a36fc5470b9561d",
+      "bytes": 1760,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/metadata-sources/kinefinity.js",
+      "preCutoverSha256": "af68088ea322453f97fda346b4858d68f6fbc691ff6f967e950f2cae8cc9b609",
+      "bytes": 3001,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/metadata-structure.js",
+      "preCutoverSha256": "0246860b27c8e787e33ca43e493b901b77b9bdb0e8b307f8d7d5ec40d5a6bfe2",
+      "bytes": 1486,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/operation-token.js",
+      "preCutoverSha256": "7ab1ba4e7e8b6e801aebfe9a1d428c35796b6924f82ebca3cf06ae8bb2c541c3",
+      "bytes": 411,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "public/recognition-request.js",
+      "preCutoverSha256": "6ea0bc1c69c41f412147703ef2c7ee90902bf4fadcd515737c898a4261a95857",
+      "bytes": 1808,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "public/resolve-csv.js",
+      "preCutoverSha256": "24325b22c269e94e6712f2994cc459aa1a4eaed0fed0b33cde030640681fbb5b",
+      "bytes": 40349,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/slate-csv-parser.js",
+      "preCutoverSha256": "c9973aecfa9e5c0167c0eb98413dc9394ee8fefeeae8d549cb0b5604cf42a125",
+      "bytes": 3457,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "public/styles.css",
+      "preCutoverSha256": "217c362d4dd6f1691cabda3d4eb36bd34e6b12465835c4138f7f0b96f1481934",
+      "bytes": 67931,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "public/task-autosave.js",
+      "preCutoverSha256": "09210e94672d6ecbfaefe421bc57ad95d34addb03e5060979f030f66c09a18e3",
+      "bytes": 2741,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "public/task-persistence.js",
+      "preCutoverSha256": "61c8bd12964e82ee444b875796fbc9049ca0997d64f7b5a5ef5a9c81fcabb110",
+      "bytes": 2921,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "public/workflow-state.js",
+      "preCutoverSha256": "c4c8576d0030d13bb91819d1e2f3edbd062fd52297841e91bee666ba928092d1",
+      "bytes": 1441,
+      "reason": "legacy renderer 与 JS 兼容层；元数据公共模块的冻结语义已由 Swift 黄金测试锁定",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "script/tests/sm02_platform_contract.mjs",
+      "preCutoverSha256": "756db7e2b02358cdd7175333d8ec3e20d771c6a5ac9786b5fd9e81a300b80dcd",
+      "bytes": 10583,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm03_contract.mjs",
+      "preCutoverSha256": "a2a6a5dd7a18b272e34d560bd96cbfd51a47a7dd5cc40bf91a67a566e4d620eb",
+      "bytes": 11088,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm04_contract.mjs",
+      "preCutoverSha256": "8e7450079a9d30b6e90c1dbfa3d3fe8cea5b21db8707ae38b88ec93db735ae9a",
+      "bytes": 11844,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm05_contract.mjs",
+      "preCutoverSha256": "aa31a46cabb478b60e5c0fc9e63438eb059cabeeb46091457d9f7e41eacf2d6d",
+      "bytes": 10331,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_contract.mjs",
+      "preCutoverSha256": "8cf872756bf3e7bbd0a65975ac8f27bf34f56f292755e46898e6c22f906e2161",
+      "bytes": 8021,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_freeze_oracles.mjs",
+      "preCutoverSha256": "4f4ba6156f9ef86cda8eb73a3a4261d3cab35b8c5bf5d9057fd7f6e0203c0fa1",
+      "bytes": 5817,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_make_media.py",
+      "preCutoverSha256": "65583ab3eb357093b55f21dafcd58cd81be9d55d60cf1b6d17b5e2b3e9499c22",
+      "bytes": 3169,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_offline_paddle.sh",
+      "preCutoverSha256": "1ed6c07ca4ab752bf880c933488aa287c8ccf2e5c47167ae054000f18946ad29",
+      "bytes": 1475,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm06_vision_oracle.mjs",
+      "preCutoverSha256": "040d7b3a83d8f1024a55dfae79d6d2a40754487c8e5d839a18b37e1d6a1539f0",
+      "bytes": 3368,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm07_contract.mjs",
+      "preCutoverSha256": "7a69a139547f58d23dce67e931024ab8fa38fdb6e2ca6a4c6ee2136d482ec337",
+      "bytes": 9879,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm08_contract.mjs",
+      "preCutoverSha256": "1a529d6c46776b4577a2cff48182199cb1e60299a94b3cf0efa5ab6cb62c52b9",
+      "bytes": 18684,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "script/tests/sm08_native_evidence.mjs",
+      "preCutoverSha256": "99b40e578a30695f5d174b17ebb63250ab9841722b0c6f4fa4cfebad8fb08f46",
+      "bytes": 20385,
+      "reason": "Node 合同脚本：仍有治理价值的断言先迁入 Swift/zsh（WP-6.4）再删除",
+      "family": "native-gate",
+      "replacement": [
+        "script/phase_gate.sh",
+        "script/lib/phase_gate_lib.sh",
+        "script/tests/phase_gate_tests.zsh"
+      ],
+      "acceptanceIDs": [
+        "CUT-03",
+        "CUT-06",
+        "CUT-07",
+        "CAR-05"
+      ]
+    },
+    {
+      "path": "scripts/build-vision-ocr.mjs",
+      "preCutoverSha256": "d368029038c4b231962ceb88a95036401a01abb68527af2b123168a76afde2e8",
+      "bytes": 6569,
+      "reason": "Electron/Node 构建编排脚本（build-vision-ocr/copy-pdfjs/electron-build-host/electron-dev）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "scripts/copy-pdfjs.mjs",
+      "preCutoverSha256": "31e1110c85bde2adfb8f9ac0dc68edee87c3d04245872432945fd773a25fa2f8",
+      "bytes": 806,
+      "reason": "Electron/Node 构建编排脚本（build-vision-ocr/copy-pdfjs/electron-build-host/electron-dev）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "scripts/electron-build-host.mjs",
+      "preCutoverSha256": "90e3a6efc38f1419dd083f39c22d67e384d7ad2bb043a1ebb43590a28a8634cd",
+      "bytes": 3961,
+      "reason": "Electron/Node 构建编排脚本（build-vision-ocr/copy-pdfjs/electron-build-host/electron-dev）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "scripts/electron-dev.mjs",
+      "preCutoverSha256": "adf0027c435bb8f60b19c14ffdc03911070b8b0c90c19c29213a4764a7bb04ae",
+      "bytes": 5783,
+      "reason": "Electron/Node 构建编排脚本（build-vision-ocr/copy-pdfjs/electron-build-host/electron-dev）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "scripts/setup-paddleocr.sh",
+      "preCutoverSha256": "1c487066e63db5a2c08f7cb7c68e70f46f1692171338efdc48ea7c8c236c656c",
+      "bytes": 746,
+      "reason": "旧 Paddle 安装入口：SM-08 原生 installer 已替代，确认后删除",
+      "family": "native-release",
+      "replacement": [
+        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+        "Sources/SlateSyncMedia/VisionOCRService.swift",
+        "SlateSyncApp/SlateSync.entitlements"
+      ],
+      "acceptanceIDs": [
+        "CUT-02",
+        "CUT-05"
+      ]
+    },
+    {
+      "path": "scripts/vision_ocr.swift",
+      "preCutoverSha256": "4c7d06d96b90bd0385f4caca68eedf94c55c4805aad9a4eaf266f21bec419e3e",
+      "bytes": 11482,
+      "reason": "旧 Vision 桥源码：SM-06 显式 binary 兼容车道（VISIONOCR_BINARY）是否随 cutover 保留需 Owner 决策",
+      "family": "native-release",
+      "replacement": [
+        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+        "Sources/SlateSyncMedia/VisionOCRService.swift",
+        "SlateSyncApp/SlateSync.entitlements"
+      ],
+      "acceptanceIDs": [
+        "CUT-02",
+        "CUT-05"
+      ]
+    },
+    {
+      "path": "slatesync.config.json",
+      "preCutoverSha256": "7f79acced6d756021178a2d176cf764c109b389aec36d443a627ad74238d6846",
+      "bytes": 328,
+      "reason": "根目录配置：确认是否仍被任何入口读取",
+      "family": "native-release",
+      "replacement": [
+        "Sources/SlateSyncWorkflow/PaddleOCRInstallerService.swift",
+        "Sources/SlateSyncMedia/VisionOCRService.swift",
+        "SlateSyncApp/SlateSync.entitlements"
+      ],
+      "acceptanceIDs": [
+        "CUT-02",
+        "CUT-05"
+      ]
+    },
+    {
+      "path": "src/main/index.ts",
+      "preCutoverSha256": "d587a38312460e99d9c5f955aa2530611b1e7a075258e6a9ffd9168e506cf85d",
+      "bytes": 422,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/main/renderer-entry.ts",
+      "preCutoverSha256": "44da76f22b6e78884b4c81e7865b1f553cb5089865acf7a04c34aa8990c9894b",
+      "bytes": 1299,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/preload/index.ts",
+      "preCutoverSha256": "b823e106a60dd9f7e98a3f95b511a1870107ddb801f6de3a4897b8711c8e14ca",
+      "bytes": 9348,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/App.tsx",
+      "preCutoverSha256": "f4b168c4a38ea32e420343a16d847a7b87687d44ce3064baba42bb8b087d5fc5",
+      "bytes": 28995,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/app/app.module.css",
+      "preCutoverSha256": "2e4f51c1b7e807c6ee93911d0706483e174dd771820860f55c03ef41472f5e36",
+      "bytes": 52423,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/app/route-title.ts",
+      "preCutoverSha256": "0fcccccf1fe7655e64ac0a67641295b4b4edab181aefc4a0d51cca599bf21fd7",
+      "bytes": 607,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/components.module.css",
+      "preCutoverSha256": "26b59951368478fe83603f434b7f906a4c398121c5fa64c152b892d514b1c852",
+      "bytes": 18767,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/components.stories.tsx",
+      "preCutoverSha256": "f0cb45c3bb8708ce9e2dd74c1a376469ef88d828d5edf0feaa9968e91cfe69ee",
+      "bytes": 4834,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/components.tsx",
+      "preCutoverSha256": "146b4622faeb311ed5bda2a53ecc194602fea531319569fdcfd908f738ca6105",
+      "bytes": 16404,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/index.ts",
+      "preCutoverSha256": "0cd6f10b608309760abc24fa8d86bcc8bd9e7d00356eafa61ee9aad31e049719",
+      "bytes": 30,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/design-system/tokens.css",
+      "preCutoverSha256": "8fce3a7798eaac1c302a1d314272c758b01f07f457b5e078e87c7cbd4ccc4e04",
+      "bytes": 5118,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/features/csv/CsvVirtualTable.tsx",
+      "preCutoverSha256": "8a06d3713f3f33eb4fa3126309f69af4669f427b6a244d5811bf8aed75980bae",
+      "bytes": 10383,
+      "reason": "Modern React renderer",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "src/renderer/features/help/HelpPage.tsx",
+      "preCutoverSha256": "4bdff160ce417752d2a097ca1677c0c8d0be806517e41d8bea3e6d91df898c0e",
+      "bytes": 27586,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/features/logs/LogViewerPage.tsx",
+      "preCutoverSha256": "967ad2d4e50a12b40d42e996e9878201c151682823c755ff6b0a7ad617470b5d",
+      "bytes": 11183,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/features/projects/ProjectLibraryPage.tsx",
+      "preCutoverSha256": "fd63e158bf7aad77c3adf3aab09935ce289122fad9e5d03d1709b82851f2e922",
+      "bytes": 10333,
+      "reason": "Modern React renderer",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/ModelSelect.tsx",
+      "preCutoverSha256": "e4b4b42dee48581b41e1a8e38eaf05aad45b6b3105a972fb6c4722adc7a7f3cc",
+      "bytes": 8975,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/RecognitionResultPanel.tsx",
+      "preCutoverSha256": "94e6b84f72ab5a7ab53f9ffcb85c32d1739a90fe8d70ddf5be8b14cceadd90d3",
+      "bytes": 11623,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/model-options.ts",
+      "preCutoverSha256": "5f4f2a68bdaa5a6a02e919f0228c765d4cde06bf6f809827c5a657b3395abfab",
+      "bytes": 4176,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/recognition/use-recognition-draft.ts",
+      "preCutoverSha256": "c9a2e00cc50e7376dc01ca6da8838678c7a668481695f5b2090b348e8035c92a",
+      "bytes": 1199,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/settings/CustomProviderSettingsPanel.tsx",
+      "preCutoverSha256": "755b0ffc9a488265ff37eabb8f5d42faf48c3c67e7d276fc9c52c5a4f03ecca9",
+      "bytes": 34922,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/settings/GlobalSettingsPage.tsx",
+      "preCutoverSha256": "7ea661fc271de0fc04cd471246d8269774b03d36b05a851067c3eee55ed9f6d5",
+      "bytes": 61017,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/settings/ProjectSettingsPage.tsx",
+      "preCutoverSha256": "a9c23f511665b689aa496eafea192a441b12211159b3eab0d13a247ccd320213",
+      "bytes": 19296,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/features/slate/SlateInputPanel.tsx",
+      "preCutoverSha256": "f2942bd48f255f3194b667a0d5ea3dbf4f3236a55db69bb94f10e4618ca240bf",
+      "bytes": 5552,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/features/tasks/TaskRail.tsx",
+      "preCutoverSha256": "a699aa8a83702d1d22ce03c9cc3c5f3158289d4d44b3dbb49dc9a3b348ac1129",
+      "bytes": 7845,
+      "reason": "Modern React renderer",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "src/renderer/features/workspace/WorkspacePage.tsx",
+      "preCutoverSha256": "b147058ba2e30b4e425edd39af37747fa8f74f59a1dfafc57678d1bbe01b5e58",
+      "bytes": 64519,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/hooks/use-file-drop.ts",
+      "preCutoverSha256": "648b1cf112d45451cd2a8239c2380a3dd7563fd7569adf3faaaf00da3562bf30",
+      "bytes": 1191,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/index.html",
+      "preCutoverSha256": "0669c40f6313da2280d2fca0082eef0e675a74af3a7c11e294fdc3de55581bf5",
+      "bytes": 643,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/main.tsx",
+      "preCutoverSha256": "2f95db9ed09f18bea1329769af1ebbaa6b9eb3cda92e8fb0ea03c9a0d653cf94",
+      "bytes": 576,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/services/api.ts",
+      "preCutoverSha256": "81b5e9260cfbf4209a6a7ae6e1400e934cc543653708c3db2d001dcfb1839e65",
+      "bytes": 2526,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/services/appearance-preference.ts",
+      "preCutoverSha256": "a5f373d96f6bb52ce4f1e87b0a7f5ef2e0b13419a5c6d41a042aa50a3e134324",
+      "bytes": 1879,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/services/csv-worker-service.ts",
+      "preCutoverSha256": "70e1d721367c492a39fea3e354e8e41712510cb29386d6e3944760b739d1ff8c",
+      "bytes": 6948,
+      "reason": "Modern React renderer",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "src/renderer/services/keyboard-shortcuts.ts",
+      "preCutoverSha256": "e3de23844bdfe1bda08683e6e0cf3560b5128340860d84679c898e8355245e40",
+      "bytes": 271,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/services/operation-guard.ts",
+      "preCutoverSha256": "ae99717436fc70110b18e267fb5961c21586c9e44983bb3696a140c2c7089547",
+      "bytes": 306,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/services/preparation-service.ts",
+      "preCutoverSha256": "a5677663def277045a9d036517ce4580d318cff6dcddfa387f215ad92c3981fd",
+      "bytes": 6214,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/services/task-autosave.ts",
+      "preCutoverSha256": "aebe0499b07bcf45148d271614084316fc5c6ab1d212d5d1ef7fa572627fb105",
+      "bytes": 3717,
+      "reason": "Modern React renderer",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "src/renderer/state/export-store.ts",
+      "preCutoverSha256": "5cf25da7368689cd54b8ef6bcc5344fd40123d6b45b60861471ae9f1765ef7a6",
+      "bytes": 1048,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/state/index.ts",
+      "preCutoverSha256": "bb8a257dcf22c33f4a53d52628e3485b541428586230c7ffc34e312faff78984",
+      "bytes": 423,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/state/metadata-store.ts",
+      "preCutoverSha256": "10b9a2136436cb759622e980c6560f901ee9c82f1b493562394e5e0e3cdd3677",
+      "bytes": 516,
+      "reason": "Modern React renderer",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "src/renderer/state/project-store.ts",
+      "preCutoverSha256": "38cc5707f5b2c58a4be89d1e738026af81dffb288359547ff4452688571399d9",
+      "bytes": 1015,
+      "reason": "Modern React renderer",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "src/renderer/state/recognition-store.ts",
+      "preCutoverSha256": "0c192f61d45d49700600ec66b8995dcb7eafe102b07f2bd76c38ab465b2aa2dd",
+      "bytes": 4078,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/state/settings-store.ts",
+      "preCutoverSha256": "4e58d806dbbcae49431087e6d813fe42e83b655ded184e1c643c71ba9004a0bb",
+      "bytes": 198,
+      "reason": "Modern React renderer",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "src/renderer/state/slate-store.ts",
+      "preCutoverSha256": "88ce77d07d91416d11586dac0b453e0b5d650072c4d10a4ce2203c2244fd604a",
+      "bytes": 958,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/state/task-store.ts",
+      "preCutoverSha256": "20b32e3caede9218b39af6ab501c0a1b631a7cf323d3808fe84a399c7e200209",
+      "bytes": 691,
+      "reason": "Modern React renderer",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "src/renderer/state/types.ts",
+      "preCutoverSha256": "a9f9eb431ce4db63f973d1d7e6358389ddc06eca3a08e7bf4140ed24fbb99aac",
+      "bytes": 5581,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/state/ui-store.ts",
+      "preCutoverSha256": "327e6623cb3e6c62cbacfcaaa3a79139f29f608f0dc07b17e8583bebec2bc36b",
+      "bytes": 604,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/styles.css",
+      "preCutoverSha256": "39d45a8e427d5c735bec84458f73fab305ce190aa7ec0357231ba3ccbc232705",
+      "bytes": 1722,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/validation/input-validation.ts",
+      "preCutoverSha256": "d1426e2a0ea01e4f5c5321d2fde9f24d45bd859c91e1cee857ee54a6f0d21281",
+      "bytes": 2417,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/renderer/workers/preparation.worker.ts",
+      "preCutoverSha256": "482adbd3d9c2280d28c42772360422c0b93d4a23477ef564a06a30482858c316",
+      "bytes": 10979,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/shared/contracts/index.ts",
+      "preCutoverSha256": "3540b4161fa495b2b04c8ba23ee588a226fa3e02cde30f946aef1abc6591a27c",
+      "bytes": 32569,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/shared/domain/index.ts",
+      "preCutoverSha256": "1780b5c5585e98e3a68c8bf8484ef00f1c176a909ca14e84dda934d20273e218",
+      "bytes": 439,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/shared/errors/index.ts",
+      "preCutoverSha256": "ef1b0e3601965a667059bfeaff9ddad2d3fb98d3bc4103c395131fac7e85036e",
+      "bytes": 1586,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "src/shared/index.ts",
+      "preCutoverSha256": "1c37ac660bc330518890ece7485299dc6264ac0b7945eac8008f0454351b8371",
+      "bytes": 222,
+      "reason": "Modern React renderer",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/baseline/capture-visuals.mjs",
+      "preCutoverSha256": "401008999846e7fe86343a593a171a510295ade29e1a6d0fde8f4b1757502bb5",
+      "bytes": 30379,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/baseline/verify-scope.mjs",
+      "preCutoverSha256": "23e9e84ac8523fd0c5386e82efb0d01902a8e0b7fa20532b515c9ef6761659b6",
+      "bytes": 2103,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/e2e/capture-visual-baseline.mjs",
+      "preCutoverSha256": "8e52bcaea4c3a7887f2444eaa39760a766e7d064ef2ad62b82d9366aab5703c2",
+      "bytes": 16271,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/e2e/compare-visual-baseline.mjs",
+      "preCutoverSha256": "46c03c515453f63913c697543a0fa727ca346b7e3aeb08ec32182bcf5fa44cf2",
+      "bytes": 1827,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/refactor/electron-smoke.mjs",
+      "preCutoverSha256": "104ff652088cc10f3d9fcbcd8b7423cc53a195c0e3d75bceb8bfb8b3e273d152",
+      "bytes": 21133,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/refactor/gateway-performance.mjs",
+      "preCutoverSha256": "59fabd27437debd6987dc6dfb8288168936d122829a4d2af00e93787975584fd",
+      "bytes": 2412,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/refactor/legacy-test-gateway.mjs",
+      "preCutoverSha256": "ccc08dd49b4294a2273d569f0fcddd6ec4170c6a9a5cff5bc314eaf0720200bf",
+      "bytes": 1406,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/refactor/native-abi-lifecycle.mjs",
+      "preCutoverSha256": "7190933d9cb1763435343d05bb4be606b8a3e7dcb08d497e63fb6dba176f8db5",
+      "bytes": 4097,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/refactor/verify-ip0102-scope.mjs",
+      "preCutoverSha256": "d198736afe4474efa69d9b7630a46ed1487d619b3b224f4417f67114e9a611ab",
+      "bytes": 8254,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/refactor/verify-ip0308-scope.mjs",
+      "preCutoverSha256": "9248f819f80a484f90a02e4109d594e93053c4875c8aa7bf6984f7244c6faeb2",
+      "bytes": 7728,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test-support/synthetic-production-day.mjs",
+      "preCutoverSha256": "7af46e5abd78b433210fa1d073f056a52c1a2c8abbeb054e4bbf4061c500ab41",
+      "bytes": 2408,
+      "reason": "测试支撑与视觉基线脚本；需长期保留的摘要进 .codex/refactor",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/ai-client.test.mjs",
+      "preCutoverSha256": "039cbea77dbba92138e1a958aab9f21d4d527a11c3935c1e59d768cd9ce200d5",
+      "bytes": 54270,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/app-logger.test.mjs",
+      "preCutoverSha256": "59b49758ab555e84c574abc253831b6fc535faa6e87613b5b07be56618af1aa9",
+      "bytes": 10216,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/baseline-contracts.test.mjs",
+      "preCutoverSha256": "88e03349dc9b71a61187d66c16a6a2eaa3f2d8a7c771f5e7da47910209a2272e",
+      "bytes": 19366,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/baseline-csv.test.mjs",
+      "preCutoverSha256": "cf2476511f93236a990965215d4e37191702316e4a6d2ba95c1b9a0db3833db1",
+      "bytes": 8986,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/baseline-persistence.test.mjs",
+      "preCutoverSha256": "2059397edf91fd0edd282a64b821d86e1ee96d116d4e45ac0147b039b1cb1aec",
+      "bytes": 9649,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/baseline-recognition.test.mjs",
+      "preCutoverSha256": "392545538d6312488af2f6485b1baf6b5df9e59587668a6c161a3e6e7991d36b",
+      "bytes": 8758,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/baseline-visual.test.mjs",
+      "preCutoverSha256": "b1877f7f824ab705a01a24cb78f1d6b4bccfc7bfd4bfe376fd6170cb5ad6e5a4",
+      "bytes": 2796,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/config.test.mjs",
+      "preCutoverSha256": "b43803649484380d11ad9f7802a4c4ec57f2ba48b91068b8efbbcea6855c9f8c",
+      "bytes": 7183,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/csv-background-tasks.test.mjs",
+      "preCutoverSha256": "0452209fe7e38c76787af588b8fcd94f1ce8ee727215c6d73727b68bf0993bed",
+      "bytes": 3010,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/csv-worker-client.test.mjs",
+      "preCutoverSha256": "c35e984b77980fcd17832122872d4c9724552af8fb50974b7b1322f28b8db140",
+      "bytes": 1291,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/custom-provider-state.test.mjs",
+      "preCutoverSha256": "a51ffa0d3a8c7234cd2b69bf5cae56b7133e6882e0ae14e5d16cf77b000eca81",
+      "bytes": 1285,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/e2e/electron.spec.ts",
+      "preCutoverSha256": "da1d960a358f9ad0f12612c1ac56fbffd711472c1110e7a9729a06144b6e8eb2",
+      "bytes": 40100,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/electron-bridge.test.mjs",
+      "preCutoverSha256": "81a712c650767325a1e26e344b7cc7f38126e77f06e74b47862fdf40dacfa869",
+      "bytes": 12805,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/electron-ipc.test.mjs",
+      "preCutoverSha256": "1bd2e6908218b858c9ac8f906443379223a9b654af33cfe6821b112330d9874a",
+      "bytes": 55076,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/electron-key-store.test.mjs",
+      "preCutoverSha256": "dfa043eceeed867cbd34777b7117af9fe8f27064e020f28559b6eb92f57212e9",
+      "bytes": 3031,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/electron-slate-scanner.test.mjs",
+      "preCutoverSha256": "c57639e4552700269ef6909a170fc15f54afc2dad8a805d562fee45b8b43edbe",
+      "bytes": 972,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/manifest.json",
+      "preCutoverSha256": "6da395529c7b98e6e7acc0d3ca8a337fbf83ce7b16a7a9727a128bc90e546025",
+      "bytes": 3858,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-semicolon.csv",
+      "preCutoverSha256": "a95565d61d2d377d213bc3f3ed3b5d2095e389b807e7b517e2d0d0816e6e842a",
+      "bytes": 118,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-utf16be.csv",
+      "preCutoverSha256": "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea",
+      "bytes": 110,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-utf16le.csv",
+      "preCutoverSha256": "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b",
+      "bytes": 110,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source-utf8.csv",
+      "preCutoverSha256": "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e",
+      "bytes": 52,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/csv/resolve-source.csv",
+      "preCutoverSha256": "6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0",
+      "bytes": 156,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/legacy-migration.json",
+      "preCutoverSha256": "6e12b070469b385c14a850ef15e9c56177528825bff0f0df4a48d0593f1ed265",
+      "bytes": 182,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/library.json",
+      "preCutoverSha256": "47768d5aa7e4b1d943fbfbd73cd19fe8ba3c6a7dcc45bfe7973cdee8fc8332ec",
+      "bytes": 130,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/project.json",
+      "preCutoverSha256": "2294865a931351ee6721ebff1dc9089e26ec604b153e159ca218edcf303c059c",
+      "bytes": 250,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/settings.json",
+      "preCutoverSha256": "69afc24cb2c71ac28a0aa4c1763e1084cd8173dd5b0667901081d19f5978a8cd",
+      "bytes": 173,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/persistence/task.json",
+      "preCutoverSha256": "636961ff1adbac3cd655bdc5980aa192a80c472cb1785023682f3002e7984573",
+      "bytes": 1571,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/recognition/normalization.json",
+      "preCutoverSha256": "29b7dac56def4652c3f4b6958f15ac9e2d67bcc5b545b77f19d873c1be3a49c0",
+      "bytes": 790,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/recognition/pages.json",
+      "preCutoverSha256": "353bb8cae6c9ac36009c13852168cc18fca66d6b8afbcb397869885ebb93da12",
+      "bytes": 829,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/fixtures/baseline/recognition/timeout.json",
+      "preCutoverSha256": "59b39f2b4e3976ca0e1ad33e53029d8a9091e0c941a8a405f5358946021e622b",
+      "bytes": 242,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/fixtures/fake-paddleocr-runner.py",
+      "preCutoverSha256": "d88af8f4d698f879e3653c76e1640a9674e40ac55bf92494ced39e6b7d63ec2d",
+      "bytes": 2583,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "test/global-settings.test.mjs",
+      "preCutoverSha256": "db30ddada87dab922e814f67d1f0b68b0bd89351cfc9242c7154509090e5c74f",
+      "bytes": 5893,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/http-timeout.test.mjs",
+      "preCutoverSha256": "5b460eec52b0c235725334773b4cde174b4db1ac626dbb679e0702d8bd5fca88",
+      "bytes": 676,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/image-preprocess.test.mjs",
+      "preCutoverSha256": "6a588bada1a0c3f60615eb2787618c5c985b6882a1ead8e14e1c5dbafa05804c",
+      "bytes": 2656,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "test/metadata-sources.test.mjs",
+      "preCutoverSha256": "e7cbd2b9a4fc4eae8184a2dcf878d5723f3e5a8dac954607f5e612259a32feb0",
+      "bytes": 1777,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/metadata-structure.test.mjs",
+      "preCutoverSha256": "bf951f88b10db3cb806d0e84b6df40b3231887025d20ac7d110c5ab7ee838ed1",
+      "bytes": 1419,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/model-capabilities.test.mjs",
+      "preCutoverSha256": "fa1cc781b06eeab69ce02b453ef55a17092c7333ce6da59a0f01e0a294a8c8b3",
+      "bytes": 3965,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/model-discovery.test.mjs",
+      "preCutoverSha256": "c7f12a869c8dec651666aca0dcbc750f0f0388c045ee9052c9c58459d8a5deff",
+      "bytes": 13594,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/ocr-settings.test.mjs",
+      "preCutoverSha256": "ea98bd041149b698052bcaf35faef350dbe49b719dc7237c3936012aaca02fa7",
+      "bytes": 4792,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "test/ocr.test.mjs",
+      "preCutoverSha256": "ea060b6a35491047e29e854f8f067fb7a803ece6a2a0ed93f78e444f6af218fa",
+      "bytes": 24409,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "test/operation-token.test.mjs",
+      "preCutoverSha256": "2f255e0943a55decf84e96a52af96f5f8c400606647a320e071c3f3b585b784c",
+      "bytes": 632,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/paddleocr-installer.test.mjs",
+      "preCutoverSha256": "e9dbef098dd03897235d4b45b6d3c5f7980dd5361938ded833253cc4f08e7218",
+      "bytes": 6866,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "test/persistence.test.mjs",
+      "preCutoverSha256": "e5aea7e312c3c13dcb7618d29bb1bfa75feb8823e7f1a017d25a4993b10ae187",
+      "bytes": 2245,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/project-library-transfer.test.mjs",
+      "preCutoverSha256": "fafbee9cb7527078ea286d9821991136941b12980bb1810dbf44c3282507ad89",
+      "bytes": 16419,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/project-library.test.mjs",
+      "preCutoverSha256": "1d6b7e138094194ee9690a8038aa9bcd8a1d4eb122eb2a861cfa220cf222042b",
+      "bytes": 20078,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/project-settings.test.mjs",
+      "preCutoverSha256": "de2871c06ab390c8c3eb5f042950d3b3925756156e25a6d6a8ead79691bd5c77",
+      "bytes": 1881,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/recognition-logging.test.mjs",
+      "preCutoverSha256": "b260da4bba52f433cdc065d9b345142ca536967ded607d240228a70e912fd4b4",
+      "bytes": 5454,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/recognition-request.test.mjs",
+      "preCutoverSha256": "f7b52d48c66b4a70375e79cbb482e8db0209098fcec0f7c2ce401f133008a73e",
+      "bytes": 2809,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-01/skeleton.test.ts",
+      "preCutoverSha256": "a1f3affabbf37be5aec509ad1f27cd436b620375eef7fdcf241d9e00c761c884",
+      "bytes": 1798,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-02/contract.test.ts",
+      "preCutoverSha256": "0755f88eb11b71249c2fcd089a40fd2f583df85ffcc2e4e52c526d35ba2a96b4",
+      "bytes": 20972,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-02/destroyed-sender.test.mjs",
+      "preCutoverSha256": "bc8bd563359e5875e6e8710ab8f45b78ea1b9763c55e51daa728cb6d04e183fd",
+      "bytes": 2954,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/appearance-preference.test.ts",
+      "preCutoverSha256": "d54df1c5cbb8d30fef7a636c855069617f5937065ab065a9cc9ba90133bb195d",
+      "bytes": 2200,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/csv-worker-service.test.ts",
+      "preCutoverSha256": "4cc8cfe4567d5ac43669c131d67016fb9ae9b0fe47b84c8184dd82b87ba82c15",
+      "bytes": 4327,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/custom-provider-settings.test.tsx",
+      "preCutoverSha256": "31c3ba607ff99d976818b8d87b3608b6ba922beb47694bd8f4b1605e9c9ca2ab",
+      "bytes": 6619,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/design-system.test.tsx",
+      "preCutoverSha256": "b1aae31b824115aaf5f5f119b8fa755b1167e62c354c5d48619ff3864703b8c0",
+      "bytes": 5249,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/electron-build.test.ts",
+      "preCutoverSha256": "8d6b4f342ac5cab36927f9bbb2a46d64b81d61d9117b3113f171ccb708dedef9",
+      "bytes": 7881,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/electron-dev.test.ts",
+      "preCutoverSha256": "9bc2f1d1e4bf05ce6d6987bd35a74f98ff2998fdf110b5289b7c0daa173321d1",
+      "bytes": 4461,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/global-settings.test.tsx",
+      "preCutoverSha256": "dd2a5b34373fa7fba6b3835eddacbff59b5821e6b1ed502ec7d91e179d8b0a20",
+      "bytes": 20967,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/help-page.test.tsx",
+      "preCutoverSha256": "11c287687210e0d14c86f6e8d7f374c62e970c2e4fa2b101446617a0efdb6978",
+      "bytes": 3418,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/input-validation.test.ts",
+      "preCutoverSha256": "b44e4f4bf65731e3e5b2d250bc690288ddfb6b986e6c8219dabfaf70e8b4717c",
+      "bytes": 1198,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/legacy-project-library.test.ts",
+      "preCutoverSha256": "c17c1b278104b6c015584349803fa71d04ab8c24ec6c6aa6d1f563d44e054b74",
+      "bytes": 4421,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/log-viewer.test.tsx",
+      "preCutoverSha256": "22ae259948618014229e9bfb5d0132f897f2a8370df551ea11ffa7fd8badb13d",
+      "bytes": 5730,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/model-options.test.ts",
+      "preCutoverSha256": "4ad358a8adc7fbb1601e2c0185558243bd2bd192e841fe46080584f79872a509",
+      "bytes": 1641,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/model-select.test.tsx",
+      "preCutoverSha256": "3379243edb8a96da6d14ec0b05a10c1f14cd1bd630331c6cec824226a124f7df",
+      "bytes": 2801,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/performance.test.tsx",
+      "preCutoverSha256": "729aa408bf355a73d0670e16e1484e36e90a48c53e51484ced8a451c93e46b52",
+      "bytes": 1458,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/preparation-service.test.ts",
+      "preCutoverSha256": "03b7bf0ae08354161932fce414aa346d0dcfdd197cf2a25028dd4fae96372e39",
+      "bytes": 5268,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/project-library.test.tsx",
+      "preCutoverSha256": "f51899c805afa857c1c955c7e535dfb4c38255d2f1164df4eff3a69702798e67",
+      "bytes": 4255,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/project-settings.test.tsx",
+      "preCutoverSha256": "f1633d604bf5498790464c63678ec1bacd8960ac62dfdb175ee041064b51985b",
+      "bytes": 11385,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "provider-recognition",
+      "replacement": [
+        "Sources/SlateSyncDomain",
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM07"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-03"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/route-title.test.ts",
+      "preCutoverSha256": "28c32bb46cd20d8238088a67a989189b9619652d8097f5450070c73e4143674c",
+      "bytes": 796,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/shell-layout.test.ts",
+      "preCutoverSha256": "ee1f7f852046b596ac4d6f8ecca1091a9654301bf77c97f628b933c03ecda359",
+      "bytes": 10520,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/state-lifecycle.test.ts",
+      "preCutoverSha256": "3ba41b229ad31b9b1a27ab7a9d9856ea20a2ae50165aae26771c0466d6274273",
+      "bytes": 6515,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/task-lifecycle.test.ts",
+      "preCutoverSha256": "14c972a10078bb4e492090bd46349c6ad40ed7b0f2fc0b5bdff1e6bddaabcdbe",
+      "bytes": 8094,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/task-rail.test.tsx",
+      "preCutoverSha256": "d27f8bf56250b253b018e21594a66e3ad75e731e02dcdee764b90298d625d0d5",
+      "bytes": 3195,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/refactor/ip-03-08/virtual-table.test.tsx",
+      "preCutoverSha256": "181c7eb2ad98e6dc987330b360a7ed7ba1fefac86f25439b684b508328e059cd",
+      "bytes": 13597,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/repository-hygiene.test.mjs",
+      "preCutoverSha256": "97f8fb40b6d66086d2f588a2999ded103cead63e21619ad6a91bce47d1bcfbaf",
+      "bytes": 1733,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "app-shell-ui",
+      "replacement": [
+        "SlateSyncApp",
+        "Sources/SlateSyncUI",
+        "SlateSyncUITests",
+        "Tests/SlateSyncUIUnitTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-02",
+        "CUT-02",
+        "CUT-03",
+        "CUT-08"
+      ]
+    },
+    {
+      "path": "test/resolve-csv.test.mjs",
+      "preCutoverSha256": "e4f71f2ccfd9a9176db45d6b0bb040dd68fbd9a5d4d1682d4afc5b13ea339a07",
+      "bytes": 32896,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/scenario-profile.test.mjs",
+      "preCutoverSha256": "39d3e293cf6641a5648b53682dcddddbb170c03d7430a1457c9297372f50bbac",
+      "bytes": 3119,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "csv-metadata-scenario",
+      "replacement": [
+        "Sources/SlateSyncWorkflow",
+        "Tests/SlateSyncWorkflowTests/Fixtures/SM05",
+        "Tests/SlateSyncWorkflowTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "DAT-02",
+        "CAR-06"
+      ]
+    },
+    {
+      "path": "test/task-autosave.test.mjs",
+      "preCutoverSha256": "bc926c42672da5aaf954b29aa01a9b14e0fe1bc7adcb3939016a8e8f72d3b620",
+      "bytes": 2947,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/task-persistence.test.mjs",
+      "preCutoverSha256": "7cdaf765213f059370880adaff3cd9ac7112c0fe2d53cb3f6ee25eb937f8b7ca",
+      "bytes": 1683,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "test/vision-ocr.test.mjs",
+      "preCutoverSha256": "920ee7a2f6556f2cd2c621931a1bd0e0572ac093a57b5ad81c9b6942a4f37544",
+      "bytes": 12019,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "media-ocr",
+      "replacement": [
+        "Sources/SlateSyncMedia",
+        "Tests/SlateSyncMediaTests",
+        "Tests/SlateSyncWorkflowTests/MediaOCRWorkflowTests.swift"
+      ],
+      "acceptanceIDs": [
+        "MAT-05",
+        "CUT-05",
+        "CAR-01",
+        "CAR-04"
+      ]
+    },
+    {
+      "path": "test/workflow-state.test.mjs",
+      "preCutoverSha256": "2ed31c847ef88cdc5863227dbbbeb601f0db6fa500281867ea2f9d45eb89c2f1",
+      "bytes": 2446,
+      "reason": "Node/Modern/Electron 测试；必要 fixtures/assertions 先迁移（WP-6.2）",
+      "family": "persistence-workflow",
+      "replacement": [
+        "Sources/SlateSyncPersistence",
+        "Tests/SlateSyncPersistenceTests"
+      ],
+      "acceptanceIDs": [
+        "MAT-04",
+        "DAT-01",
+        "DAT-02",
+        "DAT-04"
+      ]
+    },
+    {
+      "path": "tsconfig.base.json",
+      "preCutoverSha256": "aa8c66b2e1182cd1b9f0ec646e0e1c7bb3d6e0e5a53a536d4abede2d5ac792ea",
+      "bytes": 390,
+      "reason": "TypeScript 项目配置（renderer/main/preload/shared）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "tsconfig.json",
+      "preCutoverSha256": "616d5629fac4863a1b905755ea63b578fb45e880ac94f9b1f8ef047b366def88",
+      "bytes": 209,
+      "reason": "TypeScript 项目配置（renderer/main/preload/shared）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "tsconfig.main.json",
+      "preCutoverSha256": "21cc092e4f9c8dbe944e20d411b932e176a923ea8e83efaeb327ee41f3c15ffe",
+      "bytes": 353,
+      "reason": "TypeScript 项目配置（renderer/main/preload/shared）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "tsconfig.preload.json",
+      "preCutoverSha256": "5a23ce58246dbdcd80738220c8d9906b494b87c0508454f97b3a7f0f29b3ccb6",
+      "bytes": 450,
+      "reason": "TypeScript 项目配置（renderer/main/preload/shared）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "tsconfig.renderer.json",
+      "preCutoverSha256": "5f7173e27dc3c9c49946dd74de0c08abadb1f050ed3cf2dda16bfbe9cdb4f7fa",
+      "bytes": 559,
+      "reason": "TypeScript 项目配置（renderer/main/preload/shared）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "tsconfig.shared.json",
+      "preCutoverSha256": "dd8418c907f755ae6b9ae0efe3d90fea63b0bfcde84f87983314f1e440e02d37",
+      "bytes": 345,
+      "reason": "TypeScript 项目配置（renderer/main/preload/shared）",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "vite.preload.config.ts",
+      "preCutoverSha256": "143d2b4162dc8d92ceeb0bc83f021db4fb1597faaf8f256a97cf1570046e534d",
+      "bytes": 649,
+      "reason": "Vite 构建/预加载配置",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "vite.renderer.config.ts",
+      "preCutoverSha256": "75bd31fbd3c5e7e1877b598b5be567950d155526b9a042577edbb3da4866ed8d",
+      "bytes": 2708,
+      "reason": "Vite 构建/预加载配置",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    },
+    {
+      "path": "vitest.config.ts",
+      "preCutoverSha256": "c4d883e3e346b68085124cb2a9aa00197337426e933c6f9f5230f04c9de25ca9",
+      "bytes": 313,
+      "reason": "Modern 测试配置",
+      "family": "native-release",
+      "replacement": [
+        "SlateSync.xcodeproj",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "acceptanceIDs": [
+        "ARC-01",
+        "ARC-08",
+        "REL-01",
+        "REL-04",
+        "CUT-02",
+        "CUT-06"
+      ]
+    }
+  ],
+  "retainedHistory": [
+    ".codex/refactor/",
+    "Tests/*/Fixtures/",
+    "DESIGN.md",
+    "UX-CONTRACT.md"
+  ],
+  "status": "REMOVED; FINAL_NATIVE_GATE_PENDING"
+}

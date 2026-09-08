@@ -1,2 +1,0 @@
-/** Domain names re-export the Shared Contract DTOs; no second shape source is introduced. */
-export type { ConfigData, GlobalSettingKey, GlobalSettingValues, GlobalSettingsData, GlobalSettingsPatch, GlobalSettingsRequest, JsonSchemaCapabilityResult, LibraryInfo, ModelData, OcrCheckResult, OcrSelection, OcrSettings, ProgressData, ProjectData, RecognitionData, ScenarioData, TaskData, VisionOcrCheckResult } from "../contracts/index.js";
