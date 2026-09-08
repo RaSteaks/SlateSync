@@ -6,10 +6,16 @@ source "${script_dir}/lib/phase_gate_lib.sh"
 (( $# == 1 )) || { print -u2 'usage: package_smoke.sh <Gate result directory>'; exit 64; }
 result_dir="${1:A}"
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-package-smoke.XXXXXX")"
+# macOS reports the executable under /private/var even when TMPDIR uses
+# /var or a doubled slash. Canonicalize before matching a process for cleanup.
+smoke_root="${smoke_root:A}"
 app="${smoke_root}/consumer/SlateSync.app"
 cleanup() {
   # Stop only the tested bundle before removing its isolated consumer install.
-  slatesync_stop_executable SlateSync "${app}/Contents/MacOS/SlateSync" || true
+  slatesync_stop_executable SlateSync "${app}/Contents/MacOS/SlateSync" || {
+    print -u2 "Packaged application still running; retaining ${smoke_root}"
+    return 1
+  }
   rm -rf "$smoke_root"
 }
 trap cleanup EXIT INT TERM
@@ -53,7 +59,10 @@ python3 - "${result_dir}/packaged_ui_summary.json" "${smoke_root}/diagnostics" "
 import json,pathlib,sys
 value=json.load(open(sys.argv[1]))
 log='\n'.join(p.read_text(errors='replace') for p in pathlib.Path(sys.argv[2]).rglob('StandardOutputAndStandardError.txt'))
-assert log.count('SM09_PACKAGED_APP '+sys.argv[3])>=8, 'packaged app URL witness missing'
-assert value['passedTests']>=8 and value['failedTests']==0 and value['skippedTests']==0
-print('Packaged Release app: eight isolated UI, settings/help/log, task and quit/reopen scenarios passed')
+assert log.count('SM09_PACKAGED_APP '+sys.argv[3])>=9, 'packaged app URL witness missing'
+assert value['passedTests']>=9 and value['failedTests']==0 and value['skippedTests']==0
+print('Packaged Release app: nine isolated UI, settings/help/log, task and quit/reopen scenarios passed')
 PY
+# Cleanup is part of the success contract, not just an ignored EXIT trap.
+slatesync_stop_executable SlateSync "${app}/Contents/MacOS/SlateSync"
+print 'Packaged application process cleanup: PASS'

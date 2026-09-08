@@ -190,6 +190,9 @@ def validate_execution(result_dir, contract):
     summary = document(result_dir / 'xcode_test_summary.json')
     require(summary['result'].lower() == 'passed' and summary['failedTests'] == 0, 'Xcode failure')
     require(summary['passedTests'] >= contract['requiredXcodeTests'], 'Xcode test coverage shrank')
+    # Closure adds a real application path beyond the frozen minimum suite:
+    # opening a legacy Library and exporting CSV must execute, not only compile.
+    pass_line(xcode, 'SlateSyncUITests.SlateSyncUITests/testLegacyLibraryCSVExportAndReopenInDeliveredApp')
     pass_line(swift, 'SlateSyncPersistenceTests.SM09LegacyPackageTests/testFrozenLegacyPackagesImportEditReopenAndExportWithoutSourceMutation')
     for reference in contract['requiredSwiftTests']:
         pass_line(swift, reference)

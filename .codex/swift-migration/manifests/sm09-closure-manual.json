@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-08T02:30:14.742723+00:00",
+  "scope": "isolated ad-hoc native candidate replacement and UI acceptance",
+  "previousCommit": "52b2a78f6619145b0999bdccf588d83a95349e7c",
+  "candidateProductCommit": "c9a400435200484db049b03f1cd2f2b2b266bb4d",
+  "temporaryRoot": "/private/tmp/slatesync-sm09-upgrade-ejwj81sy",
+  "dataHashSnapshotSha256": "5b05156ef69cf1821849eb96f561b7156b98845a4c5bb51a0c88f67accba3ac3",
+  "observations": [
+    {
+      "check": "prior app reads legacy Library",
+      "result": "PASS",
+      "observed": "SM09 兼容项目，活跃，1 个任务; slate.png completed 1 条"
+    },
+    {
+      "check": "bundle replacement preserves data",
+      "result": "PASS",
+      "observed": "App confirmed stopped; all data file hashes unchanged while replacing install/SlateSync.app; prior bundle retained separately"
+    },
+    {
+      "check": "candidate restores edited task",
+      "result": "PASS",
+      "observed": "workspace.custom-prompt = SM09 替换前保存验证; slate.png completed 1 条"
+    },
+    {
+      "check": "Finder reopens after last-window close",
+      "result": "PASS",
+      "observed": "Double-click exact isolated SlateSync.app in Finder reopened main-AppWindow-2 and legacy project row"
+    },
+    {
+      "check": "Dock activation",
+      "result": "PENDING",
+      "observed": "CUA getApp com.apple.dock timeoutReached; no successful Dock activation witnessed"
+    },
+    {
+      "check": "Spotlight activation",
+      "result": "PENDING",
+      "observed": "CUA getApp com.apple.Spotlight timeoutReached; no successful Spotlight activation witnessed"
+    }
+  ],
+  "limitations": [
+    "Does not establish public notarized distribution.",
+    "Does not replace independent review or Owner approval."
+  ]
+}

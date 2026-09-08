@@ -206,6 +206,84 @@ final class SlateSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testLegacyLibraryCSVExportAndReopenInDeliveredApp() throws {
+        // Materialize the frozen pre-cutover export into this test's root.
+        // The delivered app opens v1 SQLite itself; no production test hook or
+        // real user Library is involved in the upgrade/CSV acceptance path.
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = repository.appending(path: "Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json")
+        struct FrozenLibrary: Decodable {
+            struct Entry: Decodable { let path: String; let base64: String }
+            let packages: [String: [Entry]]
+        }
+        let packages = try JSONDecoder().decode(FrozenLibrary.self, from: Data(contentsOf: fixture)).packages
+        let library = testRoot.appending(path: "Local SlateSync Library")
+        for entry in try XCTUnwrap(packages["library"]) {
+            let relative = entry.path
+            guard !relative.hasPrefix("/"), !relative.split(separator: "/").contains("..") else {
+                XCTFail("Unsafe fixture path"); return
+            }
+            let destination = library.appending(path: relative)
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try XCTUnwrap(Data(base64Encoded: entry.base64)).write(to: destination)
+        }
+        let input = testRoot.appending(path: "source.csv")
+        let bytes = Data("File Name,Scene,Shot,Take\r\nA001C001.mov,87A,002,03\r\n".utf8)
+        try bytes.write(to: input)
+        let outputDirectory = testRoot.appending(path: "export")
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        let app = launchIsolatedApp()
+        defer { app.terminate() }
+        let project = app.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "SM09 兼容项目")).firstMatch
+        XCTAssertTrue(project.waitForExistence(timeout: 8))
+        app.activate()
+        let legacyScreenshot = XCTAttachment(screenshot: app.screenshot())
+        legacyScreenshot.name = "SM09-legacy-library-before-open"
+        legacyScreenshot.lifetime = .keepAlways
+        add(legacyScreenshot)
+        print("SM09_PROJECT_FRAME \(project.frame); WINDOW \(app.windows.firstMatch.frame)")
+        project.click()
+        app.buttons["打开"].firstMatch.click()
+        XCTAssertTrue(app.buttons.matching(identifier: "task.create").firstMatch.waitForExistence(timeout: 8))
+        app.typeKey("n", modifierFlags: .command)
+        let csvTab = app.radioButtons["Resolve CSV"].firstMatch
+        XCTAssertTrue(csvTab.waitForExistence(timeout: 5))
+        csvTab.click()
+        app.buttons["导入 CSV…"].firstMatch.click()
+        choosePanelPath(input.path, app: app)
+        let export = app.buttons["导出 CSV…"].firstMatch
+        expectation(for: NSPredicate { _, _ in export.exists && export.isEnabled }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        export.click()
+        choosePanelPath(outputDirectory.path, app: app)
+        let output = outputDirectory.appending(path: "source.csv")
+        expectation(for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: output.path) }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        // The retained export contract canonicalizes Shot 002 to 02 while
+        // preserving CRLF and the final newline. The import source stays raw.
+        let expectedExport = Data("File Name,Scene,Shot,Take\r\nA001C001.mov,87A,02,03\r\n".utf8)
+        XCTAssertEqual(String(decoding: try Data(contentsOf: output), as: UTF8.self), String(decoding: expectedExport, as: UTF8.self))
+        XCTAssertEqual(try Data(contentsOf: input), bytes)
+        app.typeKey("s", modifierFlags: .command)
+        app.typeKey("q", modifierFlags: .command)
+        expectation(for: NSPredicate { _, _ in app.state == .notRunning }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        app.launch()
+        XCTAssertTrue(project.waitForExistence(timeout: 8))
+        XCTAssertTrue((project.value as? String)?.contains("2 个任务") == true)
+    }
+
+    @MainActor
+    private func choosePanelPath(_ path: String, app: XCUIApplication) {
+        // Native open/save panels retain their system keyboard behavior.
+        // A full path avoids depending on sidebar favorites or user folders.
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        app.typeText(path)
+        app.typeKey(.return, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+    }
+
+    @MainActor
     private func waitForWindowCount(_ count: Int, app: XCUIApplication) {
         // Query uses dynamic member lookup, so KVC "count" can resolve as a
         // UI query instead of an integer. Read the real count in the predicate.

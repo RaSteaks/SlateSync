@@ -1,5 +1,15 @@
 # SlateSync 当前项目方案
 
+## 2026-09-08 SM-09 收尾补验（进行中）
+
+新增旧版真实 Library 在 App 内打开、CSV 导入/导出及退出重开的 XCUI 验收，
+检查默认 Shot/Take 格式、CRLF 和源 CSV 不变，单项已通过。
+打包 smoke 将临时根规范化为真实路径，并把应用进程退出作为成功条件，修复
+`/var` 与 `/private/var` 不一致造成的清理遗漏。新的最终 Gate 必须执行该新增测试。
+隔离旧包替换、提示词恢复和 Finder 无窗口重开已有 CUA 观察；Dock/Spotlight
+接口超时，仍待验收。独立审查与最终 Owner 批准保持待办，不能标记 COMPLETE。
+自动提交使用 Conventional Commits，并在正文补足原因、验证及影响范围。
+
 ## 2026-09-08 SM-09 原生切换（技术 Gate PASS，待审查）
 
 Owner 已确认继续实施 WP-6，包括六项待决文件。代码提交 `c9a4004` 的最终 clean Gate PASS，详情见 `.codex/swift-migration/reviews/SM-09.md`。
