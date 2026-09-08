@@ -1,5 +1,19 @@
 # SlateSync 当前项目方案
 
+## SM-09 测试退出与失败证据（2026-09-08）
+
+680424e clean Gate 共享 UI 11 项通过，打包 UI 8 项通过、CSV 1 项失败；
+同一 Release ZIP 解包后单独运行 CSV 仍在 Go 跳转后等待确认按钮失败。
+整体保持 FAIL，不能以此前定向 PASS 或历史 Gate 批准当前版本。
+独立复核另确认测试删除目录时 App 仍持有 SQLite 文件，日志出现 vnode
+unlinked while in use。统一 XCTest teardown block 现在先终止 App 并验证
+退出，再删除隔离目录；退出失败保留目录并报告失败。两个连续定向 UI
+用例通过，此清理修复不作为 CSV 问题已解决的证据。
+
+2026-09-09 将 Go 跳转 Return 发给已验证路径的输入框，避免从应用级目标
+发送键盘事件。同一 680424e Release ZIP 上 CSV 定向用例通过，包含导入、
+字节比对及退出重开；仍须以新技术提交的完整 Gate 验证所有测试组合。
+
 ## SM-09 文件面板同步修复（定向验证通过）
 
 2d22eda 的新Gate共享UI出现CSV导出等待超时及Settings AX连接丢失，打包UI

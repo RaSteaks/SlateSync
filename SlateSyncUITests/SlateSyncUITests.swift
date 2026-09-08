@@ -12,10 +12,6 @@ final class SlateSyncUITests: XCTestCase {
         try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: testRoot)
-    }
-
     // XCUIAutomation is MainActor-isolated in the macOS 26 SDK.
     @MainActor
     func testLaunchesMainWindowAndProjectLibrary() {
@@ -79,6 +75,18 @@ final class SlateSyncUITests: XCTestCase {
             app = XCUIApplication(url: URL(fileURLWithPath: path))
         } else {
             app = XCUIApplication()
+        }
+        // XCTest runs teardown blocks even after a failed assertion. Stop the
+        // database owner before deleting its files; retain evidence if it stays
+        // alive instead of unlinking an open SQLite database across tests.
+        let root = testRoot!
+        addTeardownBlock { @MainActor in
+            if app.state != .notRunning { app.terminate() }
+            guard app.wait(for: .notRunning, timeout: 5) else {
+                XCTFail("Application did not exit; retained isolated root: \(root.path)")
+                return
+            }
+            try FileManager.default.removeItem(at: root)
         }
         app.launchEnvironment["SLATESYNC_TEST_ROOT"] = testRoot.path
         // Consecutive Gate runs can persist a prior no-window termination in
@@ -301,7 +309,9 @@ final class SlateSyncUITests: XCTestCase {
         location.typeKey("a", modifierFlags: .command)
         location.typeText(path)
         XCTAssertEqual(location.value as? String, path)
-        app.typeKey(.return, modifierFlags: [])
+        // Submit through the field whose value was verified, so XCTest routes
+        // Return to the remote Go panel rather than the application's window.
+        location.typeKey(.return, modifierFlags: [])
         expectation(for: NSPredicate { _, _ in !goSheet.exists }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
         expectation(for: NSPredicate { _, _ in confirmation.exists && confirmation.isEnabled }, evaluatedWith: app)
