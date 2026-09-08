@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-07",
-  "phase": "SM-08",
+  "updatedAt": "2026-09-09",
+  "phase": "SM-09",
   "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
@@ -10,7 +10,7 @@
       "x86_64"
     ],
     "windowsSupported": false,
-    "legacyWindowsArtifactsPresent": true
+    "legacyWindowsArtifactsPresent": false
   },
   "toolchain": {
     "xcode": "26.3",
@@ -21,60 +21,53 @@
     "observationMacroProbe": "passed-outside-command-sandbox",
     "universalBinaryProbe": "passed"
   },
-  "activePackage": ".codex/swift-migration/packages/SM-08.md",
-  "nextPackage": ".codex/swift-migration/packages/SM-09.md",
+  "activePackage": ".codex/swift-migration/packages/SM-09.md",
+  "nextPackage": null,
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "648644c59a3b62c224d7094b023180e8660f090f",
+    "reviewCommit": "4816fe4f888e70c728da340da525f80089f6f8ec",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-06T16:35:04Z",
-    "evidenceReport": ".codex/swift-migration/reviews/SM-08.md",
+    "approvedAt": "2026-09-08T16:49:09.017737Z",
+    "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
     "approvable": true,
-    "blockers": []
+    "blockers": [],
+    "approvalStatement": "批准 SM09 按本地交付范围完成，接受远端 CI/保护配置延期，授权更新 COMPLETE 并提交治理记录。",
+    "scope": "local ad-hoc native candidate; no remote integration or public distribution"
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "228 executed, 227 passed, 1 dedicated Paddle-lane skip",
-    "xcodeDebugBuild": "passed-arm64-Onone",
-    "xcodeTestPlan": "10 passed (8 UI, 2 product unit)",
-    "buildAndRunVerify": "passed-background-real-process-verification",
+    "swiftTest": "237 executed, 236 passed, 1 dedicated offline Paddle skip, 0 failed",
+    "xcodeDebugBuild": "passed",
+    "xcodeTestPlan": "11 passed, 0 failed, 0 skipped",
+    "packagedUI": "9 passed, 0 failed, 0 skipped",
+    "gateSelfTests": "119 passed",
     "releaseBuild": "passed-arm64-x86_64",
     "archive": "passed-arm64-x86_64",
-    "minimumSystem": "15.0",
-    "platformContract": "passed-macos-only-current-entrypoints",
-    "electronPackage": "passed-macos-15-dmg-zip-arm64-x86_64-runtime-guard",
-    "nodeTests": "324 passed",
-    "modernTests": "118 passed",
-    "nativeAbiLifecycle": "passed-electron-and-node",
-    "gateSelfTests": "87 passed",
-    "reviewRemediationRound": "passed-2026-09-07-branch-review-fixes-technical-matrix-swift-full-suite-node-324-modern-118-gate-selftest-87; formal-gate-rerun-7babb9a-26-of-28-checks-pass-sm07-regression-fixed; ui-evidence-lanes-blocked-env-locked-console-CGSSessionScreenIsLocked-at-run-time-documented-in-review",
-    "persistenceContract": "passed-sqlite-project-library-v1",
-    "sm05Contract": "passed-csv-metadata-scenario-v1-technical-regression",
-    "sm05ReleasePerformance": "passed-10k-median-1.923736s-max-1.955408s-ratio-2.049",
-    "sm06Contract": "passed-35-media-ocr-acceptance-ids",
-    "sm07Contract": "passed-57-provider-recognition-acceptance-ids",
-    "sm08Contract": "passed-45-native-evidence-acceptance-ids-and-governance",
-    "sm08NativeSurfaces": "passed-6-native-surfaces-including-accessibility-and-foreground-cadence",
-    "sm08UIAcceptance": "passed-8-ui-tests-including-chinese-reopen-settings-help-logs-and-windows",
-    "sm08NativeEvidence": "passed-45-acceptance-scoped-json-artifacts-with-source-fingerprint",
-    "realSQLiteScale": "passed-500-projects-1000-tasks-1-warmup-5-samples",
-    "foregroundCSVPerformance": "passed-10000-rows-119.686-fps-minimum-45",
-    "visionOCR": "passed-native-revision-3-13-block-smoke",
-    "paddleOCR": "passed-offline-pp-ocrv5-prewarm-two-inferences",
-    "mediaResourceLifecycle": "passed-20-pages-60-views-three-rounds-drained",
-    "lastDiagnosticGate": {
-      "result": "PASS",
-      "approvable": false,
-      "reviewCommit": "d65a6063fe801e2e2b3b8173defa257b24812844",
-      "evidence": ".codex/gate-results/SM-07/20260905T122916Z-d65a6063fe80/result.json"
-    },
+    "packageArtifacts": "audited ZIP and DMG from identical app",
+    "signing": "local ad-hoc; not Developer ID or notarized distribution",
+    "nativeContract": "239 removal sources, 49 frozen fixtures, 45 native acceptance evidence entries validated",
+    "manualDockReopen": "Owner observed PASS; candidate process verified",
+    "manualSpotlightReopen": "Owner observed PASS; candidate process and restored window verified",
+    "independentReview": "sm09_independent_review: no unresolved technical P0/P1",
+    "durableEvidenceHashes": "45 verified before admission",
     "lastFormalGate": {
       "result": "PASS",
       "approvable": true,
-      "reviewCommit": "70fb5db50befaeeee3d44a38a6bf4e917542f2a7",
-      "evidence": ".codex/gate-results/SM-08/20260906T104253Z-70fb5db50bef/result.json"
+      "reviewCommit": "4816fe4f888e70c728da340da525f80089f6f8ec",
+      "evidence": ".codex/gate-results/SM-09/20260908T160156Z-4816fe4f888e/result.json"
+    },
+    "previousPhaseEvidence": ".codex/swift-migration/reviews/SM-08.md"
+  },
+  "deferredWork": [
+    {
+      "id": "remote-ci-and-branch-protection",
+      "status": "DEFERRED_OWNER_ACCEPTED",
+      "owner": "RaSteaks (Repository Owner)",
+      "reason": "Owner explicitly restricted this completion to local delivery and accepted remote CI/protection deferral.",
+      "requiredBefore": "remote integration or public release",
+      "validation": "Run native CI and verify required check protection before remote integration; not currently PASS."
     }
-  }
+  ]
 }
