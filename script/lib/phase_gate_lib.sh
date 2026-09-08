@@ -17,13 +17,32 @@ slatesync_process_ids_for_executable() {
   local candidate_pid
   local process_command
 
-  candidates="$(pgrep -x "$process_name" 2>/dev/null || true)"
+  local scan_status=0
+  candidates="$(pgrep -x "$process_name" 2>/dev/null)" || scan_status=$?
+  if (( scan_status > 1 )); then
+    print -u2 'Process enumeration failed; cleanup cannot be confirmed'
+    return 1
+  fi
   for candidate_pid in ${(f)candidates}; do
-    process_command="$(ps -p "$candidate_pid" -o command= 2>/dev/null | sed 's/^[[:space:]]*//')"
+    [[ -n "$candidate_pid" ]] || continue
+    if ! process_command="$(ps -p "$candidate_pid" -o command= 2>/dev/null)"; then
+      # A process can exit between pgrep and ps. Accept that race only after
+      # another successful enumeration proves this PID has disappeared.
+      local remaining
+      scan_status=0
+      remaining="$(pgrep -x "$process_name" 2>/dev/null)" || scan_status=$?
+      if (( scan_status > 1 )) || (( ${${(f)remaining}[(Ie)$candidate_pid]} > 0 )); then
+        print -u2 'Process inspection failed; cleanup cannot be confirmed'
+        return 1
+      fi
+      continue
+    fi
+    process_command="$(print -r -- "$process_command" | sed 's/^[[:space:]]*//')"
     if slatesync_command_matches_executable "$process_command" "$expected_executable"; then
       print -r -- "$candidate_pid"
     fi
   done
+  return 0
 }
 
 slatesync_stop_executable() {
@@ -31,14 +50,17 @@ slatesync_stop_executable() {
   local expected_executable="$2"
   local process_id
   local attempt
+  local process_ids
 
-  # Restrict termination to this repository's built executable; another installed
-  # SlateSync instance may legitimately share the same process name.
-  for process_id in ${(f)"$(slatesync_process_ids_for_executable "$process_name" "$expected_executable")"}; do
+  # Capture status before using command output: failed observation must never
+  # be interpreted as an empty process list or permission to remove the bundle.
+  process_ids="$(slatesync_process_ids_for_executable "$process_name" "$expected_executable")" || return 1
+  for process_id in ${(f)process_ids}; do
     [[ -n "$process_id" ]] && kill "$process_id" 2>/dev/null || true
   done
   for (( attempt = 1; attempt <= 20; attempt += 1 )); do
-    [[ -z "$(slatesync_process_ids_for_executable "$process_name" "$expected_executable")" ]] && return 0
+    process_ids="$(slatesync_process_ids_for_executable "$process_name" "$expected_executable")" || return 1
+    [[ -z "$process_ids" ]] && return 0
     sleep 0.1
   done
   return 1
@@ -165,7 +187,7 @@ diagnostic_values = [summary.get(key) for key in diagnostic_keys if key in summa
 diagnostic_text = json.dumps(diagnostic_values, ensure_ascii=False).lower()
 
 code_failure = re.search(
-    r"xctassert|assertion|application code (crashed|failed)|uncaught exception|"
+    r"xctassert|xctfail|assertion|failed\s*-|application code (crashed|failed)|uncaught exception|"
     r"fatal error|exc_crash|test(?:s)?[\s_-]+(?:failed|failure)",
     diagnostic_text,
 )
@@ -179,13 +201,32 @@ environment_failure = re.search(
     r"(?:copy|fail|error|unable).*testing[.]framework",
     diagnostic_text,
 )
+# A run-level framework warning cannot explain a failed test. Every failed
+# entry must independently identify runner initialization failure; unknown or
+# missing details stay FAIL even when another entry is an environment error.
+runner_initialization = re.compile(
+    r"^(?:test runner failed to initialize for ui testing|"
+    r"timed out while enabling automation mode|"
+    r"failed to load ax for .+: not authorized for performing ui testing actions)",
+    re.IGNORECASE,
+)
+entries = summary.get("testFailures", summary.get("failures", []))
+if not isinstance(entries, list):
+    entries = [entries]
+if not entries and "failureText" in summary:
+    entries = summary["failureText"]
+    if not isinstance(entries, list):
+        entries = [entries]
+def initialization_only(entry):
+    text = entry.get("failureText", "") if isinstance(entry, dict) else entry
+    return isinstance(text, str) and runner_initialization.search(text.strip()) is not None
+
 if code_failure:
     print("FAIL")
+elif failed > 0:
+    print("BLOCKED_ENV" if len(entries) >= failed and all(initialization_only(e) for e in entries) else "FAIL")
 elif environment_failure:
     print("BLOCKED_ENV")
-elif failed > 0:
-    # A failed count without infrastructure diagnostics remains fail-closed.
-    print("FAIL")
 elif result in {"passed", "success"} and failed == 0:
     print("PASS")
 else:

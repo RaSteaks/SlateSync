@@ -64,6 +64,38 @@ path_is_within() {
   [[ "$1" == "$2"/* ]]
 }
 
+# Process mocks run in a subshell; no test sends a signal to a real PID.
+process_cleanup_fixture() (
+  local mode="$1"
+  local marker="${fixture_root}/process-${mode}"
+  pgrep() {
+    [[ "$mode" == enum_fail ]] && return 3
+    [[ "$mode" == no_match ]] && return 1
+    if [[ -f "$marker" ]]; then
+      [[ "$mode" == recheck_fail ]] && return 3
+      return 1
+    fi
+    print 999999
+  }
+  ps() {
+    case "$mode" in
+      ps_fail) return 1 ;;
+      race|recheck_fail) touch "$marker"; return 1 ;;
+      other) print '/different/SlateSync'; return 0 ;;
+      *) print '/isolated/SlateSync --test' ;;
+    esac
+  }
+  kill() { [[ "$mode" == exits ]] && touch "$marker"; return 0; }
+  sleep() { return 0; }
+  slatesync_stop_executable SlateSync /isolated/SlateSync
+)
+for mode in enum_fail ps_fail recheck_fail stuck; do
+  assert_failure "cleanup refuses unverifiable/live process: $mode" process_cleanup_fixture "$mode"
+done
+for mode in no_match race other exits; do
+  assert_success "cleanup confirms absence without affecting another app: $mode" process_cleanup_fixture "$mode"
+done
+
 assert_success "known phase" gate_valid_phase SM-01
 assert_failure "unknown phase" gate_valid_phase SM-10
 assert_exit_status "unknown phase CLI status" 64 \
@@ -98,6 +130,27 @@ print -r -- '{"result":"Failed","failedTests":1,"testsCount":2,"testFailures":[]
 ) > "${fixture_root}/packaged-empty-failures.log" 2>&1 || true
 assert_equal "packaged failed count survives environment noise without details" FAIL \
   "$(gate_classify_failure "${fixture_root}/packaged-empty-failures.log" 1)"
+# Each failed entry must be explained independently: framework warnings and
+# a separate initialization failure cannot mask XCTFail or unknown failures.
+for detail in 'failed - exported CSV content did not match' 'CSV content mismatch' ''; do
+  python3 - "$detail" "${fixture_root}/xcode-mixed-failure.json" <<'PYFIXTURE'
+import json,sys
+json.dump({"result":"Failed", "failedTests":1, "passedTests":8,
+           "testFailures":[{"failureText":sys.argv[1]}],
+           "diagnostics":"Copy Testing.framework failed with exit code 0"}, open(sys.argv[2], 'w'))
+PYFIXTURE
+  assert_equal "unknown failure with framework noise stays FAIL: $detail" FAIL \
+    "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-mixed-failure.json")"
+  (gate_validate_xcode_test_summary "${fixture_root}/xcode-mixed-failure.json") > "${fixture_root}/xcode-mixed-failure.log" 2>&1 || true
+  assert_equal "outer marker retains mixed failure: $detail" FAIL \
+    "$(gate_classify_failure "${fixture_root}/xcode-mixed-failure.log" 1)"
+done
+print -r -- '{"result":"Failed","failedTests":2,"testFailures":[{"failureText":"Timed out while enabling automation mode"},{"failureText":"CSV content mismatch"}]}' > "${fixture_root}/xcode-two-failures.json"
+assert_equal "one runner failure cannot explain a separate test failure" FAIL \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-two-failures.json")"
+print -r -- '{"result":"Failed","failedTests":2,"testFailures":[{"failureText":"Timed out while enabling automation mode"}]}' > "${fixture_root}/xcode-incomplete-failures.json"
+assert_equal "partial failure details remain fail-closed" FAIL \
+  "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-incomplete-failures.json")"
 # This validator is called after an exit-zero xcodebuild invocation, so a
 # failed xcresult must still prevent the wrapper from reporting PASS.
 assert_failure "exit-zero Xcode result summary failure" gate_validate_xcode_test_summary \
