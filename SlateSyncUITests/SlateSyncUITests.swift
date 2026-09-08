@@ -284,12 +284,31 @@ final class SlateSyncUITests: XCTestCase {
 
     @MainActor
     private func choosePanelPath(_ path: String, app: XCUIApplication) {
-        // Native open/save panels retain their system keyboard behavior.
-        // A full path avoids depending on sidebar favorites or user folders.
+        // Export builds its data asynchronously before presenting NSSavePanel.
+        // Wait for the actual panel action before requesting Go to Folder.
+        // NSSavePanel exposes its localized title separately from AX label.
+        // Its system identifier is shared by open and save confirmation.
+        let confirmation = app.buttons["OKButton"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 8))
         app.typeKey("g", modifierFlags: [.command, .shift])
-        app.typeText(path)
+        // Resolve the actual system Go sheet and path field, not an assumed
+        // control type or focus. Replace any previously remembered location.
+        let goSheet = app.sheets["GoToWindow"]
+        XCTAssertTrue(goSheet.waitForExistence(timeout: 5))
+        let location = app.textFields["PathTextField"]
+        XCTAssertTrue(location.waitForExistence(timeout: 5))
+        location.click()
+        location.typeKey("a", modifierFlags: .command)
+        location.typeText(path)
+        XCTAssertEqual(location.value as? String, path)
         app.typeKey(.return, modifierFlags: [])
-        app.typeKey(.return, modifierFlags: [])
+        expectation(for: NSPredicate { _, _ in !goSheet.exists }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        expectation(for: NSPredicate { _, _ in confirmation.exists && confirmation.isEnabled }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        confirmation.click()
+        expectation(for: NSPredicate { _, _ in !confirmation.exists }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
     }
 
     @MainActor
