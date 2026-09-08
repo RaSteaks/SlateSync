@@ -15,6 +15,7 @@
 		B10000000000000000000006 /* SlateSyncUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* SlateSyncUITests.swift */; };
 		B10000000000000000000007 /* slatesync.icon in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* slatesync.icon */; };
 		B10000000000000000000008 /* canonical PaddleOCR resources in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* PaddleOCR */; };
+		B10000000000000000000009 /* legacy fixture in test Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* sm09-legacy-export.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +47,7 @@
 		F10000000000000000000009 /* SlateSync.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = SlateSync.xctestplan; sourceTree = SOURCE_ROOT; };
 		F10000000000000000000010 /* slatesync.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = build/slatesync.icon; sourceTree = SOURCE_ROOT; };
 		F10000000000000000000011 /* PaddleOCR */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SlateSyncApp/Resources/PaddleOCR; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000012 /* sm09-legacy-export.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				F10000000000000000000005 /* SlateSyncUITests.swift */,
+				F10000000000000000000012 /* sm09-legacy-export.json */,
 			);
 			path = SlateSyncUITests;
 			sourceTree = "<group>";
@@ -241,7 +244,7 @@
 /* Begin PBXResourcesBuildPhase section */
 		R10000000000000000000001 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000007 /* slatesync.icon in Resources */, B10000000000000000000008 /* canonical PaddleOCR resources in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
 		R10000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		R10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		R10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000009 /* legacy fixture in test Resources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */

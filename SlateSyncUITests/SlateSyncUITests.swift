@@ -86,6 +86,9 @@ final class SlateSyncUITests: XCTestCase {
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         if app.state != .notRunning { app.terminate() }
         app.launch()
+        // Launch can leave the window behind another desktop application.
+        // Keyboard and accessibility assertions require the target foreground.
+        app.activate()
         return app
     }
 
@@ -212,8 +215,11 @@ final class SlateSyncUITests: XCTestCase {
         // Materialize the frozen pre-cutover export into this test's root.
         // The delivered app opens v1 SQLite itself; no production test hook or
         // real user Library is involved in the upgrade/CSV acceptance path.
-        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        let fixture = repository.appending(path: "Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json")
+        // Copy the canonical fixture into the test bundle at build time. A
+        // sandboxed runner must not require runtime access to Desktop sources.
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(
+            forResource: "sm09-legacy-export", withExtension: "json"
+        ))
         struct FrozenLibrary: Decodable {
             struct Entry: Decodable { let path: String; let base64: String }
             let packages: [String: [Entry]]
