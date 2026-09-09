@@ -344,6 +344,7 @@ gate_validate_phase_state() {
 
   python3 - "$state_path" "$requested_phase" <<'PY'
 import json
+import os
 import re
 import sys
 
@@ -378,9 +379,22 @@ if lifecycle_state == "PASS" and state_number != requested_number:
     raise SystemExit(1)
 
 expected_active = f".codex/swift-migration/packages/{state_phase}.md"
+if state.get("activePackage") != expected_active:
+    raise SystemExit(1)
+
+# 终局阶段（PHASE_GATES.md 声明 SM-09 为最后一个包）没有后继包，批准后
+# CURRENT_STATE.json 的 nextPackage 合法为 null。终局判定不硬编码阶段号：
+# 以状态文件同级的 packages 目录里后继包文件是否存在为准。nextPackage 为
+# null 时必须确实不存在后继包（非终局阶段写 null 仍然拒绝）；非 null 时
+# 维持原精确相等断言不变。
 expected_next_number = state_number + 1
 expected_next = f".codex/swift-migration/packages/SM-{expected_next_number:02d}.md"
-if state.get("activePackage") != expected_active or state.get("nextPackage") != expected_next:
+recorded_next = state.get("nextPackage")
+if recorded_next is None:
+    packages_dir = os.path.join(os.path.dirname(os.path.abspath(state_path)), "packages")
+    if os.path.exists(os.path.join(packages_dir, f"SM-{expected_next_number:02d}.md")):
+        raise SystemExit(1)
+elif recorded_next != expected_next:
     raise SystemExit(1)
 
 # Before admission, the previous COMPLETE phase must point at the requested

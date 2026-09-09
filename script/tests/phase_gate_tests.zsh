@@ -419,6 +419,36 @@ JSON
 assert_failure "PASS previous phase cannot pre-admit" gate_validate_phase_state \
   "${fixture_root}/phase-state.json" SM-03
 
+# 终局阶段：PHASE_GATES.md 声明 SM-09 是最后一个包，批准后 nextPackage
+# 合法为 null。终局判定以状态文件同级 packages 目录的后继包文件为准：
+# 后继包不存在时 null 可被接受；后继包存在时 null 仍被拒绝（fail-closed）。
+rm -rf "${fixture_root}/packages"
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-09",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-09.md",
+  "nextPackage": null
+}
+JSON
+assert_success "terminal phase COMPLETE accepts null next package" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-09
+mkdir -p "${fixture_root}/packages"
+cat > "${fixture_root}/packages/SM-05.md" <<'MD'
+placeholder successor package so SM-04 is not terminal
+MD
+cat > "${fixture_root}/phase-state.json" <<'JSON'
+{
+  "phase": "SM-04",
+  "lifecycleState": "COMPLETE",
+  "activePackage": ".codex/swift-migration/packages/SM-04.md",
+  "nextPackage": null
+}
+JSON
+assert_failure "non-terminal phase cannot record null next package" gate_validate_phase_state \
+  "${fixture_root}/phase-state.json" SM-04
+rm -rf "${fixture_root}/packages"
+
 # approval_freshness 门控：只在状态阶段 == 请求阶段且 COMPLETE 时生效；
 # PASS 中间态窗口必须路由为 NOT_APPLICABLE（返回失败），不得执行批准检查。
 cat > "${fixture_root}/phase-state.json" <<'JSON'
