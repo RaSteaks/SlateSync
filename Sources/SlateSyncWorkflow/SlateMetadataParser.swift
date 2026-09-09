@@ -1,6 +1,57 @@
 import Foundation
 import SlateSyncDomain
 
+/// One metadata sidecar parser. Implementations claim sidecar file names and
+/// interpret their bytes; they must stay stateless so a registry value can be
+/// shared across concurrent scans.
+public protocol SlateMetadataParsing: Sendable {
+    /// Whether this parser claims the given source file name.
+    func supports(sourceName: String) -> Bool
+    /// Interprets the sidecar bytes; throws a METADATA_* failure on any input
+    /// it cannot fully recognize.
+    func parse(_ data: Data, sourceName: String) throws -> ScannedSlateMetadata
+}
+
+/// Registry of sidecar parsers. Name matching is fail-closed: an unknown
+/// source throws METADATA_UNSUPPORTED, and a source claimed by more than one
+/// parser throws METADATA_AMBIGUOUS instead of silently picking one by
+/// registration order.
+public struct SlateMetadataParserRegistry: Sendable {
+    public let parsers: [any SlateMetadataParsing]
+
+    public init(parsers: [any SlateMetadataParsing]) {
+        self.parsers = parsers
+    }
+
+    /// The shipped registry: the Kinefinity slate.txt parser only. Later
+    /// vendor parsers join here as registered adapters.
+    public static let `default` = SlateMetadataParserRegistry(parsers: [KinefinitySlateTextParser()])
+
+    /// Discovery-level claim: at least one parser handles the name. The scan
+    /// walker uses this so ambiguous files are still discovered and then fail
+    /// loudly at parse time.
+    public func hasParser(matching sourceName: String) -> Bool {
+        parsers.contains { $0.supports(sourceName: sourceName) }
+    }
+
+    /// The single parser claiming the name. Zero matches fail closed as
+    /// METADATA_UNSUPPORTED; multiple matches as METADATA_AMBIGUOUS.
+    public func parser(matching sourceName: String) throws -> any SlateMetadataParsing {
+        let matched = parsers.filter { $0.supports(sourceName: sourceName) }
+        switch matched.count {
+        case 1: return matched[0]
+        case 0:
+            throw SlateSyncError(code: "METADATA_UNSUPPORTED", message: "无法识别的元数据文件来源：\(sourceName)")
+        default:
+            throw SlateSyncError(code: "METADATA_AMBIGUOUS", message: "元数据文件来源被多个解析器同时识别：\(sourceName)")
+        }
+    }
+
+    public func parse(_ data: Data, sourceName: String) throws -> ScannedSlateMetadata {
+        try parser(matching: sourceName).parse(data, sourceName: sourceName)
+    }
+}
+
 /// Registry-backed parser for v1 camera sidecars. Unsupported names fail
 /// closed so arbitrary files are never interpreted as camera metadata.
 ///
@@ -9,15 +60,14 @@ import SlateSyncDomain
 /// 因此 `fooslate.txt` 这类名字也会命中——真正的准入由两层兜底：扫描器只在
 /// 素材编号命中 expected 集合的目录内收集候选，解析器再校验 Clip Name 可
 /// 解析且与文件名指向一致，无法识别时以 METADATA_CLIP 拒绝。
-public enum SlateMetadataParser {
-    public static func supports(sourceName: String) -> Bool {
+public struct KinefinitySlateTextParser: SlateMetadataParsing {
+    public init() {}
+
+    public func supports(sourceName: String) -> Bool {
         sourceName.lowercased().hasSuffix("slate.txt")
     }
 
-    public static func parse(_ data: Data, sourceName: String = "slate.txt") throws -> ScannedSlateMetadata {
-        guard supports(sourceName: sourceName) else {
-            throw SlateSyncError(code: "METADATA_UNSUPPORTED", message: "无法识别的元数据文件来源：\(sourceName)")
-        }
+    public func parse(_ data: Data, sourceName: String) throws -> ScannedSlateMetadata {
         let text = try decode(data)
         var fields: [String: String] = [:]
         for line in text.replacingOccurrences(of: "\u{FEFF}", with: "").components(separatedBy: CharacterSet.newlines) {
@@ -54,7 +104,7 @@ public enum SlateMetadataParser {
         )
     }
 
-    private static func decode(_ data: Data) throws -> String {
+    private func decode(_ data: Data) throws -> String {
         guard !data.isEmpty else { throw SlateSyncError(code: "METADATA_EMPTY", message: "slate.txt 文件为空") }
         let bytes = [UInt8](data.prefix(3))
         let encoding: String.Encoding
@@ -74,5 +124,18 @@ public enum SlateMetadataParser {
             throw SlateSyncError(code: "METADATA_ENCODING", message: "无法读取 slate.txt 编码；仅支持 UTF-8 或 UTF-16 文本。")
         }
         return text
+    }
+}
+
+/// Default-registry facade kept for existing call sites. New code should
+/// depend on an injected `SlateMetadataParserRegistry` so custom parsers are
+/// reachable; these statics always route through the shipped registry.
+public enum SlateMetadataParser {
+    public static func supports(sourceName: String) -> Bool {
+        SlateMetadataParserRegistry.default.hasParser(matching: sourceName)
+    }
+
+    public static func parse(_ data: Data, sourceName: String = "slate.txt") throws -> ScannedSlateMetadata {
+        try SlateMetadataParserRegistry.default.parse(data, sourceName: sourceName)
     }
 }

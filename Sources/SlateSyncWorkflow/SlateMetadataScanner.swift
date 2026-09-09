@@ -6,8 +6,13 @@ import SlateSyncDomain
 /// normalized so filesystem enumeration cannot change compatibility output.
 public actor SlateMetadataScanner: SlateMetadataScanning {
     private struct Candidate: Sendable { let url: URL; let sourceName: String }
+    private let registry: SlateMetadataParserRegistry
 
-    public init() {}
+    /// The registry decides which sidecar names are discovered and how their
+    /// bytes are interpreted; the default scans only Kinefinity slate files.
+    public init(registry: SlateMetadataParserRegistry = .default) {
+        self.registry = registry
+    }
 
     public func scan(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult {
         let expected = Set(options.expectedKeys)
@@ -61,7 +66,7 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                     return
                 }
                 let found = entries(current, source: parts.joined(separator: "/")).filter { url in
-                    guard SlateMetadataParser.supports(sourceName: url.lastPathComponent),
+                    guard registry.hasParser(matching: url.lastPathComponent),
                           let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { return false }
                     return values.isRegularFile == true && values.isSymbolicLink != true
                 }
@@ -79,7 +84,7 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
             for entry in entries(current, source: parts.joined(separator: "/")) {
                 try Task.checkCancellation()
                 guard let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]), values.isSymbolicLink != true else { continue }
-                if values.isRegularFile == true, SlateMetadataParser.supports(sourceName: entry.lastPathComponent) {
+                if values.isRegularFile == true, registry.hasParser(matching: entry.lastPathComponent) {
                     let fileKey = ResolveCSVNormalization.extractCombinedMaterialKey(entry.lastPathComponent)
                     if fileKey.isEmpty || expected.contains(fileKey) {
                         candidates.append(Candidate(url: entry, sourceName: (parts + [entry.lastPathComponent]).joined(separator: "/")))
@@ -106,7 +111,10 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                     continue
                 }
                 read += 1
-                metadata.append(try SlateMetadataParser.parse(Data(contentsOf: candidate.url, options: [.mappedIfSafe]), sourceName: candidate.sourceName))
+                // Ambiguous or unregistered names fail closed here instead of
+                // picking a parser by registration order; the failure lands in
+                // the warnings below like any other unparseable candidate.
+                metadata.append(try registry.parse(Data(contentsOf: candidate.url, options: [.mappedIfSafe]), sourceName: candidate.sourceName))
             } catch {
                 warnings.append((error as? SlateSyncError)?.message ?? error.localizedDescription)
             }
