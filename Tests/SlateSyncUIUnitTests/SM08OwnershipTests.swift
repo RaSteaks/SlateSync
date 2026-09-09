@@ -285,12 +285,16 @@ final class SM08OwnershipTests: XCTestCase {
         for _ in 0..<50 { await Task.yield() }
 
         // The worker has observed cancellation, but service cancellation still
-        // owns the lifecycle barrier; no replacement operation may enter.
+        // owns the lifecycle barrier; no replacement operation may enter. The
+        // finished operation has released its identity and written its
+        // terminal state — admission stays closed regardless.
         model.generateLocalRecords(flush: {}, commit: { _, _ in })
         for _ in 0..<20 { await Task.yield() }
         let blockedCount = await service.localRecordsCount
         XCTAssertEqual(blockedCount, 1)
-        XCTAssertEqual(model.operationID, firstID)
+        XCTAssertNil(model.operationID, "被取消的操作结束后应释放 operationID")
+        guard case .canceled = model.operation else { return XCTFail("应保持取消终态：\(model.operation)") }
+        _ = firstID
 
         await cancelGate.release()
         await model.drain()

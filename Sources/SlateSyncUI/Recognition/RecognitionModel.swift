@@ -286,7 +286,10 @@ public final class RecognitionModel {
         cancelTask = Task {
             await service.cancelRecognition(projectID: projectID)
             await task.value
-            if operationID == id { operation = .canceled }
+            // After finishOperation cleared the identity, operationID == id
+            // can only mean the task never reached a terminal state itself;
+            // never overwrite a result the task already wrote.
+            if operationID == id, operation.isRunning { operation = .canceled }
             cancelTask = nil
         }
     }
@@ -379,6 +382,11 @@ public final class RecognitionModel {
 
     private func finishOperation(_ id: UUID) async {
         guard operationID == id else { return }
+        // Clear the identity first: from here on no late cancel, progress
+        // event, or completion continuation may adopt this operation — e.g.
+        // a cancel() that lands while the progress task is still draining
+        // must not repaint a .succeeded result as .canceled.
+        operationID = nil
         progressTask?.cancel()
         await progressTask?.value
         progressTask = nil
