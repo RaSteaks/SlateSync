@@ -69,11 +69,15 @@ public enum RecognitionNormalizer {
         return [result.promptTokens, result.completionTokens, result.totalTokens, result.inputTokens, result.outputTokens].allSatisfy { $0 == nil } ? nil : result
     }
 
+    /// Recognition-side card identity, frozen from the old `normalizeReel`
+    /// (lib/ai-client.mjs): fold case, strip every non-alphanumeric character,
+    /// and never zero-pad — "A1" and "A01" are distinct physical cards. The
+    /// previous Swift-only 3-digit padding collapsed them into one inheritance
+    /// group; Resolve CSV keeps its own field-width rules elsewhere.
     public static func normalizeCard(_ value: String?) -> String? {
         guard let normalized = clean(value)?.uppercased() else { return nil }
-        let compact = normalized.replacingOccurrences(of: #"[\s_-]+"#, with: "", options: .regularExpression)
-        guard let match = compact.wholeMatch(of: /^([A-Z])(\d{1,6})$/), let number = Int(match.output.2) else { return normalized }
-        return "\(match.output.1)\(String(format: "%03d", number))"
+        let stripped = normalized.replacingOccurrences(of: #"[^A-Z0-9]"#, with: "", options: .regularExpression)
+        return stripped.isEmpty ? nil : stripped
     }
 
     public static func normalizeVideo(_ value: String?) -> String? {

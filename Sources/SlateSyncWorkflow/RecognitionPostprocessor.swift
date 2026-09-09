@@ -67,14 +67,30 @@ public enum RecognitionPostprocessor {
             records[index] = primaryRecord
             if !fields.isEmpty { conflicts.append(.init(key: key, fields: fields, primary: primaryRecord, audit: auditRecord)) }
         }
-        records.sort { (RecognitionNormalizer.materialKey($0) ?? "~") < (RecognitionNormalizer.materialKey($1) ?? "~") }
+        // Old compareMaterialRecords sorted missing keys last and, being a
+        // modern-JS sort, kept input order for equal (missing) keys.
+        records = records.enumerated().sorted {
+            let left = RecognitionNormalizer.materialKey($0.element) ?? "~", right = RecognitionNormalizer.materialKey($1.element) ?? "~"
+            return left != right ? left < right : $0.offset < $1.offset
+        }.map(\.element)
         return .init(result: .init(sheetTitle: primary.sheetTitle ?? audit.sheetTitle, records: records, warnings: warnings), conflicts: conflicts, auditOnlyKeys: auditOnly)
     }
 
     public static func applyReview(_ merge: HighAccuracyMerge, review: RecognitionSheet) -> RecognitionSheet {
         var records = merge.result.records
         var warnings = merge.result.warnings + review.warnings.map { "冲突复核：\($0)" }
-        let reviewed = Dictionary(uniqueKeysWithValues: review.records.compactMap { record in RecognitionNormalizer.materialKey(record).map { ($0, record) } })
+        // The review response is untrusted third-pass JSON: build the map in
+        // input order, keep the first record per key, and warn instead of
+        // trapping on duplicates or dropping keyless records silently (same
+        // tolerance as mergeHighAccuracy's primary pass).
+        var reviewed: [String: RecognitionRecord] = [:]
+        for record in review.records {
+            guard let key = RecognitionNormalizer.materialKey(record) else {
+                warnings.append("冲突复核返回了一条缺少有效卷号或视频码的记录，已忽略。"); continue
+            }
+            guard reviewed[key] == nil else { warnings.append("冲突复核重复返回 \(key)，已保留第一条。"); continue }
+            reviewed[key] = record
+        }
         for conflict in merge.conflicts {
             guard let index = records.firstIndex(where: { RecognitionNormalizer.materialKey($0) == conflict.key }) else { continue }
             var record = records[index], unresolved: [String] = []
@@ -98,12 +114,18 @@ public enum RecognitionPostprocessor {
     }
 
     private static func inherit(_ records: inout [RecognitionRecord], warnings: inout [String]) {
+        // Frozen old inheritSceneAndShot ordering (lib/ai-client.mjs): page,
+        // normalized reel (never zero-padded), clip ordinal with missing last,
+        // and the source index as the final tie-breaker so equal keys keep
+        // input order deterministically.
         let order = records.indices.sorted {
             let left = records[$0], right = records[$1]
             if (left.sourcePage ?? 0) != (right.sourcePage ?? 0) { return (left.sourcePage ?? 0) < (right.sourcePage ?? 0) }
-            let lc = left.cardNumber ?? "~", rc = right.cardNumber ?? "~"
+            let lc = RecognitionNormalizer.normalizeCard(left.cardNumber) ?? "~", rc = RecognitionNormalizer.normalizeCard(right.cardNumber) ?? "~"
             if lc != rc { return lc < rc }
-            return (RecognitionNormalizer.videoOrdinal(left.videoCode) ?? .max) < (RecognitionNormalizer.videoOrdinal(right.videoCode) ?? .max)
+            let lo = RecognitionNormalizer.videoOrdinal(left.videoCode), ro = RecognitionNormalizer.videoOrdinal(right.videoCode)
+            if lo != ro { return (lo ?? .max) < (ro ?? .max) }
+            return $0 < $1
         }
         var last: [String: (String?, String?)] = [:]
         for index in order {
@@ -122,7 +144,12 @@ public enum RecognitionPostprocessor {
         var groups: [String: [Int]] = [:]
         for index in records.indices { if let reel = RecognitionNormalizer.normalizeCard(records[index].cardNumber), RecognitionNormalizer.videoOrdinal(records[index].videoCode) != nil { groups[reel, default: []].append(index) } }
         for (reel, indexes) in groups {
-            let sorted = indexes.sorted { RecognitionNormalizer.videoOrdinal(records[$0].videoCode)! < RecognitionNormalizer.videoOrdinal(records[$1].videoCode)! }
+            // Old reconcileRecordSequences ended its clip sort with the source
+            // index so duplicate ordinals keep input order.
+            let sorted = indexes.sorted {
+                let lo = RecognitionNormalizer.videoOrdinal(records[$0].videoCode)!, ro = RecognitionNormalizer.videoOrdinal(records[$1].videoCode)!
+                return lo != ro ? lo < ro : $0 < $1
+            }
             if sorted.count >= 3 {
                 for position in 1..<(sorted.count - 1) {
                     let a = records[sorted[position - 1]], b = records[sorted[position]], c = records[sorted[position + 1]]

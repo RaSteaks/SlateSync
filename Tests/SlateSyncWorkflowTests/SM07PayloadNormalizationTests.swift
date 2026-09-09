@@ -63,7 +63,7 @@ import XCTest
             .object(["cardNumber": .string("A1"), "videoCode": .string("C115"), "goodTake": .boolean(false), "confidence": .string("high")]),
         ]), "warnings": .array([.string("ok"), .number(1)])])
         let sheet = try RecognitionNormalizer.normalize(value, pageNumber: 2)
-        XCTAssertEqual(sheet.sheetTitle, "标题"); XCTAssertEqual(sheet.records[0].cardNumber, "A010"); XCTAssertEqual(sheet.records[0].videoCode, "C015")
+        XCTAssertEqual(sheet.sheetTitle, "标题"); XCTAssertEqual(sheet.records[0].cardNumber, "A10"); XCTAssertEqual(sheet.records[0].videoCode, "C015")
         XCTAssertEqual(sheet.records[0].scene, "11 / 12A"); XCTAssertEqual(sheet.records[0].shot, "11"); XCTAssertEqual(sheet.records[0].take, "09")
         XCTAssertEqual(sheet.records[0].takeStatus, .passed); XCTAssertEqual(sheet.records[0].confidence, .low); XCTAssertEqual(sheet.records[0].sourcePage, 2)
         XCTAssertNil(sheet.records[1].videoCode); XCTAssertEqual(sheet.records[1].takeStatus, .hold); XCTAssertEqual(sheet.warnings, ["ok"])
