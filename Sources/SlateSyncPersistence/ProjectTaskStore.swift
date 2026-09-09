@@ -10,18 +10,21 @@ public actor ProjectTaskStore {
 
     private let database: SQLiteDatabase
     private let writer: any AtomicFileWriting
+    private let remover: any FileRemoving
     private var didBootstrap = false
     private var bootstrapTask: Task<Void, any Error>?
 
     public init(
         projectDirectory: URL,
-        writer: any AtomicFileWriting = FileManagerAtomicFileWriter()
+        writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
+        remover: any FileRemoving = FileManager.default
     ) throws {
         self.projectDirectory = projectDirectory.standardizedFileURL
         tasksDirectory = projectDirectory.appending(path: "tasks", directoryHint: .isDirectory)
         databaseURL = projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
         database = try SQLiteDatabase(url: databaseURL)
         self.writer = writer
+        self.remover = remover
     }
 
     @discardableResult
@@ -114,13 +117,18 @@ public actor ProjectTaskStore {
     public func deleteTask(_ id: String) async throws {
         try await bootstrap()
         let taskID = try PersistenceIdentifiers.task(id)
-        guard try await database.execute(
-            "DELETE FROM tasks WHERE id = ?;",
-            bindings: [taskID]
-        ) > 0 else {
-            throw SlateSyncError(code: "ENOENT", message: "任务不存在")
-        }
-        try? FileManager.default.removeItem(at: snapshotURL(taskID))
+        // Recoverable deletion: a failed snapshot removal or a failed row
+        // delete must leave the record fully intact after a restart, so a
+        // snapshot error is surfaced, never swallowed with `try?`.
+        try await SnapshotDeletion.deleteRowAndSnapshot(
+            database: database,
+            table: "tasks",
+            id: taskID,
+            snapshotURL: snapshotURL(taskID),
+            notFoundMessage: "任务不存在",
+            remover: remover,
+            writer: writer
+        )
     }
 
     public func close() async throws {

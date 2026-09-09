@@ -20,18 +20,21 @@ public actor DiagnosticsStore {
     public nonisolated let sessionsDirectory: URL
     private let database: SQLiteDatabase
     private let writer: any AtomicFileWriting
+    private let remover: any FileRemoving
     private var didBootstrap = false
     private var bootstrapTask: Task<Void, any Error>?
 
     public init(
         projectDirectory: URL,
-        writer: any AtomicFileWriting = FileManagerAtomicFileWriter()
+        writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
+        remover: any FileRemoving = FileManager.default
     ) throws {
         sessionsDirectory = projectDirectory.appending(path: "diagnostics", directoryHint: .isDirectory)
         database = try SQLiteDatabase(
             url: projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
         )
         self.writer = writer
+        self.remover = remover
     }
 
     @discardableResult
@@ -101,13 +104,18 @@ public actor DiagnosticsStore {
     public func deleteSession(_ id: String) async throws {
         try await bootstrap()
         let sessionID = try PersistenceIdentifiers.diagnostic(id)
-        guard try await database.execute(
-            "DELETE FROM diagnostic_sessions WHERE id = ?;",
-            bindings: [sessionID]
-        ) > 0 else {
-            throw SlateSyncError(code: "ENOENT", message: "诊断会话不存在")
-        }
-        try? FileManager.default.removeItem(at: snapshotURL(sessionID))
+        // Same recoverable deletion as tasks: a failed snapshot removal or a
+        // failed row delete must leave the session fully intact after a
+        // restart, so snapshot errors are surfaced, never swallowed.
+        try await SnapshotDeletion.deleteRowAndSnapshot(
+            database: database,
+            table: "diagnostic_sessions",
+            id: sessionID,
+            snapshotURL: snapshotURL(sessionID),
+            notFoundMessage: "诊断会话不存在",
+            remover: remover,
+            writer: writer
+        )
     }
 
     public func close() async throws {
@@ -175,10 +183,21 @@ public actor DiagnosticsStore {
             bindings: [String(Self.maximumSessionCount)]
         ).compactMap { $0["id"] ?? nil }
         guard !expired.isEmpty else { return }
-        try await database.transaction(expired.map {
-            SQLiteCommand("DELETE FROM diagnostic_sessions WHERE id = ?;", bindings: [$0])
-        })
-        for id in expired { try? FileManager.default.removeItem(at: snapshotURL(id)) }
+        // Retention reuses the same recoverable deletion as explicit deletes
+        // so a half-removed session can never survive a restart; a row that
+        // another actor already removed is simply not pruned again.
+        for id in expired {
+            try await SnapshotDeletion.deleteRowAndSnapshot(
+                database: database,
+                table: "diagnostic_sessions",
+                id: id,
+                snapshotURL: snapshotURL(id),
+                notFoundMessage: "诊断会话不存在",
+                remover: remover,
+                writer: writer,
+                allowMissingRow: true
+            )
+        }
     }
 
     private func snapshotURL(_ id: String) -> URL {
