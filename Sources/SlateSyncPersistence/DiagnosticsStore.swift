@@ -27,7 +27,7 @@ public actor DiagnosticsStore {
     public init(
         projectDirectory: URL,
         writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
-        remover: any FileRemoving = FileManager.default
+        remover: any FileRemoving = FileSystemRemover()
     ) throws {
         sessionsDirectory = projectDirectory.appending(path: "diagnostics", directoryHint: .isDirectory)
         database = try SQLiteDatabase(

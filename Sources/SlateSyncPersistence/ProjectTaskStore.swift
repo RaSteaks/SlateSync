@@ -17,7 +17,7 @@ public actor ProjectTaskStore {
     public init(
         projectDirectory: URL,
         writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
-        remover: any FileRemoving = FileManager.default
+        remover: any FileRemoving = FileSystemRemover()
     ) throws {
         self.projectDirectory = projectDirectory.standardizedFileURL
         tasksDirectory = projectDirectory.appending(path: "tasks", directoryHint: .isDirectory)

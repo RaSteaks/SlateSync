@@ -41,21 +41,18 @@ public actor NativeVisionObservationSource: VisionObservationSource {
         defer { request.progressHandler = { _, _, _ in } }
         // perform 本身仍是同步阻塞调用，但被移到专用队列上执行；取消依旧
         // 依赖 progressHandler，perform 返回后的检查语义不变。VNImageRequest
-        // Handler/VNRecognizeTextRequest 不是 Sendable，队列闭包只捕获裸指针
-        // 与 continuation：沿用了 WindowLifecycleBridge 的地址移交先例，
-        // passRetained 把所有权移交给队列，takeRetained 在闭包内接回，
-        // 满足严格并发检查的同时不需要任何 unchecked Sendable 声明。
+        // Handler/VNRecognizeTextRequest 不是 Sendable，队列闭包只捕获下面
+        // 这个 queue-owned context（不再捕获裸指针）：passRetained 的所有权
+        // 整体移交给 Vision 专用串行队列，在队列线程恰好消费并释放一次。
         let handler = VNImageRequestHandler(cgImage: decoded)
-        let handlerPointer = Unmanaged.passRetained(handler).toOpaque()
-        let requestPointer = Unmanaged.passRetained(request).toOpaque()
         do {
             _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                Self.performQueue.async {
-                    let handler = Unmanaged<VNImageRequestHandler>.fromOpaque(UnsafeRawPointer(handlerPointer)).takeRetainedValue()
-                    let request = Unmanaged<VNRecognizeTextRequest>.fromOpaque(UnsafeRawPointer(requestPointer)).takeRetainedValue()
-                    do { try handler.perform([request]); continuation.resume() }
-                    catch { continuation.resume(throwing: error) }
-                }
+                let context = VisionPerformContext(
+                    handler: handler,
+                    request: request,
+                    continuation: continuation
+                )
+                Self.performQueue.async { context.perform() }
             }
         } catch {
             try deadline.check(clock: clock, operation: operation)
@@ -70,6 +67,38 @@ public actor NativeVisionObservationSource: VisionObservationSource {
             let b = observation.boundingBox
             return .init(text: candidate.string, confidence: Double(candidate.confidence), box: .init(x: b.minX, y: b.minY, width: b.width, height: b.height))
         }
+    }
+}
+
+/// Queue-owned context carrying the retained Vision handler/request and the
+/// continuation across the strict-concurrency boundary in one Sendable box —
+/// the DispatchQueue closure captures this object and nothing else. The
+/// retained objects are consumed and released exactly once, on the Vision
+/// serial queue, through the single `perform()` path shared by normal
+/// completion, a thrown error, and a cancelled request: `performQueue` is
+/// serial, so the consumption flag needs no lock and the continuation is
+/// always resumed exactly once.
+private final class VisionPerformContext: @unchecked Sendable {
+    private let handler: Unmanaged<VNImageRequestHandler>
+    private let request: Unmanaged<VNRecognizeTextRequest>
+    private let continuation: CheckedContinuation<Void, Error>
+    private var consumed = false
+
+    init(handler: VNImageRequestHandler, request: VNRecognizeTextRequest, continuation: CheckedContinuation<Void, Error>) {
+        self.handler = Unmanaged.passRetained(handler)
+        self.request = Unmanaged.passRetained(request)
+        self.continuation = continuation
+    }
+
+    /// Runs on the Vision perform queue only; the serial queue guarantees the
+    /// single consume-and-release.
+    func perform() {
+        guard !consumed else { return }
+        consumed = true
+        let handler = handler.takeRetainedValue()
+        let request = request.takeRetainedValue()
+        do { try handler.perform([request]); continuation.resume() }
+        catch { continuation.resume(throwing: error) }
     }
 }
 

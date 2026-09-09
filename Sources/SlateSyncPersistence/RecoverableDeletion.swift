@@ -1,15 +1,21 @@
 import Foundation
 import SlateSyncDomain
 
-/// Injectable snapshot-file deleter. Production uses `FileManager.default`;
+/// Injectable snapshot-file deleter. Production uses `FileSystemRemover`;
 /// tests inject failures exactly where an operator's disk would fail, without
 /// staging real filesystem faults.
 public protocol FileRemoving: Sendable {
     func removeItem(at url: URL) throws
 }
 
-extension FileManager: @unchecked Sendable {}
-extension FileManager: FileRemoving {}
+/// The production remover; a concrete type instead of a retroactive
+/// FileManager conformance keeps strict-concurrency warnings at zero.
+public struct FileSystemRemover: FileRemoving {
+    public init() {}
+    public func removeItem(at url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+}
 
 /// Recoverable row+snapshot deletion shared by `ProjectTaskStore` and
 /// `DiagnosticsStore`. The order is frozen: confirm the SQLite row exists,
