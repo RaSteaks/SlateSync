@@ -43,6 +43,10 @@ public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
     public let machineSettings: MachineSettings
     public let globalConfigVersion: Int
     public let environmentFileLoaded: Bool
+    /// Absolute path of the workflow config actually in effect. It follows the
+    /// provider created at startup and deliberately ignores later setting
+    /// changes until the process restarts.
+    public let workflowConfigPath: String
     public let migration: SlateSyncRuntimeMigrationState
     public let lastError: SlateSyncError?
 
@@ -52,6 +56,7 @@ public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
         machineSettings: MachineSettings,
         globalConfigVersion: Int,
         environmentFileLoaded: Bool,
+        workflowConfigPath: String = "",
         migration: SlateSyncRuntimeMigrationState,
         lastError: SlateSyncError? = nil
     ) {
@@ -60,6 +65,7 @@ public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
         self.machineSettings = machineSettings
         self.globalConfigVersion = globalConfigVersion
         self.environmentFileLoaded = environmentFileLoaded
+        self.workflowConfigPath = workflowConfigPath
         self.migration = migration
         self.lastError = lastError
     }
@@ -78,23 +84,35 @@ public actor SlateSyncRuntime: SettingsServing {
     private let processEnvironment: [String: String]
     private let environmentFileURL: URL
     private let legacyCredentialURL: URL
+    private let workflowConfigEnvironment: WorkflowConfigPathEnvironment
     private let logger: SlateSyncLogger
     private var snapshot: SlateSyncRuntimeSnapshot
+    /// Created exactly once per process from the startup-effective path. Old
+    /// `createWorkflowConfigProvider` had the same lifecycle: a later setting
+    /// change never hot-switches it; only a restart re-resolves.
+    private var workflowConfigProviderInstance: WorkflowConfigProvider?
 
     public init(
         locator: ApplicationSupportLocator,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
         keychainBackend: (any KeychainBackend)? = nil,
-        loggerCategory: String = "runtime"
+        loggerCategory: String = "runtime",
+        workflowConfigEnvironment: WorkflowConfigPathEnvironment = .live()
     ) {
         self.locator = locator
         processEnvironment = environment
         environmentFileURL = locator.url.appending(path: ".env")
         legacyCredentialURL = locator.url.appending(path: "provider-keys.json")
+        self.workflowConfigEnvironment = workflowConfigEnvironment
         logger = SlateSyncLogger(category: loggerCategory)
         let machineSettingsStore = MachineSettingsStore(locator: locator, writer: writer)
-        let globalConfigStore = GlobalConfigStore(locator: locator, writer: writer)
+        // The composition layer injects the resolved location; the resolver is
+        // the only place that names the file.
+        let globalConfigStore = GlobalConfigStore(
+            fileURL: ConfigPathResolver.globalConfigFileURL(applicationSupportRoot: locator.url),
+            writer: writer
+        )
         let backend = keychainBackend ?? SecurityKeychainBackend(
             coordinationDirectory: locator.url.appending(
                 path: ".locks",
@@ -166,6 +184,19 @@ public actor SlateSyncRuntime: SettingsServing {
             applicationSupportRoot: locator.url
         )
 
+        // The workflow config path freezes the startup-effective setting.
+        // refreshConfiguration re-runs bootstrap after every save, so the
+        // provider is built only once and later changes wait for a restart.
+        var effectiveWorkflowConfigPath = snapshot.workflowConfigPath
+        if workflowConfigProviderInstance == nil {
+            let workflowConfigURL = ConfigPathResolver.workflowConfigURL(
+                configured: resolvedConfiguration.values[.slateSyncConfigPath],
+                environment: workflowConfigEnvironment
+            )
+            workflowConfigProviderInstance = WorkflowConfigProvider(url: workflowConfigURL)
+            effectiveWorkflowConfigPath = workflowConfigURL.standardizedFileURL.path
+        }
+
         var migration = snapshot.migration
         if !snapshot.isBootstrapped || retryFailedMigration || migration.status == .notRun {
             migration = await migrateLegacyCredentials()
@@ -177,6 +208,7 @@ public actor SlateSyncRuntime: SettingsServing {
             machineSettings: machineSettings,
             globalConfigVersion: globalSnapshot.version,
             environmentFileLoaded: environment.loaded,
+            workflowConfigPath: effectiveWorkflowConfigPath,
             migration: migration,
             lastError: environment.error
         )
@@ -206,10 +238,26 @@ public actor SlateSyncRuntime: SettingsServing {
             machineSettings: snapshot.machineSettings,
             globalConfigVersion: snapshot.globalConfigVersion,
             environmentFileLoaded: snapshot.environmentFileLoaded,
+            workflowConfigPath: snapshot.workflowConfigPath,
             migration: snapshot.migration,
             lastError: snapshot.lastError
         )
         return await bootstrap()
+    }
+
+    /// The process-wide workflow config provider. Its URL was resolved from
+    /// the startup-effective setting; calling this before the first bootstrap
+    /// resolves and creates it immediately.
+    public func workflowConfigProvider() async -> WorkflowConfigProvider {
+        if let workflowConfigProviderInstance { return workflowConfigProviderInstance }
+        await bootstrap()
+        if let workflowConfigProviderInstance { return workflowConfigProviderInstance }
+        return WorkflowConfigProvider(
+            url: ConfigPathResolver.workflowConfigURL(
+                configured: snapshot.configuration.values[.slateSyncConfigPath],
+                environment: workflowConfigEnvironment
+            )
+        )
     }
 
     public func value(for key: String) async -> String? {
@@ -239,6 +287,7 @@ public actor SlateSyncRuntime: SettingsServing {
             machineSettings: snapshot.machineSettings,
             globalConfigVersion: globalSnapshot.version,
             environmentFileLoaded: environment.loaded,
+            workflowConfigPath: snapshot.workflowConfigPath,
             migration: snapshot.migration,
             lastError: environment.error
         )

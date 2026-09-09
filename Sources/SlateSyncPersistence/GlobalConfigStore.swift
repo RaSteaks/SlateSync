@@ -32,7 +32,19 @@ public actor GlobalConfigStore {
         applicationSupportRoot: URL,
         writer: any AtomicFileWriting = FileManagerAtomicFileWriter()
     ) {
-        fileURL = applicationSupportRoot.appending(path: "global-config.json")
+        self.init(
+            fileURL: ConfigPathResolver.globalConfigFileURL(applicationSupportRoot: applicationSupportRoot),
+            writer: writer
+        )
+    }
+
+    /// Composition-layer injection: the startup layer resolves the location
+    /// through `ConfigPathResolver`, so the file name has exactly one home.
+    public init(
+        fileURL: URL,
+        writer: any AtomicFileWriting = FileManagerAtomicFileWriter()
+    ) {
+        self.fileURL = fileURL
         self.writer = writer
     }
 

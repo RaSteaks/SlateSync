@@ -65,7 +65,12 @@ public final class GlobalSettingsModel {
                 live = saved
                 revision += 1
             }
-            operation = .succeeded(message: "全局设置已保存")
+            // Frozen old save status (app.js): a changed workflow config path
+            // cannot hot-switch the startup provider, so the save response
+            // announces that a relaunch is needed.
+            operation = saved.restartRequired
+                ? .succeeded(message: "已保存；工作流路径下次启动生效。")
+                : .succeeded(message: "全局设置已保存")
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }

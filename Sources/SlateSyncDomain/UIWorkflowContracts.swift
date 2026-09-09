@@ -24,6 +24,10 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
     public let visionAvailable: Bool
     public let paddleAvailable: Bool
     public let runtime: GlobalRuntimeProjection
+    /// True only in the response to a save that changed the effective
+    /// workflow config path (old `publicGlobalSettings`): the workflow
+    /// provider is built once per process, so the new path needs a relaunch.
+    public let restartRequired: Bool
 
     public init(
         values: GlobalSettingValues,
@@ -33,7 +37,8 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
         configuredCredentialProviderIDs: Set<String>,
         visionAvailable: Bool,
         paddleAvailable: Bool,
-        runtime: GlobalRuntimeProjection
+        runtime: GlobalRuntimeProjection,
+        restartRequired: Bool = false
     ) {
         self.values = values
         self.customProviders = customProviders
@@ -43,6 +48,7 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
         self.visionAvailable = visionAvailable
         self.paddleAvailable = paddleAvailable
         self.runtime = runtime
+        self.restartRequired = restartRequired
     }
 }
 
@@ -62,19 +68,24 @@ public struct GlobalRuntimeProjection: Hashable, Sendable {
     public let environmentFileLoaded: Bool
     public let migrationStatus: LegacyCredentialMigrationStatus
     public let migrationErrorMessage: String?
+    /// Absolute path of the workflow config in effect (startup-resolved; a
+    /// changed setting takes effect only after a restart).
+    public let workflowConfigPath: String?
 
     public init(
         resolvedSettingCount: Int,
         globalConfigVersion: Int,
         environmentFileLoaded: Bool,
         migrationStatus: LegacyCredentialMigrationStatus,
-        migrationErrorMessage: String? = nil
+        migrationErrorMessage: String? = nil,
+        workflowConfigPath: String? = nil
     ) {
         self.resolvedSettingCount = resolvedSettingCount
         self.globalConfigVersion = globalConfigVersion
         self.environmentFileLoaded = environmentFileLoaded
         self.migrationStatus = migrationStatus
         self.migrationErrorMessage = migrationErrorMessage
+        self.workflowConfigPath = workflowConfigPath
     }
 }
 

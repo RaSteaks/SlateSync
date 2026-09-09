@@ -275,6 +275,10 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func globalSettings() async throws -> GlobalSettingsProjection {
+        try await globalSettings(restartRequired: false)
+    }
+
+    private func globalSettings(restartRequired: Bool) async throws -> GlobalSettingsProjection {
         let runtimeSnapshot = await runtime.bootstrap()
         let config = try await runtime.globalConfigStore.load()
         let registry = ProviderRegistry(
@@ -305,8 +309,12 @@ public actor SlateSyncWorkflowFacade:
                 globalConfigVersion: runtimeSnapshot.globalConfigVersion,
                 environmentFileLoaded: runtimeSnapshot.environmentFileLoaded,
                 migrationStatus: Self.migrationStatus(runtimeSnapshot.migration.status),
-                migrationErrorMessage: runtimeSnapshot.migration.errorMessage.map(Self.redactedMessage)
-            )
+                migrationErrorMessage: runtimeSnapshot.migration.errorMessage.map(Self.redactedMessage),
+                workflowConfigPath: runtimeSnapshot.workflowConfigPath.isEmpty
+                    ? nil
+                    : runtimeSnapshot.workflowConfigPath
+            ),
+            restartRequired: restartRequired
         )
     }
 
@@ -314,12 +322,17 @@ public actor SlateSyncWorkflowFacade:
         values: GlobalSettingValues,
         customProviders: [CustomProviderConfiguration]
     ) async throws -> GlobalSettingsProjection {
+        // Old save-global-settings compared the effective SLATESYNC_CONFIG_PATH
+        // before and after the write: the workflow provider is constructed once
+        // at startup, so a changed path cannot hot-switch and needs a relaunch.
+        let previousPath = await runtime.currentSnapshot().configuration.values[.slateSyncConfigPath] ?? ""
         try await resetRecognition()
         await resetSettingsProviders()
         _ = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
-        _ = await runtime.refreshConfiguration()
+        let snapshot = await runtime.refreshConfiguration()
         await record(.info, category: "settings", event: "saved", message: "全局设置已保存")
-        return try await globalSettings()
+        let nextPath = snapshot.configuration.values[.slateSyncConfigPath] ?? ""
+        return try await globalSettings(restartRequired: previousPath != nextPath)
     }
 
     public func setProviderCredential(_ value: String?, providerID: String) async throws {

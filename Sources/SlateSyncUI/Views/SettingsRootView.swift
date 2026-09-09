@@ -196,7 +196,27 @@ public struct SettingsRootView: View {
 
     private var advanced: some View {
         Form {
-            Section("存储") { settingField("全局配置路径", .slateSyncConfigPath) }
+            Section("存储") {
+                // Old renderer row: label + hint. The field edits the
+                // configured value; the effective path below is resolved at
+                // startup and only changes after a restart.
+                settingField("工作流配置路径", .slateSyncConfigPath)
+                Text("开发环境读取；修改后下次启动生效。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let workflowPath = settings.live?.runtime.workflowConfigPath {
+                    LabeledContent("实际生效路径") {
+                        Text(workflowPath)
+                            .font(.caption.monospaced())
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                            .help(workflowPath)
+                    }
+                }
+                if settings.live?.restartRequired == true {
+                    Text("工作流配置路径已修改，重启 SlateSync 后生效。")
+                        .font(.caption).foregroundStyle(.yellow)
+                }
+            }
             if let snapshot = settings.live?.runtime {
                 Section("原生启动状态") {
                     LabeledContent("配置项", value: "\(snapshot.resolvedSettingCount)")
