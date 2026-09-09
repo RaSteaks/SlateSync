@@ -22,7 +22,7 @@ private actor SM07PipelineTransport: ProviderHTTPTransporting {
 
 @MainActor final class SM07PagePipelineTests: XCTestCase {
     private func image() throws -> PreparedImage { try .init(jpeg: Data([0xff, 0xd8, 0xff, 0xd9]), width: 1, height: 1) }
-    private func provider() -> ProviderDescriptor { .init(id: "openai", label: "OpenAI", kind: .builtin, baseURL: URL(string: "https://example.com/v1")!, transport: .responses) }
+    private func provider() -> ProviderDescriptor { .init(id: "openai", label: "OpenAI", origin: .builtin, providerKind: .openAI, baseURL: URL(string: "https://example.com/v1")!, transport: .responses) }
     private func model() -> ResolvedModel { .init(publicID: "m", apiID: "m", providerID: "openai", label: "m") }
 
     func testPAG01PAG07StandardBoundedAndOrdered() async throws {

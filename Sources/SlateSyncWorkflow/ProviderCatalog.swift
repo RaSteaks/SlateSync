@@ -4,6 +4,7 @@ import SlateSyncDomain
 public enum ProviderCatalog {
     public struct Definition: Hashable, Sendable {
         public let id: String
+        public let kind: ProviderKind
         public let label: String
         public let defaultBaseURL: String
         public let baseURLSetting: GlobalSettingKey
@@ -13,11 +14,11 @@ public enum ProviderCatalog {
     }
 
     public static let definitions: [Definition] = [
-        .init(id: "openai", label: "OpenAI 官方 API", defaultBaseURL: "https://api.openai.com/v1", baseURLSetting: .openAIBaseUrl, transport: .responses, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "openrouter", label: "OpenRouter API", defaultBaseURL: "https://openrouter.ai/api/v1", baseURLSetting: .openRouterBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "tokenplan", label: "阿里云 Token Plan", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", baseURLSetting: .tokenPlanBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "dashscope", label: "阿里云百炼（DashScope）", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", baseURLSetting: .dashScopeBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "openai-compatible", label: "OpenAI 兼容 API", defaultBaseURL: "", baseURLSetting: .openAICompatibleBaseUrl, transport: .chatCompletions, jsonMode: .jsonObject, credentialRequired: true),
+        .init(id: "openai", kind: .openAI, label: "OpenAI 官方 API", defaultBaseURL: "https://api.openai.com/v1", baseURLSetting: .openAIBaseUrl, transport: .responses, jsonMode: .jsonSchema, credentialRequired: true),
+        .init(id: "openrouter", kind: .openRouter, label: "OpenRouter API", defaultBaseURL: "https://openrouter.ai/api/v1", baseURLSetting: .openRouterBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
+        .init(id: "tokenplan", kind: .tokenPlan, label: "阿里云 Token Plan", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", baseURLSetting: .tokenPlanBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
+        .init(id: "dashscope", kind: .dashScope, label: "阿里云百炼（DashScope）", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", baseURLSetting: .dashScopeBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
+        .init(id: "openai-compatible", kind: .openAICompatible, label: "OpenAI 兼容 API", defaultBaseURL: "", baseURLSetting: .openAICompatibleBaseUrl, transport: .chatCompletions, jsonMode: .jsonObject, credentialRequired: true),
     ]
 
     /// Curated records intentionally omit raw price data. Public value scores
@@ -44,7 +45,7 @@ public enum ProviderCatalog {
     public static func fixedModels(providerID: String) -> [ModelData] {
         models.enumerated().compactMap { index, source in
             guard source.providers.contains(providerID) else { return nil }
-            let apiID = providerID == "openai" ? (source.directId ?? source.id) : source.id
+            let apiID = ProviderKind(id: providerID) == .openAI ? (source.directId ?? source.id) : source.id
             return ModelData(
                 id: source.id,
                 label: source.label,
@@ -77,7 +78,7 @@ public enum ProviderCatalog {
         guard let model = fixedModels(providerID: providerID).first(where: {
             $0.id == modelID || $0.apiId == modelID || $0.directId == modelID
         }) else { return nil }
-        let mode: ProviderJSONMode = providerID == "openrouter" && model.openRouterStructuredOutputs == false ? .jsonObject : .jsonSchema
+        let mode: ProviderJSONMode = ProviderKind(id: providerID) == .openRouter && model.openRouterStructuredOutputs == false ? .jsonObject : .jsonSchema
         return ResolvedModel(
             publicID: model.id,
             apiID: model.apiId ?? model.id,
@@ -108,15 +109,15 @@ public enum ProviderCatalog {
     /// an unlicensed or non-catalog model selectable on constrained APIs.
     public static func allowsRemote(providerID: String, modelID: String, hasModalities: Bool, acceptsVision: Bool, fixed: Bool) -> Bool {
         if fixed { return true }
-        switch providerID {
-        case "openai": return openAIProfile(modelID) != nil
-        case "tokenplan":
+        switch ProviderKind(id: providerID) {
+        case .openAI: return openAIProfile(modelID) != nil
+        case .tokenPlan:
             return modelID.range(of: #"^qwen3\.(?:8-max(?:-preview)?|7-plus|6-(?:plus|flash))(?:-\d{4}-\d{2}-\d{2})?$"#, options: [.regularExpression, .caseInsensitive]) != nil
-        case "dashscope":
+        case .dashScope:
             return modelID.range(of: #"^qwen(?:\d(?:\.\d+)?)?-vl(?:-[\w.-]+)?$|^qwen-vl-(?:max|plus)(?:-[\w.-]+)?$|^qwen3\.(?:8-max|7-max)(?:-[\w.-]+)?$"#, options: [.regularExpression, .caseInsensitive]) != nil
-        case "openrouter": return hasModalities && acceptsVision
-        case "openai-compatible": return hasModalities ? acceptsVision : isKnownVisionFamily(modelID)
-        default: return hasModalities ? acceptsVision : isKnownVisionFamily(modelID)
+        case .openRouter: return hasModalities && acceptsVision
+        case .openAICompatible: return hasModalities ? acceptsVision : isKnownVisionFamily(modelID)
+        case .none: return hasModalities ? acceptsVision : isKnownVisionFamily(modelID)
         }
     }
 

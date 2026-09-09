@@ -115,7 +115,7 @@ public actor URLSessionProviderTransport: ProviderHTTPTransporting {
         if let credential, !credential.isEmpty {
             request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         }
-        if input.provider.id == "openrouter" {
+        if input.provider.providerKind == .openRouter {
             request.setValue("SlateSync", forHTTPHeaderField: "X-Title")
             if let site = input.provider.openRouterSiteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !site.isEmpty {
                 request.setValue(site, forHTTPHeaderField: "HTTP-Referer")

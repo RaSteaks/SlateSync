@@ -53,9 +53,28 @@ public enum DomainResult<Value: Codable & Hashable & Sendable>: Codable, Hashabl
     }
 }
 
-public enum ProviderKind: String, Codable, Hashable, Sendable {
+/// How a provider entered the registry: a built-in catalog entry or a
+/// user-defined custom provider. The raw values are the persisted Codable
+/// boundary and must not change.
+public enum ProviderOrigin: String, Codable, Hashable, Sendable {
     case builtin
     case custom
+}
+
+/// Vendor protocol shape of a built-in provider. The raw values ARE the
+/// frozen wire IDs ("openai-compatible", "openrouter", …), so stores,
+/// settings and catalogs decode unchanged; business logic must branch on
+/// these cases instead of scattering provider string literals. Custom UUID
+/// providers keep their string IDs and carry no vendor kind.
+public enum ProviderKind: String, Codable, Hashable, Sendable, CaseIterable {
+    case openAI = "openai"
+    case openRouter = "openrouter"
+    case tokenPlan = "tokenplan"
+    case dashScope = "dashscope"
+    case openAICompatible = "openai-compatible"
+
+    /// The vendor kind of a provider ID, or nil for custom/unknown IDs.
+    public init?(id: String) { self.init(rawValue: id) }
 }
 
 public enum ProviderTransport: String, Codable, Hashable, Sendable {
@@ -91,7 +110,7 @@ public struct ProviderSummary: Codable, Hashable, Sendable {
     public let label: String
     public let configured: Bool
     public let requiredEnv: [String]
-    public let type: ProviderKind?
+    public let type: ProviderOrigin?
     public let editable: Bool?
 
     public init(
@@ -99,7 +118,7 @@ public struct ProviderSummary: Codable, Hashable, Sendable {
         label: String,
         configured: Bool,
         requiredEnv: [String] = [],
-        type: ProviderKind? = nil,
+        type: ProviderOrigin? = nil,
         editable: Bool? = nil
     ) {
         self.id = id

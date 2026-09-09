@@ -6,7 +6,7 @@ import XCTest
 
 @MainActor final class SM07PayloadNormalizationTests: XCTestCase {
     private func image() throws -> PreparedImage { try .init(jpeg: Data([0xff, 0xd8, 0xff, 0xd9]), width: 1, height: 1) }
-    private func provider(_ transport: ProviderTransport = .responses, id: String = "openai") -> ProviderDescriptor { .init(id: id, label: id, kind: .builtin, baseURL: URL(string: "https://example.com/v1")!, transport: transport, jsonMode: .jsonSchema, credentialRequired: true) }
+    private func provider(_ transport: ProviderTransport = .responses, id: String = "openai") -> ProviderDescriptor { .init(id: id, label: id, origin: .builtin, providerKind: ProviderKind(id: id), baseURL: URL(string: "https://example.com/v1")!, transport: transport, jsonMode: .jsonSchema, credentialRequired: true) }
     private func model(mode: ProviderJSONMode = .jsonSchema) -> ResolvedModel { .init(publicID: "public", apiID: "physical", providerID: "openai", label: "model", imageDetail: .original, jsonMode: mode) }
 
     func testPRM01PRM02PRM03PRM04PromptOrderAndSchemas() throws {

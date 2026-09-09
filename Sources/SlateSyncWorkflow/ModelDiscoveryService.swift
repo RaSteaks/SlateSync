@@ -31,7 +31,7 @@ public actor ModelDiscoveryService {
 
     public func discover(providerID: String, forceRefresh: Bool = false) async throws -> ModelDiscoveryResult {
         let provider = try await registry.descriptor(providerID: providerID)
-        let legacyModel = providerID == "openai-compatible" ? await registry.setting(.openAICompatibleModel) : nil
+        let legacyModel = provider.providerKind == .openAICompatible ? await registry.setting(.openAICompatibleModel) : nil
         let key = [providerID, provider.baseURL.absoluteString, legacyModel ?? "", provider.revision.map(String.init) ?? "-"].joined(separator: "\u{1f}")
         if !forceRefresh, let cached = cache[key], clock.nowMilliseconds() - cached.createdAt < Self.cacheTTLMilliseconds { return cached.value }
         guard activeProviders.insert(providerID).inserted else { throw RecognitionFailure.discoveryBusy }
@@ -46,7 +46,7 @@ public actor ModelDiscoveryService {
             cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
             return result
         } catch let error as SlateSyncError {
-            if provider.kind == .custom, [404, 405, 501].contains(error.status ?? -1) {
+            if provider.origin == .custom, [404, 405, 501].contains(error.status ?? -1) {
                 let result = try await decode(Data("{}".utf8), provider: provider, modelsEndpointAvailable: false)
                 cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
                 return result
@@ -71,14 +71,14 @@ public actor ModelDiscoveryService {
         let root: JSONValue
         do { root = try JSONDecoder().decode(JSONValue.self, from: data) }
         catch {
-            if provider.kind == .custom { return try await customUnavailable(provider: provider) }
+            if provider.origin == .custom { return try await customUnavailable(provider: provider) }
             throw RecognitionFailure.invalidResponse
         }
         guard case .object(let fields) = root else { throw RecognitionFailure.invalidResponse }
         let candidates: [JSONValue]
         if case .array(let values)? = fields["data"] { candidates = values }
         else if case .array(let values)? = fields["models"] { candidates = values }
-        else if provider.kind == .custom { return try await customUnavailable(provider: provider) }
+        else if provider.origin == .custom { return try await customUnavailable(provider: provider) }
         else { throw RecognitionFailure.invalidResponse }
 
         let custom = await registry.customConfiguration(providerID: provider.id)
@@ -103,7 +103,7 @@ public actor ModelDiscoveryService {
             }
             else if remote.hasModalities { status = remote.acceptsVision ? .declared : .unsupported }
             else if fixed != nil || ProviderCatalog.isKnownVisionFamily(remote.id) { status = .inferred }
-            else { status = provider.kind == .custom ? .pending : .unsupported }
+            else { status = provider.origin == .custom ? .pending : .unsupported }
             if status == .unsupported { unsupported.append(.init(id: remote.id, reason: "接口未声明 image 输入与 text 输出", capabilityStatus: .unsupported)); continue }
             let profile = ProviderCatalog.qualityProfile(remote.id)
             let quality = fixed?.qualityScore ?? profile.score
@@ -113,7 +113,7 @@ public actor ModelDiscoveryService {
                 description: fixed?.description ?? (status == .pending ? "等待显式视觉能力验证" : profile.description),
                 providers: [provider.id], vendor: remote.vendor ?? ProviderCatalog.vendor(for: remote.id),
                 imageDetail: fixed?.imageDetail ?? provider.imageDetail, directId: fixed?.directId,
-                apiId: remote.id, openRouterStructuredOutputs: provider.id == "openrouter" ? remote.supportsJSONSchema : true,
+                apiId: remote.id, openRouterStructuredOutputs: provider.providerKind == .openRouter ? remote.supportsJSONSchema : true,
                 fixed: fixed != nil, fixedPriority: fixed?.fixedPriority, discovered: true,
                 verifiedAvailable: [.declared, .inferred, .verified].contains(status),
                 qualityScore: quality, valueScore: value,
@@ -141,7 +141,7 @@ public actor ModelDiscoveryService {
         failed = dedupe(failed).filter { model in !contains(model.apiId ?? model.id, in: usable) }
         let resolved = usable.compactMap { model -> ResolvedModel? in
             guard let status = model.capabilityStatus, [.declared, .inferred, .verified].contains(status) else { return nil }
-            return .init(publicID: model.id, apiID: model.apiId ?? model.id, providerID: provider.id, label: model.label, imageDetail: model.imageDetail ?? provider.imageDetail, jsonMode: provider.id == "openrouter" && model.openRouterStructuredOutputs == false ? .jsonObject : provider.jsonMode, capabilityStatus: status, revision: provider.revision)
+            return .init(publicID: model.id, apiID: model.apiId ?? model.id, providerID: provider.id, label: model.label, imageDetail: model.imageDetail ?? provider.imageDetail, jsonMode: provider.providerKind == .openRouter && model.openRouterStructuredOutputs == false ? .jsonObject : provider.jsonMode, capabilityStatus: status, revision: provider.revision)
         }
         await registry.register(resolved, providerID: provider.id, revision: provider.revision)
         return result(provider: provider, source: .api, availableCount: modelsEndpointAvailable ? Set(candidates.compactMap(RemoteModel.rawID)).count : nil, usable: ProviderCatalog.sort(usable), pending: pending, failed: failed, unsupported: unsupported, endpointAvailable: modelsEndpointAvailable, warning: modelsEndpointAvailable ? nil : "接口未提供 /models；请从手动模型 ID 中选择并验证。")
@@ -168,7 +168,7 @@ public actor ModelDiscoveryService {
     }
 
     private func fallback(provider: ProviderDescriptor, warning: String) async throws -> ModelDiscoveryResult {
-        if provider.kind == .custom { return try await customUnavailable(provider: provider) }
+        if provider.origin == .custom { return try await customUnavailable(provider: provider) }
         let fixed = ProviderCatalog.fixedModels(providerID: provider.id)
         return result(provider: provider, source: .staticFallback, availableCount: nil, usable: fixed, pending: [], failed: [], unsupported: [], endpointAvailable: true, warning: bounded(warning, 500))
     }

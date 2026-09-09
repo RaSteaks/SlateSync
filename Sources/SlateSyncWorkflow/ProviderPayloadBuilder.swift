@@ -73,7 +73,7 @@ public enum ProviderPayloadBuilder {
         } else if mode == .jsonObject {
             root["response_format"] = .object(["type": .string("json_object")])
         }
-        if request.provider.id == "openrouter" { root["provider"] = .object(["require_parameters": .boolean(true)]) }
+        if request.provider.providerKind == .openRouter { root["provider"] = .object(["require_parameters": .boolean(true)]) }
         return .object(root)
     }
 

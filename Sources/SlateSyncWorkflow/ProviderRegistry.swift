@@ -45,10 +45,11 @@ public actor ProviderRegistry {
     public func setting(_ key: GlobalSettingKey) -> String? { settings[key] }
 
     public func descriptor(providerID: String) throws -> ProviderDescriptor {
-        if let custom = customProviders.first(where: { $0.id == providerID && $0.id != "openai-compatible" }) {
+        let kind = ProviderKind(id: providerID)
+        if let custom = customProviders.first(where: { $0.id == providerID && $0.id != ProviderKind.openAICompatible.rawValue }) {
             guard let baseURL = URL(string: custom.baseUrl) else { throw RecognitionFailure.invalidURL }
             return ProviderDescriptor(
-                id: custom.id, label: custom.name, kind: .custom, baseURL: baseURL,
+                id: custom.id, label: custom.name, origin: .custom, providerKind: kind, baseURL: baseURL,
                 transport: custom.transport, jsonMode: custom.jsonMode,
                 imageDetail: custom.imageDetail, credentialRequired: false,
                 revision: custom.revision
@@ -58,11 +59,11 @@ public actor ProviderRegistry {
         guard let definition = ProviderCatalog.definition(id: providerID) else {
             throw RecognitionFailure.unknownProvider
         }
-        if providerID == "openai-compatible",
+        if kind == .openAICompatible,
            let materialized = customProviders.first(where: { $0.id == providerID }) {
             guard let baseURL = URL(string: materialized.baseUrl) else { throw RecognitionFailure.invalidURL }
             return ProviderDescriptor(
-                id: providerID, label: materialized.name, kind: .builtin,
+                id: providerID, label: materialized.name, origin: .builtin, providerKind: kind,
                 baseURL: baseURL, transport: materialized.transport,
                 jsonMode: materialized.jsonMode, imageDetail: materialized.imageDetail,
                 credentialRequired: true, revision: materialized.revision,
@@ -80,18 +81,18 @@ public actor ProviderRegistry {
         var transport = definition.transport
         var jsonMode = definition.jsonMode
         var detail: ImageDetail = .high
-        if providerID == "openai-compatible" {
+        if kind == .openAICompatible {
             if settings[.openAICompatibleAPIMode]?.lowercased() == ProviderTransport.responses.rawValue { transport = .responses }
             if let raw = settings[.openAICompatibleJSONMode]?.lowercased(), let mode = ProviderJSONMode(rawValue: raw) { jsonMode = mode }
             if transport == .responses, settings[.openAICompatibleJSONMode] == nil { jsonMode = .jsonSchema }
             if let raw = settings[.openAICompatibleImageDetail]?.lowercased(), let selected = ImageDetail(rawValue: raw) { detail = selected }
         }
         return ProviderDescriptor(
-            id: providerID, label: definition.label, kind: .builtin,
+            id: providerID, label: definition.label, origin: .builtin, providerKind: kind,
             baseURL: baseURL, transport: transport, jsonMode: jsonMode,
             imageDetail: detail, credentialRequired: definition.credentialRequired,
-            openRouterSiteURL: providerID == "openrouter" ? settings[.openRouterSiteUrl] : nil,
-            isLegacyCompatible: providerID == "openai-compatible"
+            openRouterSiteURL: definition.kind == .openRouter ? settings[.openRouterSiteUrl] : nil,
+            isLegacyCompatible: kind == .openAICompatible
         )
     }
 
@@ -101,14 +102,14 @@ public actor ProviderRegistry {
         if let registration = registrations[providerID], registration.revision == descriptor.revision,
            let registered = registration.models[modelID], registered.isUsable { return registered }
 
-        if providerID == "openai-compatible" {
+        if ProviderKind(id: providerID) == .openAICompatible {
             let persisted = customProviders.first(where: { $0.id == providerID })?.manualModelIds.first
             let configured = settings[.openAICompatibleModel]?.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let apiID = persisted ?? configured, ProviderCatalog.isValidModelID(apiID) else {
                 throw RecognitionFailure.unsupportedModel
             }
             return ResolvedModel(
-                publicID: "openai-compatible/custom", apiID: apiID,
+                publicID: ProviderKind.openAICompatible.rawValue + "/custom", apiID: apiID,
                 providerID: providerID, label: apiID,
                 imageDetail: descriptor.imageDetail, jsonMode: descriptor.jsonMode,
                 capabilityStatus: .declared, revision: descriptor.revision
@@ -155,9 +156,9 @@ public actor ProviderRegistry {
             let descriptor = try? descriptor(providerID: definition.id)
             let keyConfigured = (try? await credentials?.isCredentialConfigured(for: definition.id)) ?? false
             let configured = descriptor != nil && (!definition.credentialRequired || keyConfigured)
-            result.append(.init(id: definition.id, label: definition.label, configured: configured, requiredEnv: definition.credentialRequired ? [credentialName(definition.id)] : [], type: .builtin, editable: definition.id == "openai-compatible"))
+            result.append(.init(id: definition.id, label: definition.label, configured: configured, requiredEnv: definition.credentialRequired ? [credentialName(definition.id)] : [], type: .builtin, editable: definition.kind == .openAICompatible))
         }
-        for provider in customProviders where provider.id != "openai-compatible" {
+        for provider in customProviders where provider.id != ProviderKind.openAICompatible.rawValue {
             // UUID custom providers intentionally permit anonymous local/LAN
             // endpoints, so configuration depends on the validated base URL.
             result.append(.init(id: provider.id, label: provider.name, configured: !provider.baseUrl.isEmpty, type: .custom, editable: true))
@@ -172,7 +173,7 @@ public actor ProviderRegistry {
                 let verification = provider.capabilityCache?[modelID]
                 let status = verification?.revision == provider.revision ? (verification?.status ?? .pending) : .pending
                 values.append(ModelData(
-                    id: provider.id == "openai-compatible" ? "openai-compatible/custom" : modelID,
+                    id: ProviderKind(id: provider.id) == .openAICompatible ? ProviderKind.openAICompatible.rawValue + "/custom" : modelID,
                     label: modelID, description: status == .verified ? "自定义接口模型" : "自定义接口模型，等待能力验证",
                     providers: [provider.id], vendor: ProviderCatalog.vendor(for: modelID),
                     imageDetail: provider.imageDetail, apiId: modelID, fixed: false,
@@ -196,12 +197,12 @@ public actor ProviderRegistry {
     }
 
     private func credentialName(_ providerID: String) -> String {
-        switch providerID {
-        case "openai": return "OPENAI_API_KEY"
-        case "openrouter": return "OPENROUTER_API_KEY"
-        case "tokenplan": return "TOKENPLAN_API_KEY"
-        case "dashscope": return "DASHSCOPE_API_KEY"
-        default: return "OPENAI_COMPATIBLE_API_KEY"
+        switch ProviderKind(id: providerID) {
+        case .openAI: return "OPENAI_API_KEY"
+        case .openRouter: return "OPENROUTER_API_KEY"
+        case .tokenPlan: return "TOKENPLAN_API_KEY"
+        case .dashScope: return "DASHSCOPE_API_KEY"
+        case .openAICompatible, .none: return "OPENAI_COMPATIBLE_API_KEY"
         }
     }
 

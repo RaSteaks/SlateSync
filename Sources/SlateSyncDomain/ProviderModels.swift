@@ -10,7 +10,9 @@ public enum ProviderEndpointPurpose: String, Codable, Hashable, Sendable {
 public struct ProviderDescriptor: Codable, Hashable, Sendable {
     public let id: String
     public let label: String
-    public let kind: ProviderKind
+    public let origin: ProviderOrigin
+    /// Vendor protocol shape; nil for custom UUID providers.
+    public let providerKind: ProviderKind?
     public let baseURL: URL
     public let transport: ProviderTransport
     public let jsonMode: ProviderJSONMode
@@ -23,7 +25,8 @@ public struct ProviderDescriptor: Codable, Hashable, Sendable {
     public init(
         id: String,
         label: String,
-        kind: ProviderKind,
+        origin: ProviderOrigin,
+        providerKind: ProviderKind? = nil,
         baseURL: URL,
         transport: ProviderTransport,
         jsonMode: ProviderJSONMode = .jsonSchema,
@@ -35,7 +38,8 @@ public struct ProviderDescriptor: Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.label = label
-        self.kind = kind
+        self.origin = origin
+        self.providerKind = providerKind
         self.baseURL = baseURL
         self.transport = transport
         self.jsonMode = jsonMode

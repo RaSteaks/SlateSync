@@ -83,7 +83,8 @@ public enum CustomProviderValidator {
         if raw.isEmpty, generateIfMissing {
             return idPrefix + UUID().uuidString.lowercased()
         }
-        if raw == "openai-compatible" { return raw }
+        // The materialized legacy compatible provider keeps its bare wire ID.
+        if ProviderKind(rawValue: raw) == .openAICompatible { return raw }
 
         let pattern = #"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"#
         guard raw.hasPrefix(idPrefix),

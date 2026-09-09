@@ -81,7 +81,7 @@ private actor SM07ProbeSaveLog {
 
 @MainActor final class SM07TransportDiscoveryTests: XCTestCase {
     private func configuration() -> URLSessionConfiguration { let value = URLSessionConfiguration.ephemeral; value.protocolClasses = [SM07URLProtocol.self]; return value }
-    private func provider(id: String = "openrouter", required: Bool = true) -> ProviderDescriptor { .init(id: id, label: id, kind: .builtin, baseURL: URL(string: "https://example.com/v1")!, transport: .chatCompletions, credentialRequired: required, openRouterSiteURL: "https://slatesync.example") }
+    private func provider(id: String = "openrouter", required: Bool = true) -> ProviderDescriptor { .init(id: id, label: id, origin: .builtin, providerKind: ProviderKind(id: id), baseURL: URL(string: "https://example.com/v1")!, transport: .chatCompletions, credentialRequired: required, openRouterSiteURL: "https://slatesync.example") }
 
     func testNET02URLSessionHeadersAndSuccessDrain() async throws {
         SM07URLProtocol.configure(.response(200, Data(#"{"ok":true}"#.utf8)))
