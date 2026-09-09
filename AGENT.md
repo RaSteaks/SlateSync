@@ -1,5 +1,32 @@
 # SlateSync 当前项目方案
 
+## 2026-09-10 路径一收尾：B1–B3 遗留修复
+
+Owner 批准路径一后按红绿流程完成三项遗留修复，各自独立提交。
+89d2bb0 将五处逐次新建的 ISO8601DateFormatter 收敛为 Mutex 共享实例：
+Persistence 层新增 PersistenceTimestamps（带毫秒/整秒两型渲染与 v1
+库校验的双配置解析序，字节输出冻结不变，保留"带毫秒格式无法解析整
+秒戳"的非对称），Workflow 层新增 WorkflowTimestamps 承担
+discovery/probe 元数据的整秒戳；Mutex 不可复制，选实例必须分支而非
+三元。906d07f 修复两处 fileImporter 完成回调在主线程
+Data(contentsOf:) 同步读盘：新增 SecurityScopedFileReader，安全作用
+域开启后横跨后台读取全程（提前关闭会使描述符在读取中途失效），缺失
+与无权限均抛错并继续走 model.report，保持 fail-closed。
+bb1d865 补齐安装停止的差集回收：启动前快照进程表，发起停止后仅回收
+"快照之后出现且可执行路径或 argv 携带受管根签名"的进程（pip 构建
+隔离的孙进程不再逃逸为孤儿），读不到的进程跳过、无签名者绝不触碰；
+清扫挂在"我们发起过停止"上而非仅 KILL 升级点——无 trap 的子进程常
+在 KILL 期限前就死于 TERM，仅挂升级点会漏扫。
+
+验证：真实孙进程回归先在空签名（等价旧行为）下失败、暴露存活孤儿
+pid，启用清扫后转绿；swift test 320 通过、2 跳过、0 失败；swift
+build -Xswiftc -warnings-as-errors 通过；git diff --check 干净。
+技术门禁 .codex/gate-results/SM-09/20260909T163904Z-bb1d865f3db0：
+除 approval_freshness 按设计 FAIL（需 Owner 在最新提交重新批准）外
+全部 PASS，含 sm09_packaged_ui 打包 e2e（SecurityScopedFileReader
+改造后的导入路径随本轮一并见证）。终局：Owner 在本节提交上批准后复
+跑 Gate 以 24/24 COMPLETE 收束。
+
 ## 2026-09-09 CSV 导出守卫回归与验收流水线
 
 复盘 Gate 20260909T140705Z 的 7 项 FAIL：0e0f3e1 将非 Sendable 的
