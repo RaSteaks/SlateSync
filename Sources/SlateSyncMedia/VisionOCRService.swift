@@ -13,7 +13,7 @@ public protocol VisionObservationSource: Sendable {
 public actor NativeVisionObservationSource: VisionObservationSource {
     private let clock: any OCRClock
     public init(clock: any OCRClock = SystemOCRClock()) { self.clock = clock }
-    private func request(_ configuration: VisionOCRConfiguration) -> VNRecognizeTextRequest {
+    private nonisolated static func makeRequest(_ configuration: VisionOCRConfiguration) -> VNRecognizeTextRequest {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = configuration.recognitionLevel == "fast" ? .fast : .accurate
         request.usesLanguageCorrection = configuration.usesLanguageCorrection
@@ -22,7 +22,7 @@ public actor NativeVisionObservationSource: VisionObservationSource {
         return request
     }
     public func available(configuration: VisionOCRConfiguration) -> Bool {
-        guard let languages = try? request(configuration).supportedRecognitionLanguages() else { return false }
+        guard let languages = try? Self.makeRequest(configuration).supportedRecognitionLanguages() else { return false }
         return configuration.languages.allSatisfy { languages.contains($0) }
     }
     /// 同步 Vision 调用的专用串行队列。VNImageRequestHandler.perform 对
@@ -33,75 +33,46 @@ public actor NativeVisionObservationSource: VisionObservationSource {
     public func observations(_ image: PreparedImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) async throws -> [RawVisionObservation] {
         try deadline.check(clock: clock, operation: operation)
         let decoded = try ImageRasterizer.decode(image.jpeg, maximum: 3000)
-        let request = request(configuration)
         let clock = clock
-        request.progressHandler = { request, _, _ in
-            if operation.isCanceled || clock.nowMilliseconds() >= deadline.end { request.cancel() }
-        }
-        defer { request.progressHandler = { _, _, _ in } }
-        // perform 本身仍是同步阻塞调用，但被移到专用队列上执行；取消依旧
-        // 依赖 progressHandler，perform 返回后的检查语义不变。VNImageRequest
-        // Handler/VNRecognizeTextRequest 不是 Sendable，队列闭包只捕获下面
-        // 这个 queue-owned context（不再捕获裸指针）：passRetained 的所有权
-        // 整体移交给 Vision 专用串行队列，在队列线程恰好消费并释放一次。
-        let handler = VNImageRequestHandler(cgImage: decoded)
+        // VNImageRequestHandler、VNRecognizeTextRequest 和 Vision 的结果类型
+        // 都不是 Sendable：它们的整个生命周期（构造、progressHandler、perform、
+        // 读取并归一化 results）全部固定在 Vision 专用串行队列闭包内完成，只把
+        // Sendable 的识别结论跨回 actor。串行队列对每次调用恰好调度一次闭包，
+        // continuation 因此恰好恢复一次，对象也只在队列线程上创建和释放。
+        struct Outcome: Sendable { var observations: [RawVisionObservation] }
         do {
-            _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                let context = VisionPerformContext(
-                    handler: handler,
-                    request: request,
-                    continuation: continuation
-                )
-                Self.performQueue.async { context.perform() }
+            let outcome: Outcome = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Outcome, Error>) in
+                Self.performQueue.async {
+                    let handler = VNImageRequestHandler(cgImage: decoded)
+                    let request = Self.makeRequest(configuration)
+                    request.progressHandler = { request, _, _ in
+                        if operation.isCanceled || clock.nowMilliseconds() >= deadline.end { request.cancel() }
+                    }
+                    do { try handler.perform([request]) }
+                    catch { return continuation.resume(throwing: error) }
+                    request.progressHandler = { _, _, _ in }
+                    continuation.resume(returning: Outcome(observations: (request.results ?? []).compactMap { observation in
+                        guard let candidate = observation.topCandidates(1).first else { return nil }
+                        let b = observation.boundingBox
+                        return .init(text: candidate.string, confidence: Double(candidate.confidence), box: .init(x: b.minX, y: b.minY, width: b.width, height: b.height))
+                    }))
+                }
             }
+            // perform 返回后的检查语义不变：同步框架段不会发出进度，返回前
+            // 必须再核对一次截止时间与取消状态。
+            try deadline.check(clock: clock, operation: operation)
+            return outcome.observations
         } catch {
             try deadline.check(clock: clock, operation: operation)
             throw SlateSyncError(code: "VISIONOCR_FAILED", message: "Vision OCR 识别失败", retryable: true)
         }
-        // A synchronous framework section may not issue progress. Always check
-        // again, cancel the request, and drain perform() before returning failure.
-        do { try deadline.check(clock: clock, operation: operation) }
-        catch { request.cancel(); throw error }
-        return (request.results ?? []).compactMap { observation in
-            guard let candidate = observation.topCandidates(1).first else { return nil }
-            let b = observation.boundingBox
-            return .init(text: candidate.string, confidence: Double(candidate.confidence), box: .init(x: b.minX, y: b.minY, width: b.width, height: b.height))
-        }
     }
 }
 
-/// Queue-owned context carrying the retained Vision handler/request and the
-/// continuation across the strict-concurrency boundary in one Sendable box —
-/// the DispatchQueue closure captures this object and nothing else. The
-/// retained objects are consumed and released exactly once, on the Vision
-/// serial queue, through the single `perform()` path shared by normal
-/// completion, a thrown error, and a cancelled request: `performQueue` is
-/// serial, so the consumption flag needs no lock and the continuation is
-/// always resumed exactly once.
-private final class VisionPerformContext: @unchecked Sendable {
-    private let handler: Unmanaged<VNImageRequestHandler>
-    private let request: Unmanaged<VNRecognizeTextRequest>
-    private let continuation: CheckedContinuation<Void, Error>
-    private var consumed = false
-
-    init(handler: VNImageRequestHandler, request: VNRecognizeTextRequest, continuation: CheckedContinuation<Void, Error>) {
-        self.handler = Unmanaged.passRetained(handler)
-        self.request = Unmanaged.passRetained(request)
-        self.continuation = continuation
-    }
-
-    /// Runs on the Vision perform queue only; the serial queue guarantees the
-    /// single consume-and-release.
-    func perform() {
-        guard !consumed else { return }
-        consumed = true
-        let handler = handler.takeRetainedValue()
-        let request = request.takeRetainedValue()
-        do { try handler.perform([request]); continuation.resume() }
-        catch { continuation.resume(throwing: error) }
-    }
-}
-
+/// The non-Sendable Vision objects never leave the `performQueue` closure
+/// that creates them; the serial queue schedules that closure exactly once
+/// per call, so the continuation is always resumed exactly once and only the
+/// Sendable normalized observations cross back onto the actor.
 public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing {
     private let configuration: VisionOCRConfiguration
     private let source: any VisionObservationSource

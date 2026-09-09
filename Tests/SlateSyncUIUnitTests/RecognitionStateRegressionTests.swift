@@ -1,4 +1,5 @@
 import SlateSyncDomain
+import Synchronization
 @testable import SlateSyncUI
 import XCTest
 
@@ -64,31 +65,30 @@ final class RecognitionStateRegressionTests: XCTestCase {
     }
 }
 
-private final class RecognitionGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var opened = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+private final class RecognitionGate: Sendable {
+    private let state = Mutex<(opened: Bool, waiters: [CheckedContinuation<Void, Never>])>((false, []))
 
-    var isOpen: Bool { lock.withLock { opened } }
+    var isOpen: Bool { state.withLock { $0.opened } }
 
     func wait() async {
-        guard !lock.withLock({ opened }) else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            lock.withLock {
-                if opened { continuation.resume(); return }
-                waiters.append(continuation)
+            let resumeNow = state.withLock { st -> Bool in
+                if st.opened { return true }
+                st.waiters.append(continuation)
+                return false
             }
+            if resumeNow { continuation.resume() }
         }
     }
 
     func open() {
-        let current: [CheckedContinuation<Void, Never>] = lock.withLock {
-            opened = true
-            let current = waiters
-            waiters.removeAll()
-            return current
+        let waiters = state.withLock { st -> [CheckedContinuation<Void, Never>] in
+            st.opened = true
+            let waiters = st.waiters
+            st.waiters = []
+            return waiters
         }
-        current.forEach { $0.resume() }
+        waiters.forEach { $0.resume() }
     }
 }
 

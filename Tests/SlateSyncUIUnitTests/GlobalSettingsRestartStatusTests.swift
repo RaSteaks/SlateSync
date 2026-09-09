@@ -28,7 +28,7 @@ final class GlobalSettingsRestartStatusTests: XCTestCase {
         )
     }
 
-    private final class RestartSettingsFake: GlobalSettingsWorkflowServing, @unchecked Sendable {
+    private actor RestartSettingsFake: GlobalSettingsWorkflowServing {
         let saveResponse: GlobalSettingsProjection
         private let loadResponse: GlobalSettingsProjection
 
