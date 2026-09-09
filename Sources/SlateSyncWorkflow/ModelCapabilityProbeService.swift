@@ -78,7 +78,7 @@ public actor ModelCapabilityProbeService {
     }
 
     private nonisolated static func probeOne(id: String, provider: ProviderDescriptor, client: ProviderRecognitionClient, now: @Sendable () -> Date) async -> ModelCapabilityProbeResult {
-        let checkedAt = ISO8601DateFormatter().string(from: now())
+        let checkedAt = WorkflowTimestamps.string(now())
         do {
             guard let png = Data(base64Encoded: syntheticProbePNGBase64) else { throw RecognitionFailure.invalidInput }
             let image = try ProviderImage(data: png, mimeType: "image/png", width: 192, height: 64)

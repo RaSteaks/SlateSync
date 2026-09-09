@@ -122,7 +122,7 @@ public actor ModelDiscoveryService {
                 capabilitySource: cached?.capabilitySource ?? (remote.hasModalities ? "API architecture" : "maintained model family"),
                 capabilityMessage: bounded(cached?.message, 500), capabilityCheckedAt: bounded(cached?.checkedAt, 80),
                 qualitySource: fixed?.qualitySource ?? (quality == nil ? nil : "SlateSync 维护的模型族参考评级"), qualityUpdatedAt: fixed?.qualityUpdatedAt ?? (quality == nil ? nil : "2026-08-02"),
-                valueSource: fixed?.valueSource ?? (value == nil ? nil : "接口实时价格"), valueUpdatedAt: fixed?.valueUpdatedAt ?? (value == nil ? nil : ISO8601DateFormatter().string(from: now()))
+                valueSource: fixed?.valueSource ?? (value == nil ? nil : "接口实时价格"), valueUpdatedAt: fixed?.valueUpdatedAt ?? (value == nil ? nil : WorkflowTimestamps.string(now()))
             )
             switch status { case .failed: failed.append(model); case .pending, .canceled: pending.append(model); default: usable.append(model) }
         }
@@ -174,7 +174,7 @@ public actor ModelDiscoveryService {
     }
 
     private func result(provider: ProviderDescriptor, source: ModelDiscoverySource, availableCount: Int?, usable: [ModelData], pending: [ModelData], failed: [ModelData], unsupported: [ModelDiscoveryResult.UnsupportedModel], endpointAvailable: Bool, warning: String?) -> ModelDiscoveryResult {
-        .init(provider: provider.id, source: source, refreshedAt: ISO8601DateFormatter().string(from: now()), availableModelCount: availableCount, visionModelCount: usable.count, fixedModelCount: usable.filter { $0.fixed == true }.count, models: usable, pendingModelCount: pending.count, modelsEndpointAvailable: endpointAvailable, warning: warning, pendingModels: pending, unsupportedModelCount: unsupported.count, unsupportedModels: unsupported, failedModelCount: failed.count, failedModels: failed, statusCounts: .init(usable: usable.count, pending: pending.count, unsupported: unsupported.count, failed: failed.count))
+        .init(provider: provider.id, source: source, refreshedAt: WorkflowTimestamps.string(now()), availableModelCount: availableCount, visionModelCount: usable.count, fixedModelCount: usable.filter { $0.fixed == true }.count, models: usable, pendingModelCount: pending.count, modelsEndpointAvailable: endpointAvailable, warning: warning, pendingModels: pending, unsupportedModelCount: unsupported.count, unsupportedModels: unsupported, failedModelCount: failed.count, failedModels: failed, statusCounts: .init(usable: usable.count, pending: pending.count, unsupported: unsupported.count, failed: failed.count))
     }
 
     private func manual(_ id: String, provider: ProviderDescriptor, status: ModelCapabilityStatus, verification: CustomProviderCapabilityVerification?) -> ModelData {

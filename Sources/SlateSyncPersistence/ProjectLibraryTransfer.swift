@@ -731,11 +731,9 @@ public enum ProjectLibraryTransfer {
     }
 
     private static func isTimestamp(_ value: String) -> Bool {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if formatter.date(from: value) != nil { return true }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value) != nil
+        // Shared formatters preserve the two-config try order: fractional
+        // first, then plain second-precision stamps.
+        PersistenceTimestamps.parse(value) != nil
     }
 
     private static func jsonObject(_ string: String) throws -> [String: Any]? {

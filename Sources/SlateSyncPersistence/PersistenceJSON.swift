@@ -59,9 +59,7 @@ enum PersistenceJSON {
     }
 
     static func timestamp(_ date: Date = Date()) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        PersistenceTimestamps.string(date, fractionalSeconds: true)
     }
 }
 
