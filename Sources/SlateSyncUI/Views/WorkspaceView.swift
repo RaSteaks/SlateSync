@@ -92,14 +92,14 @@ public struct WorkspaceView: View {
             }
         }
         .fileImporter(isPresented: $importsSlateCSV, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
-            do {
-                let url = try result.get()
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                let data = try Data(contentsOf: url)
-                guard let projectID = workspace.projectID else { return }
-                recognition.importSlateCSV(data, filename: url.lastPathComponent, projectID: projectID) { try await workspace.flush() }
-            } catch { recognition.report(error) }
+            Task {
+                do {
+                    let url = try result.get()
+                    let data = try await SecurityScopedFileReader.read(url)
+                    guard let projectID = workspace.projectID else { return }
+                    recognition.importSlateCSV(data, filename: url.lastPathComponent, projectID: projectID) { try await workspace.flush() }
+                } catch { recognition.report(error) }
+            }
         }
         .task {
             await recognition.loadOptions()

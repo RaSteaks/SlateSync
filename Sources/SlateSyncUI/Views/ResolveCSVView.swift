@@ -100,16 +100,13 @@ public struct ResolveCSVView: View {
             }
         }
         .fileImporter(isPresented: $importsCSV, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
-            guard case .success(let url) = result else {
-                if case .failure(let error) = result { model.report(error) }
-                return
+            Task {
+                do {
+                    let url = try result.get()
+                    let data = try await SecurityScopedFileReader.read(url)
+                    await model.importData(data, filename: url.lastPathComponent)
+                } catch { model.report(error) }
             }
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let data = try Data(contentsOf: url)
-                Task { await model.importData(data, filename: url.lastPathComponent) }
-            } catch { model.report(error) }
         }
         .fileExporter(
             isPresented: $exportsCSV,
