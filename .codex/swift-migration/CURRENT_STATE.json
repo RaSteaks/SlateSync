@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-09",
+  "updatedAt": "2026-09-10",
   "phase": "SM-09",
   "lifecycleState": "COMPLETE",
   "platform": {
@@ -27,18 +27,18 @@
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "4816fe4f888e70c728da340da525f80089f6f8ec",
+    "reviewCommit": "3015ce1a0fa540af4d60307e92e9e52d4dc827cb",
     "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-08T16:49:09.017737Z",
+    "approvedAt": "2026-09-09T17:01:58.831243Z",
     "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
     "approvable": true,
     "blockers": [],
-    "approvalStatement": "批准 SM09 按本地交付范围完成，接受远端 CI/保护配置延期，授权更新 COMPLETE 并提交治理记录。",
+    "approvalStatement": "Owner 批准路径一遗留修复（B1 共享 ISO8601 格式化器、B2 fileImporter 主线程读盘、B3 安装孙进程差集回收）并重新收束 SM-09：授权将批准重绑至 3015ce1，接受远端 CI/保护配置延期，复跑 Gate 以 COMPLETE 收束。",
     "scope": "local ad-hoc native candidate; no remote integration or public distribution"
   },
   "verification": {
     "swiftBuild": "passed",
-    "swiftTest": "237 executed, 236 passed, 1 dedicated offline Paddle skip, 0 failed",
+    "swiftTest": "320 executed, 318 passed, 2 skipped, 0 failed",
     "xcodeDebugBuild": "passed",
     "xcodeTestPlan": "11 passed, 0 failed, 0 skipped",
     "packagedUI": "9 passed, 0 failed, 0 skipped",
