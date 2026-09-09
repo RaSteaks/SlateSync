@@ -1,5 +1,37 @@
 # SlateSync 当前项目方案
 
+## 2026-09-09 CSV 导出守卫回归与验收流水线
+
+复盘 Gate 20260909T140705Z 的 7 项 FAIL：0e0f3e1 将非 Sendable 的
+Vision 对象（handler/request/results）生命周期整体固定进 performQueue
+闭包，仅回传 Sendable 结论，修复 forbidden_items、gate_self_tests 与
+sm09_native_contract 的 @unchecked Sendable 根因；3cc9f2e 让 phase
+state 校验数据驱动地接受终局阶段（无后继包文件）的 nextPackage=null，
+非终局阶段仍拒绝 null。
+
+打包 e2e 重冻结牵出真实生产缺陷：合并导出守卫误用 updatedRowCount，
+而整表位宽规范化（002→02）会把无匹配行也计为已更新，密封 SM-09
+旧任务（记录缺卷号/视频码）的合并导出因此静默成功并弹出保存面板。
+旧源码 public/csv-background-tasks.js export-resolve 有意以
+matchedRecordCount 判定（fps 回填不得掩盖卷号/视频码不匹配），
+c2bdfc7 据此改回 matchedRecordCount 并新增仅规范化场景的回归冻结。
+edf11e5 将 e2e 重冻结到保留 Worker 语义：CSV 场景改在旧任务上执行
+（Workspace.activate 自动选中首任务，其恢复记录缺卷号/视频码，合并
+导出必须报"没有匹配到可写入的完整记录"且不产出文件）；错误 Label 的
+AX label 为空、消息在 value（失败快照证据），见证改为读 static text
+value；独立导出冻结 <sheetTitle || 场记单>_场记识别.csv 命名与
+UTF-16LE BOM/CRLF/位宽字节（A001/002/03→001/02/03，未知 remark 键
+不入库故 Comments 为空）；保留新建任务与重开"2 个任务"断言。
+
+验证：swift test 311 通过、2 跳过、0 失败；swift build -Xswiftc
+-warnings-as-errors 通过；打包 e2e 定向 45.2s 通过（导入、报错见证、
+独立导出字节、退出重开）。已知环境限制：approval_freshness 将按设计
+FAIL——4816fe4 的 Owner 批准先于本轮修复提交，需 Owner 在新提交上
+重新批准后方可置 COMPLETE；sm09_packaged_ui 的 UI runner 依赖桌面与
+TCC 环境，历史上偶发键盘焦点 flake（见 2026-09-08 小节）。最终状态：
+SM-09 技术项全绿，终局以本提交（edf11e5 之后的干净树）上的 clean
+Gate 复核为准，结果落盘 .codex/gate-results/SM-09/。
+
 ## SM-09 测试退出与失败证据（2026-09-08）
 
 680424e clean Gate 共享 UI 11 项通过，打包 UI 8 项通过、CSV 1 项失败；
