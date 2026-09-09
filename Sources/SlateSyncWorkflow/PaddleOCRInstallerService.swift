@@ -39,11 +39,15 @@ public actor PaddleOCRInstallerService {
     public init(
         userDataRoot: URL,
         requirementsURL: URL,
-        runner: any PaddleInstallerCommandRunning = ProcessPaddleInstallerCommandRunner()
+        runner: (any PaddleInstallerCommandRunning)? = nil
     ) {
         self.userDataRoot = userDataRoot.standardizedFileURL
         self.requirementsURL = requirementsURL.standardizedFileURL
-        self.runner = runner
+        // KILL/TERM escalation reaps orphaned grandchildren by this managed
+        // root signature; injected runners (tests) keep their own behavior.
+        self.runner = runner ?? ProcessPaddleInstallerCommandRunner(
+            targetRoot: self.userDataRoot.resolvingSymlinksInPath().path
+        )
     }
 
     public func install(
@@ -266,8 +270,14 @@ public actor ProcessPaddleInstallerCommandRunner: PaddleInstallerCommandRunning 
     private var canceled = false
     private var generation = 0
     private var terminationDeadline: ContinuousClock.Instant?
+    private var stopRequested = false
+    /// Managed install root marking processes spawned by this command. Empty
+    /// (test doubles, injected runners) disables the differential sweep.
+    private let targetRoot: String
 
-    public init() {}
+    public init(targetRoot: String = "") {
+        self.targetRoot = targetRoot
+    }
 
     public func run(
         executable: URL,
@@ -278,9 +288,14 @@ public actor ProcessPaddleInstallerCommandRunner: PaddleInstallerCommandRunning 
     ) async throws -> PaddleInstallerCommandResult {
         guard process == nil else { throw SlateSyncError(code: "PADDLEOCR_INSTALL_BUSY", message: "安装命令正在运行") }
         canceled = false
+        stopRequested = false
         terminationDeadline = nil
         generation += 1
         let runGeneration = generation
+        // Differential baseline for orphan reaping: pip build isolation and
+        // similar tooling spawn grandchildren that neither TERM nor KILL of
+        // the direct child reaches.
+        let baseline = Self.livingProcessIDs()
         let child = Process(), output = Pipe(), errors = Pipe()
         child.executableURL = executable
         child.arguments = arguments
@@ -330,6 +345,13 @@ public actor ProcessPaddleInstallerCommandRunner: PaddleInstallerCommandRunning 
         // second synchronous run-loop wait from this cooperative executor.
         drain(output.fileHandleForReading.fileDescriptor, into: &stdout)
         drain(errors.fileHandleForReading.fileDescriptor, into: &stderr)
+        // A stop we initiated may have left the direct child's own children
+        // running (reparented to launchd); TERM often kills a cooperative
+        // child before the KILL deadline, so the sweep rides the stop, not
+        // the escalation alone.
+        if stopRequested {
+            Self.reapSpawnedDescendants(baseline: baseline, excluding: child.processIdentifier, targetRoot: targetRoot)
+        }
         if timedOut {
             throw SlateSyncError(code: "PADDLEOCR_INSTALL_TIMEOUT", message: "PaddleOCR 安装命令超时", retryable: true)
         }
@@ -353,8 +375,71 @@ public actor ProcessPaddleInstallerCommandRunner: PaddleInstallerCommandRunning 
 
     private func requestStop(_ child: Process) {
         guard child.isRunning, terminationDeadline == nil else { return }
+        stopRequested = true
         _ = Darwin.kill(child.processIdentifier, SIGTERM)
         terminationDeadline = ContinuousClock.now.advanced(by: .seconds(2))
+    }
+
+    /// Kills only processes that appeared after the pre-spawn baseline and
+    /// reference the managed root in their executable path or arguments;
+    /// unrelated processes launched during the install are left alone, and a
+    /// process we cannot read is skipped — a missed orphan is better than a
+    /// killed bystander.
+    private nonisolated static func reapSpawnedDescendants(baseline: Set<pid_t>, excluding directChild: pid_t, targetRoot: String) {
+        guard !targetRoot.isEmpty else { return }
+        for pid in livingProcessIDs() where pid != directChild && !baseline.contains(pid) {
+            if referencesTargetRoot(pid, targetRoot: targetRoot) {
+                _ = Darwin.kill(pid, SIGKILL)
+            }
+        }
+    }
+
+    private nonisolated static func livingProcessIDs() -> Set<pid_t> {
+        var capacity = Int(proc_listallpids(nil, 0))
+        guard capacity > 0 else { return [] }
+        capacity += 16
+        var pids = [pid_t](repeating: 0, count: capacity)
+        let count = proc_listallpids(&pids, Int32(capacity * MemoryLayout<pid_t>.stride))
+        guard count > 0 else { return [] }
+        return Set(pids.prefix(Int(count)).filter { $0 > 0 })
+    }
+
+    // libproc's PROC_PIDPATHINFO_MAXSIZE macro does not surface in Swift.
+    private nonisolated static let pidPathInfoMaxSize = 4 * 1024
+
+    private nonisolated static func referencesTargetRoot(_ pid: pid_t, targetRoot: String) -> Bool {
+        var path = [CChar](repeating: 0, count: pidPathInfoMaxSize)
+        guard proc_pidpath(pid, &path, UInt32(pidPathInfoMaxSize)) > 0 else { return false }
+        if String(cString: path).hasPrefix(targetRoot) { return true }
+        return arguments(of: pid).contains { $0.contains(targetRoot) }
+    }
+
+    /// KERN_PROCARGS2 layout: argument count, executable path, padding NULs,
+    /// then the argv strings. Anything inconsistent returns empty so the
+    /// caller skips the process instead of guessing.
+    private nonisolated static func arguments(of pid: pid_t) -> [String] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, u_int(mib.count), nil, &size, nil, 0) == 0,
+              size > MemoryLayout<Int32>.size else { return [] }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, u_int(mib.count), &buffer, &size, nil, 0) == 0,
+              size > MemoryLayout<Int32>.size else { return [] }
+        let argc = buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
+        guard argc > 0, argc < 4096 else { return [] }
+        var index = MemoryLayout<Int32>.size
+        while index < size, buffer[index] != 0 { index += 1 }
+        while index < size, buffer[index] == 0 { index += 1 }
+        var values: [String] = []
+        values.reserveCapacity(Int(argc))
+        for _ in 0..<argc {
+            let start = index
+            while index < size, buffer[index] != 0 { index += 1 }
+            guard index < size else { return [] }
+            values.append(String(decoding: buffer[start..<index], as: UTF8.self))
+            index += 1
+        }
+        return values
     }
 
     private func drain(_ descriptor: Int32, into data: inout Data) {

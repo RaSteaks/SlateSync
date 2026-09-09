@@ -893,6 +893,65 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertEqual(Darwin.kill(pid, 0), -1, "返回前必须回收实际子进程")
         XCTAssertEqual(errno, ESRCH)
     }
+
+    func testRealInstallerRunnerStopReapsSpawnedGrandchild() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "SM08Grandchild-\(UUID())", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Only shell builtins and sleep run: no network, production Python, or
+        // user files. The grandchild carries the managed-root signature the
+        // way pip build-isolation pythons carry the venv path, and survives
+        // TERM of the direct child — exactly the orphan shape the sweep owns.
+        let grandchild = root.appending(path: "grandchild.sh")
+        try "#!/bin/sh\nwhile :; do sleep 0.2; done\n".write(to: grandchild, atomically: true, encoding: .utf8)
+        let child = root.appending(path: "child.sh")
+        try "#!/bin/sh\n\"\(grandchild.path)\" &\nwait\n".write(to: child, atomically: true, encoding: .utf8)
+        for script in [grandchild, child] {
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        }
+        let signature = root.resolvingSymlinksInPath().path
+        let runner = ProcessPaddleInstallerCommandRunner(targetRoot: signature)
+
+        let task = Task {
+            try await runner.run(executable: child, arguments: [], directory: root,
+                environment: ["PATH": "/usr/bin:/bin"], timeout: .seconds(30))
+        }
+        // The grandchild must be alive before cancel so the witness is real.
+        for _ in 0..<100 where Self.pids(matching: signature).count < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThanOrEqual(Self.pids(matching: signature).count, 2, "子进程与孙进程必须都在运行")
+        task.cancel()
+        do { _ = try await task.value; XCTFail("取消不可返回成功") }
+        catch let error as SlateSyncError {
+            XCTAssertEqual(error.code, "PADDLEOCR_INSTALL_CANCELED")
+        }
+        // The reaped grandchild is not a Foundation child and cannot be
+        // joined; poll until the whole signature set is gone. The final
+        // assertion re-checks fresh, so an early empty poll cannot mask a
+        // surviving orphan.
+        for _ in 0..<25 where !Self.pids(matching: signature).isEmpty {
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        XCTAssertEqual(Self.pids(matching: signature), [], "发起停止后必须回收派生的孙进程")
+    }
+
+    private static func pids(matching signature: String) -> [String] {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        process.arguments = ["-f", signature]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do { try process.run() } catch { return ["unavailable"] }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return [] }
+        return String(decoding: data, as: UTF8.self)
+            .split(whereSeparator: \.isNewline).map(String.init)
+    }
 }
 
 /// The production progress callback is synchronous. A Mutex-backed collector
