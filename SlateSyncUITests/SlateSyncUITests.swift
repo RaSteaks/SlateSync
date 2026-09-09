@@ -262,25 +262,54 @@ final class SlateSyncUITests: XCTestCase {
         project.click()
         app.buttons["打开"].firstMatch.click()
         XCTAssertTrue(app.buttons.matching(identifier: "task.create").firstMatch.waitForExistence(timeout: 8))
-        app.typeKey("n", modifierFlags: .command)
+        // Workspace.activate selects and loads the project's first task — the
+        // frozen v1 task — so the CSV scenario below runs against its restored
+        // recognition records, the same state the old renderer exported from.
         let csvTab = app.radioButtons["Resolve CSV"].firstMatch
         XCTAssertTrue(csvTab.waitForExistence(timeout: 5))
         csvTab.click()
         app.buttons["导入 CSV…"].firstMatch.click()
         choosePanelPath(input.path, app: app)
+        // Retained Worker fail-closed boundary (public/resolve-csv.js
+        // export-resolve): the frozen legacy record carries no 卷号/视频码, so
+        // its material key is missing-key, matchedRecordCount stays 0 and no
+        // manual edits exist. Merged export must surface the retained
+        // CSV_NO_EXPORT error instead of silently exporting the raw table.
+        // SwiftUI renders the failure Label as a static text whose
+        // accessibility label is empty and whose value carries the message,
+        // so the witness reads the value.
+        let missing = "没有匹配到可写入的完整记录"
         let export = app.buttons["导出 CSV…"].firstMatch
         expectation(for: NSPredicate { _, _ in export.exists && export.isEnabled }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
         export.click()
-        choosePanelPath(outputDirectory.path, app: app)
-        let output = outputDirectory.appending(path: "source.csv")
-        expectation(for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: output.path) }, evaluatedWith: app)
+        let surfaced = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", missing, missing)
+        ).firstMatch
+        XCTAssertTrue(surfaced.waitForExistence(timeout: 8), "合并导出必须保留 CSV_NO_EXPORT 报错")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputDirectory.appending(path: "source.csv").path))
+        // Standalone export keeps the old <sheetTitle || 场记单>_场记识别.csv
+        // naming. The sealed v1 result carries no sheetTitle, so the fallback
+        // applies, and its unknown "remark" key stays outside the retained
+        // schema, leaving Comments empty.
+        let standalone = app.buttons["独立导出…"].firstMatch
+        expectation(for: NSPredicate { _, _ in standalone.exists && standalone.isEnabled }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
-        // The retained export contract canonicalizes Shot 002 to 02 while
-        // preserving CRLF and the final newline. The import source stays raw.
-        let expectedExport = Data("File Name,Scene,Shot,Take\r\nA001C001.mov,87A,02,03\r\n".utf8)
-        XCTAssertEqual(String(decoding: try Data(contentsOf: output), as: UTF8.self), String(decoding: expectedExport, as: UTF8.self))
+        standalone.click()
+        choosePanelPath(outputDirectory.path, app: app)
+        let standaloneOutput = outputDirectory.appending(path: "场记单_场记识别.csv")
+        expectation(for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: standaloneOutput.path) }, evaluatedWith: app)
+        waitForExpectations(timeout: 8)
+        // The retained standalone contract canonicalizes the legacy record
+        // {scene A001, shot 002, take 03} to scene width 3 and shot width 2,
+        // preserving the UTF-16LE BOM, CRLF and the final newline. The import
+        // source stays raw.
+        let expectedStandalone = Data("\u{FEFF}Scene,Shot,Take,Comments\r\n001,02,03,\r\n".data(using: .utf16LittleEndian)!)
+        XCTAssertEqual(try Data(contentsOf: standaloneOutput), expectedStandalone)
         XCTAssertEqual(try Data(contentsOf: input), bytes)
+        // The migrated library must still accept a brand-new task; creation
+        // persists it immediately, so the relaunch below sees both rows.
+        app.typeKey("n", modifierFlags: .command)
         app.typeKey("s", modifierFlags: .command)
         app.typeKey("q", modifierFlags: .command)
         expectation(for: NSPredicate { _, _ in app.state == .notRunning }, evaluatedWith: app)
