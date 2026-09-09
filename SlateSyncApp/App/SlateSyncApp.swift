@@ -205,24 +205,14 @@ private struct SlateSyncWindowRoot: View {
             settingsRevision: globalSettings.revision
         )
         .task {
-            workspace.permitsNewOperation = { [weak termination] in
-                guard let termination else { return false }
-                return !termination.isDraining && !termination.isMutatingLibrary && !termination.restartRequired
-            }
+            // Per-feature admission: independent editors stay usable while
+            // recognition runs; only CSV import waits for it.
+            workspace.permitsNewOperation = WindowAdmission.shared(termination)
             workspace.didFailRuntimeClose = termination.requireRestart
-            csv.permitsNewOperation = { [weak termination, weak recognition] in
-                guard let termination, let recognition else { return false }
-                return !recognition.operation.isRunning && !termination.isDraining && !termination.isMutatingLibrary && !termination.restartRequired
-            }
-            // Picker completions and drag/drop reach models independently of
-            // Form.disabled, so every input owner shares the same admission.
-            media.permitsNewOperation = csv.permitsNewOperation
-            metadata.permitsNewOperation = csv.permitsNewOperation
-            recognition.permitsNewOperation = { [weak termination, weak workspace] in
-                guard let termination, let workspace else { return false }
-                return !workspace.isTransitioning && !termination.isDraining &&
-                    !termination.isMutatingLibrary && !termination.restartRequired
-            }
+            csv.permitsNewOperation = WindowAdmission.csv(termination, recognition: recognition)
+            media.permitsNewOperation = WindowAdmission.media(termination)
+            metadata.permitsNewOperation = WindowAdmission.metadata(termination)
+            recognition.permitsNewOperation = WindowAdmission.recognition(termination, workspace: workspace)
             projects.mutationCoordinator = termination.performLibraryMutation
             projects.didChangeLibrary = { await termination.refreshProjects(activeIDs: $0) }
             projects.didRequireRestart = termination.requireRestart
