@@ -747,7 +747,7 @@ final class SM08OwnershipTests: XCTestCase {
         let workspace = WorkspaceModel(service: service)
         try await workspace.activate(projectID: "p1")
         let csv = ResolveCSVModel(service: service)
-        csv.onTableChange = { [weak workspace] in workspace?.stageCSV($0, filename: $1) }
+        csv.onTableChange = { [weak workspace] in workspace?.stageCSV($0.table, filename: $0.filename, edits: $0.edits, rawBase64: $0.rawBase64) }
         await csv.importData(Data(), filename: "Resolve.csv")
         let old = CSVCellCommit(tableID: csv.tableID, rowID: 9_999, columnID: 1, revision: csv.revision, value: "保留末行")
         csv.receive(old)
@@ -1337,7 +1337,7 @@ extension SM08OwnershipTests {
         let gate = SM08TestGate()
         let csv = ResolveCSVModel(service: WorkspaceFake(rowCount: 10_000, decodeGate: gate))
         var publications = 0
-        csv.onTableChange = { _, _ in publications += 1 }
+        csv.onTableChange = { _ in publications += 1 }
         let decode = Task { await csv.importData(Data(), filename: "large.csv") }
         await gate.entered()
         var drained = false
@@ -1734,7 +1734,7 @@ extension SM08OwnershipTests {
         let csv = ResolveCSVModel(service: WorkspaceFake(rowCount: 1))
         await csv.importData(Data(), filename: "测试.csv")
         var writes = 0
-        csv.onTableChange = { _, _ in writes += 1 }
+        csv.onTableChange = { _ in writes += 1 }
         let edit = CSVCellCommit(tableID: csv.tableID, rowID: 0, columnID: 1, revision: csv.revision, value: "中文校对")
         csv.receive(edit)
         csv.receive(edit)

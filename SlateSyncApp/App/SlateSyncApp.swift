@@ -231,7 +231,9 @@ private struct SlateSyncWindowRoot: View {
                 try csv?.flushEditor?()
                 try recognition?.flushEditor?()
             }
-            csv.onTableChange = { [weak workspace] table, filename in workspace?.stageCSV(table, filename: filename) }
+            csv.onTableChange = { [weak workspace] snapshot in
+                workspace?.stageCSV(snapshot.table, filename: snapshot.filename, edits: snapshot.edits, rawBase64: snapshot.rawBase64)
+            }
             media.onPrepared = { [weak workspace] document in workspace?.stageMedia(document) }
             metadata.onResult = { [weak workspace] result, name in workspace?.stageMetadata(result, directoryName: name) }
             projectSettings.onSaved = { [weak workspace] in workspace?.adoptProjectSettings($0) }

@@ -160,7 +160,10 @@ public protocol MediaInputWorkflowServing: Sendable {
 }
 
 public protocol ResolveExportWorkflowServing: Sendable {
-    func mergeResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async throws -> ResolveExportArtifact
+    /// Merged export mirrors the retained Worker's `export-resolve`: the
+    /// source stays the retained raw table, and manual sparse edits are
+    /// applied after the recognition merge, last and byte-for-byte.
+    func mergeResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveExportArtifact
     func exportStandalone(records: [ResolveSlateRecord], settings: ProjectSettings.ResolveSettings) async throws -> Data
 }
 

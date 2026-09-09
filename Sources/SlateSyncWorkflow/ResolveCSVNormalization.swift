@@ -262,7 +262,14 @@ public enum ResolveCSVNormalization {
     }
 
     static func normalizeHeader(_ value: String) -> String {
-        clean(value).lowercased().replacingOccurrences(of: #"[\s_-]+"#, with: "", options: .regularExpression)
+        // Frozen old normalizeHeader (public/resolve-csv.js): trim, lowercase,
+        // strip whitespace/underscore/hyphen runs. JS trim() and \s cover
+        // U+FEFF and U+3000, but there is no NFKC — a full-width header like
+        // "Ｓｃｅｎｅ" must stay unmatched instead of colliding with a real
+        // "Scene" column and tripping CSV_COLUMNS duplicate detection.
+        let trimSet = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
+        return value.trimmingCharacters(in: trimSet).lowercased()
+            .replacingOccurrences(of: "[\\s\\x{FEFF}_-]+", with: "", options: .regularExpression)
     }
 
     static func firstMatch(_ pattern: String, in value: String, caseInsensitive: Bool = false) -> [String]? {

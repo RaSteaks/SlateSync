@@ -7,6 +7,7 @@ public struct ResolveCSVView: View {
     @State private var importsCSV = false
     @State private var exportsCSV = false
     @State private var exportDocument = CSVDocument(data: Data())
+    @State private var exportDefaultName = "Resolve.csv"
     private let recognition: RecognitionModel?
     private let workspace: WorkspaceModel?
 
@@ -35,6 +36,9 @@ public struct ResolveCSVView: View {
                         Task {
                             do {
                                 try await workspace.flush()
+                                // Old naming: <baseName(sheetTitle || 场记单)>_场记识别.csv.
+                                exportDefaultName = ResolveCSVModel.suggestedFilename(
+                                    recognition.result?.result.sheetTitle, fallback: "场记单", suffix: "场记识别")
                                 exportDocument = CSVDocument(data: try await model.standaloneData(records: recognition.resolveRecords, settings: workspace.projectSettings.resolve))
                                 exportsCSV = true
                             } catch { model.report(error) }
@@ -44,8 +48,22 @@ public struct ResolveCSVView: View {
                 Button("导出 CSV…", systemImage: "square.and.arrow.up") {
                     Task {
                         do {
-                            let data = try await model.encodedData()
-                            exportDocument = CSVDocument(data: data)
+                            if let recognition, let workspace {
+                                try await workspace.flush()
+                                // Canonical merged export: re-merge from the raw
+                                // table with the latest records, apply manual
+                                // edits last, canonicalize the whole table.
+                                // Old naming: <baseName(metadataFile)>_场记已回填.csv.
+                                exportDefaultName = ResolveCSVModel.suggestedFilename(
+                                    model.filename, fallback: "Resolve", suffix: "场记已回填")
+                                exportDocument = CSVDocument(data: try await model.exportData(
+                                    records: recognition.resolveRecords,
+                                    metadata: workspace.selectedTask?.slateMetadata ?? [],
+                                    settings: workspace.projectSettings.resolve))
+                            } else {
+                                exportDefaultName = model.filename ?? "Resolve.csv"
+                                exportDocument = CSVDocument(data: try await model.encodedData())
+                            }
                             exportsCSV = true
                         } catch { model.report(error) }
                     }
@@ -97,7 +115,7 @@ public struct ResolveCSVView: View {
             isPresented: $exportsCSV,
             document: exportDocument,
             contentType: .commaSeparatedText,
-            defaultFilename: model.filename ?? "Resolve.csv"
+            defaultFilename: exportDefaultName
         ) { result in
             switch result {
             case .success: model.exported()

@@ -262,9 +262,9 @@ public final class WorkspaceModel {
         enqueue(snapshot, delay: .milliseconds(250))
     }
 
-    public func stageCSV(_ table: ResolveCSVTable, filename: String?) {
+    public func stageCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?) {
         guard let selectedTask else { return }
-        let snapshot = selectedTask.replacingCSV(table, filename: filename)
+        let snapshot = selectedTask.replacingCSV(table, filename: filename, edits: edits, rawBase64: rawBase64)
         self.selectedTask = snapshot
         enqueue(snapshot, delay: .milliseconds(250))
     }
@@ -403,8 +403,8 @@ private extension TaskData {
         replacing(customPrompt: customPrompt, editedRecords: editedRecords)
     }
 
-    func replacingCSV(_ table: ResolveCSVTable, filename: String?) -> TaskData {
-        replacing(customPrompt: customPrompt, editedRecords: editedRecords, csv: table, csvFilename: filename)
+    func replacingCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String]? = nil, rawBase64: String? = nil) -> TaskData {
+        replacing(customPrompt: customPrompt, editedRecords: editedRecords, csv: table, csvFilename: filename, csvEdits: edits, csvRawBase64: rawBase64)
     }
 
     func replacingMedia(_ document: PreparedDocument) -> TaskData {
@@ -437,6 +437,8 @@ private extension TaskData {
         editedRecords: [PersistedRecognitionRecord]?,
         csv: ResolveCSVTable? = nil,
         csvFilename: String? = nil,
+        csvEdits: [String: String]? = nil,
+        csvRawBase64: String? = nil,
         media: PreparedDocument? = nil,
         scan: ScanResult? = nil,
         directoryName: String? = nil,
@@ -457,10 +459,10 @@ private extension TaskData {
             fileSize: fileSize,
             pageCount: media?.pages.count ?? pageCount,
             imageDataGroups: media?.pages.map { $0.views.map { $0.image.dataURL } } ?? imageDataGroups,
-            resolveCsvBase64: resolveCsvBase64,
+            resolveCsvBase64: csvRawBase64 ?? resolveCsvBase64,
             resolveCsvFilename: csvFilename ?? resolveCsvFilename,
             resolveCsvTable: csv ?? resolveCsvTable,
-            resolveCsvEdits: resolveCsvEdits,
+            resolveCsvEdits: csvEdits ?? resolveCsvEdits,
             slateMetadata: scan?.metadata.map {
                 PersistedSlateMetadata(materialKey: $0.materialKey, sourceName: $0.sourceName,
                     clipName: $0.clipName, sensorFps: $0.sensorFps, shootDay: $0.shootDay)
