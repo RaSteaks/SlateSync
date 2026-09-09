@@ -266,6 +266,7 @@ private struct SlateSyncWindowRoot: View {
                 metadata: metadata,
                 media: media,
                 settings: projectSettings,
+                logs: logs,
                 refresh: { [weak workspace, weak session, weak projects] activeIDs in
                     if let id = workspace?.projectID, !activeIDs.contains(id) {
                         await workspace?.deactivate()
@@ -277,16 +278,11 @@ private struct SlateSyncWindowRoot: View {
         }
         .background {
             // The adapter vetoes close before the view disappears. On failure
-            // the registered window still owns its draft and can retry.
+            // the registered window still owns its draft and can retry. The
+            // coordinator owns the whole teardown order; the window only
+            // passes its identity.
             WindowLifecycleBridge(close: {
-                guard !termination.isDraining, !termination.isMutatingLibrary else {
-                    throw SlateSyncError(code: "LIBRARY_BUSY", message: "项目库正在更新，请稍后关闭窗口", retryable: true)
-                }
-                try await projectSettings.flushIfNeeded()
-                try await workspace.close()
-                await csv.drain()
-                logs.stopPolling()
-                await termination.unregisterWindow(id: windowID)
+                try await termination.closeWindow(id: windowID)
             }, failure: termination.reportCloseFailure, visibility: logs.setWindowVisible)
                 .frame(width: 0, height: 0)
         }
