@@ -154,6 +154,16 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
 
     private func performBootstrap() async throws {
         try SecureFilePermissions.prepareDirectory(at: root)
+        // Every open of the Library re-runs the symlink boundary: the root is
+        // canonicalized, then the Projects root must resolve back inside it
+        // before anything is prepared or read beneath it.
+        let canonicalRoot = try LibraryBoundary.validateRoot(root)
+        try LibraryBoundary.validateInterior(
+            projectsRoot,
+            canonicalRoot: canonicalRoot,
+            code: "LIBRARY_PATH_INVALID",
+            message: "项目库内存在指向外部的链接，已拒绝访问"
+        )
         try SecureFilePermissions.prepareDirectory(at: projectsRoot)
         try await SQLiteV1.bootstrapLibrary(database)
         try await cleanupStagedProjectDirectories()
@@ -452,9 +462,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         let defaultProject = try await ensureDefaultProject()
         guard let defaultRow = try await projectRow(defaultProject.id) else { throw missingProject() }
         let projectDirectory = try checkedProjectDirectory(defaultRow)
-        let target = try SQLiteDatabase(
-            url: projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
-        )
+        let target = try SQLiteDatabase(url: checkedProjectDatabaseURL(projectDirectory))
         try await SQLiteV1.bootstrapProject(target)
         var counts = LegacyMigrationReport.Counts()
         let sourceURL = legacyRoot.appending(path: SQLiteV1.legacyDatabaseFilename)
@@ -638,7 +646,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         let projectDirectory = try checkedProjectDirectory(row)
         var taskCount = 0
         var latestTaskAt: String?
-        let projectDatabaseURL = projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
+        let projectDatabaseURL = try checkedProjectDatabaseURL(projectDirectory)
         if FileManager.default.fileExists(atPath: projectDatabaseURL.path) {
             let projectDatabase = try SQLiteDatabase(url: projectDatabaseURL)
             do {
@@ -675,9 +683,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             throw SlateSyncError(code: "PROJECT_INVALID", message: "项目索引记录不完整")
         }
         let projectDirectory = try checkedProjectDirectory(row)
-        let projectDatabase = try SQLiteDatabase(
-            url: projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
-        )
+        let projectDatabase = try SQLiteDatabase(url: checkedProjectDatabaseURL(projectDirectory))
         do {
             try await SQLiteV1.bootstrapProject(projectDatabase)
             let settings = try await readProjectSettings(projectDatabase)
@@ -705,9 +711,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             bindings: [archivedAt, now, projectID]
         )
         let projectDirectory = try checkedProjectDirectory(row)
-        let projectDatabase = try SQLiteDatabase(
-            url: projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
-        )
+        let projectDatabase = try SQLiteDatabase(url: checkedProjectDatabaseURL(projectDirectory))
         do {
             try await SQLiteV1.bootstrapProject(projectDatabase)
             let encoded = archivedAt.map { "\"\($0)\"" } ?? "null"
@@ -737,9 +741,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         updatedAt: String,
         archivedAt: String?
     ) async throws {
-        let projectDatabase = try SQLiteDatabase(
-            url: directory.appending(path: SQLiteV1.projectDatabaseFilename)
-        )
+        let projectDatabase = try SQLiteDatabase(url: checkedProjectDatabaseURL(directory))
         do {
             try await SQLiteV1.bootstrapProject(projectDatabase)
             let settingsJSON = try PersistenceJSON.string(
@@ -825,7 +827,21 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         guard candidate.path.hasPrefix(boundary) else {
             throw SlateSyncError(code: "PROJECT_PATH_INVALID", message: "项目路径不在当前 Project Library 中")
         }
+        // Symlink resolution against the canonicalized root and Projects root:
+        // an existing candidate reached through an interior link that lands
+        // outside the Library fails closed instead of being read or written.
+        let canonicalRoot = try LibraryBoundary.validateRoot(root)
+        try LibraryBoundary.validateInterior(candidate, canonicalRoot: canonicalRoot)
         return candidate
+    }
+
+    /// Project databases are opened only through this check so a swapped
+    /// `project.sqlite` symlink cannot point SQLite outside the Library.
+    private func checkedProjectDatabaseURL(_ projectDirectory: URL) throws -> URL {
+        let url = projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
+        let canonicalRoot = try LibraryBoundary.validateRoot(root)
+        try LibraryBoundary.validateInterior(url, canonicalRoot: canonicalRoot)
+        return url
     }
 
     private func loadOrCreateLibraryManifest() throws -> LibraryV1Manifest {
