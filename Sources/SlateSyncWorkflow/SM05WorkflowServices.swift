@@ -39,7 +39,11 @@ public actor SM05WorkflowServices {
         // Match export-resolve: manual edits may make an otherwise unchanged
         // merge exportable, but an empty recognition list is never exportable.
         // ResolveSparseEdit is the typed equivalent of a normalized JS edit.
-        guard !records.isEmpty, result.updatedRowCount > 0 || !edits.isEmpty else {
+        // The old guard counts matchedRecordCount on purpose — never
+        // updatedRowCount: whole-table width canonicalization and slate
+        // sidecar backfills rewrite rows without any record matching, and
+        // must not mask a 卷号/视频码 mismatch.
+        guard !records.isEmpty, result.matchedRecordCount > 0 || !edits.isEmpty else {
             throw SlateSyncError(code: "CSV_NO_EXPORT", message: "没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。")
         }
         try Task.checkCancellation()

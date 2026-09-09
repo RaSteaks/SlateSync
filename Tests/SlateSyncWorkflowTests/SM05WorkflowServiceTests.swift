@@ -52,6 +52,18 @@ final class SM05WorkflowServiceTests: XCTestCase {
                 records: [.init(cardNumber: "A001", videoCode: "C999", scene: "1", shot: "1", take: "1")]
             )
         )
+        // Old export-resolve judges matchedRecordCount on purpose: a record
+        // whose missing 卷号/视频码 matches nothing must fail the export even
+        // though whole-table width canonicalization would still rewrite the
+        // shot cell (002 → 02) and mark the row as updated.
+        let canonicalizable = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,87A,002,03\r\n"
+        await XCTAssertSM05Error(
+            "CSV_NO_EXPORT",
+            try await services.mergeAndEncode(
+                source: Data(canonicalizable.utf8),
+                records: [.init(cardNumber: nil, videoCode: nil, scene: "A001", shot: "002", take: "03")]
+            )
+        )
         let editedOnly = try await services.mergeAndEncode(
             source: source,
             records: [.init(cardNumber: "A001", videoCode: "C999", scene: "1", shot: "1", take: "1")],
