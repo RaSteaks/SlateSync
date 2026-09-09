@@ -201,19 +201,34 @@ public actor SlateSyncWorkflowFacade:
 
     public func restoreInput(groups: [[String]], filename: String) async throws -> PreparedDocument {
         guard !groups.isEmpty, groups.count <= MediaPreparationService.maximumPages else { throw MediaFailure.invalidInput }
+        // V1 persisted tasks contain data URLs but no pixel dimensions. Exact
+        // restore decodes every persisted data URL through Media and rebuilds
+        // all views in order — original JPEG bytes, view order and view type
+        // survive a reopen instead of re-cropping and re-compressing each
+        // page's first image. No UI parser or raw PDF compatibility shortcut
+        // exists.
+        if PreparedDocumentRestore.isLegacySingleView(groups) {
+            // Legacy tasks saved only one full image per page; keep their
+            // bounded re-preparation fallback so crops and core-detail views
+            // regenerate exactly as before exact restore existed.
+            var pages: [PreparedMediaPage] = []
+            for (index, group) in groups.enumerated() {
+                try Task.checkCancellation()
+                let data = try PreparedDocumentRestore.jpegData(group.first)
+                let decoded = try await prepareInput(.bytes(data, filename: filename))
+                guard let page = decoded.pages.first else { throw MediaFailure.invalidInput }
+                pages.append(.init(pageNumber: index + 1, views: page.views))
+            }
+            return .init(filename: filename, pages: pages)
+        }
         var pages: [PreparedMediaPage] = []
-        // V1 persisted tasks contain data URLs but no pixel dimensions. Decode
-        // each full-page JPEG through Media to validate it and restore the
-        // bounded views; no UI parser or raw PDF compatibility shortcut exists.
         for (index, group) in groups.enumerated() {
             try Task.checkCancellation()
-            guard let first = group.first, first.hasPrefix("data:image/jpeg;base64,"),
-                  let data = Data(base64Encoded: String(first.dropFirst("data:image/jpeg;base64,".count))) else { throw MediaFailure.invalidInput }
-            let decoded = try await prepareInput(.bytes(data, filename: filename))
-            guard let page = decoded.pages.first else { throw MediaFailure.invalidInput }
-            pages.append(.init(pageNumber: index + 1, views: page.views))
+            pages.append(.init(pageNumber: index + 1, views: try PreparedDocumentRestore.views(group)))
         }
-        return .init(filename: filename, pages: pages)
+        let document = PreparedDocument(filename: filename, pages: pages)
+        try document.validate()
+        return document
     }
 
     public func mergeResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveExportArtifact {
