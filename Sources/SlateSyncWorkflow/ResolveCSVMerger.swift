@@ -28,7 +28,8 @@ public actor ResolveCSVMerger {
         metadata: [PersistedSlateMetadata] = [],
         fieldFormats: ResolveFieldFormats = .init(),
         comments: ResolveComments = .init(),
-        edits: [ResolveSparseEdit] = []
+        edits: [ResolveSparseEdit] = [],
+        knownAnomalyKeys: Set<String> = []
     ) throws -> ResolveMergeResult {
         try fieldFormats.validate()
         try comments.validate()
@@ -238,7 +239,7 @@ public actor ResolveCSVMerger {
             rowKeys: rowKeys,
             missingCameraFPSKeys: orderedMissingFPS,
             missingShootDayKeys: orderedMissingDay,
-            sequenceAnomalies: try sequenceAnomalies(records)
+            sequenceAnomalies: try sequenceAnomalies(records, excluding: knownAnomalyKeys)
         )
     }
 
@@ -267,49 +268,15 @@ public actor ResolveCSVMerger {
         return (index.keys.sorted(by: ResolveCSVNormalization.compareMaterialKeys), warnings)
     }
 
-    public func sequenceAnomalies(_ records: [ResolveSlateRecord]) throws -> [SlateSequenceAnomaly] {
-        struct Entry { let record: ResolveSlateRecord; let index: Int; let clip: Int; let reel: String }
-        let entries = records.enumerated().compactMap { index, record -> Entry? in
-            guard let card = ResolveCSVNormalization.parseCardNumber(record.cardNumber),
-                  let clip = Int(ResolveCSVNormalization.normalizeClipNumber(record.videoCode).dropFirst()) else { return nil }
-            return Entry(record: record, index: index, clip: clip, reel: "\(card.camera)\(card.reel)")
-        }
-        var result: [SlateSequenceAnomaly] = []
-        let groups = Dictionary(grouping: entries, by: \.reel)
-        var reelOrder: [String] = []
-        var seenReels = Set<String>()
-        for entry in entries where seenReels.insert(entry.reel).inserted { reelOrder.append(entry.reel) }
-        for reel in reelOrder {
-            guard let group = groups[reel] else { continue }
-            let ordered = group.sorted { $0.clip == $1.clip ? $0.index < $1.index : $0.clip < $1.clip }
-            for pairIndex in 1..<ordered.count {
-                let previous = ordered[pairIndex - 1]
-                let current = ordered[pairIndex]
-                let key = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: current.record.cardNumber, videoCode: current.record.videoCode)
-                if current.clip > previous.clip + 1 {
-                    let missingCount = current.clip - previous.clip - 1
-                    var labels = (previous.clip + 1..<current.clip).prefix(5).map { "C\(String(format: "%03d", $0))" }
-                    if missingCount > 5 { labels.append("等 \(missingCount) 条") }
-                    result.append(SlateSequenceAnomaly(key: key, type: "clip-gap", message: "条号从 C\(String(format: "%03d", previous.clip)) 断档到 C\(String(format: "%03d", current.clip))，缺少 \(labels.joined(separator: "、"))，可能漏 \(missingCount) 条"))
-                    continue
-                }
-                guard let previousScene = previous.record.scene, !previousScene.isEmpty,
-                      let currentScene = current.record.scene, !currentScene.isEmpty, previousScene == currentScene,
-                      let previousTake = Self.unsignedInteger(previous.record.take), let currentTake = Self.unsignedInteger(current.record.take),
-                      let previousShot = Self.unsignedInteger(previous.record.shot), let currentShot = Self.unsignedInteger(current.record.shot),
-                      Set(current.record.reviewRequiredFields).isDisjoint(with: ["scene", "shot", "take"]) else { continue }
-                if previousShot == currentShot, currentTake == previousTake {
-                    result.append(SlateSequenceAnomaly(key: key, type: "take-sequence", message: "与上一条同为 \(currentScene) \(current.record.shot ?? "") 镜 \(currentTake) 次，次序可能重复"))
-                } else if previousShot == currentShot, currentTake > previousTake + 1 {
-                    result.append(SlateSequenceAnomaly(key: key, type: "take-sequence", message: "\(currentScene) \(current.record.shot ?? "") 镜的次从 \(previousTake) 跳到 \(currentTake)，中间可能漏 \(currentTake - previousTake - 1) 条"))
-                } else if previousShot == currentShot, currentTake < previousTake {
-                    result.append(SlateSequenceAnomaly(key: key, type: "take-sequence", message: "\(currentScene) \(current.record.shot ?? "") 镜的次从 \(previousTake) 回落到 \(currentTake)"))
-                } else if previousShot != currentShot, currentTake > 1 {
-                    result.append(SlateSequenceAnomaly(key: key, type: "take-sequence", message: "进入 \(currentScene) \(current.record.shot ?? "") 镜的第一条次为 \(currentTake)，通常应从 1 开始"))
-                }
-            }
-        }
-        return result
+    /// Delegates to the shared detector so export and recognition can never
+    /// drift apart. `knownAnomalyKeys` carries the stable `type:key` values
+    /// already reported at recognition time; those anomalies are excluded
+    /// from the export result instead of being shown twice.
+    public func sequenceAnomalies(
+        _ records: [ResolveSlateRecord],
+        excluding knownAnomalyKeys: Set<String> = []
+    ) throws -> [SlateSequenceAnomaly] {
+        try SequenceAnomalyDetector.detect(records.map(SequenceAnomalyDetector.Input.init), excluding: knownAnomalyKeys)
     }
 
     private static func buildMetadataIndex(_ entries: [PersistedSlateMetadata], warnings: inout [String]) -> [String: MetadataValue] {
@@ -384,10 +351,5 @@ public actor ResolveCSVMerger {
         for index in columns.fileName where !ResolveCSVNormalization.clean(row[index]).isEmpty { return ResolveCSVNormalization.clean(row[index]) }
         for index in columns.reelName where !ResolveCSVNormalization.clean(row[index]).isEmpty { return ResolveCSVNormalization.clean(row[index]) }
         return ""
-    }
-
-    private static func unsignedInteger(_ value: String?) -> Int? {
-        guard let value, !value.isEmpty, value.allSatisfy(\.isNumber) else { return nil }
-        return Int(value)
     }
 }

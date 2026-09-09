@@ -182,6 +182,11 @@ public struct SlateSequenceAnomaly: Codable, Hashable, Sendable {
     public let type: String
     public let message: String
 
+    /// Stable cross-stage identity (`type:key`). Recognition and CSV export
+    /// both run the shared detector; consumers dedupe reports by this key so
+    /// one anomaly is never shown twice.
+    public var stableKey: String { "\(type):\(key)" }
+
     public init(key: String, type: String, message: String) {
         self.key = key
         self.type = type

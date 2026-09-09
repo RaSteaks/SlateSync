@@ -210,13 +210,12 @@ public enum RecognitionPostprocessor {
     }
 
     private static func validate(_ records: [RecognitionRecord], accuracy: ProjectSettings.AccuracyMode, warnings: inout [String]) {
-        var anomalies = 0
-        let grouped = Dictionary(grouping: records) { RecognitionNormalizer.normalizeCard($0.cardNumber) ?? "" }
-        for (reel, values) in grouped where !reel.isEmpty {
-            let clips = values.compactMap { RecognitionNormalizer.videoOrdinal($0.videoCode) }.sorted()
-            for pair in zip(clips, clips.dropFirst()) where pair.1 > pair.0 + 1 { warnings.append("\(reel) 条号 C\(String(format: "%03d", pair.0)) 到 C\(String(format: "%03d", pair.1)) 之间存在缺口，请人工核对。"); anomalies += 1 }
-        }
-        if anomalies > 0 && accuracy != .high { warnings.append("快速模式仅执行单次识别，以上 \(anomalies) 条序列异常未经过双重校验，建议使用精确模式重新识别。") }
+        // The recognition stage reports through the shared detector so its
+        // warnings carry the exact frozen messages the CSV export produces,
+        // and the stable `type:key` identity lets downstream stages dedupe.
+        let anomalies = (try? SequenceAnomalyDetector.detect(records.map(SequenceAnomalyDetector.Input.init))) ?? []
+        warnings += anomalies.map(\.message)
+        if !anomalies.isEmpty && accuracy != .high { warnings.append("快速模式仅执行单次识别，以上 \(anomalies.count) 条序列异常未经过双重校验，建议使用精确模式重新识别。") }
     }
 
     private static func core(_ record: RecognitionRecord, _ field: String) -> String? {

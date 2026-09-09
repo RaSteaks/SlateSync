@@ -253,7 +253,11 @@ public actor RecognitionCoordinator: RecognitionServing {
             }
             try Task.checkCancellation()
             await publish(.init(phase: "complete", completed: pages.count, total: pages.count, message: "识别完成，共 \(sheet.records.count) 条记录", percent: 100))
-            return RecognitionData(provider: providerID, model: model.publicID, durationMs: duration, pageCount: pages.count, accuracyMode: accuracy, usage: output.usage, ocr: ocr, scenario: scenario.selection, result: sheet, projectId: request.projectID, projectSettingsSnapshot: projectSettings, lastRecognitionDefaults: defaults, diagnosticSessionId: diagnosticID, taskId: taskID)
+            // Persist the recognition-stage detector output so later export
+            // stages can dedupe by the stable `type:key` identity instead of
+            // reporting the same anomaly twice.
+            let sequenceAnomalies = (try? SequenceAnomalyDetector.detect(sheet.records.map(SequenceAnomalyDetector.Input.init))) ?? []
+            return RecognitionData(provider: providerID, model: model.publicID, durationMs: duration, pageCount: pages.count, accuracyMode: accuracy, usage: output.usage, ocr: ocr, scenario: scenario.selection, result: sheet, sequenceAnomalies: sequenceAnomalies, projectId: request.projectID, projectSettingsSnapshot: projectSettings, lastRecognitionDefaults: defaults, diagnosticSessionId: diagnosticID, taskId: taskID)
         } catch is CancellationError {
             await media.close(); throw RecognitionFailure.canceled
         } catch let error as SlateSyncError {

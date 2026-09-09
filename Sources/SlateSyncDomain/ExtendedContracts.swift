@@ -403,6 +403,9 @@ public struct RecognitionData: Codable, Hashable, Sendable {
     public let ocr: OcrSummary
     public let scenario: ScenarioSelection?
     public let result: RecognitionSheet
+    /// Structured output of the shared sequence detector at recognition time.
+    /// Optional so envelopes persisted before the field existed still decode.
+    public let sequenceAnomalies: [SlateSequenceAnomaly]?
     public let projectId: String?
     public let projectSettingsSnapshot: ProjectSettings?
     public let lastRecognitionDefaults: RecognitionDefaults?
@@ -420,6 +423,7 @@ public struct RecognitionData: Codable, Hashable, Sendable {
         ocr: OcrSummary,
         scenario: ScenarioSelection? = nil,
         result: RecognitionSheet,
+        sequenceAnomalies: [SlateSequenceAnomaly]? = nil,
         projectId: String? = nil,
         projectSettingsSnapshot: ProjectSettings? = nil,
         lastRecognitionDefaults: RecognitionDefaults? = nil,
@@ -436,6 +440,7 @@ public struct RecognitionData: Codable, Hashable, Sendable {
         self.ocr = ocr
         self.scenario = scenario
         self.result = result
+        self.sequenceAnomalies = sequenceAnomalies
         self.projectId = projectId
         self.projectSettingsSnapshot = projectSettingsSnapshot
         self.lastRecognitionDefaults = lastRecognitionDefaults

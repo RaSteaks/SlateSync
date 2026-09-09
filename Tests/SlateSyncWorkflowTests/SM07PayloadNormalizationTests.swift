@@ -77,7 +77,8 @@ import XCTest
         let merged = RecognitionPostprocessor.mergePages([(2, second), (3, droppedTen), (1, first)], accuracy: .standard, formats: .init())
         XCTAssertEqual(Array(merged.records.prefix(4)).map(\.sourcePage), [1, 1, 1, 2]); XCTAssertEqual(merged.records[1].shot, "17"); XCTAssertEqual(merged.records[1].take, "02")
         XCTAssertEqual(merged.records[3].shot, "17"); XCTAssertEqual(merged.records.first { $0.videoCode == "C011" }?.shot, "18"); XCTAssertEqual(merged.records.first { $0.videoCode == "C012" }?.shot, "18")
-        XCTAssertTrue(merged.warnings.contains { $0.contains("漏写十位") }); XCTAssertTrue(merged.warnings.contains { $0.contains("缺口") }); XCTAssertTrue(merged.warnings.contains { $0.contains("快速模式") })
+        // 识别阶段断档告警已统一为共享检测器的冻结文案（与 CSV 导出一致）。
+        XCTAssertTrue(merged.warnings.contains { $0.contains("漏写十位") }); XCTAssertTrue(merged.warnings.contains { $0.contains("断档") }); XCTAssertTrue(merged.warnings.contains { $0.contains("快速模式") })
         let usage = RecognitionNormalizer.aggregateUsage([.init(inputTokens: 2, outputTokens: 3), .init(inputTokens: 4, outputTokens: 5)])
         XCTAssertEqual(usage?.inputTokens, 6); XCTAssertEqual(usage?.outputTokens, 8)
         let encoded = try? JSONEncoder().encode(usage); XCTAssertFalse(String(data: encoded ?? Data(), encoding: .utf8)?.contains("cost") ?? true)
