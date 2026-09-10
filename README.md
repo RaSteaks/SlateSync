@@ -33,6 +33,23 @@
 > SlateSync 当前是原生 Swift/SwiftUI macOS 应用，不再依赖 Electron、Node.js 或 npm 运行时。
 > 原生迁移已在本地 ad-hoc 交付范围通过 SM-09 Gate；Developer ID 签名、公证和公开发布仍未配置。
 
+## 架构与分支基线
+
+当前仓库保留两条有明确职责的架构基线：
+
+| 分支 | 架构角色 | 开发规则 |
+| --- | --- | --- |
+| `main` | Electron 主架构 | 维护现有 Electron 产品与兼容行为 |
+| `swift-rewrite` | Swift/SwiftUI 原生架构 | 当前项目开发、验证和新功能的基线 |
+
+当前开发分支默认从 `swift-rewrite` 创建，并以 `swift-rewrite` 为合并目标。在 Owner 或项目决策
+明确 Swift 成为主架构之前，禁止将 `swift-rewrite` 或其派生分支合并到 `main`，包括普通合并、
+squash、fast-forward 或其他等效方式。
+
+后续目标是在 `swift-rewrite` 上持续完成原生功能、兼容性、严格质量门禁、CI 和分支保护建设；只有
+在架构切换决策、功能与数据验收、发布/回滚方案及分支治理均记录完成后，才讨论将 Swift 提升为
+`main` 的主架构。详细项目方案见 [AGENT.md](AGENT.md)。
+
 ## 核心能力
 
 | 识别与理解 | 校对与回填 | 项目与安全 |
