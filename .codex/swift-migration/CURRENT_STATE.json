@@ -55,8 +55,8 @@
     "lastFormalGate": {
       "result": "PASS",
       "approvable": true,
-      "reviewCommit": "3015ce1a0fa540af4d60307e92e9e52d4dc827cb",
-      "evidence": ".codex/gate-results/SM-09/20260909T184048Z-5e597f30679a/result.json"
+      "reviewCommit": "86ef98f4430985f0662cb23837a7f35afadb606f",
+      "evidence": ".codex/gate-results/SM-09/20260910T151652Z-86ef98f44309/result.json"
     },
     "previousPhaseEvidence": ".codex/swift-migration/reviews/SM-08.md"
   },
