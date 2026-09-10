@@ -1,7 +1,7 @@
 # SlateSync Swift migration authority
 
 Updated: 2026-09-10
-Current phase: **SM-09 technical Gate PASS; Owner approval pending within local ad-hoc scope**
+Current phase: **SM-09 COMPLETE within local ad-hoc scope**
 Development baseline: **`swift-rewrite`**
 Main branch architecture: **Electron; Swift merge is prohibited before an explicit architecture decision**
 Target: **native macOS 15.0+, arm64 + x86_64**
@@ -43,11 +43,9 @@ the Icon Composer app icon, and the deterministic build-and-run script. Debug
 uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
-SM-01 through SM-09 have complete native implementation and technical Gate
-coverage within the local ad-hoc scope. `CURRENT_STATE.json` records SM-09
-PASS while the current repair commit awaits explicit Owner approval; the native
-implementation is developed from `swift-rewrite`, while `main` remains the
-Electron baseline.
+SM-01 through SM-09 are formally complete within the approved local ad-hoc
+scope. `CURRENT_STATE.json` records SM-09 COMPLETE; the native implementation
+is developed from `swift-rewrite`, while `main` remains the Electron baseline.
 SM-04 supplies the v1 Library/SQLite ownership and portable transfer boundary,
 SM-05 supplies byte-compatible CSV, metadata and Scenario v1 behavior, and
 SM-06 supplies the native media/OCR handoff.
