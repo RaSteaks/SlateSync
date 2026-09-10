@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "updatedAt": "2026-09-10",
   "phase": "SM-09",
-  "lifecycleState": "COMPLETE",
+  "lifecycleState": "PASS",
   "platform": {
     "minimumMacOS": "15.0",
     "architectures": [
@@ -27,14 +27,14 @@
   "blockingDecisions": [],
   "gate": {
     "conclusion": "PASS",
-    "reviewCommit": "3015ce1a0fa540af4d60307e92e9e52d4dc827cb",
-    "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-09T17:01:58.831243Z",
+    "reviewCommit": "c4b864c284e2d4c4c6aac8da2464516e115f0e48",
+    "owner": null,
+    "approvedAt": null,
     "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
     "approvable": true,
     "blockers": [],
-    "approvalStatement": "Owner 批准路径一遗留修复（B1 共享 ISO8601 格式化器、B2 fileImporter 主线程读盘、B3 安装孙进程差集回收）并重新收束 SM-09：授权将批准重绑至 3015ce1，接受远端 CI/保护配置延期，复跑 Gate 以 COMPLETE 收束。",
-    "scope": "local ad-hoc native candidate; no remote integration or public distribution"
+    "approvalStatement": null,
+    "scope": "local ad-hoc native candidate; GitHub source push and native CI validation pending; no public distribution"
   },
   "verification": {
     "swiftBuild": "passed",
@@ -62,12 +62,12 @@
   },
   "deferredWork": [
     {
-      "id": "remote-ci-and-branch-protection",
-      "status": "DEFERRED_OWNER_ACCEPTED",
+      "id": "remote-native-ci-validation",
+      "status": "PENDING_REMOTE_RUN",
       "owner": "RaSteaks (Repository Owner)",
-      "reason": "Owner explicitly restricted this completion to local delivery and accepted remote CI/protection deferral.",
+      "reason": "GitHub branch protection is configured; the native workflow now targets swift-rewrite, but no remote run has been triggered from this local workspace.",
       "requiredBefore": "remote integration or public release",
-      "validation": "Run native CI and verify required check protection before remote integration; not currently PASS."
+      "validation": "Push swift-rewrite, confirm native CI passes, and verify the protected branch requires the native checks before remote integration; not locally verifiable until that run."
     }
   ]
 }
