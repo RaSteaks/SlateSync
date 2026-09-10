@@ -171,7 +171,7 @@ export function buildSlateMetadataIndex(entries = []) {
     if (sensorFpsValues.size > 1) {
       sensorFpsConflict = true;
       warnings.push(
-        `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突或无效的 Sensor FPS（${sensorFpsCandidates.join(" / ")}），Camera FPS 不会写入素材行，需人工确认帧率。`,
+        `${canonicalKeyToMaterialPrefix(materialKey)} 的相机元数据存在互相冲突或无效的 Sensor FPS（${sensorFpsCandidates.join(" / ")}），Camera FPS 不会写入素材行，需人工确认帧率。`,
       );
     } else if (sensorFpsValues.size === 1) {
       sensorFps = sensorFpsCandidates[0];
@@ -183,7 +183,7 @@ export function buildSlateMetadataIndex(entries = []) {
     let shootDay = "";
     if (shootDayValues.size > 1) {
       warnings.push(
-        `${canonicalKeyToMaterialPrefix(materialKey)} 的 slate.txt 存在互相冲突的 Shot Date，Shoot Day 不会写入。`,
+        `${canonicalKeyToMaterialPrefix(materialKey)} 的相机元数据存在互相冲突的 Shot Date，Shoot Day 不会写入。`,
       );
     } else if (shootDayValues.size === 1) {
       shootDay = [...shootDayValues][0];

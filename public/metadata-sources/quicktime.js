@@ -13,6 +13,10 @@ import {
   normalizeCameraFps,
   normalizeShootDay,
 } from "../metadata-common.js";
+import {
+  hasArriQuickTimeMarker,
+  hasDjiQuickTimeMarker,
+} from "./arri-common.js";
 
 // 视频扩展名只作为"发现候选"的过滤条件；是否真的内嵌可用元数据由 moov 结构校验决定。
 export const QUICKTIME_FILE_PATTERN = /\.(?:mov|mp4|m4v)$/i;
@@ -28,25 +32,33 @@ export const quicktimeMetadataSource = {
   id: "quicktime",
   label: "QuickTime 内嵌元数据",
   filePatterns: [QUICKTIME_FILE_PATTERN],
+  // 内容裁决：含 com.arri.* 键的 moov 让位给 ARRI 适配器；但无 ARRI 标记的
+  // 普通 MP4/moov（含解析失败兜底）仍由本来源处理，且同时带 proapps 标记的
+  // 病态双标记文件继续命中——与 ARRI 适配器双双命中，让分发器上报歧义。
+  detect(sourceName, input) {
+    if (!QUICKTIME_FILE_PATTERN.test(String(sourceName || ""))) return false;
+    return !hasArriQuickTimeMarker(input) || hasDjiQuickTimeMarker(input);
+  },
   parse(input, sourceName) {
     return parseQuickTimeMoov(input, sourceName);
   },
 };
 
-// 解析完整 moov atom（含 8 字节 size/type 头），输出与其他来源一致的规范形状：
-// { sourceName, clipName, materialKey, sensorFps, shootDay }。
-export function parseQuickTimeMoov(input, sourceName = "") {
+// 遍历完整 moov atom（含 8 字节 size/type 头），提取可共用的元数据骨架：
+//   creationSeconds（mvhd）/ videoTrack（帧率推导）/ mdtaKeys（键→文本值）/
+//   rawMdtaEntries（含 typed 二进制载荷的原始键值，供 ARRI 整数解码）。
+// 无 moov 头返回 null；本函数只读不抛。
+export function walkQuickTimeMoov(input) {
   const bytes = toUint8Array(input);
   if (!bytes || bytes.length < 8 || readAtomType(bytes, 4) !== "moov") {
-    throw new Error(
-      `${displaySourceName(sourceName)} 缺少 moov atom，无法读取内嵌元数据`,
-    );
+    return null;
   }
 
   const parsed = {
     creationSeconds: null,
     videoTrack: null,
     mdtaKeys: new Map(),
+    rawMdtaEntries: [],
   };
   for (const child of walkChildren(bytes, 8, bytes.length)) {
     if (child.type === "mvhd") parseMvhd(bytes, child, parsed);
@@ -54,6 +66,18 @@ export function parseQuickTimeMoov(input, sourceName = "") {
     else if (child.type === "udta" || child.type === "meta") {
       parseMetaContainer(bytes, child, parsed);
     }
+  }
+  return parsed;
+}
+
+// 解析完整 moov atom（含 8 字节 size/type 头），输出与其他来源一致的规范形状：
+// { sourceName, clipName, materialKey, sensorFps, shootDay }。
+export function parseQuickTimeMoov(input, sourceName = "") {
+  const parsed = walkQuickTimeMoov(input);
+  if (!parsed) {
+    throw new Error(
+      `${displaySourceName(sourceName)} 缺少 moov atom，无法读取内嵌元数据`,
+    );
   }
 
   const proapps = (key) => cleanValue(parsed.mdtaKeys.get(`com.apple.proapps.${key}`));
@@ -241,7 +265,7 @@ function parseMetaContainer(bytes, atom, parsed) {
   if (handlerType !== "mdta" || !keysAtom || !ilstAtom) return;
 
   const keyStrings = parseMdtaKeys(bytes, keysAtom);
-  const values = parseMdtaIlst(bytes, ilstAtom, keyStrings);
+  const values = parseMdtaIlst(bytes, ilstAtom, keyStrings, parsed.rawMdtaEntries);
   for (const [key, value] of values) {
     if (!parsed.mdtaKeys.has(key)) parsed.mdtaKeys.set(key, value);
   }
@@ -265,23 +289,34 @@ function parseMdtaKeys(bytes, atom) {
 }
 
 // ilst 每项：size(4)+键序号(4)+子 atom（通常为 data：size(4)+"data"(4)+
-// type_flags(4)+locale(4)+值载荷）。返回 [键名, 文本值] 列表。
-function parseMdtaIlst(bytes, atom, keyStrings) {
+// type_flags(4)+locale(4)+值载荷）。返回 [键名, 文本值] 列表；同时把每个键值
+// （含仅二进制的项）按读取顺序推入 rawEntries，供 ARRI 适配器做整数解码。
+function parseMdtaIlst(bytes, atom, keyStrings, rawEntries) {
   const end = atom.offset + atom.size;
   const values = [];
   for (const item of walkChildren(bytes, atom.offset + atom.headerSize, end)) {
     const keyIndex = readU32(bytes, item.offset + 4);
     const key = keyStrings[keyIndex - 1];
     if (!key) continue;
-    const value = readIlstValue(bytes, item);
-    if (value != null) values.push([key, value]);
+    const entry = readIlstEntry(bytes, item);
+    if (entry.text != null) values.push([key, entry.text]);
+    if (entry.text != null || entry.payload) {
+      rawEntries.push({
+        key,
+        text: entry.text,
+        typeFlags: entry.typeFlags,
+        payload: entry.payload,
+      });
+    }
   }
   return values;
 }
 
-// 提取 ilst 项里的 data 载荷。仅接受 UTF-8 文本（type_flags=1）或纯可打印字节，
-// 二进制值（如 proresraw 白平衡浮点数组）跳过。
-function readIlstValue(bytes, item) {
+// 提取 ilst 项里的 data 载荷。文本值（UTF-8 或全可打印字节）优先；二进制值
+// （如 proresraw 白平衡浮点数组、ARRI 的 typed 整数帧率）以原始 payload +
+// type_flags 返回，由调用方按需解码。
+function readIlstEntry(bytes, item) {
+  let binary = null;
   const itemEnd = item.offset + item.size;
   for (const child of walkChildren(bytes, item.offset + 8, itemEnd)) {
     if (child.type !== "data") continue;
@@ -291,14 +326,17 @@ function readIlstValue(bytes, item) {
     const slice = bytes.subarray(payload, child.offset + child.size);
     // type_flags=1 是 UTF-8 文本；其余类型仅在内容全部可打印时按文本处理
     const printable = [...slice].every((byte) => byte >= 0x20 && byte < 0x7f);
-    if (typeFlags !== 1 && !printable) continue;
+    if (typeFlags !== 1 && !printable) {
+      if (!binary) binary = { typeFlags, text: null, payload: slice };
+      continue;
+    }
     const value = text(bytes, payload, child.offset + child.size);
-    if (value) return value;
+    if (value) return { typeFlags, text: value, payload: slice };
   }
-  return null;
+  return binary || { typeFlags: 0, text: null, payload: null };
 }
 
-function formatFps(videoTrack) {
+export function formatFps(videoTrack) {
   if (!videoTrack) return "";
   const fps = (videoTrack.totalSamples * videoTrack.timescale) / videoTrack.totalTicks;
   if (!Number.isFinite(fps) || fps <= 0) return "";
@@ -308,7 +346,7 @@ function formatFps(videoTrack) {
 
 // mvhd 创建时间是 Mac 纪元秒；拍摄日期按"本地时区日期"换算，
 // 与剧组按本地日期命名素材（…_260906_…）的习惯一致。
-function formatCreationDate(macSeconds) {
+export function formatCreationDate(macSeconds) {
   if (macSeconds == null) return "";
   const unixSeconds = macSeconds - MAC_EPOCH_OFFSET_SECONDS;
   if (unixSeconds <= 0) return "";

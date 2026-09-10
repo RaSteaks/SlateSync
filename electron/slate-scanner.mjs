@@ -2,15 +2,18 @@
 // The scanner prunes unrelated material directories, learns camera-specific
 // filename structures, and falls back to bounded directory enumeration.
 // 两类元数据来源，同一目录下互斥出现（侧车优先）：
-//   - 外置侧车：slate.txt 等（Kinefinity），整文件读取（默认 ≤2MB）
-//   - 内嵌元数据：DJI 等把信息写进 MOV/MP4 容器，只定位读取 moov atom，
+//   - 外置侧车：slate.txt / ARRI XML / ALE 等，整文件读取（默认 ≤2MB）
+//   - 内嵌元数据：DJI/ARRI 等把信息写进 MOV/MP4 容器，只定位读取 moov atom，
 //     绝不读取媒体数据本体
+// "侧车优先"按目录裁决：先解析该目录的侧车候选，仅当没有任何侧车产出有效
+// 条目时才回退读取该目录的视频候选——无关侧车（如随手放置的 .xml）不会阻塞
+// 内嵌元数据。
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { extractCombinedMaterialKey } from "../public/metadata-common.js";
 import {
   METADATA_FILE_PATTERN,
-  parseMetadataFile,
+  parseMetadataEntries,
 } from "../public/metadata-sources/index.js";
 import { QUICKTIME_FILE_PATTERN } from "../public/metadata-sources/quicktime.js";
 import {
@@ -53,7 +56,9 @@ async function scanSlateDirectory(dirPath, options = {}) {
     512 * 1024 * 1024,
   );
   const warnings = [];
-  const candidates = [];
+  // 候选按目录分组：同一目录先解析侧车，仅当侧车没有产出有效条目时才回退
+  // 该目录的视频候选（listVideos 是探测命中路径的延迟枚举闭包）。
+  const directoryGroups = new Map();
   const structureByCamera = new Map();
   const stats = {
     visitedDirectories: 0,
@@ -89,18 +94,41 @@ async function scanSlateDirectory(dirPath, options = {}) {
         structureByCamera.set(camera, structure);
       }
 
-      // Probe the known naming convention directly (no enumeration).
+      // Probe the known naming convention directly (no enumeration). The rest
+      // of the directory enumerates lazily — only if this sidecar yields no
+      // valid entry during parsing; that late enumeration also picks up
+      // sidecars the fixed probe missed (e.g. an ARRI XML next to the slate).
+      const group = ensureGroup(currentPath);
       for (const candidateName of probeNames(structure, dirName)) {
         const candidatePath = join(currentPath, candidateName);
         try {
           const fileStat = await stat(candidatePath);
           if (fileStat.isFile()) {
-            candidates.push({
+            group.sidecars.push({
               filePath: candidatePath,
               sourceName: [...pathParts, candidateName].join("/"),
               isVideo: false,
             });
             stats.discoveredSlateFiles += 1;
+            group.listVideos = async () => {
+              const enumerated = await listDirectoryEntries(currentPath, pathParts, directoryKey);
+              // 探测只试了已知命名约定，枚举可能发现新的侧车（如 ARRI XML/ALE）。
+              // 新侧车全部补进分组（探测命中的候选按路径去重），"侧车优先"才能
+              // 对目录里的全部侧车裁决，而不是只对探测到的那一个。
+              const knownSidecars = new Set(group.sidecars.map((file) => file.filePath));
+              for (const file of enumerated) {
+                if (!file.isVideo) {
+                  if (knownSidecars.has(file.filePath)) continue;
+                  knownSidecars.add(file.filePath);
+                  group.sidecars.push(file);
+                  stats.discoveredSlateFiles += 1;
+                  continue;
+                }
+                group.videos.push(file);
+                stats.discoveredVideoFiles += 1;
+              }
+              return group.videos;
+            };
             return;
           }
         } catch {
@@ -109,27 +137,24 @@ async function scanSlateDirectory(dirPath, options = {}) {
       }
 
       // Probe missed → enumerate once, learn the real structure, remember.
-      const sidecars = await listDirectoryEntries(currentPath, pathParts, directoryKey);
-      const found = sidecars.filter((file) => !file.isVideo);
+      const enumerated = await listDirectoryEntries(currentPath, pathParts, directoryKey);
+      const found = enumerated.filter((file) => !file.isVideo);
       if (found.length) {
         structureByCamera.set(
           camera,
           learnStructure(dirName, found.map((file) => file.name)),
         );
         stats.learnedStructures += 1;
-        for (const file of found) {
-          candidates.push({ filePath: file.filePath, sourceName: file.sourceName, isVideo: false });
-          stats.discoveredSlateFiles += 1;
-        }
-        return;
       }
-
-      // 侧车未命中 → 使用同一次目录枚举寻找内嵌元数据的视频文件
-      //（两类来源互斥，侧车优先；视频须与所在片段目录指向同一素材，防止
-      // 错位文件被静默误归属到别的素材行）。
-      const videos = sidecars.filter((file) => file.isVideo);
-      for (const file of videos) {
-        candidates.push({ filePath: file.filePath, sourceName: file.sourceName, isVideo: true });
+      for (const file of found) {
+        group.sidecars.push({ filePath: file.filePath, sourceName: file.sourceName, isVideo: false });
+        stats.discoveredSlateFiles += 1;
+      }
+      // 视频候选进入同目录分组（须与所在片段目录指向同一素材，防止错位文件
+      // 被静默误归属到别的素材行）；是否真正读取由解析阶段的"侧车优先"裁决。
+      for (const file of enumerated) {
+        if (!file.isVideo) continue;
+        group.videos.push({ filePath: file.filePath, sourceName: file.sourceName, isVideo: true });
         stats.discoveredVideoFiles += 1;
       }
       return;
@@ -143,6 +168,7 @@ async function scanSlateDirectory(dirPath, options = {}) {
       return;
     }
 
+    const group = ensureGroup(currentPath);
     const childDirectories = [];
     for (const entry of entries) {
       if (entry.isFile()) {
@@ -150,17 +176,24 @@ async function scanSlateDirectory(dirPath, options = {}) {
         // 按扩展名区分外置侧车与内嵌元数据视频。侧车允许无键名（内容键裁决）；
         // 视频必须带键名——目录里常有不含素材键的手机花絮等视频，宽松接纳会
         // 造成大量无意义的 moov 读取与警告，且其内容键大概率不在本 CSV 内。
+        // 约束：ARRI MOV 的素材键同样以文件名为准（com.arri.* 内的键仅作
+        // 解析期校验，不用于发现）。
         const isVideo = QUICKTIME_FILE_PATTERN.test(entry.name);
         const fileKey = extractCombinedMaterialKey(entry.name);
         if (isVideo && !fileKey) continue;
         if (fileKey && !expectedKeys.has(fileKey)) continue;
-        candidates.push({
+        const candidate = {
           filePath: join(currentPath, entry.name),
           sourceName: [...pathParts, entry.name].join("/"),
           isVideo,
-        });
-        if (isVideo) stats.discoveredVideoFiles += 1;
-        else stats.discoveredSlateFiles += 1;
+        };
+        if (isVideo) {
+          group.videos.push(candidate);
+          stats.discoveredVideoFiles += 1;
+        } else {
+          group.sidecars.push(candidate);
+          stats.discoveredSlateFiles += 1;
+        }
         continue;
       }
       if (!entry.isDirectory()) continue;
@@ -219,17 +252,57 @@ async function scanSlateDirectory(dirPath, options = {}) {
   const rootName = dirPath.split("/").filter(Boolean).pop() || "素材根目录";
   await walk(dirPath, [rootName], 0, true);
 
-  // Read and parse every candidate file. Only sidecars whose content-derived
-  // material key belongs to this Resolve CSV are kept as matched metadata;
-  // anything else (including clips absent from the CSV) is ignored.
+  // Read and parse candidates directory by directory: sidecars first, and the
+  // directory's video candidates only when no sidecar yielded a valid entry
+  // (解析失败、无内容素材键、或键不在本 Resolve CSV 中都视为无效)。
   const metadata = [];
-  for (const candidate of candidates) {
-    const parsed = await readCandidate(candidate);
-    if (!parsed || !parsed.materialKey) continue;
-    if (!expectedKeys.has(parsed.materialKey)) continue;
-    metadata.push(parsed);
+  for (const group of directoryGroups.values()) {
+    const collected = collectValidEntries(await readCandidates(group.sidecars));
+    if (!collected.length && group.listVideos) {
+      // 探测命中路径：视频候选尚未枚举，侧车全部无效后才枚举一次。枚举会把
+      // 探测遗漏的新侧车补进分组，先补解析它们，仍无有效条目才回退视频。
+      const parsedSidecarCount = group.sidecars.length;
+      const listVideos = group.listVideos;
+      group.listVideos = null;
+      await listVideos();
+      collected.push(
+        ...collectValidEntries(await readCandidates(group.sidecars.slice(parsedSidecarCount))),
+      );
+    }
+    if (!collected.length && group.videos.length) {
+      collected.push(...collectValidEntries(await readCandidates(group.videos)));
+    }
+    metadata.push(...collected);
   }
 
+  function collectValidEntries(entries) {
+    const valid = [];
+    for (const entry of entries) {
+      if (!entry?.materialKey) continue;
+      if (!expectedKeys.has(entry.materialKey)) continue;
+      valid.push(entry);
+    }
+    return valid;
+  }
+
+  function ensureGroup(dirPath) {
+    let group = directoryGroups.get(dirPath);
+    if (!group) {
+      group = { sidecars: [], videos: [], listVideos: null };
+      directoryGroups.set(dirPath, group);
+    }
+    return group;
+  }
+
+  async function readCandidates(candidates) {
+    const entries = [];
+    for (const candidate of candidates) {
+      entries.push(...(await readCandidate(candidate)));
+    }
+    return entries;
+  }
+
+  // 解析单个候选文件，返回 entry[]（多片段格式如 ALE 可一次产出多条）。
   async function readCandidate(candidate) {
     try {
       // 内嵌元数据：视频文件不整读，只定位并读取承载元数据的 moov atom。
@@ -247,9 +320,9 @@ async function scanSlateDirectory(dirPath, options = {}) {
           warnings.push(
             `${candidate.sourceName} 不是有效的 QuickTime 文件，未找到 moov 元数据`,
           );
-          return null;
+          return [];
         }
-        return parseMetadataFile(moov, candidate.sourceName);
+        return parseMetadataEntries(moov, candidate.sourceName);
       }
 
       const fileStat = await stat(candidate.filePath);
@@ -257,7 +330,7 @@ async function scanSlateDirectory(dirPath, options = {}) {
         warnings.push(
           `${candidate.sourceName} 超过 ${Math.floor(maxFileBytes / 1024 / 1024)} MB，已跳过。`,
         );
-        return null;
+        return [];
       }
       stats.readSlateFiles += 1;
       const buffer = await readFile(candidate.filePath);
@@ -265,10 +338,10 @@ async function scanSlateDirectory(dirPath, options = {}) {
         buffer.byteOffset,
         buffer.byteOffset + buffer.byteLength,
       );
-      return parseMetadataFile(arrayBuffer, candidate.sourceName);
+      return parseMetadataEntries(arrayBuffer, candidate.sourceName);
     } catch (error) {
       warnings.push(error.message || `${candidate.sourceName} 无法读取`);
-      return null;
+      return [];
     }
   }
 
