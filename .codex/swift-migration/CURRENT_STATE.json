@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "updatedAt": "2026-09-10",
   "phase": "SM-09",
-  "lifecycleState": "PASS",
+  "lifecycleState": "COMPLETE",
   "platform": {
     "minimumMacOS": "15.0",
     "architectures": [
@@ -28,12 +28,12 @@
   "gate": {
     "conclusion": "PASS",
     "reviewCommit": "c4b864c284e2d4c4c6aac8da2464516e115f0e48",
-    "owner": null,
-    "approvedAt": null,
+    "owner": "RaSteaks (Repository Owner)",
+    "approvedAt": "2026-09-10T15:39:02Z",
     "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
     "approvable": true,
     "blockers": [],
-    "approvalStatement": null,
+    "approvalStatement": "Owner 明确批准当前 Swift 基线修复提交 c4b864c，授权在治理-only 提交中将 SM-09 从 PASS 收束为 COMPLETE；保持 main 为 Electron、swift-rewrite 为 Swift 开发基线，远端 native CI 待推送验证。",
     "scope": "local ad-hoc native candidate; GitHub source push and native CI validation pending; no public distribution"
   },
   "verification": {
