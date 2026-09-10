@@ -410,7 +410,11 @@ public actor ProcessPaddleInstallerCommandRunner: PaddleInstallerCommandRunning 
     private nonisolated static func referencesTargetRoot(_ pid: pid_t, targetRoot: String) -> Bool {
         var path = [CChar](repeating: 0, count: pidPathInfoMaxSize)
         guard proc_pidpath(pid, &path, UInt32(pidPathInfoMaxSize)) > 0 else { return false }
-        if String(cString: path).hasPrefix(targetRoot) { return true }
+        // proc_pidpath writes a NUL-terminated byte buffer. Trim the terminator
+        // before decoding so the modern initializer preserves String(cString:)'s
+        // prefix semantics without relying on its deprecated API.
+        let pathBytes = path.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }
+        if String(decoding: pathBytes, as: UTF8.self).hasPrefix(targetRoot) { return true }
         return arguments(of: pid).contains { $0.contains(targetRoot) }
     }
 

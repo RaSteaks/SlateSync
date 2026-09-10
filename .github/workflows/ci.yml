@@ -2,8 +2,10 @@ name: Native macOS CI
 
 on:
   push:
-    branches: [main]
+    branches: [swift-rewrite]
   pull_request:
+    branches: [swift-rewrite]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,6 +35,9 @@ jobs:
           swift --version
           sw_vers
 
+      - name: Run strict Swift build
+        run: swift build -Xswiftc -warnings-as-errors
+
       - name: Run shared native SM-09 Gate
         env:
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
@@ -52,3 +57,16 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Upload native Gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ci-evidence
+          path: |
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/SUMMARY.md
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+          if-no-files-found: ignore
+          retention-days: 14

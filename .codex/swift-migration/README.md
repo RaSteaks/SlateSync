@@ -1,7 +1,9 @@
 # SlateSync Swift migration authority
 
-Updated: 2026-09-05
-Current phase: **SM-06 COMPLETE; SM-07 implementation IN_PROGRESS**
+Updated: 2026-09-10
+Current phase: **SM-09 COMPLETE within local ad-hoc scope**
+Development baseline: **`swift-rewrite`**
+Main branch architecture: **Electron; Swift merge is prohibited before an explicit architecture decision**
 Target: **native macOS 15.0+, arm64 + x86_64**
 
 This directory is the current authority for replacing the Electron application
@@ -26,6 +28,10 @@ preserve.
 - Swift code changes include comments for non-obvious ownership, concurrency,
   compatibility and recovery logic.
 - Windows support is terminated. New build, CI and release work is macOS-only.
+- `main` remains the Electron architecture branch. Current Swift development
+  branches start from `swift-rewrite` and target `swift-rewrite`.
+- Before an explicit Owner/project decision makes Swift the primary architecture,
+  no `swift-rewrite` branch may merge into `main`.
 - A phase advances only through the lifecycle and Owner approval rules in
   `PHASE_GATES.md`; a dirty diagnostic run can never approve a phase.
 
@@ -37,33 +43,29 @@ the Icon Composer app icon, and the deterministic build-and-run script. Debug
 uses the active host architecture with `-Onone`; Release and Archive contain
 both arm64 and x86_64 and declare macOS 15.0 as the minimum system.
 
-SM-01 through SM-06 are formally complete. `CURRENT_STATE.json` records
-SM-06 COMPLETE at the approved review commit
-`3ba200cafad758b10ad51c08eace5024bcffa90e`. SM-04 supplies the v1
-Library/SQLite ownership and portable transfer boundary, SM-05 supplies
-byte-compatible CSV, metadata and Scenario v1 behavior, and SM-06 supplies the
-native media/OCR handoff.
+SM-01 through SM-09 are formally complete within the approved local ad-hoc
+scope. `CURRENT_STATE.json` records SM-09 COMPLETE; the native implementation
+is developed from `swift-rewrite`, while `main` remains the Electron baseline.
+SM-04 supplies the v1 Library/SQLite ownership and portable transfer boundary,
+SM-05 supplies byte-compatible CSV, metadata and Scenario v1 behavior, and
+SM-06 supplies the native media/OCR handoff.
 
 SM-06 implements native image/PDF preparation, full/detail JPEG views,
 immutable request compression, built-in Vision and the explicit legacy helper
 adapter, supervised Paddle processes, OCR policy/cache/evidence, and a local
-Workflow handoff. It retains the shared Python runner in App resources and
-verifies real inference offline with explicitly supplied runtime/model fixtures.
-SM-07 implementation now supplies the secret-safe Provider registry,
-URLSession transport, discovery/probes, exact prompts/schemas, response
-normalization, bounded page/high-accuracy pipeline, and OCR-first recognition
-coordinator with progress/cancel/persistence lifetime. Workspace UI and
-distribution remain SM-08 and SM-09 responsibilities. Scenario v1 remains
-unchanged; legacy TakeStatus strings cross one SM-07 adapter.
+Workflow handoff. SM-07 supplies the secret-safe Provider registry, URLSession
+transport, discovery/probes, exact prompts/schemas, response normalization,
+bounded page/high-accuracy pipeline, and OCR-first recognition coordinator.
+SM-08 and SM-09 complete the workspace UI, lifecycle, native packaging,
+compatibility evidence and Electron runtime removal from the active Swift tree.
+Scenario v1 remains unchanged; legacy TakeStatus strings cross one SM-07 adapter.
 
-SM-06 implementation and formal evidence are recorded in `reviews/SM-06.md`.
-The separately authorized SM-07 code construction is complete and its latest
-dirty diagnostic Gate passed every technical check at
-`.codex/gate-results/SM-07/20260905T122916Z-d65a6063fe80/`. This remains an
-implementation result, not phase approval: `CURRENT_STATE.json` deliberately
-stays at the formally approved SM-06 COMPLETE boundary until SM-07 has a
-dedicated review commit, exact-SHA clean Gate evidence, review report, and
-explicit Owner approval.
+SM-09 implementation and formal evidence are recorded in `reviews/SM-09.md`.
+The approved completion scope is local native delivery only; Developer ID,
+notarization, public distribution and GitHub Release are not part of the current
+target. GitHub source pushes and native CI validation are in scope, while
+`swift-rewrite` remains the only baseline for new Swift development.
 
-Electron, React, Node and cross-platform-era files remain retained as migration
-evidence until SM-09; SM-02 changes only their current macOS product entrypoints.
+Electron, React, Node and cross-platform-era files remain on `main` and in
+protected historical evidence; they are not the active runtime of the native
+`swift-rewrite` tree.

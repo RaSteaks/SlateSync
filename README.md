@@ -46,9 +46,9 @@
 明确 Swift 成为主架构之前，禁止将 `swift-rewrite` 或其派生分支合并到 `main`，包括普通合并、
 squash、fast-forward 或其他等效方式。
 
-后续目标是在 `swift-rewrite` 上持续完成原生功能、兼容性、严格质量门禁、CI 和分支保护建设；只有
-在架构切换决策、功能与数据验收、发布/回滚方案及分支治理均记录完成后，才讨论将 Swift 提升为
-`main` 的主架构。详细项目方案见 [AGENT.md](AGENT.md)。
+后续目标是在 `swift-rewrite` 上持续完成原生功能、兼容性、严格质量门禁和 GitHub CI 验证；GitHub
+分支保护已配置。只有在架构切换决策、功能与数据验收、发布/回滚方案及分支治理均记录完成后，才
+讨论将 Swift 提升为 `main` 的主架构。详细项目方案见 [AGENT.md](AGENT.md)。
 
 ## 核心能力
 
@@ -259,9 +259,9 @@ python3 script/tests/sm09_inventory_tests.py
 Gate 会验证原生项目布局、Swift/Xcode 构建与测试、删除来源和冻结夹具、Release/Archive、
 Universal bundle、ZIP/DMG 回验、打包后的 UI 启动与退出重开，以及 CSV 性能预算。
 
-当前本地基线为：Swift 测试 320 项执行、1 项按设计跳过、0 失败；SM-09 Gate 27/27 通过并
-标记 `approvable=true`。严格的 `-warnings-as-errors` 构建仍有一处 Swift 弃用警告待清理，
-不影响上述常规 Gate 结果：
+当前本地基线为：普通 Swift 测试 320 项执行、318 项通过、2 项按设计跳过、0 失败；SM-09
+Gate 会启用前台 CSV 性能测试，因此正式 Gate 仅保留 1 项离线 Paddle 测试跳过。严格的
+`-warnings-as-errors` 构建现已通过：
 
 ```sh
 swift build -Xswiftc -warnings-as-errors
