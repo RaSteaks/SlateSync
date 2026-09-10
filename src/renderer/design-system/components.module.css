@@ -147,7 +147,10 @@
 .checkbox input { width: 18px; height: 18px; accent-color: var(--ss-color-accent-strong); }
 
 .segmented { display: inline-flex; padding: var(--ss-space-1); gap: var(--ss-space-1); border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-md); background: var(--ss-color-surface-sunken); }
-.segmentedButton { min-height: 32px; padding: 0 var(--ss-space-3); color: var(--ss-color-ink-subtle); background: transparent; cursor: pointer; font-size: 0.8rem; }
+/* Muted ink keeps enabled, unselected labels above 4.5:1 on the light sunken
+   surface without changing the subtle text token used by supporting copy. */
+.segmentedButton { min-height: 32px; padding: 0 var(--ss-space-3); color: var(--ss-color-ink-muted); background: transparent; cursor: pointer; font-size: 0.8rem; }
+.segmentedButton:not(:disabled):not([data-active="true"]):hover { color: var(--ss-color-ink); background: var(--ss-color-surface-hover); }
 .segmentedButton[data-active="true"] { color: var(--ss-color-ink); background: var(--ss-color-surface-raised); box-shadow: var(--ss-shadow-sm); }
 
 .badge { display: inline-flex; min-height: 26px; align-items: center; gap: 5px; padding: 4px 9px; border-radius: var(--ss-radius-pill); font-size: 0.7rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
@@ -166,6 +169,7 @@
 
 .dialogOverlay { position: fixed; inset: 0; z-index: var(--ss-z-overlay); display: grid; place-items: center; padding: var(--ss-space-6); background: var(--ss-overlay); backdrop-filter: blur(10px); animation: fadeIn var(--ss-motion-base) var(--ss-ease); }
 .dialog { width: min(100%, 560px); max-height: min(720px, calc(100vh - 48px)); overflow: auto; padding: var(--ss-space-6); border: 1px solid var(--ss-color-line-strong); border-radius: var(--ss-radius-xl); background: var(--ss-color-surface-raised); box-shadow: var(--ss-shadow-md); animation: dialogIn var(--ss-motion-base) var(--ss-ease); }
+.dialog[data-size="wide"] { width: min(100%, 980px); }
 .dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ss-space-4); margin-bottom: var(--ss-space-5); }
 .popover { position: absolute; z-index: var(--ss-z-dropdown); min-width: 180px; padding: var(--ss-space-3); border: 1px solid var(--ss-color-line-strong); border-radius: var(--ss-radius-md); background: var(--ss-color-surface-raised); box-shadow: var(--ss-shadow-md); }
 .tooltipWrap { position: relative; display: inline-flex; }

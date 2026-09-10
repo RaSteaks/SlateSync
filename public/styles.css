@@ -2538,6 +2538,41 @@ body {
   overflow: auto;
 }
 
+/* 项目包结果属于跨路由状态，放在共享内容区避免完成后写入隐藏页面。 */
+.project-transfer-notice {
+  width: min(1180px, calc(100% - 64px));
+  margin: 18px auto -4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tape);
+  border-radius: var(--r-box);
+  color: var(--ink-soft);
+  background: var(--paper);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.project-transfer-notice[data-tone="success"] {
+  border-color: rgba(37, 122, 71, 0.22);
+  border-left-color: var(--success);
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.project-transfer-notice[data-tone="warning"] {
+  border-color: rgba(143, 99, 7, 0.24);
+  border-left-color: var(--warning);
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.project-transfer-notice[data-tone="error"] {
+  border-color: rgba(191, 68, 48, 0.22);
+  border-left-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
 #recognition-settings-group {
   display: none;
 }
@@ -2612,6 +2647,98 @@ body {
 
 .settings-note.is-ready {
   color: var(--success);
+}
+
+/* The Legacy fallback keeps the one-click PaddleOCR action beside the Local
+   OCR status, while the feedback panel reserves a stable footprint for the
+   long-running install/cancel/retry states. */
+.global-ocr-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.global-ocr-heading-actions .secondary-button {
+  min-width: 132px;
+}
+
+.paddleocr-install-feedback {
+  display: grid;
+  min-height: 68px;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  color: var(--ink-soft);
+  background: var(--sunken);
+}
+
+.paddleocr-install-feedback[data-tone="accent"] {
+  border-color: color-mix(in srgb, var(--tape) 34%, var(--line));
+  background: var(--tape-soft);
+}
+
+.paddleocr-install-feedback[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.paddleocr-install-feedback[data-tone="warning"] {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--line));
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.paddleocr-install-feedback[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.paddleocr-install-feedback-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paddleocr-install-feedback-status {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.paddleocr-install-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 55%, transparent);
+}
+
+.paddleocr-install-progress > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tape);
+  transition: width 180ms ease;
+}
+
+.paddleocr-install-feedback[data-tone="success"] .paddleocr-install-progress > span {
+  background: var(--success);
+}
+
+.paddleocr-install-feedback[data-tone="warning"] .paddleocr-install-progress > span {
+  background: var(--warning);
+}
+
+.paddleocr-install-feedback[data-tone="danger"] .paddleocr-install-progress > span {
+  background: var(--danger);
 }
 
 .project-grid {
@@ -2743,6 +2870,11 @@ body {
   box-shadow: 0 8px 24px rgba(38, 50, 61, 0.05);
 }
 
+/* 项目包入口与设置表单分离，但继续复用同一张 Legacy 设置卡片。 */
+.project-package-card {
+  margin-top: 16px;
+}
+
 .settings-card:nth-child(3),
 .settings-layout > .settings-actions {
   grid-column: 1 / -1;
@@ -2759,6 +2891,9 @@ body {
 .global-settings-group[open] > summary { border-bottom: 1px solid var(--line); }
 .global-settings-group-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 14px 14px; }
 .global-settings-group-fields .field { margin-top: 14px; }
+/* Keep the Legacy model recommendations and custom ID entry together so the
+   fallback page retains the same configuration surface as Modern settings. */
+.global-settings-model-control { display: grid; gap: 8px; }
 .global-settings-field-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .global-settings-card .settings-actions { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .global-settings-card .settings-save-status.error { color: var(--danger); }
@@ -2829,8 +2964,44 @@ body {
   font-size: 12px;
 }
 
+.settings-save-status.error {
+  color: var(--danger);
+}
+
 .global-api-key-row {
   margin-top: 18px;
+}
+
+/* Custom provider registry uses the same graphite surfaces as the recovery
+   page while keeping the list/detail relationship legible in narrow windows. */
+.custom-provider-layout { display: grid; grid-template-columns: minmax(190px, .65fr) minmax(0, 1.35fr); gap: 18px; margin-top: 16px; }
+.custom-provider-list { display: grid; gap: 6px; align-content: start; }
+.custom-provider-row { display: grid; gap: 4px; width: 100%; padding: 11px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.custom-provider-row:hover, .custom-provider-row.selected { border-color: var(--accent); background: var(--surface); }
+.custom-provider-row small, .custom-provider-detail small { color: var(--muted); overflow-wrap: anywhere; }
+.custom-provider-detail { min-width: 0; }
+.custom-model-group { margin: 8px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); }
+.custom-model-group > summary { padding: 8px 10px; color: var(--ink-muted); cursor: pointer; font-size: .8rem; }
+.custom-model-group .custom-model-row { border-top: 1px solid var(--line); }
+.custom-provider-form { display: grid; gap: 13px; margin-top: 12px; }
+.custom-search-row { display: flex; align-items: end; gap: 8px; }
+.custom-search-row .field { flex: 1; }
+.custom-model-list { display: grid; gap: 7px; margin-top: 12px; }
+.custom-model-list h4 { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.custom-model-row { display: grid; gap: 3px; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+.custom-model-row span, .custom-model-row small, .custom-pending-row code { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.custom-pending-row { display: flex; gap: 7px; align-items: flex-start; padding: 6px 0; font-size: 12px; }
+/* Pending vendor buckets keep large registries scannable and make the
+   per-supplier selection action explicit in the Legacy recovery UI. */
+.custom-pending-group { border: 1px solid var(--line); border-radius: 8px; padding: 0 10px 5px; background: var(--sunken); }
+.custom-pending-group > summary { padding: 8px 0 4px; color: var(--ink-muted); cursor: pointer; font-size: 12px; }
+.custom-pending-select-all { display: flex; gap: 7px; align-items: center; padding: 4px 0; color: var(--accent); font-size: 11px; }
+.custom-failed-row { justify-content: space-between; align-items: center; gap: 12px; }
+.checkbox-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; color: var(--muted); font-size: 11px; }
+.settings-warning { color: var(--warning); }
+
+@media (max-width: 900px) {
+  .custom-provider-layout { grid-template-columns: 1fr; }
 }
 
 /* ---------- 项目对话框 ---------- */
@@ -3030,7 +3201,8 @@ body {
   }
 
   .project-page,
-  .settings-page {
+  .settings-page,
+  .project-transfer-notice {
     width: min(100% - 32px, 720px);
   }
 
@@ -3053,6 +3225,9 @@ body {
 
   .global-settings-card { grid-column: auto; }
   .global-settings-group-fields { grid-template-columns: 1fr; }
+  .global-ocr-heading-actions { align-items: flex-start; flex-direction: column; }
+  .global-ocr-heading-actions .secondary-button { width: 100%; }
+  .paddleocr-install-feedback-header { align-items: stretch; flex-direction: column; }
 
   .page-shell,
   footer {

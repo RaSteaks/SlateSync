@@ -78,7 +78,14 @@ export function createCsvTaskProcessor() {
             comments: task.comments,
           },
         );
-        if (!records.length || (!output.exportableCount && !edits.length)) {
+        // Exporting without any recognized records, or with records none of
+        // which actually matched a row in this CSV, is a reel/video-code
+        // mismatch worth surfacing. Judging by matchedRecordCount (not
+        // exportableCount) keeps slate fps backfills from masking the mismatch.
+        if (
+          !records.length ||
+          (!output.matchedRecordCount && !edits.length)
+        ) {
           throw new Error("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
         }
         const table = applySparseCsvEdits(output.table, edits);

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-22T12:25:53.118Z",
+  "generatedAt": "2026-09-05T18:48:24.122Z",
   "methodology": "Production electron/main.mjs and the compiled typed out/preload/index.cjs; isolated profile/library; one real BrowserWindow; the mode marker exists and the visible body has non-zero layout after document.fonts.ready and two animation frames. Legacy readiness additionally requires completed app navigation/project-library rendering. markerReadyMs is measured from navigation start by the Renderer performance clock.",
   "runs": [
     {
@@ -12,16 +12,17 @@
       "namespaceKeys": [
         "app",
         "files",
+        "logs",
         "projects",
         "recognition",
         "settings",
         "tasks"
       ],
-      "markerReadyMs": 166.30000001192093,
-      "firstContentfulPaintMs": 120,
+      "markerReadyMs": 183,
+      "firstContentfulPaintMs": 136,
       "markerRect": {
         "width": 1440,
-        "height": 855
+        "height": 848
       },
       "projectLibraryFiles": [
         "Projects",
@@ -54,16 +55,17 @@
       "namespaceKeys": [
         "app",
         "files",
+        "logs",
         "projects",
         "recognition",
         "settings",
         "tasks"
       ],
-      "markerReadyMs": 165.80000001192093,
-      "firstContentfulPaintMs": 136,
+      "markerReadyMs": 171.79999995231628,
+      "firstContentfulPaintMs": 160,
       "markerRect": {
         "width": 1440,
-        "height": 910.2734375
+        "height": 903.2734375
       },
       "projectLibraryFiles": [
         "Projects",
@@ -95,16 +97,17 @@
       "namespaceKeys": [
         "app",
         "files",
+        "logs",
         "projects",
         "recognition",
         "settings",
         "tasks"
       ],
-      "markerReadyMs": 169.69999998807907,
-      "firstContentfulPaintMs": 140,
+      "markerReadyMs": 174.19999980926514,
+      "firstContentfulPaintMs": 148,
       "markerRect": {
         "width": 1440,
-        "height": 910.2734375
+        "height": 903.2734375
       },
       "projectLibraryFiles": [
         "Projects",
@@ -136,16 +139,17 @@
       "namespaceKeys": [
         "app",
         "files",
+        "logs",
         "projects",
         "recognition",
         "settings",
         "tasks"
       ],
-      "markerReadyMs": 152.30000001192093,
-      "firstContentfulPaintMs": 124,
+      "markerReadyMs": 164.20000004768372,
+      "firstContentfulPaintMs": 136,
       "markerRect": {
         "width": 1440,
-        "height": 910.2734375
+        "height": 903.2734375
       },
       "projectLibraryFiles": [
         "Projects",
@@ -170,7 +174,7 @@
     }
   ],
   "medianMarkerReadyMs": {
-    "legacy": 165.80000001192093,
-    "modern": 166.30000001192093
+    "legacy": 171.79999995231628,
+    "modern": 183
   }
 }

@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import styles from "./components.module.css";
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
-type ClassProps = { className?: string };
+type ClassProps = { className?: string | undefined };
 type ControlState = "error" | "success";
 
 function classes(...values: Array<string | false | null | undefined>) {
@@ -96,12 +96,14 @@ export function Field({ label, hint, error, children, htmlFor }: { label: string
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [hintId, errorId].filter((value): value is string => Boolean(value)).join(" ") || undefined;
-  // Field owns the label/control relationship so every design-system input
-  // remains accessible even when a feature omits a manual htmlFor id.
-  const control = isValidElement(children)
+  const directControl = isValidElement(children) && isFieldControlElement(children);
+  // Field owns direct control IDs, but leaves layout wrappers intact. This
+  // keeps an explicit htmlFor target on a nested control from being duplicated
+  // onto its wrapper (for example the PP-OCRv6 select plus custom input).
+  const control = directControl
     ? cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean; "data-state"?: ControlState }>, { id, ...(describedBy ? { "aria-describedby": describedBy } : {}), ...(error ? { "aria-invalid": true, "data-state": "error" } : {}) })
     : children;
-  return <label htmlFor={id}>
+  return <label {...(directControl || htmlFor ? { htmlFor: id } : {})}>
     <span className={styles.fieldLabel}>{label}</span>
     {control}
     {hint && <span className={styles.fieldHint} id={hintId}>{hint}</span>}
@@ -109,16 +111,27 @@ export function Field({ label, hint, error, children, htmlFor }: { label: string
   </label>;
 }
 
+function isFieldControlElement(element: ReactElement): boolean {
+  // Custom controls such as ModelSelect receive Field's generated props;
+  // intrinsic layout elements must not receive an ID that belongs to a child.
+  if (typeof element.type !== "string") return true;
+  return ["button", "input", "select", "textarea"].includes(element.type);
+}
+
 export function Checkbox({ label, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return <label className={styles.checkbox}><input type="checkbox" {...props} /><span>{label}</span></label>;
 }
 
-export function SegmentedControl<T extends string>({ value, options, onChange, label }: { value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; label: string }) {
-  return <div className={styles.segmented} role="group" aria-label={label}>{options.map((option) => <button key={option.value} type="button" className={styles.segmentedButton} data-active={value === option.value} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
+export function SegmentedControl<T extends string>({ value, options, onChange, label, className, disabled = false }: { disabled?: boolean; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; label: string; className?: string | undefined }) {
+  // Optional className lets narrow rows wrap the segments without changing the
+  // shared group semantics (role="group" + aria-pressed buttons).
+  return <div className={classes(styles.segmented, className)} role="group" aria-label={label}>{options.map((option) => <button key={option.value} type="button" className={styles.segmentedButton} data-active={value === option.value} aria-pressed={value === option.value} disabled={disabled} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
 }
 
-export function Badge({ tone = "neutral", children, icon: IconComponent }: { tone?: Tone; children: ReactNode; icon?: LucideIcon }) {
-  return <span className={styles.badge} data-tone={tone}>{IconComponent && <Icon icon={IconComponent} size={13} />} {children}</span>;
+export function Badge({ tone = "neutral", children, icon: IconComponent, className, ...props }: { tone?: Tone; children: ReactNode; icon?: LucideIcon; className?: string | undefined } & HTMLAttributes<HTMLSpanElement>) {
+  // Rest props keep test hooks and aria attributes available on badges the
+  // same way they are on buttons and inputs.
+  return <span className={classes(styles.badge, className)} data-tone={tone} {...props}>{IconComponent && <Icon icon={IconComponent} size={13} />} {children}</span>;
 }
 
 export function StatusIndicator({ tone = "neutral", label }: { tone?: Tone; label: string }) {
@@ -140,27 +153,37 @@ export function InlineError({ message, onRetry }: { message: string; onRetry?: (
   return <div className={styles.inlineError} role="alert"><AlertTriangle size={17} aria-hidden="true" /><span>{message}</span>{onRetry && <Button size="sm" variant="ghost" onClick={onRetry}>重试</Button>}</div>;
 }
 
-export function EmptyState({ icon: IconComponent = CircleHelp, title, description, action }: { icon?: LucideIcon; title: string; description?: string; action?: ReactNode }) {
-  return <div className={styles.emptyState}><div><div className={styles.emptyIcon}><Icon icon={IconComponent} /></div><Text as="h2" size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}{action && <div style={{ marginTop: "var(--ss-space-4)" }}>{action}</div>}</div></div>;
+export function EmptyState({ icon: IconComponent = CircleHelp, title, description, action, className }: { icon?: LucideIcon; title: string; description?: string; action?: ReactNode; className?: string | undefined }) {
+  // Feature surfaces can tune the footprint of the canonical empty state
+  // without replacing its icon, heading, and action semantics.
+  return <div className={classes(styles.emptyState, className)}><div><div className={styles.emptyIcon}><Icon icon={IconComponent} /></div><Text as="h2" size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}{action && <div style={{ marginTop: "var(--ss-space-4)" }}>{action}</div>}</div></div>;
 }
 
 export function Toast({ message, tone = "neutral", onDismiss }: { message: string; tone?: Tone; onDismiss?: () => void }) {
   return <div className={styles.toast} role="status" aria-live="polite"><Stack direction="row" gap={3} align="center"><StatusIndicator tone={tone} label={message} />{onDismiss && <IconButton label="关闭通知" size="sm" onClick={onDismiss}><X size={16} /></IconButton>}</Stack></div>;
 }
 
-export function Dialog({ open, title, description, onClose, children, footer }: { open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Dialog({ open, title, description, onClose, children, footer, size = "default", dismissible = true, onKeyDown }: { open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: "default" | "wide"; dismissible?: boolean; onKeyDown?: ComponentPropsWithoutRef<"div">["onKeyDown"] }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
   const wasOpenRef = useRef(false);
   const titleId = useId();
   onCloseRef.current = onClose;
+  dismissibleRef.current = dismissible;
   if (open && !wasOpenRef.current) {
     // Capture before portal children commit: a descendant autoFocus can move
     // document.activeElement to an input before the layout effect executes.
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   wasOpenRef.current = open;
+  useLayoutEffect(() => () => {
+    // Conditional dialogs unmount instead of receiving open=false. Restore
+    // their opener too, provided it still belongs to the current page.
+    const opener = restoreRef.current;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }, []);
   useLayoutEffect(() => {
     if (!open) {
       // The portal is already absent in this layout phase, so restoring here
@@ -174,7 +197,9 @@ export function Dialog({ open, title, description, onClose, children, footer }: 
     const focusable = () => dialogRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
     focusable()?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); onCloseRef.current(); return; }
+      // An inner picker handles Escape before the modal; never close both.
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape" && dismissibleRef.current) { event.preventDefault(); onCloseRef.current(); return; }
       if (event.key !== "Tab" || !dialogRef.current) return;
       const nodes = [...dialogRef.current.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")].filter((node) => !node.hasAttribute("disabled"));
       if (!nodes.length) return;
@@ -191,9 +216,13 @@ export function Dialog({ open, title, description, onClose, children, footer }: 
     };
   }, [open]);
   if (!open) return null;
-  return createPortal(<div className={styles.dialogOverlay} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className={styles.dialogHeader}><div><Text as="h2" id={titleId} size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}</div><IconButton label="关闭对话框" onClick={onClose}><X size={18} /></IconButton></div>
+  return createPortal(<div className={styles.dialogOverlay} role="presentation" onMouseDown={(event) => { if (dismissible && event.target === event.currentTarget) onClose(); }}>
+    {/* Wide dialogs keep document previews readable without changing the shared
+        focus trap, Escape handling, or opener restoration contract. */}
+    <div ref={dialogRef} className={styles.dialog} data-size={size} role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={onKeyDown}>
+      {/* A pending mutation can make the whole dismissal surface inert; the
+          close affordance, overlay and Escape key must never disagree. */}
+      <div className={styles.dialogHeader}><div><Text as="h2" id={titleId} size="lg" weight="bold">{title}</Text>{description && <Text tone="muted" size="sm">{description}</Text>}</div><IconButton label="关闭对话框" onClick={onClose} disabled={!dismissible}><X size={18} /></IconButton></div>
       {children}
       {footer && <><Separator /><div style={{ marginTop: "var(--ss-space-5)" }}>{footer}</div></>}
     </div>

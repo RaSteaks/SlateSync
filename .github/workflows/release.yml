@@ -31,13 +31,7 @@ jobs:
         run: npm ci
 
       - name: Build local Vision OCR bridge
-        run: |
-          mkdir -p bin
-          if [ "${{ matrix.arch }}" = "x64" ]; then
-            xcrun swiftc -O -target x86_64-apple-macos13 -o bin/vision-ocr scripts/vision_ocr.swift
-          else
-            xcrun swiftc -O -target arm64-apple-macos13 -o bin/vision-ocr scripts/vision_ocr.swift
-          fi
+        run: node scripts/build-vision-ocr.mjs --arch ${{ matrix.arch }}
 
       - name: Verify source and tests
         run: |

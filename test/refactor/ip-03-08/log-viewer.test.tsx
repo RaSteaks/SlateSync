@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LogEntry, SlateSyncApi } from "../../../src/shared/contracts/index.js";
 import { LogViewerPage } from "../../../src/renderer/features/logs/LogViewerPage";
-import { useRecognitionStore } from "../../../src/renderer/state";
+import { useRecognitionStore, useUiStore } from "../../../src/renderer/state";
 
 // Keep React's concurrent renderer deterministic for polling and store updates.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +29,7 @@ afterEach(() => {
     host.remove();
   }
   useRecognitionStore.getState().reset();
+  useUiStore.getState().setToast(null);
   Object.defineProperty(window, "slateSync", { configurable: true, value: undefined });
 });
 
@@ -100,5 +101,54 @@ describe("LogViewerPage", () => {
 
     expect(host.textContent).toContain("暂无日志");
     expect(host.textContent).toContain("当前没有进行中的识别");
+  });
+
+  it("opens the local log folder from the storage card", async () => {
+    const read = vi.fn(async () => ({ ok: true as const, data: { entries: [], hasMore: false } }));
+    const openDirectory = vi.fn(async () => ({ ok: true as const, data: { opened: true } }));
+    Object.defineProperty(window, "slateSync", {
+      configurable: true,
+      value: { logs: { read, openDirectory } } as unknown as SlateSyncApi,
+    });
+    const { host, root } = mount();
+
+    await act(async () => {
+      root.render(<LogViewerPage />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = host.querySelector<HTMLButtonElement>('[aria-label="打开本地日志文件夹"]');
+    expect(button).not.toBeNull();
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(openDirectory).toHaveBeenCalledTimes(1);
+    expect(useUiStore.getState().toast?.message).toBe("已打开本地日志文件夹");
+  });
+
+  it("shows restart guidance when the folder IPC is missing from an old Preload", async () => {
+    const read = vi.fn(async () => ({ ok: true as const, data: { entries: [], hasMore: false } }));
+    Object.defineProperty(window, "slateSync", {
+      configurable: true,
+      value: { logs: { read } } as unknown as SlateSyncApi,
+    });
+    const { host, root } = mount();
+
+    await act(async () => {
+      root.render(<LogViewerPage />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const button = host.querySelector<HTMLButtonElement>('[aria-label="打开本地日志文件夹"]');
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(useUiStore.getState().toast?.message).toMatch(/Renderer 与 Preload 版本不一致.*完全退出 SlateSync.*不要只刷新窗口/);
   });
 });

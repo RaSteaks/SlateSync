@@ -67,6 +67,25 @@ describe("modern design system", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("exposes a wide dialog size for document inspection surfaces", () => {
+    render(<Dialog open title="大图预览" onClose={() => undefined} size="wide"><img alt="场记单" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" /></Dialog>);
+
+    // The presentation size is a data attribute so the shared Dialog keeps
+    // one focus and dismissal implementation across normal and wide content.
+    expect(document.querySelector('[role="dialog"]')?.getAttribute("data-size")).toBe("wide");
+  });
+
+  it("forwards dialog-local keyboard handlers to the dialog surface", () => {
+    const onKeyDown = vi.fn();
+    render(<Dialog open title="大图预览" onClose={() => undefined} onKeyDown={onKeyDown}><img alt="场记单" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" /></Dialog>);
+
+    // Feature-level arrow navigation can bubble from the close button and
+    // footer controls without changing Dialog's global Escape/Tab behavior.
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    act(() => dialog?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it("connects inline errors and leaves readable space for textarea counts", () => {
     const { host } = render(<Field label="项目名称" error="请输入项目名称。"><Input /></Field>);
     const input = host.querySelector("input");

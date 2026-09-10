@@ -1,7 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { FileClock, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
-import { useRef } from "react";
-import { Button, EmptyState, IconButton, Stack, Text } from "../../design-system";
+import { FileClock, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { TaskListItem } from "../../../shared/contracts/index.js";
+import { Button, EmptyState, IconButton, InlineError, Input, Stack, Text } from "../../design-system";
 import { useTaskStore } from "../../state";
 import styles from "../../app/app.module.css";
 
@@ -26,6 +27,13 @@ function taskStatusLabel(status: string | null | undefined) {
   return status;
 }
 
+function taskSearchText(task: TaskListItem) {
+  return [taskLabel(task.filename, task.id), task.id, taskStatusLabel(task.status)]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("zh-CN");
+}
+
 interface TaskRailProps {
   readonly onSelect: (id: string) => void;
   readonly onRefresh: () => void;
@@ -39,12 +47,26 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
   const tasks = useTaskStore((state) => state.items);
   const activeId = useTaskStore((state) => state.activeId);
   const loading = useTaskStore((state) => state.loading);
+  const taskError = useTaskStore((state) => state.error);
   const saveState = useTaskStore((state) => state.saveState);
+  const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const query = search.trim().toLocaleLowerCase("zh-CN");
+  const visibleTasks = useMemo(
+    () => tasks.filter((task) => !query || taskSearchText(task).includes(query)),
+    [query, tasks],
+  );
+
+  useEffect(() => {
+    // A narrower result set must always start at its first row; otherwise a
+    // prior scroll position can leave the virtualizer with no visible items.
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [query]);
+
   // A project may contain thousands of task snapshots. Virtualizing this rail
   // keeps selection and save-state updates independent of total history size.
   const virtualizer = useVirtualizer({
-    count: tasks.length,
+    count: visibleTasks.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 62,
     overscan: 6,
@@ -74,13 +96,52 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
         )}
       </div>
 
-      {tasks.length === 0 ? (
+      {tasks.length > 0 && (
+        <div className={styles.taskSearch}>
+          <div className={styles.taskSearchRow}>
+            <div className={styles.taskSearchControl}>
+              <Search size={15} aria-hidden="true" />
+              <Input
+                type="search"
+                className={styles.taskSearchInput || ""}
+                aria-label="搜索历史任务"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && search) {
+                    event.preventDefault();
+                    setSearch("");
+                  }
+                }}
+                placeholder="搜索文件名、任务 ID 或状态"
+              />
+            </div>
+            {query && <Button variant="ghost" size="sm" onClick={() => setSearch("")}>清除</Button>}
+          </div>
+          <Text tone="subtle" size="xs">
+            {query ? `匹配 ${visibleTasks.length} / ${tasks.length} 个任务` : `共 ${tasks.length} 个历史任务`}
+          </Text>
+        </div>
+      )}
+
+      {taskError && <InlineError message={taskError.message} onRetry={onRefresh} />}
+
+      {loading && tasks.length === 0 ? (
+        <div className={styles.routeHint} role="status">正在加载历史任务…</div>
+      ) : taskError && tasks.length === 0 ? null : tasks.length === 0 ? (
         <EmptyState icon={FileClock} title="还没有任务" description="新建任务即可开始。" />
+      ) : visibleTasks.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="没有匹配任务"
+          description="试试文件名、任务 ID 或状态的其他关键词。"
+          action={<Button variant="ghost" size="sm" onClick={() => setSearch("")}>清除搜索</Button>}
+        />
       ) : (
         <div ref={scrollRef} className={styles.taskRail}>
           <div className={styles.taskVirtualSizer} style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
-              const task = tasks[virtualRow.index];
+              const task = visibleTasks[virtualRow.index];
               if (!task) return null;
               const key = task.id || `${task.createdAt}-${task.filename}-${virtualRow.index}`;
               return (

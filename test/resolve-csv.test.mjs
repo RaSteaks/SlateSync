@@ -16,6 +16,7 @@ import {
   normalizeSceneValue,
   normalizeShotValue,
   normalizeTakeValue,
+  collectResolveMaterialKeys,
   parseCsvText,
   parseSlateMetadataText,
   resolveColumnIndexes,
@@ -245,7 +246,8 @@ test("slate.txt Sensor FPS and Shot Date map to Resolve Camera FPS and Shoot Day
 
   assert.equal(output.table.rows[0][columns.cameraFps], "48");
   assert.equal(output.table.rows[0][columns.shootDay], "26-08-04");
-  assert.deepEqual(output.addedColumns, ["Camera FPS", "Shoot Day"]);
+  assert.equal(output.table.rows[0][columns.camera], "A");
+  assert.deepEqual(output.addedColumns, ["Camera FPS", "Shoot Day", "Camera #"]);
   assert.equal(output.cameraFpsMatchedMaterialCount, 1);
   assert.equal(output.cameraFpsMatchedRowCount, 1);
   assert.equal(output.shootDayMatchedMaterialCount, 1);
@@ -285,9 +287,14 @@ test("Shot Date can populate an existing Shoot Day without Sensor FPS", () => {
 
   assert.equal(output.table.rows[0][columns.shootDay], "26-08-01");
   assert.equal(output.table.rows[0][columns.cameraFps], "");
-  assert.deepEqual(output.addedColumns, ["Camera FPS"]);
+  // The merge adds Camera FPS itself, but a recognized clip without a usable
+  // Sensor FPS is reported as a warning — never as an empty fps row asking the
+  // user to invent a frame rate.
+  assert.deepEqual(output.addedColumns, ["Camera FPS", "Camera #"]);
+  assert.equal(output.table.rows[0][resolveColumnIndexes(output.table.headers).camera], "A");
   assert.equal(output.shootDayMatchedMaterialCount, 1);
   assert.equal(output.cameraFpsMatchedMaterialCount, 0);
+  assert.match(output.warnings.join("\n"), /Sensor FPS 缺失/);
   assert.match(output.warnings.join("\n"), /Camera FPS 保持原值/);
 });
 
@@ -345,7 +352,12 @@ test("missing or conflicting Sensor FPS preserves an existing Camera FPS", () =>
     },
   ];
   const index = buildSlateMetadataIndex(conflicting);
-  assert.equal(index.byMaterialKey.has("A:1:1"), false);
+  // Conflicting entries stay in the index (flagged) so the merge can append
+  // them as reconciliation rows instead of dropping the frame rates.
+  const conflictEntry = index.byMaterialKey.get("A:1:1");
+  assert.equal(conflictEntry.sensorFps, "");
+  assert.equal(conflictEntry.sensorFpsConflict, true);
+  assert.deepEqual(conflictEntry.sensorFpsCandidates, ["48", "50"]);
 
   const output = mergeSlateIntoResolveTable(
     source,
@@ -355,8 +367,7 @@ test("missing or conflicting Sensor FPS preserves an existing Camera FPS", () =>
   const columns = resolveColumnIndexes(output.table.headers);
   assert.equal(output.table.rows[0][columns.cameraFps], "24");
   assert.equal(output.cameraFpsMatchedMaterialCount, 0);
-  assert.match(output.warnings.join("\n"), /冲突.*Camera FPS 不会写入/);
-  assert.match(output.warnings.join("\n"), /Camera FPS 保持原值/);
+  assert.match(output.warnings.join("\n"), /冲突.*Camera FPS 不会写入素材行/);
 });
 
 test("Camera FPS is filled even when scene metadata is incomplete", () => {
@@ -485,9 +496,11 @@ test("merge preserves every original column and row while canonicalizing target 
   ]);
 
   assert.deepEqual(source, original, "source table must stay immutable");
-  assert.deepEqual(output.table.headers, source.headers);
+  // Camera # is appended (derived from each clip's own name) while every
+  // original column and cell keeps its position and content.
+  assert.deepEqual(output.table.headers, [...source.headers, "Camera #"]);
   assert.equal(output.table.rows.length, 2);
-  assert.deepEqual(output.table.rows[0], [
+  assert.deepEqual(output.table.rows[0].slice(0, source.headers.length), [
     "A001C015_suffix.mov",
     " /Volumes/A ",
     "A001C015",
@@ -497,7 +510,8 @@ test("merge preserves every original column and row while canonicalizing target 
     " keep spaces ",
     "",
   ]);
-  assert.deepEqual(output.table.rows[1], [
+  assert.equal(output.table.rows[0][source.headers.length], "A");
+  assert.deepEqual(output.table.rows[1].slice(0, source.headers.length), [
     "E001C001_suffix.mov",
     "/Volumes/E",
     "E001C001",
@@ -507,6 +521,7 @@ test("merge preserves every original column and row while canonicalizing target 
     "untouched",
     "",
   ]);
+  assert.equal(output.table.rows[1][source.headers.length], "E");
   assert.equal(output.matchedRecordCount, 1);
   assert.equal(output.updatedRowCount, 2);
   assert.equal(output.overwrittenCellCount, 6);
@@ -556,7 +571,7 @@ test("metadata coverage audit exposes the exact 30 missing materials from the sy
   assert.equal(output.unrecognizedRowIndexes.length, 30);
   assert.match(
     output.warnings.join("\n"),
-    /完整性对账.*30 个素材.*X101 C001–C015、X102 C001–C005、X102 C009–C015、X102 C056–C058/,
+    /30 个素材.*X101 C001–C015、X102 C001–C005、X102 C009–C015、X102 C056–C058/,
   );
 });
 
@@ -859,7 +874,10 @@ test("consistent duplicate OCR rows merge once while conflicting rows write noth
     "conflict",
     "conflict",
   ]);
-  assert.deepEqual(conflicting.table.rows, source.rows);
+  // Conflicting OCR fields are not written; only the intrinsic Camera #
+  // backfill touches the row, and it is not counted as exportable work.
+  assert.deepEqual(conflicting.table.rows[0].slice(0, source.rows[0].length), source.rows[0]);
+  assert.equal(conflicting.table.rows[0][source.rows[0].length], "A");
   assert.equal(conflicting.exportableCount, 0);
 });
 
@@ -870,7 +888,9 @@ test("a row with conflicting Reel Name and File Name is skipped", () => {
   const output = mergeSlateIntoResolveTable(source, [completeRecord()]);
 
   assert.equal(output.statuses[0].status, "unmatched");
-  assert.deepEqual(output.table.rows, source.rows);
+  // The row is skipped for writes (identity is ambiguous) — Camera # stays empty.
+  assert.deepEqual(output.table.rows[0].slice(0, source.rows[0].length), source.rows[0]);
+  assert.equal(output.table.rows[0][source.rows[0].length], "");
   assert.match(output.warnings.join("\n"), /卷名与文件名指向不同素材/);
 });
 
@@ -923,6 +943,7 @@ test("missing target fields are appended with canonical Resolve headers", () => 
     "Scene",
     "Take",
     "Comments",
+    "Camera #",
   ]);
   assert.deepEqual(output.table.rows[0], [
     "A001C001_suffix.mov",
@@ -932,8 +953,15 @@ test("missing target fields are appended with canonical Resolve headers", () => 
     "037",
     "02",
     "",
+    "A",
   ]);
-  assert.deepEqual(output.addedColumns, ["Shot", "Scene", "Take", "Comments"]);
+  assert.deepEqual(output.addedColumns, [
+    "Shot",
+    "Scene",
+    "Take",
+    "Comments",
+    "Camera #",
+  ]);
 });
 
 test("invalid, incomplete and unmatched slate rows do not create CSV rows", () => {
@@ -951,7 +979,12 @@ test("invalid, incomplete and unmatched slate rows do not create CSV rows", () =
     "incomplete",
     "unmatched",
   ]);
-  assert.deepEqual(output.table.rows, source.rows);
+  // No CSV rows are created and no OCR/Scene fields are written; only the
+  // intrinsic Camera # (from the clip's own name) is backfilled, and it is not
+  // counted as exportable work.
+  assert.equal(output.table.rows.length, source.rows.length);
+  assert.deepEqual(output.table.rows[0].slice(0, source.rows[0].length), source.rows[0]);
+  assert.equal(output.table.rows[0][source.rows[0].length], "A");
   assert.equal(output.exportableCount, 0);
 });
 
@@ -961,6 +994,122 @@ test("CSV parser rejects unclosed quotes and supports an explicit delimiter", ()
     ["File Name", "Scene"],
     ["A001C001.mov", "37"],
   ]);
+});
+
+test("a recognized clip with no sidecar fps warns instead of appending an empty fps row", () => {
+  const source = sourceTable([
+    ["A001C001.mov", "/A", "A001C001", "", "", "", "", ""],
+    ["A001C002.mov", "/A", "A001C002", "", "", "", "", ""],
+  ]);
+  const metadata = [
+    parseSlateMetadataText(
+      "Clip Name: A001C001\nSensor FPS: 48",
+      "A001C001-slate.txt",
+    ),
+  ];
+  const records = [
+    completeRecord(),
+    completeRecord({ videoCode: "C002" }),
+  ];
+  const output = mergeSlateIntoResolveTable(source, records, metadata);
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  // A real clip always carries a frame rate; C002 being recognized but lacking
+  // a usable Sensor FPS is a scan/card anomaly to warn about — never a blank
+  // fps row for the user to hand-confirm.
+  assert.ok(output.addedColumns.includes("Camera FPS"));
+  assert.ok(!output.addedColumns.includes("FPS 对账"));
+  assert.equal(output.table.rows.length, 2);
+  assert.equal(output.table.rows[1][columns.cameraFps], "");
+  assert.match(output.warnings.join("\n"), /没有可用 Sensor FPS/);
+  assert.match(output.warnings.join("\n"), /A001 C002/);
+  assert.doesNotMatch(output.warnings.join("\n"), /未找到 slate\.txt，帧率待人工确认/);
+});
+
+test("frame rate backfills to a CSV material even when it has no 场记 record", () => {
+  const source = sourceTable([
+    ["A001C001.mov", "/A", "A001C001", "", "", "", "", ""],
+    ["A001C002.mov", "/A", "A001C002", "", "", "", "", ""],
+  ]);
+  // The sidecar for C002 is on the card, but recognition only produced a
+  // record for C001 — C002's frame rate must still be backfilled.
+  const metadata = [
+    parseSlateMetadataText(
+      "Clip Name: A001C002\nSensor FPS: 50",
+      "A001C002-slate.txt",
+    ),
+  ];
+  const output = mergeSlateIntoResolveTable(source, [completeRecord()], metadata);
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.rows[1][columns.cameraFps], "50");
+  assert.equal(output.table.rows[0][columns.cameraFps], "");
+  assert.equal(output.cameraFpsMatchedMaterialCount, 1);
+  assert.match(output.warnings.join("\n"), /未匹配到场记/);
+});
+
+test("Camera # backfills the leading camera letter from each clip name", () => {
+  const source = sourceTable([
+    ["A004C004_20260801_RA259.mov", "/Volumes/A", "A004C004_20260801_RA259", "", "", "", ""],
+    ["B002C003.mov", "/Volumes/B", "B002C003", "", "", "", ""],
+    ["D001C0009_DEMO.MOV", "/fixtures/media/D", "D001C0009", "", "", "", ""],
+  ]);
+  const output = mergeSlateIntoResolveTable(source, [
+    completeRecord({ cardNumber: "A004", videoCode: "C004" }),
+  ]);
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.headers[columns.camera], "Camera #");
+  assert.equal(output.table.rows[0][columns.camera], "A");
+  assert.equal(output.table.rows[1][columns.camera], "B");
+  assert.equal(output.table.rows[2][columns.camera], "D");
+});
+
+test("Camera # never overwrites an existing value", () => {
+  const headers = [...ENGLISH_HEADERS, "Camera #"];
+  const source = sourceTable(
+    [["A001C001.mov", "/A", "A001C001", "", "", "", "", "", "自定"]],
+    { headers },
+  );
+  const output = mergeSlateIntoResolveTable(source, [completeRecord()]);
+  const columns = resolveColumnIndexes(output.table.headers);
+
+  assert.equal(output.table.rows[0][columns.camera], "自定");
+  assert.equal(output.addedColumns.length, 0);
+});
+
+test("Camera # writes only the canonical Resolve header and tolerates duplicate headers", () => {
+  // A localized "摄影机编号" column is not Resolve's header — it is ignored and
+  // never written.
+  const headers = [...ENGLISH_HEADERS, "Camera #", "摄影机编号"];
+  const source = sourceTable(
+    [["A001C001.mov", "/A", "A001C001", "", "", "", "", "", "", ""]],
+    { headers },
+  );
+  const columns = resolveColumnIndexes(source.headers);
+  assert.equal(columns.camera, 8);
+
+  const output = mergeSlateIntoResolveTable(source, [completeRecord()]);
+  assert.equal(output.table.rows[0][columns.camera], "A");
+  assert.equal(output.table.rows[0][columns.camera + 1], "");
+
+  // Two canonical "Camera #" columns do not fail the load; the first receives
+  // the backfill and the file still opens for the user to clean up.
+  const dup = sourceTable(
+    [["A001C001.mov", "/A", "A001C001", "", "", "", "", "", "", ""]],
+    { headers: [...ENGLISH_HEADERS, "Camera #", "Camera #"] },
+  );
+  const dupCols = resolveColumnIndexes(dup.headers);
+  assert.equal(dupCols.camera, 8);
+  const dupOut = mergeSlateIntoResolveTable(dup, [completeRecord()]);
+  assert.equal(dupOut.table.rows[0][dupCols.camera], "A");
+  assert.equal(dupOut.table.rows[0][dupCols.camera + 1], "");
+
+  // Other writable targets still reject duplicate headers.
+  assert.throws(
+    () => resolveColumnIndexes(["Scene", "File Name", "Scene"]),
+    /多个 Scene/,
+  );
 });
 
 function materialRange(cardNumber, start, end) {

@@ -7,3 +7,4 @@ export { useMetadataStore } from "./metadata-store";
 export { useTaskStore } from "./task-store";
 export { useExportStore } from "./export-store";
 export { useSettingsStore } from "./settings-store";
+export { useGlobalSettingsStore } from "./global-settings-store";

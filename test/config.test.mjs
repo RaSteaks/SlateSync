@@ -14,6 +14,7 @@ import {
 } from "../lib/config.mjs";
 import { formatSlateResultFields } from "../lib/schema.mjs";
 import { describeProviderModel } from "../lib/model-catalog.mjs";
+import { createProviderRegistry } from "../lib/provider-registry.mjs";
 
 test("workflow config defaults to four directory levels and XXX/XX/XX", () => {
   assert.deepEqual(normalizeWorkflowConfig({}), DEFAULT_WORKFLOW_CONFIG);
@@ -167,6 +168,34 @@ test("DashScope provider resolves with BaiLian defaults and fixed models", () =>
   const flagship = resolveModel("dashscope", "qwen3.8-max");
   assert.equal(flagship.apiId, "qwen3.8-max");
   assert.equal(flagship.qualityScore, 93);
+});
+
+test("legacy compatible Responses settings normalize before provider resolution", () => {
+  const provider = resolveProvider("openai-compatible", {
+    OPENAI_COMPATIBLE_API_MODE: "Responses",
+    OPENAI_COMPATIBLE_JSON_MODE: "JSON_OBJECT",
+  });
+
+  assert.equal(provider.transport, "responses");
+  assert.equal(provider.chatJsonMode, "json_schema");
+});
+
+test("legacy materialized records keep Responses routing when loaded from an old snapshot", () => {
+  const registry = createProviderRegistry({
+    customProviders: [{
+      id: "openai-compatible",
+      name: "旧兼容接口",
+      baseUrl: "https://legacy.example/v1",
+      transport: "Responses",
+      jsonMode: "json_object",
+      imageDetail: "high",
+      manualModelIds: ["legacy-model"],
+    }],
+  });
+
+  const provider = registry.resolveProvider("openai-compatible");
+  assert.equal(provider.transport, "responses");
+  assert.equal(provider.chatJsonMode, "json_schema");
 });
 
 test("public config exposes DashScope readiness and no secret values", () => {

@@ -1,8 +1,9 @@
 // Client-side image preprocessing for slate page recognition.
 //
-// Finds the dense content band of a scanned page (to crop dead margin), splits
-// a page into header + overlapping body segments for higher detail, and
-// computes the core-column crop width used by the "high accuracy" audit pass.
+// Finds the outer bounds of dense content bands on a scanned page (to crop dead
+// margin), splits a page into header + overlapping body segments for higher
+// detail, and computes the core-column crop width used by the "high accuracy"
+// audit pass.
 const DEFAULT_DARK_THRESHOLD = 225;
 const DEFAULT_ROW_DENSITY = 0.02;
 
@@ -60,21 +61,20 @@ export function findDenseRowBand(
   }
   bands.push({ start, end, activeCount });
 
-  const best = bands
-    .filter((band) => band.activeCount >= 3)
-    .sort((left, right) => {
-      const leftSpan = left.end - left.start + 1;
-      const rightSpan = right.end - right.start + 1;
-      return rightSpan - leftSpan || right.activeCount - left.activeCount;
-    })[0];
+  // Keep the outer bounds of every supported content band. A slate may put a
+  // title/header and its table in separate bands with a large blank gap; using
+  // only the largest band would silently delete valid recognition input.
+  const contentBands = bands.filter((band) => band.activeCount >= 3);
+  const firstBand = contentBands[0];
+  const lastBand = contentBands[contentBands.length - 1];
   const minimumHeight = Math.max(8, Math.round(height * minBandRatio));
-  if (!best || best.end - best.start + 1 < minimumHeight) {
+  if (!firstBand || !lastBand || lastBand.end - firstBand.start + 1 < minimumHeight) {
     return { top: 0, bottom: height, cropped: false };
   }
 
   const padding = Math.max(4, Math.round(height * paddingRatio));
-  const top = Math.max(0, best.start - padding);
-  const bottom = Math.min(height, best.end + padding + 1);
+  const top = Math.max(0, firstBand.start - padding);
+  const bottom = Math.min(height, lastBand.end + padding + 1);
   const savedHeight = height - (bottom - top);
   if (savedHeight < height * 0.08) {
     return { top: 0, bottom: height, cropped: false };

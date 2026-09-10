@@ -30,7 +30,7 @@
     "tables": {
       "app_meta": [["key", "TEXT", 0, null, 1], ["value", "TEXT", 1, null, 0]],
       "project_meta": [["key", "TEXT", 0, null, 1], ["value", "TEXT", 1, null, 0]],
-      "tasks": [["id", "TEXT", 0, null, 1], ["data_json", "TEXT", 1, null, 0], ["created_at", "TEXT", 1, null, 0], ["updated_at", "TEXT", 1, null, 0]],
+      "tasks": [["id", "TEXT", 0, null, 1], ["data_json", "TEXT", 1, null, 0], ["created_at", "TEXT", 1, null, 0], ["updated_at", "TEXT", 1, null, 0], ["summary_json", "TEXT", 0, null, 0]],
       "diagnostic_sessions": [["id", "TEXT", 0, null, 1], ["data_json", "TEXT", 1, null, 0], ["saved_at", "TEXT", 1, null, 0]],
       "scenario_profiles": [["id", "TEXT", 0, null, 1], ["schema_version", "INTEGER", 1, null, 0], ["fingerprint_version", "INTEGER", 1, null, 0], ["fingerprint", "TEXT", 1, null, 0], ["profile_json", "TEXT", 1, null, 0], ["sample_count", "INTEGER", 1, "1", 0], ["created_at", "TEXT", 1, null, 0], ["updated_at", "TEXT", 1, null, 0], ["last_used_at", "TEXT", 1, null, 0]],
       "scenario_observations": [["id", "TEXT", 0, null, 1], ["profile_id", "TEXT", 0, null, 0], ["fingerprint_version", "INTEGER", 1, null, 0], ["fingerprint", "TEXT", 1, null, 0], ["observation_json", "TEXT", 1, null, 0], ["created_at", "TEXT", 1, null, 0]]

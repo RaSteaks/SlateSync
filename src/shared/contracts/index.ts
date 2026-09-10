@@ -21,7 +21,70 @@ export interface ProviderSummary {
   readonly label: string;
   readonly configured: boolean;
   readonly requiredEnv: readonly string[];
+  readonly type?: "builtin" | "custom";
+  readonly editable?: boolean;
 }
+
+export type ModelCapabilityStatus =
+  | "declared"
+  | "inferred"
+  | "verified"
+  | "pending"
+  | "unsupported"
+  | "failed"
+  | "canceled";
+
+export interface CustomProviderCapabilityVerification {
+  readonly status: "verified" | "failed" | "canceled";
+  readonly revision: number;
+  readonly checkedAt: string | null;
+  readonly capabilitySource?: string;
+  readonly message?: string;
+}
+
+/** Non-secret provider configuration returned to the Renderer. */
+export interface CustomProviderSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly label?: string;
+  readonly baseUrl: string;
+  readonly transport: "chat-completions" | "responses";
+  readonly jsonMode: "json_schema" | "json_object" | "prompt";
+  readonly imageDetail: "auto" | "low" | "high" | "original";
+  readonly manualModelIds: readonly string[];
+  readonly revision: number;
+  readonly keyConfigured: boolean;
+  /** Revision-scoped outcomes for every model actually probed, not only manual IDs. */
+  readonly capabilityCache?: Readonly<Record<string, CustomProviderCapabilityVerification>>;
+}
+
+export interface CustomProviderConfigRequest {
+  readonly id?: string;
+  readonly providerId?: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly transport?: "chat-completions" | "responses";
+  readonly jsonMode?: "json_schema" | "json_object" | "prompt";
+  readonly imageDetail?: "auto" | "low" | "high" | "original";
+  readonly manualModelIds?: readonly string[];
+  /** Accepted only by Main and never returned or logged. */
+  readonly apiKey?: string;
+  readonly replaceApiKey?: boolean;
+  readonly clearApiKey?: boolean;
+}
+
+// Additive aliases keep the contract discoverable for callers that model the
+// persisted shape (`Config`) separately from the create/update request shape.
+export type CustomProviderConfig = CustomProviderSummary;
+export type NewCustomProviderRequest = CustomProviderConfigRequest;
+export type UpdateCustomProviderRequest = CustomProviderConfigRequest & { readonly id: string };
+
+export interface CustomProviderDeleteRequest {
+  readonly id: string;
+  readonly confirm?: boolean;
+}
+
+export type DeleteCustomProviderRequest = CustomProviderDeleteRequest;
 
 export interface ModelData {
   readonly id: string;
@@ -38,10 +101,20 @@ export interface ModelData {
   readonly fixedPriority?: number | null;
   readonly discovered?: boolean;
   readonly verifiedAvailable?: boolean;
-  readonly qualityScore?: number;
-  readonly valueScore?: number;
+  readonly qualityScore?: number | null;
+  readonly valueScore?: number | null;
   readonly qualityLabel?: string;
   readonly valueLabel?: string;
+  readonly capabilityStatus?: ModelCapabilityStatus;
+  readonly capabilitySource?: string;
+  /** Safe, redacted probe failure detail suitable for recovery UI. */
+  readonly capabilityMessage?: string | null;
+  readonly capabilityCheckedAt?: string | null;
+  readonly qualitySource?: string;
+  readonly qualityUpdatedAt?: string | null;
+  readonly valueSource?: string;
+  readonly valueUpdatedAt?: string | null;
+  readonly priceUpdatedAt?: string | null;
 }
 
 export interface OcrEngineStatus {
@@ -57,11 +130,16 @@ export interface OcrEngineStatus {
   readonly minimumConfidence?: number;
   readonly maxBlocksPerView?: number;
   readonly modelVersion?: string;
+  /** Effective Paddle preset and model-side detection sizing, when exposed. */
+  readonly preset?: string;
+  readonly presetLabel?: string;
   readonly profile?: string;
   readonly profileLabel?: string;
   readonly detectionModel?: string;
   readonly recognitionModel?: string;
   readonly recognitionBatchSize?: number;
+  /** Effective text detector longest side after preset/custom resolution. */
+  readonly textDetLimitSideLen?: number;
   readonly device?: string;
 }
 
@@ -115,6 +193,7 @@ export interface ConfigData {
   readonly ocrSelection: OcrSelection;
   readonly upload: UploadLimits;
   readonly workflow: WorkflowConfig;
+  readonly customProviders?: readonly CustomProviderSummary[];
 }
 
 export interface ProjectSettings {
@@ -156,6 +235,16 @@ export interface ProjectData extends ProjectSummary {
   readonly lastRecognitionDefaults: RecognitionDefaults | null;
 }
 
+/**
+ * 打开项目的一次性快照：单个 IPC 同时供给工作台首屏可用的完整投影，
+ * 替代 load-project / list-scenarios / list-tasks 三次并行往返。
+ */
+export interface ProjectLoadSnapshot {
+  readonly project: ProjectData;
+  readonly scenarios: readonly ScenarioSummary[];
+  readonly tasks: readonly TaskListItem[];
+}
+
 export interface LibraryInfo {
   readonly id: string;
   readonly name: string;
@@ -178,6 +267,16 @@ export type LibraryImportResult =
 export type LibraryExportResult =
   | { readonly canceled: true }
   | { readonly canceled: false; readonly library: ValidatedLibraryInfo };
+
+/** 项目包操作取消时不改变索引；成功导入返回已经生成新 ID 的完整项目。 */
+export type ProjectImportResult =
+  | { readonly canceled: true }
+  | { readonly canceled: false; readonly project: ProjectData };
+
+/** 导出结果携带规范化后的目录路径，方便两套 Renderer 给出一致反馈。 */
+export type ProjectExportResult =
+  | { readonly canceled: true }
+  | { readonly canceled: false; readonly project: ProjectSummary; readonly path: string };
 
 export type LibraryLocationResult = LibraryImportResult;
 
@@ -256,6 +355,7 @@ export type GlobalSettingKey =
   | "PADDLEOCR_ENABLED"
   | "PADDLEOCR_REQUIRED"
   | "PADDLEOCR_MODEL_VERSION"
+  | "PADDLEOCR_PRESET"
   | "PADDLEOCR_PROFILE"
   | "PADDLEOCR_LANGUAGE"
   | "PADDLEOCR_DEVICE"
@@ -265,6 +365,7 @@ export type GlobalSettingKey =
   | "PADDLEOCR_PYTHON"
   | "PADDLEOCR_MIN_CONFIDENCE"
   | "PADDLEOCR_MAX_BLOCKS_PER_VIEW"
+  | "PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN"
   | "PADDLEOCR_TIMEOUT_MS"
   | "PADDLE_PDX_CACHE_HOME"
   | "VISIONOCR_ENABLED"
@@ -292,6 +393,7 @@ export interface GlobalSettingsData {
   readonly keyConfigured: Readonly<Record<string, boolean>>;
   /** True after saving SLATESYNC_CONFIG_PATH, which is read at next startup. */
   readonly restartRequired: boolean;
+  readonly customProviders?: readonly CustomProviderSummary[];
 }
 
 export interface SlateCsvRecord {
@@ -350,6 +452,25 @@ export interface OcrSettings {
   readonly setupSkipped: boolean;
 }
 
+export type PaddleOcrInstallStage =
+  | "detect-python"
+  | "create-environment"
+  | "install-dependencies"
+  | "verify"
+  | "completed";
+
+/** Main-owned installation progress; percentages represent completed stages. */
+export interface PaddleOcrInstallProgress {
+  readonly stage: PaddleOcrInstallStage;
+  readonly percent: number;
+  readonly message: string;
+}
+
+export interface PaddleOcrInstallResult extends OcrSettings {
+  readonly paddleVersion: string;
+  readonly paddleOcrVersion: string;
+}
+
 export type OcrCheckResult =
   | {
       readonly ok: true;
@@ -373,6 +494,55 @@ export type VisionOcrCheckResult =
       readonly error: { readonly code: string; readonly message: string };
     };
 
+/** Read-only Python probe result for the OCR environment dialog. */
+export interface OcrPythonProbe {
+  readonly found: boolean;
+  /** Resolved probe command for display, e.g. "python3" or "py -3". */
+  readonly command: string;
+  /** Interpreter banner, e.g. "Python 3.12.4". Empty when not found. */
+  readonly version: string;
+  /** Installer guidance is Python 3.10+; null when the banner is unparseable. */
+  readonly meetsMinimum: boolean | null;
+  /** Probe order that was attempted, e.g. ["python3", "python"]. */
+  readonly candidates: readonly string[];
+  readonly error: string | null;
+}
+
+/** Secret-free machine probe behind the Global Settings OCR dialog. */
+export interface OcrEnvironmentSnapshot {
+  readonly platform: string;
+  /** Human label with OS version when available, e.g. "macOS 15.5". */
+  readonly platformLabel: string;
+  readonly architecture: string;
+  /** Human label, e.g. "Apple Silicon（arm64）". */
+  readonly architectureLabel: string;
+  readonly packaged: boolean;
+  readonly python: OcrPythonProbe;
+  readonly paddle: {
+    readonly venvPath: string;
+    /** Interpreter path the one-click installer owns. */
+    readonly pythonPath: string;
+    readonly venvExists: boolean;
+    /** PADDLEOCR_PYTHON from the effective runtime env; "" when not pinned. */
+    readonly configuredPythonPath: string;
+    /**
+     * Interpreter the next recognition would actually use (configured →
+     * workspace venv). Empty when neither exists and runtime falls back to
+     * auto-discovery ("python3").
+     */
+    readonly activePythonPath: string;
+    /** Existence of activePythonPath; null while resolution is auto-discovery. */
+    readonly activePythonExists: boolean | null;
+  };
+  readonly vision: {
+    readonly binaryPath: string;
+    readonly binaryExists: boolean;
+    readonly source: "explicit" | "bundled" | "local-build" | "missing";
+    /** No binary yet, but a dev Swift toolchain can build one on demand. */
+    readonly swiftToolchain: boolean;
+  };
+}
+
 export interface JsonSchemaCapabilityResult {
   readonly supported: boolean;
   readonly model: string;
@@ -380,6 +550,40 @@ export interface JsonSchemaCapabilityResult {
   readonly status: number | null;
   readonly checkedAt: string;
   readonly message: string;
+}
+
+export interface ModelProbeRequest {
+  readonly providerId: string;
+  readonly modelIds?: readonly string[];
+}
+
+export interface ModelProbeProgress {
+  readonly providerId: string;
+  /** Connection revision used for this event; stale late events can be ignored. */
+  readonly revision?: number;
+  readonly model: string;
+  readonly completed: number;
+  readonly total: number;
+  readonly percent: number;
+  readonly result?: ModelCapabilityProbeResult;
+}
+
+export interface ModelCapabilityProbeResult {
+  readonly supported: boolean;
+  readonly model: string;
+  readonly transport: "chat-completions" | "responses";
+  readonly status: number | null;
+  readonly checkedAt: string;
+  readonly message: string;
+  readonly capabilityStatus: ModelCapabilityStatus;
+}
+
+export interface ModelProbeResult {
+  readonly canceled: boolean;
+  readonly revision?: number;
+  readonly results: readonly ModelCapabilityProbeResult[];
+  readonly completed: number;
+  readonly total: number;
 }
 
 export interface RecognitionRecord {
@@ -536,6 +740,11 @@ export interface LogsReadResult {
   readonly entries: readonly LogEntry[];
   /** True when more matching entries exist beyond the returned limit. */
   readonly hasMore: boolean;
+}
+
+/** Result of asking the Main process to reveal the private local log folder. */
+export interface LogsOpenDirectoryResult {
+  readonly opened: boolean;
 }
 
 export interface TaskListItem {
@@ -739,8 +948,27 @@ export interface ModelDiscoveryResult {
   readonly availableModelCount: number | null;
   readonly visionModelCount: number;
   readonly fixedModelCount: number;
+  /** Number of models waiting for explicit capability verification. */
+  readonly pendingModelCount?: number;
+  /** False when a custom gateway has no usable GET /models endpoint. */
+  readonly modelsEndpointAvailable?: boolean;
   readonly warning?: string;
   readonly models: readonly ModelData[];
+  readonly pendingModels?: readonly ModelData[];
+  readonly unsupportedModelCount?: number;
+  readonly unsupportedModels?: readonly {
+    readonly id: string;
+    readonly reason: string;
+    readonly capabilityStatus?: "unsupported";
+  }[];
+  readonly failedModelCount?: number;
+  readonly failedModels?: readonly ModelData[];
+  readonly statusCounts?: Readonly<{
+    readonly usable: number;
+    readonly pending: number;
+    readonly unsupported: number;
+    readonly failed: number;
+  }>;
 }
 
 export interface SlateSyncApi {
@@ -752,10 +980,13 @@ export interface SlateSyncApi {
     getLibraryInfo(): Promise<Result<LibraryInfo | null>>;
     importLibrary(): Promise<Result<LibraryImportResult>>;
     exportLibrary(): Promise<Result<LibraryExportResult>>;
+    importProject(): Promise<Result<ProjectImportResult>>;
+    exportProject(request: ProjectIdRequest): Promise<Result<ProjectExportResult>>;
     changeLibraryLocation(): Promise<Result<LibraryLocationResult>>;
     renameLibrary(request: LibraryRenameRequest): Promise<Result<LibraryRenameResult>>;
     create(request: ProjectRequest): Promise<Result<ProjectData>>;
     load(request: ProjectIdRequest): Promise<Result<ProjectData>>;
+    loadSnapshot(request: ProjectIdRequest): Promise<Result<ProjectLoadSnapshot>>;
     update(request: ProjectRequest): Promise<Result<ProjectData>>;
     archive(request: ProjectIdRequest): Promise<Result<ProjectData>>;
     restore(request: ProjectIdRequest): Promise<Result<ProjectData>>;
@@ -791,11 +1022,23 @@ export interface SlateSyncApi {
     getOcrSettings(): Promise<Result<OcrSettings>>;
     saveOcrSettings(request: OcrSettingsRequest): Promise<Result<OcrSettings>>;
     checkOcr(request: OcrCheckRequest): Promise<Result<OcrCheckResult>>;
+    installPaddleOcr(): Promise<Result<PaddleOcrInstallResult>>;
+    cancelPaddleOcrInstall(): Promise<Result<{ readonly canceled: boolean }>>;
+    onPaddleOcrInstallProgress(listener: (event: PaddleOcrInstallProgress) => void): () => void;
     checkVisionOcr(): Promise<Result<VisionOcrCheckResult>>;
+    getOcrEnvironment(): Promise<Result<OcrEnvironmentSnapshot>>;
     checkCompatibleJsonSchema(): Promise<Result<JsonSchemaCapabilityResult>>;
+    listCustomProviders(): Promise<Result<CustomProviderSummary[]>>;
+    createCustomProvider(request: CustomProviderConfigRequest): Promise<Result<CustomProviderSummary>>;
+    updateCustomProvider(request: UpdateCustomProviderRequest): Promise<Result<CustomProviderSummary>>;
+    deleteCustomProvider(request: CustomProviderDeleteRequest): Promise<Result<{ readonly deleted: string }>>;
+    probeCustomModels(request: ModelProbeRequest): Promise<Result<ModelProbeResult>>;
+    cancelCustomModelProbe(request: { readonly providerId: string }): Promise<Result<{ readonly canceled: boolean }>>;
+    onModelProbeProgress(listener: (event: ModelProbeProgress) => void): () => void;
   };
   readonly logs: {
     read(request: LogsReadRequest): Promise<Result<LogsReadResult>>;
+    openDirectory(): Promise<Result<LogsOpenDirectoryResult>>;
   };
 }
 

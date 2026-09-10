@@ -1,10 +1,10 @@
-import { Activity, AlertTriangle, CheckCircle2, Info, RefreshCw, ScrollText, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, FolderOpen, Info, RefreshCw, ScrollText, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { LogEntry, LogLevel, LogsReadRequest } from "../../../shared/contracts/index.js";
-import { Badge, Button, EmptyState, Field, Icon, InlineError, Progress, Select, Stack, Surface, Text } from "../../design-system";
-import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
-import { useRecognitionStore } from "../../state";
+import { Badge, Button, EmptyState, Field, Icon, IconButton, InlineError, Progress, Select, Stack, Surface, Text } from "../../design-system";
+import { appErrorFromUnknown, getSlateSync, requireLocalLogDirectoryApi, unwrap } from "../../services/api";
+import { useRecognitionStore, useUiStore } from "../../state";
 import styles from "../../app/app.module.css";
 
 type LevelFilter = "all" | LogLevel;
@@ -75,6 +75,7 @@ function LogEntryRow({ entry }: { entry: LogEntry }) {
 }
 
 export function LogViewerPage() {
+  const setToast = useUiStore((state) => state.setToast);
   const recognition = useRecognitionStore(useShallow((state) => ({
     running: state.running,
     phase: state.phase,
@@ -91,8 +92,27 @@ export function LogViewerPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openingDirectory, setOpeningDirectory] = useState(false);
   const inFlightRef = useRef(false);
   const requestIdRef = useRef(0);
+
+  // Keep the folder reveal behind the typed bridge so the viewer never needs
+  // to know or expose the Main process's private userData path.
+  const openLocalLogDirectory = useCallback(async () => {
+    if (openingDirectory) return;
+    setOpeningDirectory(true);
+    try {
+      // HMR can leave an older Preload attached to the refreshed Renderer;
+      // validate this additive API before calling it so recovery stays clear.
+      const api = requireLocalLogDirectoryApi();
+      const result = await unwrap(await api.logs.openDirectory());
+      setToast({ tone: result.opened ? "success" : "danger", message: result.opened ? "已打开本地日志文件夹" : "无法打开本地日志文件夹" });
+    } catch (nextError) {
+      setToast({ tone: "danger", message: appErrorFromUnknown(nextError).message });
+    } finally {
+      setOpeningDirectory(false);
+    }
+  }, [openingDirectory, setToast]);
 
   const loadEntries = useCallback(async (silent = false) => {
     if (inFlightRef.current) return;
@@ -162,7 +182,7 @@ export function LogViewerPage() {
       </Surface>
 
       <Surface className={styles.panel}>
-        <div className={styles.sectionHeader}><div><p className={styles.kicker}>存储策略</p><h2 className={styles.sectionTitle}>本地日志</h2></div><Icon icon={ScrollText} size={19} /></div>
+        <div className={styles.sectionHeader}><div><p className={styles.kicker}>存储策略</p><h2 className={styles.sectionTitle}>本地日志</h2></div><Stack direction="row" gap={1} align="center"><IconButton label="打开本地日志文件夹" title="打开本地日志文件夹" size="sm" disabled={openingDirectory} onClick={() => void openLocalLogDirectory()}><FolderOpen size={17} aria-hidden="true" /></IconButton><Icon icon={ScrollText} size={19} /></Stack></div>
         <Text tone="muted" size="sm">按天写入，保留最近 7 天；日志读取通过 Main 进程完成，页面每 3 秒刷新一次。</Text>
         <Stack direction="row" justify="between" gap={3} style={{ marginTop: 18 }}>
           <Text tone="subtle" size="xs" mono>{entries.length} 条{hasMore ? " · 还有更多" : ""}</Text>

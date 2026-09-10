@@ -3,7 +3,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "rea
 import { Button, Icon, InlineError, Progress, Stack, Surface, Text } from "../../design-system";
 import { asPreparationError, getPreparationService } from "../../services/preparation-service";
 import { createOperationGuard } from "../../services/operation-guard";
-import { useProjectStore, useRecognitionStore, useSlateStore } from "../../state";
+import { acquireWorkspaceOperation, isWorkspaceBusy } from "../../services/workspace-operation";
+import { useProjectStore, useRecognitionStore, useSlateStore, useTaskStore } from "../../state";
 import styles from "../../app/app.module.css";
 import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateSlateFile } from "../../validation/input-validation";
@@ -28,30 +29,38 @@ export const SlateInputPanel = forwardRef<SlateInputPanelHandle, { readonly onIn
   const setPreparing = useSlateStore((state) => state.setPreparing);
   const setError = useSlateStore((state) => state.setError);
   const recognition = useRecognitionStore((state) => state.running);
+  const operation = useTaskStore((state) => state.operation);
+  const blocked = recognition || Boolean(operation);
   const preparationGuard = useMemo(() => createOperationGuard(), []);
-  useImperativeHandle(ref, () => ({ openPicker: () => inputRef.current?.click() }), []);
+  useImperativeHandle(ref, () => ({ openPicker: () => { if (!isWorkspaceBusy()) inputRef.current?.click(); } }), []);
 
   useEffect(() => () => { preparationGuard.invalidate(); getPreparationService().terminate(); }, [preparationGuard]);
 
   const accept = config?.upload.acceptedTypes || ["image/jpeg", "image/png", "image/webp", "application/pdf"];
   const selectFile = async (file: File | undefined) => {
-    if (!file || recognition) return;
+    const projectId = useProjectStore.getState().current?.id;
+    if (!file || !projectId || isWorkspaceBusy()) return;
     const validation = validateSlateFile(file, { acceptedTypes: accept, ...(config?.upload.maxBytes ? { maxBytes: config.upload.maxBytes } : {}) });
     if (!validation.ok) { setError({ code: "INVALID_FILE", message: validation.message, retryable: false }); return; }
     const type = validation.type || file.type;
+    // File preparation owns the same lease as recognition/task transitions;
+    // a delayed worker result cannot be attached to a newly created task.
+    const owner = acquireWorkspaceOperation("input", projectId);
+    if (!owner) return;
     const operationId = preparationGuard.start();
     setError(null); setPreparing(true, 2, "正在读取场记单");
     try {
       const result = await getPreparationService().prepare(file, (nextProgress, message) => { if (preparationGuard.isCurrent(operationId)) setPreparing(true, nextProgress, message); });
-      if (!preparationGuard.isCurrent(operationId)) return;
+      if (!preparationGuard.isCurrent(operationId) || !owner.isCurrent()) return;
       setInput({ filename: file.name, fileType: type, fileSize: file.size, pageCount: result.pageCount, imageDataGroups: result.imageDataGroups });
       onInputChanged?.();
-    } catch (nextError) { if (preparationGuard.isCurrent(operationId)) setError(asPreparationError(nextError)); }
+    } catch (nextError) { if (preparationGuard.isCurrent(operationId) && owner.isCurrent()) setError(asPreparationError(nextError)); }
+    finally { owner.release(); }
   };
-  const { dragging, dropProps } = useFileDrop({ disabled: recognition, onFile: selectFile });
+  const { dragging, dropProps } = useFileDrop({ disabled: blocked, onFile: selectFile });
 
-  const removeInput = () => { clearInput(); onInputChanged?.(); };
+  const removeInput = () => { if (!isWorkspaceBusy()) { clearInput(); onInputChanged?.(); } };
   // The input panel reports file identity only; actual page imagery belongs to
   // WorkspacePage's single dedicated preview so the slate is never duplicated.
-  return <Surface className={styles.panel} aria-labelledby="slate-input-title"><input ref={inputRef} hidden type="file" accept={accept.join(",") + ",.pdf"} onChange={(event) => { const file = event.target.files?.[0]; if (file) void selectFile(file); event.currentTarget.value = ""; }} /><div className={styles.sectionHeader}><div><p className={styles.kicker}>01 / 场记输入</p><h2 id="slate-input-title" className={styles.sectionTitle}>载入场记单</h2></div><Icon icon={fileType === "application/pdf" ? FileText : FileImage} size={18} /></div>{!filename ? <button type="button" className={styles.uploadZone} data-dragging={dragging} {...dropProps} onClick={() => inputRef.current?.click()}><span><span className={styles.uploadIcon}><UploadCloud size={22} /></span><strong>拖入场记单，或点击选择</strong><Text tone="subtle" size="xs">PDF、JPEG、PNG、WebP · 最多 {config?.upload.maxBytes ? (config.upload.maxBytes / 1024 / 1024).toFixed(0) : "20"} MB</Text></span></button> : <div className={styles.fileRow}><div className={styles.fileThumb}><Icon icon={fileType === "application/pdf" ? FileText : FileImage} size={20} /></div><div className={styles.fileCopy}><strong>{filename}</strong><small>{fileType === "application/pdf" ? "PDF" : "图片"} · {(fileSize / 1024 / 1024).toFixed(2)} MB · {pageCount} 页</small></div><Button variant="ghost" size="sm" onClick={removeInput} disabled={recognition} startIcon={<Trash2 size={14} />}>移除</Button></div>}{preparing && <Stack gap={2} style={{ marginTop: 14 }}><Stack direction="row" justify="between"><Text tone="muted" size="xs">{preparationMessage}</Text><Text tone="accent" size="xs" mono>{Math.round(progress)}%</Text></Stack><Progress value={progress} label="场记单准备进度" /></Stack>}{error && <div style={{ marginTop: 14 }}><InlineError message={error.message} onRetry={() => setError(null)} /></div>}</Surface>;
+  return <Surface className={styles.panel} aria-labelledby="slate-input-title"><input ref={inputRef} hidden disabled={blocked} type="file" accept={accept.join(",") + ",.pdf"} onChange={(event) => { const file = event.target.files?.[0]; if (file) void selectFile(file); event.currentTarget.value = ""; }} /><div className={styles.sectionHeader}><div><p className={styles.kicker}>01 / 场记输入</p><h2 id="slate-input-title" className={styles.sectionTitle}>载入场记单</h2></div><Icon icon={fileType === "application/pdf" ? FileText : FileImage} size={18} /></div>{!filename ? <button type="button" className={styles.uploadZone} disabled={blocked} data-dragging={dragging} {...dropProps} onClick={() => inputRef.current?.click()}><span><span className={styles.uploadIcon}><UploadCloud size={22} /></span><strong>拖入场记单，或点击选择</strong><Text tone="subtle" size="xs">PDF、JPEG、PNG、WebP · 最多 {config?.upload.maxBytes ? (config.upload.maxBytes / 1024 / 1024).toFixed(0) : "20"} MB</Text></span></button> : <div className={styles.fileRow}><div className={styles.fileThumb}><Icon icon={fileType === "application/pdf" ? FileText : FileImage} size={20} /></div><div className={styles.fileCopy}><strong>{filename}</strong><small>{fileType === "application/pdf" ? "PDF" : "图片"} · {(fileSize / 1024 / 1024).toFixed(2)} MB · {pageCount} 页</small></div><Button variant="ghost" size="sm" onClick={removeInput} disabled={blocked} startIcon={<Trash2 size={14} />}>移除</Button></div>}{preparing && <Stack gap={2} style={{ marginTop: 14 }}><Stack direction="row" justify="between"><Text tone="muted" size="xs">{preparationMessage}</Text><Text tone="accent" size="xs" mono>{Math.round(progress)}%</Text></Stack><Progress value={progress} label="场记单准备进度" /></Stack>}{error && <div style={{ marginTop: 14 }}><InlineError message={error.message} onRetry={() => setError(null)} /></div>}</Surface>;
 });

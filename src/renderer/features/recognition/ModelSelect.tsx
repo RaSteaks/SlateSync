@@ -1,6 +1,7 @@
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
-import type { ModelData } from "../../../shared/contracts/index.js";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { Button as AriaButton, Dialog as AriaDialog, Popover, Tree, TreeHeader, TreeItem, TreeItemContent, TreeSection } from "react-aria-components";
 import styles from "../../app/app.module.css";
 import { modelOptionLabel, type ModelOptionGroup } from "./model-options";
 
@@ -16,233 +17,130 @@ type ModelSelectProps = {
   "data-state"?: "error" | "success";
 };
 
-type SelectedModel = {
-  group: ModelOptionGroup;
-  model: ModelData;
-};
-
-type MenuPosition = {
-  left: number;
-  width: number;
-  maxHeight: number;
-  top?: number;
-  bottom?: number;
-};
-
-/**
- * A native select cannot collapse optgroups, so this keeps fixed recommendations
- * visible while exposing discovered vendor buckets through disclosure buttons.
- * The root also stops clicks from bubbling through Field's wrapping label.
- */
-export function ModelSelect({
-  value,
-  groups,
-  onChange,
-  placeholder,
-  disabled = false,
-  id,
-  "aria-describedby": ariaDescribedBy,
-  "aria-invalid": ariaInvalid,
-  "data-state": dataState,
-}: ModelSelectProps) {
+/** The maintained Tree owns focus, typeahead and hierarchical selection. The
+ * popup is a dialog because React Aria's Tree has treegrid semantics.
+ * Only leaf activation commits; browsing or dismissing preserves the value. */
+export function ModelSelect({ value, groups, onChange, placeholder, disabled = false, id, "aria-describedby": describedBy, "aria-invalid": invalid, "data-state": dataState }: ModelSelectProps) {
   const [open, setOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
-  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const instanceId = useId().replace(/:/g, "");
-  const listboxId = "model-picker-" + instanceId;
-
-  const selected = useMemo<SelectedModel | null>(() => {
+  const popupRef = useRef<HTMLElement>(null);
+  const openRef = useRef(false);
+  const popupId = useId();
+  const catalogIdentity = groups.map((group) => `${group.key}:${group.models.map((model) => model.id).join(",")}`).join("|");
+  const selected = useMemo(() => {
     for (const group of groups) {
       const model = group.models.find((candidate) => candidate.id === value);
-      if (model) return { group, model };
+      if (model) return { model, group, key: `${group.key}:${model.id}` };
     }
     return null;
   }, [groups, value]);
+  const leaves = useMemo(() => new Map<string, string>(groups.flatMap((group) => group.models.map((model) => [`${group.key}:${model.id}`, model.id] as const))), [groups]);
+  const groupKeys = groups.filter((group) => group.collapsible).map((group) => group.key);
+
+  const changeOpen = (next: boolean) => {
+    if (next && disabled) return;
+    if (next && selected?.group.collapsible) setExpanded((keys) => new Set(keys).add(selected.group.key));
+    openRef.current = next;
+    setOpen(next);
+  };
+  const closeAndRestore = () => {
+    // Remove the popover's focus scope before restoring the form position.
+    // Otherwise focus containment redirects the trigger focus into the tree.
+    flushSync(() => changeOpen(false));
+    if (!triggerRef.current?.disabled) triggerRef.current?.focus({ preventScroll: true });
+  };
+  const choose = (key: string) => {
+    const modelId = leaves.get(key);
+    if (!openRef.current || disabled || !modelId) return;
+    // Close synchronously so one activation cannot submit twice.
+    openRef.current = false;
+    setOpen(false);
+    onChange(modelId);
+    // The popover restores focus after the press has finished. Moving focus
+    // during Enter's keydown would send its native click to the trigger.
+  };
 
   useEffect(() => {
-    if (!open) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setMenuPosition(null);
-      return undefined;
-    }
-    const updateMenuPosition = () => {
-      const triggerRect = triggerRef.current?.getBoundingClientRect();
-      if (!triggerRect) return;
-      const gap = 6;
-      const viewportPadding = 12;
-      const preferredHeight = 320;
-      const availableBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - viewportPadding);
-      const availableAbove = Math.max(0, triggerRect.top - gap - viewportPadding);
-      const openBelow =
-        availableBelow >= Math.min(preferredHeight, window.innerHeight - viewportPadding * 2) ||
-        availableBelow >= availableAbove;
-      const availableHeight = openBelow ? availableBelow : availableAbove;
-      setMenuPosition({
-        left: triggerRect.left,
-        width: triggerRect.width,
-        maxHeight: Math.min(440, availableHeight),
-        ...(openBelow
-          ? { top: triggerRect.bottom + gap }
-          : { bottom: window.innerHeight - triggerRect.top + gap }),
-      });
-    };
-    // A fixed menu escapes scroll containers; closing on scroll avoids leaving
-    // the list behind when an ancestor moves the trigger.
-    const closeOnScroll = (event: Event) => {
-      if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
-      setOpen(false);
-    };
-    updateMenuPosition();
-    window.addEventListener("resize", updateMenuPosition);
-    document.addEventListener("scroll", closeOnScroll, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      document.removeEventListener("scroll", closeOnScroll, true);
-    };
-  }, [open]);
-
-  const triggerLabel = selected
-    ? modelOptionLabel(selected.model)
-    : value
-      ? value + " · 已保存（当前未加载）"
-      : placeholder;
-
-  const openPicker = () => {
-    if (disabled) return;
-    if (!open && selected?.group.collapsible) {
-      setExpandedGroups((current) => new Set(current).add(selected.group.key));
-    }
-    setOpen((current) => !current);
-  };
-
-  const toggleGroup = (groupKey: string) => {
-    setExpandedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
-    });
-  };
-
-  const chooseModel = (modelId: string) => {
-    onChange(modelId);
+    // Provider/catalog changes invalidate every previously visible option.
+    openRef.current = false;
     setOpen(false);
-    triggerRef.current?.focus();
+  }, [disabled, catalogIdentity]);
+
+  const label = selected ? modelOptionLabel(selected.model) : value ? `${value} · 已保存（当前未加载）` : placeholder;
+  const renderModel = (group: ModelOptionGroup, model: ModelOptionGroup["models"][number]) => {
+    const key = `${group.key}:${model.id}`;
+    return <TreeItem key={key} id={key} textValue={modelOptionLabel(model)} className={styles.modelPickerOption || ""}>
+      <TreeItemContent>
+        <span className={styles.modelPickerOptionLabel || ""}>{modelOptionLabel(model)}</span>
+        {value === model.id && <Check className={styles.modelPickerOptionCheck || ""} size={15} aria-hidden="true" />}
+      </TreeItemContent>
+    </TreeItem>;
   };
 
-  const handleRootBlur = (event: FocusEvent<HTMLDivElement>) => {
-    const nextTarget = event.relatedTarget;
-    if (!(nextTarget instanceof Node) || !rootRef.current?.contains(nextTarget)) {
-      setOpen(false);
-    }
-  };
-
-  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (open || !["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) return;
-    event.preventDefault();
-    openPicker();
-  };
-
-  return (
-    <div ref={rootRef} className={styles.modelPicker} onBlur={handleRootBlur} onClick={(event) => event.stopPropagation()}>
-      <button
-        ref={triggerRef}
-        id={id}
-        type="button"
-        className={styles.modelPickerTrigger}
-        data-open={open || undefined}
-        data-state={dataState}
-        aria-describedby={ariaDescribedBy}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={listboxId}
-        aria-invalid={ariaInvalid}
-        disabled={disabled}
-        onClick={openPicker}
-        onKeyDown={handleTriggerKeyDown}
-      >
-        <span className={styles.modelPickerTriggerLabel} data-placeholder={!value || undefined}>{triggerLabel}</span>
-        <ChevronDown className={styles.modelPickerTriggerIcon} size={16} aria-hidden="true" />
-      </button>
-      {open && (
-        <div
-          id={listboxId}
-          className={styles.modelPickerMenu}
-          role="listbox"
-          aria-label="模型列表"
-          style={menuPosition || { visibility: "hidden" }}
+  return <div className={styles.modelPicker || ""} onClick={(event) => event.stopPropagation()}
+      onKeyDownCapture={(event) => {
+        if (!openRef.current || !popupRef.current?.contains(event.target as Node) || event.nativeEvent.isComposing) return;
+        if (event.key === "Escape") {
+          event.preventDefault(); event.stopPropagation(); closeAndRestore();
+        } else if (event.key === "Tab") {
+          // Restore the logical form position before native Tab. The body
+          // portal escapes scrolling dialogs without changing tab order.
+          closeAndRestore();
+          event.stopPropagation();
+        }
+      }}>
+    <AriaButton
+      ref={triggerRef} {...(id ? { id } : {})} className={styles.modelPickerTrigger || ""} isDisabled={disabled}
+      data-open={open || undefined} data-state={dataState} {...(describedBy ? { "aria-describedby": describedBy } : {})}
+      {...(invalid === undefined ? {} : { "aria-invalid": invalid })} aria-expanded={open} aria-haspopup="dialog" {...(open ? { "aria-controls": popupId } : {})}
+      onPress={() => changeOpen(!openRef.current)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); changeOpen(true); }
+      }}
+    >
+      <span className={styles.modelPickerTriggerLabel || ""} data-placeholder={!value || undefined}>{label}</span>
+      <ChevronDown className={styles.modelPickerTriggerIcon || ""} size={16} aria-hidden="true" />
+    </AriaButton>
+    <Popover
+      ref={popupRef} isOpen={open} onOpenChange={changeOpen} triggerRef={triggerRef}
+      placement="bottom start" offset={6} containerPadding={12} maxHeight={440}
+      className={styles.modelPickerMenu || ""}
+      style={{ width: "var(--trigger-width)", boxSizing: "border-box", zIndex: "calc(var(--ss-z-overlay) + 1)" }}
+    >
+      <AriaDialog id={popupId} aria-label="选择模型" className={styles.modelPickerTreeDialog || ""}>
+        <Tree
+          aria-label="模型列表" className={styles.modelPickerTree || ""} autoFocus="first"
+          selectionMode="single" selectionBehavior="toggle" escapeKeyBehavior="none"
+          selectedKeys={selected ? [selected.key] : []} disabledKeys={groupKeys} disabledBehavior="selection"
+          expandedKeys={expanded} onExpandedChange={(keys) => setExpanded(new Set([...keys].map(String)))}
+          onSelectionChange={(keys) => {
+            if (keys === "all") return;
+            // Toggle selection keeps arrow/typeahead focus separate from the
+            // committed value. React Aria emits an empty set when the current
+            // leaf is activated again; that confirms the same value here.
+            const key = [...keys][0] ?? selected?.key;
+            if (key !== undefined) choose(String(key));
+          }}
+          renderEmptyState={() => <div className={styles.modelPickerEmpty || ""}>暂无可用模型</div>}
         >
-          {!groups.length && <div className={styles.modelPickerEmpty}>暂无可用模型</div>}
-          {groups.map((group) => {
-            const collapsible = group.collapsible === true;
-            const expanded = !collapsible || expandedGroups.has(group.key);
-            const groupOptionsId = listboxId + "-" + group.key;
-            return (
-              <section className={styles.modelPickerGroup} key={group.key}>
-                {collapsible ? (
-                  <button
-                    type="button"
-                    className={styles.modelPickerGroupHeader}
-                    data-expanded={expanded}
-                    aria-expanded={expanded}
-                    aria-controls={groupOptionsId}
-                    onClick={() => toggleGroup(group.key)}
-                  >
-                    <ChevronRight className={styles.modelPickerGroupHeaderIcon} size={14} aria-hidden="true" />
-                    <span>{group.label}</span>
-                  </button>
-                ) : (
-                  <div className={styles.modelPickerGroupHeader} data-fixed="true">
-                    <span>{group.label}</span>
-                  </div>
-                )}
-                {expanded && (
-                  <div id={groupOptionsId} className={styles.modelPickerGroupOptions} role="group" aria-label={group.label}>
-                    {group.models.map((model) => {
-                      const selectedModel = value === model.id;
-                      return (
-                        <button
-                          type="button"
-                          className={styles.modelPickerOption}
-                          key={model.id}
-                          role="option"
-                          aria-selected={selectedModel}
-                          onClick={() => chooseModel(model.id)}
-                        >
-                          <span className={styles.modelPickerOptionLabel}>{modelOptionLabel(model)}</span>
-                          {selectedModel && <Check className={styles.modelPickerOptionCheck} size={15} aria-hidden="true" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+          {groups.map((group) => <TreeSection key={group.key} className={styles.modelPickerGroup || ""} aria-label={group.label}>
+            {group.collapsible ? <TreeItem id={group.key} textValue={group.label} className={styles.modelPickerGroupHeader || ""}>
+              <TreeItemContent>
+                <AriaButton slot="chevron" className={styles.modelPickerGroupToggle || ""} aria-label={group.label}>
+                  <ChevronRight className={styles.modelPickerGroupHeaderIcon || ""} size={14} aria-hidden="true" />
+                  <span>{group.label}</span>
+                </AriaButton>
+              </TreeItemContent>
+              {group.models.map((model) => renderModel(group, model))}
+            </TreeItem> : <>
+              <TreeHeader className={styles.modelPickerGroupHeader || ""} data-fixed="true">{group.label}</TreeHeader>
+              {group.models.map((model) => renderModel(group, model))}
+            </>}
+          </TreeSection>)}
+        </Tree>
+      </AriaDialog>
+    </Popover>
+  </div>;
 }

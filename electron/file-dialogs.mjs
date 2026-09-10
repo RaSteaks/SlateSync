@@ -63,6 +63,22 @@ export function createFileDialogs(getMainWindow) {
         : result.filePaths[0];
     },
 
+    async selectProjectPackage(defaultPath) {
+      // 项目包是目录而非压缩文件；取消选择统一返回 null，不触碰项目库状态。
+      const window = getMainWindow();
+      if (!window) throw new Error("主窗口不可用");
+
+      const result = await dialog.showOpenDialog(window, {
+        defaultPath,
+        properties: ["openDirectory"],
+        title: "导入 SlateSync 项目",
+        buttonLabel: "导入项目",
+      });
+      return result.canceled || !result.filePaths.length
+        ? null
+        : result.filePaths[0];
+    },
+
     async selectLibraryStorageDirectory(defaultPath) {
       const window = getMainWindow();
       if (!window) throw new Error("主窗口不可用");
@@ -88,6 +104,22 @@ export function createFileDialogs(getMainWindow) {
         buttonLabel: "导出",
         filters: [
           { name: "SlateSync Project Library", extensions: ["slatesync-library"] },
+        ],
+      });
+      return result.canceled || !result.filePath ? null : result.filePath;
+    },
+
+    async selectProjectPackageExportPath(defaultPath) {
+      // 保存对话框只负责收集用户路径，扩展名与安全路径由传输层统一规范化。
+      const window = getMainWindow();
+      if (!window) throw new Error("主窗口不可用");
+
+      const result = await dialog.showSaveDialog(window, {
+        defaultPath,
+        title: "导出 SlateSync 项目",
+        buttonLabel: "导出项目",
+        filters: [
+          { name: "SlateSync Project", extensions: ["slatesync-project"] },
         ],
       });
       return result.canceled || !result.filePath ? null : result.filePath;

@@ -19,6 +19,7 @@ export class PreparationService {
   private worker: Worker | null = null;
   private nextId = 1;
   private pending = new Map<number, Pending>();
+  private terminateWhenIdleRequested = false;
 
   private ensureWorker() {
     if (this.worker) return this.worker;
@@ -61,6 +62,13 @@ export class PreparationService {
     request.progressTimer = null;
     request.deferredProgress = null;
     this.pending.delete(id);
+    this.releaseWorkerIfIdle();
+  }
+
+  private releaseWorkerIfIdle() {
+    if (!this.terminateWhenIdleRequested || this.pending.size > 0) return;
+    this.worker?.terminate();
+    this.worker = null;
   }
 
   private failWorker(message: string) {
@@ -80,7 +88,9 @@ export class PreparationService {
         if (!this.pending.has(id)) return;
         worker.postMessage({ id, fileType: file.type || "image/jpeg", data, filename: file.name }, [data]);
       }).catch((error: unknown) => {
+        if (!this.pending.has(id)) return;
         this.pending.delete(id);
+        this.releaseWorkerIfIdle();
         reject(error instanceof Error ? error : new Error("无法读取场记单"));
       });
     });
@@ -97,7 +107,19 @@ export class PreparationService {
     });
   }
 
+  /** Request cleanup for a hidden Workspace without cancelling active work. */
+  terminateWhenIdle() {
+    this.terminateWhenIdleRequested = true;
+    this.releaseWorkerIfIdle();
+  }
+
+  /** Cancel a pending hidden-route cleanup when the Workspace becomes visible. */
+  keepAlive() {
+    this.terminateWhenIdleRequested = false;
+  }
+
   terminate() {
+    this.terminateWhenIdleRequested = false;
     this.worker?.terminate();
     this.worker = null;
     const error = new Error("场记单准备已停止");
