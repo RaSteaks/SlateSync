@@ -41,7 +41,6 @@ import {
 import {
   normalizeProjectSettings,
   projectSettingsFromWorkflow,
-  validateProjectSettings,
 } from "../lib/project-settings.mjs";
 import { throwIfRecognitionCanceled } from "../lib/ocr/cancellation.mjs";
 
@@ -368,8 +367,10 @@ export function registerIpcHandlers(ipcMain, context) {
       sanitizeProject(await projectLibrary.updateProject(body?.id, {
         name: body?.name,
         description: body?.description,
-        settings: body?.settings
-          ? validateProjectSettings(body.settings)
+        // Keep the raw payload here; the Main project library owns the sole
+        // normalization pass and can merge against the persisted settings.
+        settings: body && Object.hasOwn(body, "settings")
+          ? body.settings
           : undefined,
       })),
     );
@@ -953,7 +954,21 @@ export function registerIpcHandlers(ipcMain, context) {
     return withProjectRead(projectId, async () => {
       const context = await resolveProjectContext(projectId, { readOnly: true });
       if (!context.taskStore) throw new Error("任务存储不可用");
-      return context.taskStore.loadTask(id);
+      const task = await context.taskStore.loadTask(id);
+      if (!task?.projectSettingsSnapshot) return task;
+
+      // Normalize only the IPC response: historical task JSON remains untouched,
+      // while both renderers receive the same v2 settings contract on restore.
+      const workflow = await getWorkflowConfig();
+      const fallback = context.project?.settings
+        || projectSettingsFromWorkflow(workflow);
+      return {
+        ...task,
+        projectSettingsSnapshot: normalizeProjectSettings(
+          task.projectSettingsSnapshot,
+          fallback,
+        ),
+      };
     });
   });
 

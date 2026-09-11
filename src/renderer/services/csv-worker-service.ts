@@ -1,5 +1,8 @@
 import type { RecognitionRecord, ResolveCsvTable, ScannedSlateMetadata, SlateCsvRecord } from "../../shared/contracts/index.js";
 
+// @ts-expect-error The stable identity helper is shared with Main without a TS build boundary.
+import { manualRecognitionTargetId } from "../../../public/recognition-target.js";
+
 declare const __SLATESYNC_CSV_WORKER_DEV_URL__: string;
 
 export const CSV_WORKER_PROTOCOL_VERSION = 1 as const;
@@ -141,7 +144,12 @@ export class CsvWorkerService {
 
   async recordsFromSlateCsv(records: readonly SlateCsvRecord[]) {
     const result = await this.request<{ records: RecognitionRecord[] }>({ type: "records-from-slate-csv", records });
-    return result.records;
+    // Local slate CSV rows are not OCR crop candidates; give them an explicit
+    // manual namespace before publishing them as live RecognitionRecords.
+    return result.records.map((record, index) => ({
+      ...record,
+      targetId: record.targetId || manualRecognitionTargetId(`slate-csv-${index}`),
+    }));
   }
 
   async mergePreview(task: Extract<CsvTask, { type: "merge-preview" }>) {

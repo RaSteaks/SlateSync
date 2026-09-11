@@ -91,6 +91,10 @@ import {
   selectRecognitionImageGroups,
   serializeRecognitionRequest as serializeRecognitionPayload,
 } from "./recognition-request.js";
+import {
+  manualRecognitionTargetId,
+  restoreRecognitionTargetId,
+} from "./recognition-target.js";
 import { createLatestOperation } from "./operation-token.js";
 import { createTaskAutosave } from "./task-autosave.js";
 import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
@@ -1012,8 +1016,12 @@ function buildProjectSettingsFromForm() {
   if (![goodTake, holdTake].every((value) => value && !/[\r\n]/.test(value))) {
     throw new Error("过条和保条标记不能为空，且不能包含换行。");
   }
+  const current = state.currentProject?.settings || defaultRendererProjectSettings();
+  // The legacy adapter only owns the visible fields; spreading the current
+  // snapshot keeps v2 export preferences and future JSON-safe branches intact.
   return {
-    version: 1,
+    ...current,
+    version: 2,
     providerId: elements.projectProvider.value || null,
     modelId: elements.projectModel.value || null,
     accuracyMode: elements.projectAccuracy.value,
@@ -1085,6 +1093,7 @@ function resetProjectOutputSettings() {
 
 function defaultRendererProjectSettings() {
   return {
+    version: 2,
     providerId: "",
     modelId: "",
     accuracyMode: "high",
@@ -3728,6 +3737,8 @@ async function mergeSlateCsv() {
   const records = state.slateCsvRecords.map((sr, index) =>
     applyRecordFieldFormats({
       id: `slate-csv-${index}`,
+      // Slate CSV rows are imported material data, not OCR crop candidates.
+      targetId: manualRecognitionTargetId(`slate-csv-${index}`),
       cardNumber: sr.materialKey?.match(/^([A-Z]\d+)/)?.[1] || null,
       videoCode: sr.materialKey?.match(/(C\d+)$/)?.[1] || null,
       scene: sr.scene,
@@ -4355,8 +4366,12 @@ async function downloadCsv(bytes, filename) {
 }
 
 function emptyRecord() {
+  const id = `manual-${Date.now()}`;
   return {
-    id: `manual-${Date.now()}`,
+    id,
+    // Keep manually inserted rows outside the page-target namespace used by
+    // OCR results and future crop recheck requests.
+    targetId: manualRecognitionTargetId(id),
     cardNumber: null,
     videoCode: null,
     scene: null,
@@ -4898,9 +4913,22 @@ function restoreTask(task, operation = {}) {
   // Restore recognition result
   if (task.result?.records?.length) {
     // Re-apply field normalization so older saved tasks also display and
-    // export scene suffixes such as 87a as the canonical value 87A.
+    // export scene suffixes such as 87a as the canonical value 87A. Derive a
+    // target once for legacy rows while preserving identities already saved.
     const restoredRecords = (task.editedRecords || task.result.records).map(
-      applyRecordFieldFormats,
+      (record, index) => {
+        const legacyManualTarget = !record?.targetId && String(record?.id || "").startsWith("manual-")
+          ? manualRecognitionTargetId(record.id)
+          : record?.targetId;
+        return {
+          ...applyRecordFieldFormats(record),
+          targetId: restoreRecognitionTargetId(
+            legacyManualTarget,
+            record?.sourcePage ?? null,
+            index,
+          ),
+        };
+      },
     );
     state.records = restoredRecords;
     state.latestResponse = {

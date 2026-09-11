@@ -48,6 +48,13 @@ describe("Legacy project package transfer contract", () => {
     expect(legacyScript).toContain("const restored = state.paddleModelDrafts[nextVersion]");
   });
 
+  it("keeps legacy recognition rows addressable without making them crop targets", () => {
+    expect(legacyScript).toContain("manualRecognitionTargetId");
+    expect(legacyScript).toContain("restoreRecognitionTargetId");
+    expect(legacyScript).toContain("targetId: manualRecognitionTargetId");
+    expect(legacyScript).toContain("targetId: restoreRecognitionTargetId");
+  });
+
   it("guards both operations with autosave, cancellation, refresh, and busy cleanup", () => {
     const importSource = functionSource("importProject", "exportProject");
     const exportSource = functionSource("exportProject", "importProjectLibrary");

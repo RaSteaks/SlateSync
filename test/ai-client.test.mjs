@@ -260,6 +260,7 @@ test("OpenAI Responses request uses image input and parses structured output", a
   assert.equal(result.result.records[0].take, "03");
   assert.equal(result.result.records[0].cardNumber, "A001");
   assert.equal(result.result.records[0].takeStatus, "过");
+  assert.equal(result.result.records[0].targetId, "page:1:record:0");
 });
 
 test("Electron project output settings override Profile output metadata", async () => {
@@ -956,6 +957,7 @@ test("multiple pages are recognized separately and cross-page fields inherit by 
   assert.equal(result.result.records[2].scene, "012");
   assert.equal(result.result.records[2].shot, "01");
   assert.equal(result.result.records[2].sourcePage, 2);
+  assert.equal(result.result.records[2].targetId, "page:2:record:2");
   assert.match(result.result.warnings.at(-1), /场次、镜.*继承/);
   assert.equal(result.usage.input_tokens, 20);
   assert.equal(result.usage.output_tokens, 10);
@@ -1319,6 +1321,11 @@ test("high-accuracy multi-view recognition recovers 30 synthetic omissions and r
   assert.equal(result.accuracyMode, "high");
   assert.equal(result.pageCount, 1);
   assert.equal(result.result.records.length, 159);
+  assert.equal(result.result.records[0].targetId, "page:1:record:0");
+  assert.equal(
+    new Set(result.result.records.map((record) => record.targetId)).size,
+    result.result.records.length,
+  );
   assert.equal(result.usage.input_tokens, 30);
   assert.equal(result.usage.output_tokens, 15);
   const actual = new Map(

@@ -74,6 +74,7 @@ test("CSV background processor decodes slate CSV and builds local records", () =
     { cardNumber: local.records[0].cardNumber, videoCode: local.records[0].videoCode, takeStatus: local.records[0].takeStatus },
     { cardNumber: "A001", videoCode: "C001", takeStatus: "过" },
   );
+  assert.equal(local.records[0].targetId, "manual:slate-csv-0");
 });
 
 

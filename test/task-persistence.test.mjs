@@ -11,6 +11,7 @@ test("CSV preview task state round-trips table, edits, and metadata", () => {
       headers: ["File Name", "Scene", "Comments"],
       rows: [["A001C001.mov", "001", ""]],
       format: { encoding: "utf-8", delimiter: "," },
+      sourceEncoding: "gb18030",
     },
     metadataFilename: "timeline.csv",
     csvEdits: new Map([
@@ -26,6 +27,7 @@ test("CSV preview task state round-trips table, edits, and metadata", () => {
   const restored = restoreCsvPreviewState(snapshot);
   assert.equal(restored.metadataFilename, "timeline.csv");
   assert.deepEqual(restored.metadataTable, snapshot.resolveCsvTable);
+  assert.equal(restored.metadataTable.sourceEncoding, "gb18030");
   assert.deepEqual([...restored.csvEdits], [
     ["0:1", "002"],
     ["0:2", "_OK"],

@@ -156,6 +156,96 @@ describe("electron IPC handlers", () => {
     }
   });
 
+  it("forwards legacy project settings without pre-normalizing away future fields", async () => {
+    let receivedPatch = null;
+    const project = { id: "project-settings-forwarded", settings: { version: 2 } };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectLibrary: {
+        updateProject: async (id, patch) => {
+          receivedPatch = { id, patch };
+          return { ...project, settings: patch.settings };
+        },
+      },
+    }));
+
+    const legacySettings = {
+      version: 1,
+      providerId: "openrouter",
+      modelId: "vision-model",
+      accuracyMode: "standard",
+      scenarioId: null,
+      customPrompt: "legacy editor",
+      resolve: {
+        fieldFormats: { scene: "XXXX", shot: "XXX", take: "XX" },
+        comments: { goodTake: "GOOD", holdTake: "HOLD" },
+      },
+      futureBranch: { mustReachMain: true },
+    };
+    const result = await ipcMain.invoke("update-project", {
+      id: project.id,
+      settings: legacySettings,
+    });
+
+    assert.equal(receivedPatch.id, project.id);
+    assert.strictEqual(receivedPatch.patch.settings, legacySettings);
+    assert.equal(result.settings, legacySettings);
+  });
+
+  it("normalizes legacy task settings snapshots only in the load response", async () => {
+    const projectId = "project-task-settings-compat";
+    const legacySnapshot = {
+      version: 1,
+      providerId: "openrouter",
+      modelId: "vision-model",
+      accuracyMode: "standard",
+      scenarioId: null,
+      customPrompt: "legacy task",
+      resolve: {
+        fieldFormats: { scene: "XXXX", shot: "XXX", take: "XX" },
+        comments: { goodTake: "GOOD", holdTake: "HOLD" },
+      },
+    };
+    const storedTask = {
+      id: "task-settings-compat",
+      projectId,
+      projectSettingsSnapshot: legacySnapshot,
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({
+      projectRuntime: {
+        get: async () => ({
+          project: {
+            id: projectId,
+            settings: {
+              version: 2,
+              export: {
+                filenameTemplate: "current.csv",
+                format: { encoding: "utf-8" },
+              },
+              futureBranch: { keep: true },
+            },
+          },
+          taskStore: { loadTask: async () => storedTask },
+        }),
+      },
+    }));
+
+    const loaded = await ipcMain.invoke("load-task", {
+      projectId,
+      id: storedTask.id,
+    });
+
+    assert.equal(loaded.projectSettingsSnapshot.version, 2);
+    assert.equal(
+      loaded.projectSettingsSnapshot.export.filenameTemplate,
+      "current.csv",
+    );
+    assert.deepEqual(loaded.projectSettingsSnapshot.futureBranch, { keep: true });
+    assert.equal(storedTask.projectSettingsSnapshot.version, 1);
+    assert.equal(storedTask.projectSettingsSnapshot.export, undefined);
+  });
+
   it("get-config returns public config with upload limits", async () => {
     const ipcMain = createMockIpcMain();
     registerIpcHandlers(ipcMain, createMockContext());

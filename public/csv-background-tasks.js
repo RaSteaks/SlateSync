@@ -10,6 +10,7 @@ import {
   encodeResolveCsv,
   mergeSlateIntoResolveTable,
 } from "./resolve-csv.js";
+import { manualRecognitionTargetId } from "./recognition-target.js";
 import { parseSlateCsv } from "./slate-csv-parser.js";
 
 const EDIT_KEY_PATTERN = /^(\d+):(\d+)$/;
@@ -25,7 +26,9 @@ export function createCsvTaskProcessor() {
       }
       case "prime-metadata": {
         assertTable(task.table);
-        metadataTable = task.table;
+        // Upgrade old task tables in the Worker-owned copy only; the persisted
+        // snapshot remains byte-compatible while exports gain source metadata.
+        metadataTable = sourceAwareTable(task.table);
         return { ready: true };
       }
       case "clear-metadata": {
@@ -125,6 +128,7 @@ function recognitionRecordsFromSlateCsv(records) {
     const match = key.match(/^([A-Z]+\d+)(C\d+)$/);
     return {
       id: `slate-csv-${index}`,
+      targetId: manualRecognitionTargetId(`slate-csv-${index}`),
       sourcePage: null,
       cardNumber: record?.cardNumber || match?.[1] || null,
       videoCode: record?.videoCode || match?.[2] || null,
@@ -139,6 +143,14 @@ function recognitionRecordsFromSlateCsv(records) {
       confidence: "high",
     };
   });
+}
+
+function sourceAwareTable(table) {
+  if (table.sourceEncoding || !table.format?.encoding) return table;
+  return {
+    ...table,
+    sourceEncoding: table.format.encoding,
+  };
 }
 
 function assertTable(table) {

@@ -4,6 +4,8 @@ import type { RecognitionRecord } from "../../../shared/contracts/index.js";
 import { Badge, Button, IconButton, InlineError, Input, Stack, Surface, Text } from "../../design-system";
 import { useRecognitionStore } from "../../state";
 import styles from "../../app/app.module.css";
+// @ts-expect-error The stable identity helper is shared with Main without a TS build boundary.
+import { manualRecognitionTargetId } from "../../../../public/recognition-target.js";
 
 const fields = [
   ["cardNumber", "卡号"],
@@ -120,7 +122,8 @@ export function RecognitionResultPanel({ onRecordEdited }: { readonly onRecordEd
   if (!result) return <Surface className={styles.panel}><div className={styles.routeHint}>识别完成后在这里核对结果。</div></Surface>;
 
   const appendRecord = () => {
-    addRecord({ id: globalThis.crypto?.randomUUID?.() || `manual-${Date.now()}`, sourcePage: null, cardNumber: null, videoCode: null, scene: null, shot: null, take: null, takeStatus: null, description: null, comments: null, shotSize: null, cameraPosition: null, confidence: "medium" });
+    const seed = globalThis.crypto?.randomUUID?.() || `record-${Date.now()}`;
+    addRecord({ id: seed, targetId: manualRecognitionTargetId(seed), sourcePage: null, cardNumber: null, videoCode: null, scene: null, shot: null, take: null, takeStatus: null, description: null, comments: null, shotSize: null, cameraPosition: null, confidence: "medium" });
     onRecordEdited?.();
   };
 
