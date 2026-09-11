@@ -13,7 +13,7 @@
 
 ## 前置条件
 
-- 分支：`feat/electron/recognition-accuracy-csv-export`
+- 分支：`feat/electron/accuracy-csv`
 - 当前基线检查通过。
 - 更新根目录 `AGENT.md`，记录本方案允许修改 OCR、CSV 和 ProjectSettings 的边界。
 
@@ -80,7 +80,7 @@
 ### 实施前门禁
 
 1. 在开始任何源码改动前，确认实际工作分支是否为
-   `feat/electron/recognition-accuracy-csv-export`。本次只读检查已确认当前工作区
+   `feat/electron/accuracy-csv`。本次只读检查已确认当前工作区
    分支与该名称一致；施工包仍不授权切换或重命名分支。
 2. 先在根目录 `AGENT.md` 追加本方案的真实授权边界：允许新增 v2
    `ProjectSettings`、CSV 导出配置的类型与持久化字段、稳定 `targetId` 和兼容

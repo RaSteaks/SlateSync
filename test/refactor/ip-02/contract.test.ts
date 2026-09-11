@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSlateSyncApi } from "../../../src/preload/index";
+import { DEFAULT_EXPORT_OPTIONS } from "../../../src/shared/contracts/index";
 import type {
   ConfigData,
   DirectorySelection,
@@ -103,7 +104,7 @@ const config = {
 } satisfies ConfigData;
 
 const projectSettings = {
-  version: 1,
+  version: 2,
   providerId: "openai",
   modelId: "openai/gpt",
   accuracyMode: "standard",
@@ -113,6 +114,7 @@ const projectSettings = {
     fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
     comments: { goodTake: "_OK", holdTake: "_KP" },
   },
+  export: DEFAULT_EXPORT_OPTIONS,
 } as const;
 
 const projectSummary = {
@@ -331,6 +333,7 @@ const recognition = {
     sheetTitle: "Day 01",
     records: [{
       id: "record-1",
+      targetId: "page:1:record:0",
       sourcePage: 1,
       cardNumber: "A001",
       videoCode: "C001",

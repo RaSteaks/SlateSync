@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "../../src/renderer/App";
 import { useGlobalSettingsStore, useProjectStore, useRecognitionStore, useSettingsStore, useTaskStore, useUiStore } from "../../src/renderer/state";
-import type { ConfigData, ProjectData } from "../../src/shared/contracts/index.js";
+import { DEFAULT_EXPORT_OPTIONS, type ConfigData, type ProjectData } from "../../src/shared/contracts/index.js";
 
 // Keep these shell/form tests independent of image/CSV workers. Their mounted
 // workspace transfer and recognition paths are exercised in real Chromium.
@@ -13,7 +13,7 @@ vi.mock("../../src/renderer/features/workspace/WorkspacePage", () => ({ Workspac
 const mounted: Array<{ root: ReturnType<typeof createRoot>; host: HTMLDivElement }> = [];
 const project = {
   id: "guard-project", name: "原项目", description: "", archivedAt: null, canArchive: true,
-  settings: { version: 1, providerId: null, modelId: null, accuracyMode: "high", scenarioId: null, customPrompt: "", resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" }, comments: { goodTake: "_OK", holdTake: "_KP" } } },
+  settings: { version: 2, providerId: null, modelId: null, accuracyMode: "high", scenarioId: null, customPrompt: "", resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" }, comments: { goodTake: "_OK", holdTake: "_KP" } }, export: DEFAULT_EXPORT_OPTIONS },
 } as ProjectData;
 const config = { providers: [], models: [], ocrEngines: [], workflow: { resolve: project.settings!.resolve } } as unknown as ConfigData;
 const settle = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });

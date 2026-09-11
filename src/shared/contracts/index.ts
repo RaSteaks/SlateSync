@@ -1,8 +1,8 @@
 /**
- * Shared Contract v1 is the single Renderer-facing description of values that
- * the existing Main handlers actually return. Persisted compatibility shapes
- * are named separately from live recognition DTOs so legacy snapshots remain
- * readable without turning the public contract into an unbounded JSON bag.
+ * Shared Contract is the single Renderer-facing description of values that
+ * the Main handlers return. Persisted compatibility shapes are named
+ * separately from live recognition DTOs so legacy snapshots remain readable
+ * without turning the public contract into an unbounded JSON bag.
  */
 export type BinaryPayload = ArrayBuffer | ArrayBufferView;
 
@@ -196,8 +196,32 @@ export interface ConfigData {
   readonly customProviders?: readonly CustomProviderSummary[];
 }
 
+/** Columns that the Resolve CSV exporter can expose as semantic fields. */
+export type ExportColumnKey =
+  | "scene"
+  | "shot"
+  | "take"
+  | "comments"
+  | "takeStatus"
+  | "cardNumber"
+  | "videoCode"
+  | "sourcePage";
+
+export interface ExportColumnConfig {
+  readonly key: ExportColumnKey;
+  readonly header: string;
+  readonly enabled: boolean;
+}
+
+/** Project-owned CSV export preferences; encoding is the final output encoding. */
+export interface ExportOptions {
+  readonly columns: readonly ExportColumnConfig[];
+  readonly format: ResolveCsvFormat;
+  readonly filenameTemplate: string;
+}
+
 export interface ProjectSettings {
-  readonly version: number;
+  readonly version: 2;
   readonly providerId: string | null;
   readonly modelId: string | null;
   readonly accuracyMode: "high" | "standard";
@@ -207,6 +231,7 @@ export interface ProjectSettings {
     readonly fieldFormats: ResolveFieldFormats;
     readonly comments: ResolveComments;
   };
+  readonly export: ExportOptions;
 }
 
 export interface RecognitionDefaults {
@@ -586,8 +611,54 @@ export interface ModelProbeResult {
   readonly total: number;
 }
 
+export type RecognitionFieldKey =
+  | "cardNumber"
+  | "videoCode"
+  | "scene"
+  | "shot"
+  | "take"
+  | "takeStatus"
+  | "description"
+  | "comments"
+  | "shotSize"
+  | "cameraPosition";
+
+export type NormalizationWarningCode =
+  | "ambiguous-numeric-token"
+  | "invalid-numeric-token"
+  | "out-of-range"
+  | "conflicting-value"
+  | "confusable-character"
+  | "missing-value";
+
+/** A user-visible explanation for a value changed during recognition normalization. */
+export interface NormalizationWarning {
+  readonly code: NormalizationWarningCode;
+  readonly field: RecognitionFieldKey;
+  readonly message: string;
+  readonly originalValue: string | null;
+  readonly normalizedValue: string | null;
+}
+
+/** Field-level provenance retained for later review and export diagnostics. */
+export interface FieldQualityMetadata {
+  readonly field: RecognitionFieldKey;
+  readonly originalValue: string | null;
+  readonly normalizedValue: string | null;
+  readonly changed: boolean;
+  readonly confidence: "high" | "medium" | "low" | null;
+  readonly reviewRequired: boolean;
+  readonly warnings: readonly NormalizationWarning[];
+}
+
+export interface RecognitionQualityMetadata {
+  readonly fields: Readonly<Partial<Record<RecognitionFieldKey, FieldQualityMetadata>>>;
+}
+
 export interface RecognitionRecord {
   readonly id: string;
+  /** Stable final-sheet identity; it must not depend on editable material fields. */
+  readonly targetId: string;
   readonly sourcePage: number | null;
   readonly cardNumber: string | null;
   readonly videoCode: string | null;
@@ -601,11 +672,14 @@ export interface RecognitionRecord {
   readonly cameraPosition: string | null;
   readonly confidence: "high" | "medium" | "low";
   readonly reviewRequiredFields?: readonly string[];
+  readonly quality?: RecognitionQualityMetadata;
 }
 
 /** Older task snapshots can contain normalized records predating newer keys. */
 export interface PersistedRecognitionRecord {
   readonly id?: string;
+  /** Added by newer recognition runs; absent in old task snapshots. */
+  readonly targetId?: string;
   readonly sourcePage?: number | null;
   readonly cardNumber?: string | null;
   readonly videoCode?: string | null;
@@ -619,6 +693,7 @@ export interface PersistedRecognitionRecord {
   readonly cameraPosition?: string | null;
   readonly confidence?: "high" | "medium" | "low";
   readonly reviewRequiredFields?: readonly string[];
+  readonly quality?: RecognitionQualityMetadata;
 }
 
 export interface RecognitionSheet {
@@ -760,7 +835,11 @@ export interface TaskListItem {
   readonly updatedAt?: string | null;
 }
 
+/** Encoding of the final generated CSV bytes. */
 export type ResolveCsvEncoding = "utf-8" | "utf-16le" | "utf-16be";
+
+/** Encoding used while decoding an imported Resolve CSV source. */
+export type ResolveCsvSourceEncoding = ResolveCsvEncoding | "gbk" | "gb18030";
 
 export interface ResolveCsvFormat {
   readonly encoding?: ResolveCsvEncoding;
@@ -776,7 +855,34 @@ export interface ResolveCsvTable {
   readonly headers: readonly string[];
   readonly rows: readonly (readonly string[])[];
   readonly format: ResolveCsvFormat;
+  /** Kept separate from `format.encoding`, which always describes output bytes. */
+  readonly sourceEncoding?: ResolveCsvSourceEncoding;
 }
+
+/** Canonical defaults shared by modern settings and the Main normalizer. */
+export const DEFAULT_EXPORT_COLUMN_CONFIGS: readonly ExportColumnConfig[] =
+  Object.freeze([
+    Object.freeze({ key: "scene", header: "Scene", enabled: true }),
+    Object.freeze({ key: "shot", header: "Shot", enabled: true }),
+    Object.freeze({ key: "take", header: "Take", enabled: true }),
+    Object.freeze({ key: "comments", header: "Comments", enabled: true }),
+    Object.freeze({ key: "takeStatus", header: "Take Status", enabled: false }),
+    Object.freeze({ key: "cardNumber", header: "Card Number", enabled: false }),
+    Object.freeze({ key: "videoCode", header: "Video Code", enabled: false }),
+    Object.freeze({ key: "sourcePage", header: "Source Page", enabled: false }),
+  ]);
+
+export const DEFAULT_EXPORT_OPTIONS: ExportOptions = Object.freeze({
+  columns: DEFAULT_EXPORT_COLUMN_CONFIGS,
+  format: Object.freeze({
+    encoding: "utf-16le",
+    bom: true,
+    delimiter: ",",
+    lineEnding: "\r\n",
+    finalNewline: true,
+  }),
+  filenameTemplate: "{source}_场记识别.csv",
+});
 
 export type ResolveCsvEdits = Readonly<Record<`${number}:${number}`, string>>;
 

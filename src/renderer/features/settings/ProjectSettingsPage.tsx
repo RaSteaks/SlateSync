@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowLeft, Check, Import, PackageOpen, RotateCcw, Save, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { ProjectSettings } from "../../../shared/contracts/index.js";
+import { DEFAULT_EXPORT_OPTIONS, type ProjectSettings } from "../../../shared/contracts/index.js";
 import { Button, Dialog, Field, InlineError, Input, Select, Separator, Stack, Surface, Text, Textarea } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
 import { useProjectStore, useRecognitionStore, useSettingsStore, useTaskStore, useUiStore } from "../../state";
@@ -13,7 +13,49 @@ import styles from "../../app/app.module.css";
 import { validateProjectName } from "../../validation/input-validation";
 
 function settingsDefaults(config: ReturnType<typeof useProjectStore.getState>["config"]): ProjectSettings {
-  return { version: 1, providerId: null, modelId: null, accuracyMode: "high", scenarioId: null, customPrompt: "", resolve: { fieldFormats: config?.workflow.resolve.fieldFormats || { scene: "XXX", shot: "XX", take: "XX" }, comments: config?.workflow.resolve.comments || { goodTake: "_OK", holdTake: "_KP" } } };
+  return {
+    version: 2,
+    providerId: null,
+    modelId: null,
+    accuracyMode: "high",
+    scenarioId: null,
+    customPrompt: "",
+    resolve: {
+      fieldFormats: config?.workflow.resolve.fieldFormats || { scene: "XXX", shot: "XX", take: "XX" },
+      comments: config?.workflow.resolve.comments || { goodTake: "_OK", holdTake: "_KP" },
+    },
+    export: {
+      ...DEFAULT_EXPORT_OPTIONS,
+      columns: DEFAULT_EXPORT_OPTIONS.columns.map((column) => ({ ...column })),
+      format: { ...DEFAULT_EXPORT_OPTIONS.format },
+    },
+  };
+}
+
+function settingsForDraft(value: ProjectSettings, config: ReturnType<typeof useProjectStore.getState>["config"]): ProjectSettings {
+  const defaults = settingsDefaults(config);
+  const defaultExport = defaults.export!;
+  const exportValue = value.export;
+  // The Main process normally returns v2, but upgrading here keeps a legacy
+  // project editable before its first explicit save and preserves unknown keys.
+  return {
+    ...defaults,
+    ...value,
+    version: 2,
+    resolve: {
+      ...defaults.resolve,
+      ...value.resolve,
+      fieldFormats: { ...defaults.resolve.fieldFormats, ...value.resolve?.fieldFormats },
+      comments: { ...defaults.resolve.comments, ...value.resolve?.comments },
+    },
+    export: {
+      ...defaultExport,
+      ...(exportValue || {}),
+      columns: exportValue?.columns || defaultExport.columns,
+      format: { ...defaultExport.format, ...exportValue?.format },
+      filenameTemplate: exportValue?.filenameTemplate || defaultExport.filenameTemplate,
+    },
+  };
 }
 
 export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onProjectImported }: { onBack: () => void; onDeleted: (projectId: string) => void; onPrepareTransfer?: () => Promise<boolean>; onProjectImported?: (projectId: string) => void | boolean | Promise<void | boolean> }) {
@@ -52,8 +94,9 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
 
   useEffect(() => {
     if (!project) return;
+    const hydratedSettings = settingsForDraft(project.settings || settingsDefaults(config), config);
     useSettingsStore.getState().hydrateProject(project.id, {
-      name: project.name, description: project.description, settings: project.settings || settingsDefaults(config),
+      name: project.name, description: project.description, settings: hydratedSettings,
     });
     let active = true;
     void (async () => {
@@ -88,7 +131,7 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
 
   if (!project) return <div className={styles.page}><InlineError message="尚未选择项目。" onRetry={onBack} /></div>;
 
-  const updateSettings = (patch: Partial<ProjectSettings>) => patchProject({ settings: { ...settings, ...patch } });
+  const updateSettings = (patch: Partial<ProjectSettings>) => patchProject({ settings: { ...settingsForDraft(settings, config), ...patch, version: 2 } });
   const updateResolveField = (field: keyof ProjectSettings["resolve"]["fieldFormats"], value: string) =>
     updateSettings({ resolve: { ...settings.resolve, fieldFormats: { ...settings.resolve.fieldFormats, [field]: value } } });
   const updateResolveComment = (field: keyof ProjectSettings["resolve"]["comments"], value: string) =>

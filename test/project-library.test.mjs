@@ -205,6 +205,66 @@ test("projects use separate SQLite files and project-scoped IPC", async () => {
   }
 });
 
+test("legacy project settings updates retain v2 export and future branches", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-settings-compat-"));
+  const library = createProjectLibrary(join(tempRoot, "library"));
+
+  try {
+    const project = await library.createProject({
+      name: "兼容设置项目",
+      settings: {
+        version: 2,
+        providerId: "openai",
+        modelId: "gpt-vision",
+        accuracyMode: "high",
+        scenarioId: null,
+        customPrompt: "保留项目约定",
+        resolve: {
+          fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
+          comments: { goodTake: "_OK", holdTake: "_KP" },
+        },
+        export: {
+          format: {
+            encoding: "utf-8",
+            bom: false,
+            delimiter: ";",
+            lineEnding: "\n",
+            finalNewline: false,
+          },
+          filenameTemplate: "{source}-custom.csv",
+          futureExportFlag: { enabled: true },
+        },
+        futureBranch: { keep: ["one", "two"] },
+      },
+    });
+    const before = project.settings;
+
+    const updated = await library.updateProject(project.id, {
+      settings: {
+        version: 1,
+        providerId: "openrouter",
+        modelId: "gpt-vision-2",
+        accuracyMode: "standard",
+        scenarioId: null,
+        customPrompt: "旧版编辑器提交",
+        resolve: {
+          fieldFormats: { scene: "XXXX", shot: "XXX", take: "XX" },
+          comments: { goodTake: "GOOD", holdTake: "HOLD" },
+        },
+      },
+    });
+
+    assert.equal(updated.settings.version, 2);
+    assert.equal(updated.settings.providerId, "openrouter");
+    assert.equal(updated.settings.export.filenameTemplate, "{source}-custom.csv");
+    assert.equal(updated.settings.export.futureExportFlag.enabled, true);
+    assert.deepEqual(updated.settings.futureBranch, before.futureBranch);
+  } finally {
+    await library.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("legacy data migrates once into the default project and remains intact", async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-migration-"));
   const legacyDir = join(tempRoot, "legacy-data");

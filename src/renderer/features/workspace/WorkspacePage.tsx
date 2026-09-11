@@ -11,6 +11,7 @@ import type {
   ScannedSlateMetadata,
   TaskData,
 } from "../../../shared/contracts/index.js";
+import { DEFAULT_EXPORT_OPTIONS } from "../../../shared/contracts/index.js";
 import { Badge, Button, Dialog, Field, InlineError, Progress, Select, Stack, Surface, Text, Textarea } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
 import { createOperationGuard } from "../../services/operation-guard";
@@ -34,6 +35,8 @@ import styles from "../../app/app.module.css";
 
 // @ts-expect-error The frozen browser compatibility module intentionally has no TS declarations.
 import { REQUEST_COMPRESSION_PROFILES, requestBodyBytes, requestBodyFits, selectRecognitionImageGroups } from "../../../../public/recognition-request.js";
+// @ts-expect-error The stable identity helper is shared with Main without a TS build boundary.
+import { manualRecognitionTargetId, restoreRecognitionTargetId } from "../../../../public/recognition-target.js";
 
 const EMPTY_OCR: OcrSummary = {
   enabled: false,
@@ -58,7 +61,7 @@ const EMPTY_OCR: OcrSummary = {
 
 function defaultSettings(config: ReturnType<typeof useProjectStore.getState>["config"]): ProjectSettings {
   return {
-    version: 1,
+    version: 2,
     providerId: null,
     modelId: null,
     accuracyMode: "high",
@@ -68,12 +71,31 @@ function defaultSettings(config: ReturnType<typeof useProjectStore.getState>["co
       fieldFormats: config?.workflow.resolve.fieldFormats || { scene: "XXX", shot: "XX", take: "XX" },
       comments: config?.workflow.resolve.comments || { goodTake: "_OK", holdTake: "_KP" },
     },
+    export: {
+      ...DEFAULT_EXPORT_OPTIONS,
+      columns: DEFAULT_EXPORT_OPTIONS.columns.map((column) => ({ ...column })),
+      format: { ...DEFAULT_EXPORT_OPTIONS.format },
+    },
   };
 }
 
 function normalizeRecord(record: PersistedRecognitionRecord, index: number): RecognitionRecord {
+  const legacyManualTarget = !record.targetId && String(record.id || "").startsWith("manual-")
+    ? manualRecognitionTargetId(record.id)
+    : record.targetId;
+  const targetId = restoreRecognitionTargetId(legacyManualTarget, record.sourcePage ?? null, index);
+  const qualityReviewFields = Object.values(record.quality?.fields || {})
+    .filter((field) => field?.reviewRequired && field.field)
+    .map((field) => field.field);
+  const reviewRequiredFields = [...new Set([
+    ...(record.reviewRequiredFields || []),
+    ...qualityReviewFields,
+  ])].sort();
   return {
     id: record.id || `restored-${index}`,
+    // Old snapshots had no targetId; derive it once from persisted position and
+    // never replace an identity already assigned by a recognition run.
+    targetId,
     sourcePage: record.sourcePage ?? null,
     cardNumber: record.cardNumber || null,
     videoCode: record.videoCode || null,
@@ -86,7 +108,8 @@ function normalizeRecord(record: PersistedRecognitionRecord, index: number): Rec
     shotSize: record.shotSize || null,
     cameraPosition: record.cameraPosition || null,
     confidence: record.confidence || "medium",
-    ...(record.reviewRequiredFields ? { reviewRequiredFields: record.reviewRequiredFields } : {}),
+    ...(reviewRequiredFields.length ? { reviewRequiredFields } : {}),
+    ...(record.quality ? { quality: record.quality } : {}),
   };
 }
 

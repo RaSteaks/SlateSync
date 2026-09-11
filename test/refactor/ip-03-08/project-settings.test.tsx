@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectData, SlateSyncApi } from "../../../src/shared/contracts/index.js";
+import { DEFAULT_EXPORT_OPTIONS, type ProjectData, type SlateSyncApi } from "../../../src/shared/contracts/index.js";
 import { ProjectSettingsPage } from "../../../src/renderer/features/settings/ProjectSettingsPage";
 import { useProjectStore, useRecognitionStore, useSettingsStore, useTaskStore, useUiStore } from "../../../src/renderer/state";
 
@@ -22,7 +22,7 @@ const project = {
   taskCount: 2,
   latestTaskAt: "2026-01-01T01:00:00.000Z",
   canArchive: true,
-  settings: { version: 1, providerId: null, modelId: null, accuracyMode: "high" as const, scenarioId: null, customPrompt: "", resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" }, comments: { goodTake: "_OK", holdTake: "_KP" } } },
+  settings: { version: 2, providerId: null, modelId: null, accuracyMode: "high" as const, scenarioId: null, customPrompt: "", resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" }, comments: { goodTake: "_OK", holdTake: "_KP" } }, export: DEFAULT_EXPORT_OPTIONS },
   lastRecognitionDefaults: null,
 } satisfies ProjectData;
 
@@ -59,7 +59,7 @@ describe("project deletion confirmation", () => {
       taskCount: 0,
       latestTaskAt: null,
       canArchive: true,
-      settings: { version: 1, providerId: null, modelId: null, accuracyMode: "high", scenarioId: null, customPrompt: "", resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" }, comments: { goodTake: "_OK", holdTake: "_KP" } } },
+      settings: { version: 2, providerId: null, modelId: null, accuracyMode: "high", scenarioId: null, customPrompt: "", resolve: { fieldFormats: { scene: "XXX", shot: "XX", take: "XX" }, comments: { goodTake: "_OK", holdTake: "_KP" } }, export: DEFAULT_EXPORT_OPTIONS },
       lastRecognitionDefaults: null,
     } satisfies ProjectData;
     const deleteProject = vi.fn(async () => ({ ok: true as const, data: { deleted: project.id } }));
@@ -111,12 +111,12 @@ describe("project deletion confirmation", () => {
 });
 
 describe("project package settings actions", () => {
-  async function renderPage(api: Partial<SlateSyncApi["projects"]>, props: { onPrepareTransfer?: () => Promise<boolean>; onProjectImported?: (projectId: string) => void | boolean | Promise<void | boolean> } = {}) {
+  async function renderPage(api: Partial<SlateSyncApi["projects"]>, props: { onPrepareTransfer?: () => Promise<boolean>; onProjectImported?: (projectId: string) => void | boolean | Promise<void | boolean> } = {}, currentProject = project) {
     Object.defineProperty(window, "slateSync", {
       configurable: true,
       value: { projects: { listScenarios: vi.fn(async () => ({ ok: true as const, data: [] })), ...api } },
     });
-    useProjectStore.setState({ current: project, projects: [project] });
+    useProjectStore.setState({ current: currentProject, projects: [currentProject] });
     const host = document.createElement("div");
     document.body.append(host);
     const root = createRoot(host);
@@ -127,6 +127,38 @@ describe("project package settings actions", () => {
     });
     return host;
   }
+
+  it("saves v2 settings without dropping export or future branches", async () => {
+    const futureSettings = {
+      ...project.settings,
+      export: {
+        ...DEFAULT_EXPORT_OPTIONS,
+        filenameTemplate: "{source}-future.csv",
+        futureExportFlag: { enabled: true },
+      },
+      futureBranch: { keep: "modern" },
+    } as typeof project.settings & Record<string, unknown>;
+    const futureProject = { ...project, settings: futureSettings } as typeof project;
+    const update = vi.fn(async ({ settings }: { settings: unknown }) => ({
+      ok: true as const,
+      data: { ...futureProject, settings },
+    }));
+    const host = await renderPage({ update }, {}, futureProject);
+
+    act(() => buttonNamed("恢复默认").click());
+    await act(async () => {
+      buttonNamed("保存设置").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(update).toHaveBeenCalledOnce();
+    const payload = update.mock.calls[0][0] as { settings: Record<string, unknown> };
+    expect(payload.settings.version).toBe(2);
+    expect(payload.settings.export).toMatchObject({ filenameTemplate: "{source}-future.csv", futureExportFlag: { enabled: true } });
+    expect(payload.settings.futureBranch).toEqual({ keep: "modern" });
+    expect(host.textContent).toContain("项目包");
+  });
 
   it("keeps import/export in project settings, refreshes after import, and preserves cancellation", async () => {
     const imported = { ...project, id: "project-package-copy", name: project.name };

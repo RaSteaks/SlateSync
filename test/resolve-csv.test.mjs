@@ -458,6 +458,7 @@ test("CSV decoding and encoding preserve UTF-16LE BOM, LF and quoted cells", () 
   const decoded = decodeResolveCsv(encoded);
   assert.deepEqual(decoded.headers, source.headers);
   assert.deepEqual(decoded.rows, source.rows);
+  assert.equal(decoded.sourceEncoding, "utf-16le");
   assert.deepEqual(decoded.format, source.format);
 
   const text = new TextDecoder("utf-16le").decode(encoded.subarray(2));
@@ -481,6 +482,7 @@ test("UTF-8 and UTF-16BE CSV formats round-trip without changing their BOM choic
     const decoded = decodeResolveCsv(encodeResolveCsv(source));
     assert.deepEqual(decoded.headers, source.headers);
     assert.deepEqual(decoded.rows, source.rows);
+    assert.equal(decoded.sourceEncoding, format.encoding);
     assert.deepEqual(decoded.format, source.format);
   }
 });

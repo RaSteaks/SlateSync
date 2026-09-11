@@ -84,6 +84,9 @@ function cloneTable(table) {
     format: table.format && typeof table.format === "object"
       ? { ...table.format }
       : {},
+    // Source encoding is metadata about the imported bytes, not an output
+    // format option; preserve it when newer snapshots provide it.
+    ...(table.sourceEncoding ? { sourceEncoding: String(table.sourceEncoding) } : {}),
   };
 }
 

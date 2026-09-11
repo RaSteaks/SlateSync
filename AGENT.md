@@ -31,10 +31,14 @@ Worker 边界、验收证据和最终治理交接。
 
 ## 架构边界
 
-- 保持 Shared Contract v1、唯一 `window.slateSync`、Result/AppError、Main
-  SQLite 权威、八个 Zustand slice 和单 Renderer 选择。
+- 保持 Shared Contract 的单一来源、v1 持久化兼容读取与 additive v2、唯一
+  `window.slateSync`、Result/AppError、Main SQLite 权威、八个 Zustand slice
+  和单 Renderer 选择。
 - 不修改 recognition/provider/OCR 算法、CSV 字节语义、SQLite/Library/task
-  格式、version-1 迁移、Electron IPC、包身份或签名发布设置。
+  格式、version-1 数据迁移、包身份或签名发布设置。2026-09-10 Phase 01 是
+  明确边界例外：只允许新增 v2 ProjectSettings/CSV 类型、保留未知字段、移除
+  update-project 的重复归一化以及为识别记录接线稳定 targetId；不新增或改变
+  Electron IPC channel，不进入后续 CSV/OCR 实现。
 - 不增加第二网关、第二 Renderer、第二持久化写入者、mega-store 或临时
   兼容真相。
 - 复杂 CSV 与准备计算由 Worker 持有；Renderer 只协调状态与用户交互。
@@ -1200,6 +1204,30 @@ Worker 边界、验收证据和最终治理交接。
 - DESIGN.md lint：0 error；26 条既有语义 token 命名/未在 frontmatter 组件中引用的提示
   保留，运行时 CSS 仍是 token 权威。构建保留大 chunk 提示；Storybook 用户级设置写入
   被沙盒阻止，但静态构建成功。这些提示不影响本轮三项布局验收。
+
+## 2026-09-10 Recognition CSV Phase 01 implementation
+
+- 当前实施分支为 `feat/electron/accuracy-csv`。本轮只落地
+  `.codex/recognition-accuracy-csv-export/package/phase-01-contracts-compatibility.md`
+  的 Contracts & Compatibility 范围，不执行后续 CSV 编码、导出算法、OCR 精度或 UI
+  导出入口改造。
+- Shared Contract 增加 v2 `ProjectSettings` 的 additive `export` 配置、最终输出编码与
+  源文件编码分离类型、字段级识别质量元数据及稳定 `targetId`（旧持久化记录可缺失）。项目设置 Main
+  normalizer 接受 v1/缺省版本并写出 v2；遇到更高版本必须以稳定错误码拒绝，JSON-safe
+  未知字段与嵌套分支在兼容更新中保留。
+- Main 的 project library 是唯一设置归一化边界；IPC 不在归一化前丢弃旧字段，项目更新
+  以当前持久化设置作为 fallback。稳定识别目标 ID 在最终页级合并后按
+  `page:<sourcePage|unknown>:record:<globalIndex>` 生成；人工新增记录使用 `manual:` 前缀。
+- Modern/legacy settings adapters 默认与保存路径使用 v2 语义；旧任务恢复时仅在缺失
+  `targetId` 时从持久化位置派生，并保留已有 target ID。所有新增/修改的关键边界代码
+  注释其所有权、兼容性和生命周期，避免 Renderer、Main、任务快照再次形成第二套规则。
+- 验证使用临时 Library/任务数据，禁止访问默认 macOS Project Library；不执行 git
+  切换、提交、推送或前台 Electron 操作。实施完成后再按本文件记录 Node、Modern、类型
+  与静态检查结果。
+- 完成验收：`npm run check`、`npm run typecheck`、`npm run test:node`（428 项）、
+  `npm run test:modern`（31 个文件 / 192 项）、`npm run validate:modern` 和
+  `git diff --check` 均通过。Modern 构建仅保留既有大 chunk 提示；未执行 Electron
+  GUI/OCR/Provider 实机流程，也未进入 Phase 02–06。
 
 ## 2026-09-06 打开项目性能优化
 

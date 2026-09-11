@@ -141,6 +141,9 @@ export function decodeResolveCsv(input) {
   return {
     headers,
     rows,
+    // Keep the detected input encoding separate from the output format. The
+    // format remains unchanged so existing round-trip bytes stay identical.
+    sourceEncoding: format.encoding,
     format: {
       encoding: format.encoding,
       bom: format.bomBytes > 0,
@@ -614,6 +617,9 @@ export function mergeSlateIntoResolveTable(
     table: {
       headers,
       rows,
+      // Preview/merge tables retain the imported source fact even though their
+      // output format remains inherited from the source table.
+      sourceEncoding: sourceTable.sourceEncoding || sourceTable.format?.encoding,
       format: { ...defaultFormat(), ...(sourceTable.format || {}) },
     },
     statuses,
