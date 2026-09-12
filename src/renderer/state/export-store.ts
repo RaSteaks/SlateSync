@@ -16,6 +16,8 @@ export const useExportStore = create<ExportSlice>((set) => ({
   setEdits: (edits) => set({ edits: { ...edits } }),
   setSlateCsvRecords: (slateCsvRecords, slateCsvFilename = null) => set({ slateCsvRecords: slateCsvRecords ? [...slateCsvRecords] : null, slateCsvFilename }),
   setProcessing: (processing) => set({ processing }),
+  // Worker failures only change transient status; source, preview and edits
+  // remain available for retry after the service recreates its Worker.
   setError: (error) => set({ error, processing: false }),
   clear: () => set({ table: null, previewTable: null, filename: null, edits: {}, slateCsvRecords: null, slateCsvFilename: null, processing: false, error: null }),
 }));

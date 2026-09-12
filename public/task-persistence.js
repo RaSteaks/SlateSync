@@ -86,6 +86,11 @@ function cloneTable(table) {
       : {},
     // Source encoding is metadata about the imported bytes, not an output
     // format option; preserve it when newer snapshots provide it.
+    // Preserve stable column bindings through JSON task restoration; headers
+    // may be duplicated or renamed and must never become field identity.
+    ...(Array.isArray(table.semanticColumns) ? { semanticColumns: table.semanticColumns.map((column) => ({ ...column })) } : {}),
+    ...(table.semanticBuilt === true ? { semanticBuilt: true } : {}),
+    ...(table.sourceEncodingDetection ? { sourceEncodingDetection: table.sourceEncodingDetection } : {}),
     ...(table.sourceEncoding ? { sourceEncoding: String(table.sourceEncoding) } : {}),
   };
 }

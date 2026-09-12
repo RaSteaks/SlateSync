@@ -4,16 +4,13 @@
 // lets the Worker retain the large source Resolve table. Export requests then
 // send only the comparatively small recognition/edit payload back to it.
 import {
-  buildStandaloneResolveTable,
+  buildSemanticExportTable,
   collectResolveMaterialKeys,
   decodeResolveCsv,
   encodeResolveCsv,
-  mergeSlateIntoResolveTable,
 } from "./resolve-csv.js";
 import { manualRecognitionTargetId } from "./recognition-target.js";
 import { parseSlateCsv } from "./slate-csv-parser.js";
-
-const EDIT_KEY_PATTERN = /^(\d+):(\d+)$/;
 
 export function createCsvTaskProcessor() {
   let metadataTable = null;
@@ -21,14 +18,18 @@ export function createCsvTaskProcessor() {
   return function processCsvTask(task = {}) {
     switch (task.type) {
       case "decode-metadata": {
-        metadataTable = decodeResolveCsv(task.data);
+        metadataTable = decodeResolveCsv(task.data, { sourceEncoding: task.sourceEncoding });
         return { table: metadataTable };
       }
       case "prime-metadata": {
         assertTable(task.table);
         // Upgrade old task tables in the Worker-owned copy only; the persisted
         // snapshot remains byte-compatible while exports gain source metadata.
-        metadataTable = sourceAwareTable(task.table);
+        metadataTable = sourceAwareTable({
+          ...task.table,
+          ...(task.semanticColumns ? { semanticColumns: task.semanticColumns } : {}),
+          ...(task.sourceEncoding && !task.table.sourceEncoding ? { sourceEncoding: task.sourceEncoding } : {}),
+        });
         return { ready: true };
       }
       case "clear-metadata": {
@@ -53,68 +54,27 @@ export function createCsvTaskProcessor() {
       case "records-from-slate-csv": {
         return { records: recognitionRecordsFromSlateCsv(task.records) };
       }
-      case "merge-preview": {
-        assertTable(metadataTable);
-        // Reuse the authoritative merge algorithm for the visible preview;
-        // export still starts from the retained raw table and applies edits.
-        const output = mergeSlateIntoResolveTable(
-          metadataTable,
-          Array.isArray(task.records) ? task.records : [],
-          Array.isArray(task.slateMetadata) ? task.slateMetadata : [],
-          {
-            fieldFormats: task.fieldFormats,
-            comments: task.comments,
-          },
-        );
-        return { table: output.table };
-      }
-      case "export-resolve": {
-        assertTable(metadataTable);
+      case "merge-preview":
+      case "export-resolve":
+      case "export-standalone":
+      case "standalone-preview": {
+        const mode = task.type.includes("standalone") ? "standalone" : "resolve";
+        if (mode === "resolve") assertTable(metadataTable);
+        // All clients and infrastructure fallbacks use this exact builder;
+        // retained source state is never replaced by preview or export output.
         const records = Array.isArray(task.records) ? task.records : [];
-        const edits = normalizeEdits(task.csvEdits);
-        const output = mergeSlateIntoResolveTable(
-          metadataTable,
-          records,
-          Array.isArray(task.slateMetadata) ? task.slateMetadata : [],
-          {
-            fieldFormats: task.fieldFormats,
-            comments: task.comments,
-          },
-        );
-        // Exporting without any recognized records, or with records none of
-        // which actually matched a row in this CSV, is a reel/video-code
-        // mismatch worth surfacing. Judging by matchedRecordCount (not
-        // exportableCount) keeps slate fps backfills from masking the mismatch.
-        if (
-          !records.length ||
-          (!output.matchedRecordCount && !edits.length)
-        ) {
+        const output = buildSemanticExportTable({
+          ...task, mode, sourceTable: metadataTable, records,
+          slateMetadata: Array.isArray(task.slateMetadata) ? task.slateMetadata : [],
+        });
+        if (task.type.endsWith("preview")) return { table: output.table, semanticColumns: output.semanticColumns, resolvedFilename: output.resolvedFilename };
+        if (mode === "resolve" && (!records.length || (!output.matchedRecordCount && !output.appliedEditCount))) {
           throw new Error("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
         }
-        const table = applySparseCsvEdits(output.table, edits);
-        return {
-          bytes: encodeResolveCsv(table, {
-            fieldFormats: task.fieldFormats,
-            comments: task.comments,
-            // Resolve Comments only accepts the configured take-status markers.
-            canonicalizeComments: true,
-          }),
-        };
-      }
-      case "export-standalone": {
-        const table = buildStandaloneResolveTable(task.records, {
-          fieldFormats: task.fieldFormats,
-          comments: task.comments,
-        });
-        if (!table.rows.length) {
+        if (mode === "standalone" && !output.table.rows.length) {
           throw new Error("没有场次、镜、次完整的识别记录可导出。");
         }
-        return {
-          bytes: encodeResolveCsv(table, {
-            fieldFormats: task.fieldFormats,
-            comments: task.comments,
-          }),
-        };
+        return { bytes: encodeResolveCsv(output.table), resolvedFilename: output.resolvedFilename };
       }
       default:
         throw new Error(`未知 CSV 后台任务：${String(task.type || "")}`);
@@ -157,32 +117,4 @@ function assertTable(table) {
   if (!table?.headers || !Array.isArray(table.rows)) {
     throw new Error("尚未载入有效的 Resolve CSV");
   }
-}
-
-function normalizeEdits(edits) {
-  return (Array.isArray(edits) ? edits : [])
-    .map(([key, value]) => {
-      const match = String(key).match(EDIT_KEY_PATTERN);
-      return match
-        ? [Number(match[1]), Number(match[2]), String(value ?? "")]
-        : null;
-    })
-    .filter(Boolean);
-}
-
-// Manual edits are sparse in normal use. Clone only rows that are actually
-// touched instead of copying every cell in a potentially very large CSV.
-function applySparseCsvEdits(table, edits) {
-  if (!edits.length) return table;
-  const rows = table.rows.slice();
-  const copiedRows = new Set();
-  for (const [rowIndex, columnIndex, value] of edits) {
-    if (!rows[rowIndex] || columnIndex >= table.headers.length) continue;
-    if (!copiedRows.has(rowIndex)) {
-      rows[rowIndex] = rows[rowIndex].slice();
-      copiedRows.add(rowIndex);
-    }
-    rows[rowIndex][columnIndex] = value;
-  }
-  return { ...table, rows };
 }

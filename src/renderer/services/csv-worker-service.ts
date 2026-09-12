@@ -1,4 +1,4 @@
-import type { RecognitionRecord, ResolveCsvTable, ScannedSlateMetadata, SlateCsvRecord } from "../../shared/contracts/index.js";
+import type { ExportOptions, ResolveCsvSourceEncoding, ResolveCsvFormat, SemanticExportColumn, RecognitionRecord, ResolveCsvTable, ScannedSlateMetadata, SlateCsvRecord } from "../../shared/contracts/index.js";
 
 // @ts-expect-error The stable identity helper is shared with Main without a TS build boundary.
 import { manualRecognitionTargetId } from "../../../public/recognition-target.js";
@@ -7,7 +7,17 @@ declare const __SLATESYNC_CSV_WORKER_DEV_URL__: string;
 
 export const CSV_WORKER_PROTOCOL_VERSION = 1 as const;
 
-type CsvTask =
+// Additive v1 payload: old callers keep their defaults and retained source.
+interface CsvExportPayload {
+  readonly exportOptions?: ExportOptions;
+  readonly sourceEncoding?: ResolveCsvSourceEncoding;
+  readonly semanticColumns?: readonly SemanticExportColumn[];
+  readonly resolvedFilename?: string;
+  readonly outputFormat?: ResolveCsvFormat;
+  readonly csvEdits?: readonly (readonly [string, string])[];
+}
+
+type CsvTask = CsvExportPayload & (
   | { readonly type: "decode-metadata"; readonly data: ArrayBuffer }
   | { readonly type: "prime-metadata"; readonly table: ResolveCsvTable }
   | { readonly type: "clear-metadata" }
@@ -29,14 +39,15 @@ type CsvTask =
       readonly fieldFormats: { readonly scene: string; readonly shot: string; readonly take: string };
       readonly comments: { readonly goodTake: string; readonly holdTake: string };
     }
+  | { readonly type: "standalone-preview"; readonly records: readonly RecognitionRecord[]; readonly fieldFormats?: { readonly scene: string; readonly shot: string; readonly take: string }; readonly comments?: { readonly goodTake: string; readonly holdTake: string } }
   | {
       readonly type: "export-standalone";
       readonly records: readonly RecognitionRecord[];
       readonly fieldFormats: { readonly scene: string; readonly shot: string; readonly take: string };
       readonly comments: { readonly goodTake: string; readonly holdTake: string };
-    };
+    });
 
-type WorkerReply = { readonly id: number; readonly result?: unknown; readonly error?: string };
+type WorkerReply = { readonly id: number; readonly result?: unknown; readonly error?: string; readonly errorCode?: string; readonly errorName?: string };
 
 interface Pending<T> {
   resolve(value: T): void;
@@ -87,7 +98,8 @@ export class CsvWorkerService {
     this.pending.delete(message.id);
     if (message.error) {
       const error = new Error(message.error);
-      error.name = "CsvWorkerTaskError";
+      error.name = message.errorName || "CsvWorkerTaskError";
+      Object.assign(error, { code: message.errorCode });
       pending.reject(error);
       return;
     }
@@ -119,8 +131,8 @@ export class CsvWorkerService {
     });
   }
 
-  async decode(data: ArrayBuffer) {
-    const result = await this.request<{ table: ResolveCsvTable }>({ type: "decode-metadata", data }, [data]);
+  async decode(data: ArrayBuffer, sourceEncoding?: ResolveCsvSourceEncoding) {
+    const result = await this.request<{ table: ResolveCsvTable }>({ type: "decode-metadata", data, ...(sourceEncoding ? { sourceEncoding } : {}) }, [data]);
     return result.table;
   }
 
@@ -162,6 +174,11 @@ export class CsvWorkerService {
   async exportResolve(task: Extract<CsvTask, { type: "export-resolve" }>) {
     const result = await this.request<{ bytes: ArrayBuffer }>({ ...task, csvEdits: [...task.csvEdits] });
     return result.bytes;
+  }
+
+  async standalonePreview(task: Extract<CsvTask, { type: "standalone-preview" }>) {
+    const result = await this.request<{ table: ResolveCsvTable }>(task);
+    return result.table;
   }
 
   async exportStandalone(task: Extract<CsvTask, { type: "export-standalone" }>) {
