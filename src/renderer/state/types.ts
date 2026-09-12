@@ -158,6 +158,7 @@ export interface ExportSlice {
   previewTable: ResolveCsvTable | null;
   filename: string | null;
   edits: ResolveCsvEdits;
+  editHeaders: readonly string[] | null;
   slateCsvRecords: readonly SlateCsvRecord[] | null;
   slateCsvFilename: string | null;
   processing: boolean;
@@ -170,6 +171,7 @@ export interface ExportSlice {
   setPreviewTable(table: ResolveCsvTable | null): void;
   setEdit(key: `${number}:${number}`, value: string): void;
   setEdits(edits: ResolveCsvEdits): void;
+  setEditHeaders(headers: readonly string[] | null): void;
   setSlateCsvRecords(records: readonly SlateCsvRecord[] | null, filename?: string | null): void;
   setProcessing(processing: boolean): void;
   setError(error: AppError | null): void;

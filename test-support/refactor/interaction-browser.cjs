@@ -39,12 +39,110 @@ async function main() {
       await reset();
       try { await callback(); } catch (error) {
         results.push({ name, status: 'failed', error: error.message });
+        await writeFile(path.join(output, `${name}-failure.txt`), await page.locator('body').innerText());
+        await writeFile(path.join(output, `${name}-state.json`), JSON.stringify(await page.evaluate(async () => ({ export: (await import('/state/export-store.ts')).useExportStore.getState(), recognition: (await import('/state/recognition-store.ts')).useRecognitionStore.getState() })), null, 2));
         await page.screenshot({ path: path.join(output, `${name}-failure.png`) });
         throw error;
       }
       results.push({ name, status: 'passed' });
       console.log(`PASS ${name}`);
     };
+
+    await test('resolve-builtin-template', async () => {
+      await openProject();
+      await page.evaluate(async () => {
+        // Synthetic recognized row and save gateway; no user media or library.
+        const { useRecognitionStore } = await import('/state/recognition-store.ts');
+        useRecognitionStore.setState({ records: [{ id: 'template-record', targetId: 'manual:template', cardNumber: 'A001', videoCode: 'C001', scene: '12A', shot: 'B', take: '003', comments: '对白完整', description: '街口外景' }] });
+        window.slateSync.files = { save: ({data}) => { window.__review.savedCsv = new TextDecoder('utf-8').decode(data); return Promise.resolve({ok: true, data: {saved: true, filePath: '/tmp/synthetic.csv'}}); } };
+      });
+      await nav('项目设置');
+      const template = page.getByRole('combobox', { name: '导出模板', exact: true });
+      await template.selectOption('resolve-21.1-csv-v1');
+      await page.getByRole('checkbox', { name: '内容描述', exact: true }).check();
+      for (const name of ['素材文件名', '素材起始时码', '素材结束时码', '卷名', '源文件目录']) assert.equal(await page.getByRole('checkbox', {name, exact: true}).isDisabled(), true);
+      await template.focus(); await page.keyboard.press('Space'); await page.keyboard.press('Escape');
+      await page.screenshot({path: path.join(output, 'resolve-template-settings.png'), fullPage: true});
+      await page.setViewportSize({width: 960, height: 700});
+      await page.emulateMedia({colorScheme: 'light', reducedMotion: 'reduce'});
+      await page.screenshot({path: path.join(output, 'resolve-template-settings-narrow.png'), fullPage: true});
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await nav('保存项目设置');
+      await page.waitForFunction(() => window.__review.projects[0].settings.export?.templateId === 'resolve-21.1-csv-v1');
+      await nav('返回工作台');
+      await page.getByRole('heading', {name: '回填预览', exact: true}).scrollIntoViewIfNeeded();
+      const fileName = page.getByRole('textbox', {name: 'File Name 第 2 行', exact: true});
+      await fileName.waitFor();
+      await nav('导出 Resolve CSV');
+      await page.getByText(/Resolve 导出有 1 行缺少素材文件名/).first().waitFor();
+      const edits = {'File Name': 'A001C001.mov', 'Start TC': '01:00:00:00', 'End TC': '01:00:09:24', 'Reel Name': 'A001', 'Clip Directory': '/Volumes/素材/A001'};
+      for (const [header, value] of Object.entries(edits)) {
+        const cell = page.getByRole('textbox', {name: `${header} 第 2 行`, exact: true});
+        await cell.fill(value); await cell.press('Tab');
+      }
+      await page.waitForFunction(async () => (await import('/state/export-store.ts')).useExportStore.getState().previewTable?.exportWarnings?.length === 0);
+      await nav('导出 Resolve CSV');
+      await page.waitForFunction(() => Boolean(window.__review.savedCsv));
+      const csv = await page.evaluate(() => window.__review.savedCsv);
+      assert.equal(await page.getByText(/Resolve 导出有 1 行缺少素材文件名/).count(), 0);
+      assert.match(csv, /^File Name,Start TC,End TC,Reel Name,Clip Directory,Scene,Shot,Take,Comments,Description/);
+      assert.match(csv, /A001C001.mov,01:00:00:00,01:00:09:24,A001,\/Volumes\/素材\/A001,12A,B,003,对白完整,街口外景/);
+      await page.screenshot({path: path.join(output, 'resolve-template-preview.png'), fullPage: true});
+      await nav('项目设置');
+      assert.equal(await template.inputValue(), 'resolve-21.1-csv-v1');
+      assert.equal(await page.getByRole('checkbox', {name: '内容描述', exact: true}).isChecked(), true);
+      await page.getByRole('button', {name: '上移素材起始时码', exact: true}).click();
+      await nav('保存项目设置');
+      await page.waitForFunction(() => window.__review.projects[0].settings.export.columns[0].key === 'startTimecode');
+      await nav('返回工作台');
+      await page.getByRole('heading', {name: '回填预览', exact: true}).scrollIntoViewIfNeeded();
+      await page.waitForFunction(async () => (await import('/state/export-store.ts')).useExportStore.getState().previewTable?.headers[0] === 'Start TC');
+      await page.evaluate(() => { window.__review.savedCsv = null; });
+      await nav('导出 Resolve CSV');
+      await page.waitForFunction(() => Boolean(window.__review.savedCsv));
+      const restoredCsv = await page.evaluate(() => window.__review.savedCsv);
+      assert.match(restoredCsv, /^Start TC,File Name,End TC/);
+      assert.match(restoredCsv, /01:00:00:00,A001C001.mov,01:00:09:24/);
+
+    });
+
+    await test('project-import-template', async () => {
+      await openProject(); await nav('项目设置');
+      const template = page.getByRole('combobox', { name: '导出模板', exact: true });
+      assert.equal(await template.inputValue(), 'resolve-21.1-csv-v1');
+      const input = page.getByLabel('导入 CSV 模板文件', { exact: true });
+      await input.setInputFiles({ name: '后期样表.csv', mimeType: 'text/csv', buffer: Buffer.from('Comments;File Name;客户备注;Scene\n样本不得复用;sample.mov;PRIVATE SAMPLE;999\n') });
+      await page.getByRole('status').filter({hasText: '已导入 后期样表.csv'}).waitFor();
+      assert.equal(await template.inputValue(), 'imported-csv-v1');
+      await input.setInputFiles({ name: '错误.csv', mimeType: 'text/csv', buffer: Buffer.from('Scene,scene') });
+      await page.getByText('模板包含重复列标题：scene').waitFor();
+      assert.equal(await template.inputValue(), 'imported-csv-v1');
+      await nav('保存项目设置');
+      await page.waitForFunction(() => window.__review.projects[0].settings.export?.templateId === 'imported-csv-v1');
+      assert.equal(await page.evaluate(() => JSON.stringify(window.__review.projects[0].settings).includes('PRIVATE SAMPLE')), false);
+      await page.screenshot({path: path.join(output, 'import-template-settings.png'), fullPage: true});
+      await nav('返回工作台');
+      await page.evaluate(async () => {
+        // A fresh task has no session override and must inherit the saved schema.
+        const { useExportStore } = await import('/state/export-store.ts');
+        useExportStore.getState().clear();
+        const { useRecognitionStore } = await import('/state/recognition-store.ts');
+        useRecognitionStore.setState({ records: [{id: 'new-task-row', targetId:'manual:new-task', scene:'12A', shot:'B', take:'003', comments:'真实备注'}] });
+        window.slateSync.files = { save: ({data}) => { window.__review.savedCsv = new TextDecoder().decode(data); return Promise.resolve({ok:true,data:{saved:true,filePath:'/tmp/synthetic.csv'}}); } };
+      });
+      await page.getByRole('heading', { name:'回填预览', exact:true }).scrollIntoViewIfNeeded();
+      const customCell = page.getByRole('textbox', { name: '客户备注 第 2 行', exact:true });
+      await customCell.fill('人工填写'); await customCell.press('Tab');
+      await nav('导出 Resolve CSV');
+      await page.waitForFunction(() => Boolean(window.__review.savedCsv));
+      assert.equal(await page.evaluate(() => window.__review.savedCsv), 'Comments;File Name;客户备注;Scene\n真实备注;;人工填写;12A\n');
+      await nav('项目设置');
+      assert.equal(await template.inputValue(), 'imported-csv-v1');
+      await page.setViewportSize({width: 960, height: 700});
+      await page.emulateMedia({colorScheme:'light'});
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await page.screenshot({path: path.join(output, 'import-template-settings-narrow.png'), fullPage:true});
+    });
 
     await test('project-create-retry', async () => {
       await page.evaluate(() => { window.__review.createMode = 'failure'; });

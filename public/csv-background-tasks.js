@@ -11,12 +11,19 @@ import {
 } from "./resolve-csv.js";
 import { manualRecognitionTargetId } from "./recognition-target.js";
 import { parseSlateCsv } from "./slate-csv-parser.js";
+import { assertResolveTemplateExport, createImportedExportOptions } from "./resolve-export-template.js";
 
 export function createCsvTaskProcessor() {
   let metadataTable = null;
 
   return function processCsvTask(task = {}) {
     switch (task.type) {
+      case "import-export-template": {
+        // Template decoding must not replace the active task's retained inventory.
+        if (!task.data || task.data.byteLength > 5 * 1024 * 1024) throw new Error("CSV 模板不能超过 5 MB。");
+        const table = decodeResolveCsv(task.data, { templateOnly: true });
+        return { options: createImportedExportOptions(table, task.filename), sourceEncoding: table.sourceEncoding };
+      }
       case "decode-metadata": {
         metadataTable = decodeResolveCsv(task.data, { sourceEncoding: task.sourceEncoding });
         return { table: metadataTable };
@@ -77,6 +84,9 @@ export function createCsvTaskProcessor() {
         if (mode === "standalone" && !output.table.rows.length) {
           throw new Error("没有场次、镜、次完整的识别记录可导出。");
         }
+        // Preview permits incomplete identities so users can fill the cells;
+        // final delivery requires actual clip filenames, never slate filenames.
+        assertResolveTemplateExport(output.table);
         return { bytes: encodeResolveCsv(output.table), resolvedFilename: output.resolvedFilename };
       }
       default:

@@ -171,7 +171,9 @@ export function EditableCell({ label, value, committedValue = value, edited, onC
       cancelBlurRef.current = false;
       return;
     }
-    if (draft !== value) onCommit(draft);
+    // A Worker preview can echo a queued draft before its debounce reaches the
+    // store. Blur must compare with the committed value so immediate export flushes it.
+    if (draft !== committedValue) onCommit(draft);
   };
   return <input className={styles.tableCellInput} data-edited={edited || undefined} aria-label={label} value={draft} onChange={(event) => {
     const nextDraft = event.target.value;

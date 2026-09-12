@@ -25,7 +25,6 @@ import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateCsvFile } from "../../validation/input-validation";
 import { CsvVirtualTable } from "../csv/CsvVirtualTable";
 import { RecognitionResultPanel } from "../recognition/RecognitionResultPanel";
-import { ExportOptionsPanel } from "../export/ExportOptionsPanel";
 import { acquireWorkspaceOperation, isRecognitionBusy, isWorkspaceBusy } from "../../services/workspace-operation";
 import { useProviderModels } from "../recognition/useProviderModels";
 import { ModelSelect } from "../recognition/ModelSelect";
@@ -35,6 +34,8 @@ import { SlateInputPanel, type SlateInputPanelHandle } from "../slate/SlateInput
 import { TaskRail } from "../tasks/TaskRail";
 import styles from "../../app/app.module.css";
 
+// @ts-expect-error Shared schema remapping is also used by the Worker and legacy renderer.
+import { remapTemplateEdits, isMetadataTemplate } from "../../../../public/resolve-export-template.js";
 // @ts-expect-error The frozen browser compatibility module intentionally has no TS declarations.
 import { REQUEST_COMPRESSION_PROFILES, requestBodyBytes, requestBodyFits, selectRecognitionImageGroups } from "../../../../public/recognition-request.js";
 // @ts-expect-error The stable identity helper is shared with Main without a TS build boundary.
@@ -371,7 +372,8 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   const refreshResolvePreview = useCallback(async () => {
     const currentExport = useExportStore.getState();
     const currentRecognition = useRecognitionStore.getState();
-    if (!currentExport.table || !currentRecognition.records.length) {
+    const builtinTemplate = isMetadataTemplate(effectiveExportOptions);
+    if ((!currentExport.table && !builtinTemplate) || !currentRecognition.records.length) {
       invalidateResolvePreview();
       return;
     }
@@ -384,23 +386,38 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       systemDefault: systemExportOptions,
     }).options as ExportOptions;
     try {
-      const previewTable = await getCsvWorkerService().mergePreview({
-        type: "merge-preview",
+      // Built-in templates also expose editable identity cells without a supplied CSV.
+      const previewInput = {
         records: currentRecognition.records,
         slateMetadata: useMetadataStore.getState().result?.metadata || [],
         fieldFormats: settings.resolve.fieldFormats,
         comments: settings.resolve.comments,
         exportOptions: previewExportOptions,
+        // Template warnings must reflect corrections, including after reordering.
+        ...(builtinTemplate ? { csvEdits: Object.entries(currentExport.edits), csvEditHeaders: currentExport.editHeaders } : {}),
         resolvedFilename: resolveExportFilename(previewExportOptions.filenameTemplate, {
           project: project?.name,
           source: currentExport.filename || slate.filename || project?.name || "slate",
           task: recognition.taskId || "",
         }),
-      });
+      };
+      const previewTable = currentExport.table
+        ? await getCsvWorkerService().mergePreview({ ...previewInput, type: "merge-preview" })
+        : await getCsvWorkerService().standalonePreview({ ...previewInput, type: "standalone-preview" });
       const latestExport = useExportStore.getState();
       const latestRecognition = useRecognitionStore.getState();
       if (!workspaceMountedRef.current || !previewGuard.isCurrent(operationId) || latestExport.table !== currentExport.table || latestRecognition.records !== currentRecognition.records) return;
-      useExportStore.getState().setPreviewTable(previewTable);
+      const previousHeaders = latestExport.editHeaders || (latestExport.previewTable || latestExport.table)?.headers;
+      if (previousHeaders && JSON.stringify(previousHeaders) !== JSON.stringify(previewTable.headers)) {
+        useExportStore.getState().setEdits(remapTemplateEdits(latestExport.edits, previousHeaders, previewTable.headers));
+      }
+      // Stable header identity keeps table cell renderers mounted while an
+      // asynchronous validation reply arrives during the next cell's edit.
+      const visibleHeaders = latestExport.previewTable?.headers;
+      const headers = visibleHeaders && JSON.stringify(visibleHeaders) === JSON.stringify(previewTable.headers)
+        ? visibleHeaders : previewTable.headers;
+      useExportStore.getState().setEditHeaders(headers);
+      useExportStore.getState().setPreviewTable({ ...previewTable, headers });
     } catch (nextError) {
       if (!workspaceMountedRef.current || !previewGuard.isCurrent(operationId)) return;
       const appError = appErrorFromUnknown(nextError);
@@ -408,6 +425,9 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       setError(appError.message);
     }
   }, [effectiveExportOptions, invalidateResolvePreview, previewGuard, project?.name, project?.settings?.export, recognition.taskId, settingsSnapshot, slate.filename, systemExportOptions]);
+
+  // A fresh task or externally restored recognition result must project the project template too.
+  useEffect(() => { void refreshResolvePreview(); }, [refreshResolvePreview, recognition.records]);
 
   const captureTask = useCallback((): TaskData | null => {
     const currentProject = useProjectStore.getState().current;
@@ -431,6 +451,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       preprocessMetadata: currentSlate.preprocessMetadata,
       resolveCsvTable: currentExport.table,
       resolveCsvEdits: currentExport.edits,
+      resolveCsvEditHeaders: currentExport.editHeaders,
       resolveCsvFilename: currentExport.filename,
       exportSessionOptions: currentExport.sessionOverride,
       slateMetadata: currentMetadata.result?.metadata || [],
@@ -540,30 +561,35 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     await getCsvWorkerService().clear();
   }, [operationGuard, previewGuard]);
 
-  useEffect(() => () => {
-    workspaceMountedRef.current = false;
-    operationGuard.invalidate();
-    previewGuard.invalidate();
-    taskListGuard.invalidate();
-    taskLoadGuard.invalidate();
-    void autosave.flush();
-    const preserveRecognitionForLogViewer = useUiStore.getState().route === "logs"
-      && isRecognitionBusy();
-    if (preserveRecognitionForLogViewer) {
-      // Logs is a read-only detour. Keep every route-owned input and the
-      // worker alive so returning to Workspace can render the same task while
-      // the App-level progress listener continues receiving events.
-      useRecognitionStore.getState().markWorkspaceHandoff(projectIdRef.current, useTaskStore.getState().activeId);
-      return;
-    }
-    getCsvWorkerService().terminate();
-    // Non-log routes still release the potentially large image/CSV graphs;
-    // their next visit reloads the authoritative task from Main.
-    useRecognitionStore.getState().reset();
-    useSlateStore.getState().clearInput();
-    useExportStore.getState().clear();
-    useMetadataStore.getState().clear();
-    useTaskStore.getState().clear();
+  useEffect(() => {
+    // StrictMode replays effect setup after cleanup. Restore liveness so a
+    // valid Worker preview is not discarded for the lifetime of the workspace.
+    workspaceMountedRef.current = true;
+    return () => {
+      workspaceMountedRef.current = false;
+      operationGuard.invalidate();
+      previewGuard.invalidate();
+      taskListGuard.invalidate();
+      taskLoadGuard.invalidate();
+      void autosave.flush();
+      const preserveRecognitionForLogViewer = useUiStore.getState().route === "logs"
+        && isRecognitionBusy();
+      if (preserveRecognitionForLogViewer) {
+        // Logs is a read-only detour. Keep every route-owned input and the
+        // worker alive so returning to Workspace can render the same task while
+        // the App-level progress listener continues receiving events.
+        useRecognitionStore.getState().markWorkspaceHandoff(projectIdRef.current, useTaskStore.getState().activeId);
+        return;
+      }
+      getCsvWorkerService().terminate();
+      // Non-log routes still release the potentially large image/CSV graphs;
+      // their next visit reloads the authoritative task from Main.
+      useRecognitionStore.getState().reset();
+      useSlateStore.getState().clearInput();
+      useExportStore.getState().clear();
+      useMetadataStore.getState().clear();
+      useTaskStore.getState().clear();
+    };
   }, [autosave, operationGuard, previewGuard, taskListGuard, taskLoadGuard]);
 
   useEffect(() => {
@@ -638,6 +664,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     }
     if (task.resolveCsvTable) useExportStore.getState().setTable(task.resolveCsvTable, task.resolveCsvFilename);
     if (task.resolveCsvEdits) useExportStore.getState().setEdits(task.resolveCsvEdits);
+    useExportStore.getState().setEditHeaders(task.resolveCsvEditHeaders || null);
     if (task.slateMetadata?.length || task.slateWarnings?.length || task.missingMetadataKeys?.length) {
       useMetadataStore.getState().setResult({
         metadata: (task.slateMetadata || []).map((item) => ({
@@ -821,8 +848,9 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
   const onEdit = useCallback((key: `${number}:${number}`, value: string) => {
     useExportStore.getState().setEdit(key, value);
+    if (isMetadataTemplate(effectiveExportOptions)) void refreshResolvePreview();
     autosave.markDirty(captureTask());
-  }, [autosave, captureTask]);
+  }, [autosave, captureTask, effectiveExportOptions.templateId, refreshResolvePreview]);
 
   const loadResolveCsv = async (file: File) => {
     if (isWorkspaceBusy() || useExportStore.getState().processing) return;
@@ -1107,21 +1135,6 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     }
   };
 
-  const saveExportAsProjectDefault = async () => {
-    if (!project || isWorkspaceBusy()) return;
-    try {
-      const nextSettings = { ...project.settings, export: effectiveExportOptions };
-      const updated = await unwrap(await getSlateSync().projects.update({ id: project.id, settings: nextSettings }));
-      useProjectStore.getState().setCurrent(updated);
-      // Main has accepted and normalized the full project snapshot; clear the
-      // session layer so the effective source visibly returns to project.
-      useExportStore.getState().setSessionOverride(null);
-      setToast({ tone: "success", message: "已保存为项目默认导出设置" });
-    } catch (nextError) {
-      setError(appErrorFromUnknown(nextError).message);
-    }
-  };
-
   // Keep the global listener stable while always invoking the latest draft and
   // project state captured by the recognition action.
   runRecognitionRef.current = () => { void runRecognition(); };
@@ -1135,6 +1148,8 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
   const exportCsv = async () => {
     const records = useRecognitionStore.getState().records;
     if (!project || !records.length || isWorkspaceBusy() || useExportStore.getState().processing) return;
+    // A successful retry must not leave the previous missing-identity error visible.
+    useExportStore.getState().setError(null);
     useExportStore.getState().setProcessing(true);
     setError(null);
     try {
@@ -1146,8 +1161,8 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       });
       const slateMetadata: ScannedSlateMetadata[] = metadata.result?.metadata ? [...metadata.result.metadata] : [];
       const bytes = exportState.table
-        ? await getCsvWorkerService().exportResolve({ type: "export-resolve", records, csvEdits: Object.entries(exportState.edits), slateMetadata, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments, exportOptions: effectiveExportOptions, resolvedFilename: filename })
-        : await getCsvWorkerService().exportStandalone({ type: "export-standalone", records, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments, exportOptions: effectiveExportOptions, resolvedFilename: filename });
+        ? await getCsvWorkerService().exportResolve({ type: "export-resolve", records, csvEdits: Object.entries(useExportStore.getState().edits), csvEditHeaders: useExportStore.getState().editHeaders, slateMetadata, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments, exportOptions: effectiveExportOptions, resolvedFilename: filename })
+        : await getCsvWorkerService().exportStandalone({ type: "export-standalone", records, csvEdits: Object.entries(useExportStore.getState().edits), csvEditHeaders: useExportStore.getState().editHeaders, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments, exportOptions: effectiveExportOptions, resolvedFilename: filename });
       const saved = await unwrap(await getSlateSync().files.save({ defaultFilename: filename, data: bytes }));
       if (saved.saved) setToast({ tone: "success", message: saved.filePath ? `已保存：${saved.filePath}` : "Resolve CSV 已保存" });
     } catch (nextError) {
@@ -1268,21 +1283,14 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
               {exportState.table && <Stack direction="row" gap={2} align="center" wrap><Button variant="ghost" size="sm" disabled={taskActionsBlocked || exportState.processing} onClick={() => { if (isWorkspaceBusy()) return; previewGuard.invalidate(); void getCsvWorkerService().clear(); useExportStore.getState().setTable(null, null); autosave.markDirty(captureTask()); }} startIcon={<RefreshCw size={14} />}>清除表格</Button></Stack>}
             </div>
             {exportState.error && <InlineError message={exportState.error.message} />}
+            {effectiveExportOptions.templateId === "imported-csv-v1" && <Text tone="muted" size="sm">已应用项目导入的 CSV 模板。仅带入可对应的数据，其他列可在预览中填写；导入剪辑软件时，按后期约定选择匹配字段。</Text>}
+            {effectiveExportOptions.templateId === "resolve-21.1-csv-v1" && <Text tone="muted" size="sm">Resolve 内置模板：检查 File Name、Start TC、End TC、Reel Name 和 Clip Directory。缺失值请在表格中补齐；未填写的字段不要用于 Resolve 导入匹配。源目录与文件名共同组成源文件路径。</Text>}
+            {exportState.previewTable?.exportWarnings?.map((warning) => <Text key={warning} tone="warning" size="xs">{warning}</Text>)}
             {(exportState.previewTable || exportState.table) && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.previewTable || exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
-            {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>请在左侧可选输入中载入 Resolve CSV 后预览并编辑回填结果。</div>}
+            {!exportState.table && !exportState.previewTable && <div className={styles.routeHint} style={{ marginTop: 14 }}>{isMetadataTemplate(effectiveExportOptions) ? "识别或载入场记 CSV 后，可在这里补齐素材匹配信息并导出。" : "请在左侧可选输入中载入 Resolve CSV 后预览并编辑回填结果。"}</div>}
           </Surface>
-          <Surface className={styles.panel}>
-            <ExportOptionsPanel
-              options={effectiveExportOptions}
-              onChange={(next) => { useExportStore.getState().setSessionOverride(next); void refreshResolvePreview(); autosave.markDirty(captureTask()); }}
-              onClearOverride={exportState.sessionOverride ? () => { useExportStore.getState().setSessionOverride(null); void refreshResolvePreview(); autosave.markDirty(captureTask()); } : undefined}
-              onSaveProjectDefault={() => void saveExportAsProjectDefault()}
-              disabled={taskActionsBlocked || exportState.processing}
-              sourceLabel={effectiveExportSource === "session" ? "当前任务覆盖" : "项目默认"}
-              title="导出配置"
-              description="当前任务可临时覆盖项目默认值；保存为项目默认会在 Main 返回成功后清除临时层。"
-            />
-          </Surface>
+          {/* Export defaults are edited in Project Settings; the workspace
+              keeps preview/export behavior and existing task overrides intact. */}
           <RecognitionResultPanel onRecordEdited={() => { void refreshResolvePreview(); autosave.markDirty(captureTask()); }} />
         </div>
       </div>

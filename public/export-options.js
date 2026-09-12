@@ -1,6 +1,7 @@
 // Shared export-options boundary for Modern Renderer, legacy Renderer, and
 // Worker payloads. Keeping precedence, normalization, and filename expansion
 // here prevents a preview and a saved CSV from drifting apart.
+import { RESOLVE_TEMPLATE_ID, normalizeResolveTemplateColumns, createResolveExportOptions, IMPORTED_TEMPLATE_ID, normalizeImportedColumns } from "./resolve-export-template.js";
 
 export const EXPORT_COLUMN_DEFINITIONS = Object.freeze([
   Object.freeze({ key: "scene", header: "Scene", enabled: true, label: "场次" }),
@@ -13,7 +14,7 @@ export const EXPORT_COLUMN_DEFINITIONS = Object.freeze([
   Object.freeze({ key: "sourcePage", header: "Source Page", enabled: false, label: "来源页" }),
 ]);
 
-export const DEFAULT_EXPORT_OPTIONS = Object.freeze({
+export const CUSTOM_EXPORT_OPTIONS = Object.freeze({
   columns: EXPORT_COLUMN_DEFINITIONS.map(({ label: _label, ...column }) => Object.freeze(column)),
   format: Object.freeze({
     encoding: "utf-16le",
@@ -25,6 +26,9 @@ export const DEFAULT_EXPORT_OPTIONS = Object.freeze({
   filenameTemplate: "{source}_场记识别.csv",
 });
 
+// New projects use Resolve; explicit historical settings retain custom behavior.
+export const DEFAULT_EXPORT_OPTIONS = Object.freeze(createResolveExportOptions());
+
 const EXPORT_COLUMN_KEYS = new Set(EXPORT_COLUMN_DEFINITIONS.map((column) => column.key));
 const OUTPUT_ENCODINGS = new Set(["utf-8", "utf-16le", "utf-16be"]);
 const LINE_ENDINGS = new Set(["\r\n", "\n", "\r"]);
@@ -33,7 +37,9 @@ const FILENAME_TOKEN_PATTERN = /\{([a-z][a-z0-9_-]*)\}/gi;
 export function normalizeExportOptions(value, fallback = DEFAULT_EXPORT_OPTIONS) {
   const fallbackValue = isRecord(fallback) ? fallback : DEFAULT_EXPORT_OPTIONS;
   const source = isRecord(value) ? value : {};
-  const base = mergeExportOptions(DEFAULT_EXPORT_OPTIONS, fallbackValue);
+  const legacy = !source.templateId && Object.keys(source).length > 0;
+  const base = legacy ? mergeExportOptions(CUSTOM_EXPORT_OPTIONS, { ...fallbackValue, templateId: "custom" }) : mergeExportOptions(DEFAULT_EXPORT_OPTIONS, fallbackValue);
+  if ((legacy || source.templateId === "custom") && fallbackValue === DEFAULT_EXPORT_OPTIONS) Object.assign(base, CUSTOM_EXPORT_OPTIONS, { templateId: "custom" });
   const rawColumns = Array.isArray(source.columns)
     ? source.columns
     : Array.isArray(base.columns) ? base.columns : DEFAULT_EXPORT_OPTIONS.columns;
@@ -45,7 +51,7 @@ export function normalizeExportOptions(value, fallback = DEFAULT_EXPORT_OPTIONS)
       seen.add(column.key);
       return true;
     });
-  const normalizedColumns = columns.length ? columns : DEFAULT_EXPORT_OPTIONS.columns.map((column) => ({ ...column }));
+  const normalizedColumns = columns.length ? columns : CUSTOM_EXPORT_OPTIONS.columns.map((column) => ({ ...column }));
   if (!normalizedColumns.some((column) => column.enabled)) normalizedColumns[0].enabled = true;
 
   const rawFormat = isRecord(source.format) ? source.format : {};
@@ -61,13 +67,15 @@ export function normalizeExportOptions(value, fallback = DEFAULT_EXPORT_OPTIONS)
   return {
     ...base,
     ...source,
-    columns: normalizedColumns,
+    // Built-in adapters own their field names and mandatory identity columns.
+    columns: (source.templateId ?? base.templateId) === IMPORTED_TEMPLATE_ID ? normalizeImportedColumns(rawColumns) : source.templateId === RESOLVE_TEMPLATE_ID || (!Object.hasOwn(source, "templateId") && base.templateId === RESOLVE_TEMPLATE_ID)
+      ? normalizeResolveTemplateColumns(rawColumns) : normalizedColumns,
     format: {
       ...baseFormat,
       ...rawFormat,
       encoding,
       bom: typeof rawFormat.bom === "boolean" ? rawFormat.bom : Boolean(baseFormat.bom),
-      delimiter: safeDelimiter(rawFormat.delimiter ?? baseFormat.delimiter),
+      delimiter: (source.templateId ?? base.templateId) === RESOLVE_TEMPLATE_ID ? "," : safeDelimiter(rawFormat.delimiter ?? baseFormat.delimiter),
       lineEnding,
       finalNewline: typeof rawFormat.finalNewline === "boolean"
         ? rawFormat.finalNewline
@@ -135,8 +143,8 @@ function normalizeColumn(value, index, fallbackColumns) {
   const key = String(value.key || "").trim();
   if (!EXPORT_COLUMN_KEYS.has(key)) return null;
   const fallback = fallbackColumns?.find?.((column) => column.key === key)
-    || DEFAULT_EXPORT_OPTIONS.columns[index]
-    || DEFAULT_EXPORT_OPTIONS.columns[0];
+    || CUSTOM_EXPORT_OPTIONS.columns[index]
+    || CUSTOM_EXPORT_OPTIONS.columns[0];
   const header = String(value.header ?? fallback.header).trim().slice(0, 80);
   return {
     ...value,

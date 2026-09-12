@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowLeft, Check, Import, PackageOpen, RotateCcw, Save, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_EXPORT_OPTIONS, type ProjectSettings } from "../../../shared/contracts/index.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_EXPORT_OPTIONS, type ExportOptions, type ProjectSettings } from "../../../shared/contracts/index.js";
 import { Button, Dialog, Field, InlineError, Input, Select, Separator, Stack, Surface, Text, Textarea } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
 import { useProjectStore, useRecognitionStore, useSettingsStore, useTaskStore, useUiStore } from "../../state";
@@ -11,6 +11,7 @@ import { ModelSelect } from "../recognition/ModelSelect";
 import { groupModelOptions } from "../recognition/model-options";
 import styles from "../../app/app.module.css";
 import { validateProjectName } from "../../validation/input-validation";
+import { getCsvWorkerService } from "../../services/csv-worker-service";
 import { ExportOptionsPanel } from "../export/ExportOptionsPanel";
 
 // @ts-expect-error Shared browser module intentionally has no generated declarations.
@@ -52,13 +53,7 @@ function settingsForDraft(value: ProjectSettings, config: ReturnType<typeof useP
       fieldFormats: { ...defaults.resolve.fieldFormats, ...value.resolve?.fieldFormats },
       comments: { ...defaults.resolve.comments, ...value.resolve?.comments },
     },
-    export: {
-      ...defaultExport,
-      ...(exportValue || {}),
-      columns: exportValue?.columns || defaultExport.columns,
-      format: { ...defaultExport.format, ...exportValue?.format },
-      filenameTemplate: exportValue?.filenameTemplate || defaultExport.filenameTemplate,
-    },
+    export: normalizeExportOptions(exportValue || defaultExport),
   };
 }
 
@@ -80,6 +75,15 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
   const description = currentDraft?.description ?? project?.description ?? "";
   const settings = currentDraft?.settings ?? project?.settings ?? settingsDefaults(config);
   const { models } = useProviderModels(settings.providerId || "");
+  const templateInput = useRef<HTMLInputElement>(null);
+  const templateImportGeneration = useRef(0);
+  const [templateImporting, setTemplateImporting] = useState(false);
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  useEffect(() => {
+    setTemplateImporting(false); setTemplateMessage(null); setTemplateError(null);
+    return () => { templateImportGeneration.current++; };
+  }, [project?.id]);
   const [deleting, setDeleting] = useState(false);
   const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -173,8 +177,30 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
     }
   };
   const readOnly = Boolean(project.archivedAt);
-  const packageBusy = Boolean(transferBusy) || saving || deleting;
+  const packageBusy = Boolean(transferBusy) || saving || deleting || templateImporting;
   const settingsDisabled = readOnly || packageBusy;
+  const importTemplate = async (file: File) => {
+    if (settingsDisabled || isWorkspaceBusy()) return;
+    const generation = ++templateImportGeneration.current;
+    const projectId = project.id;
+    setTemplateImporting(true); setTemplateError(null); setTemplateMessage(null);
+    try {
+      if (!/\.csv$/i.test(file.name)) throw new Error("请选择 CSV 模板文件。");
+      if (file.size > 5 * 1024 * 1024) throw new Error("CSV 模板不能超过 5 MB。");
+      const data = await file.arrayBuffer();
+      const result = await getCsvWorkerService().request<{ options: ExportOptions; sourceEncoding: string }>({ type: "import-export-template", data, filename: file.name }, [data]);
+      // A late decode must never patch another project's draft or resurrect an unmounted page.
+      if (generation !== templateImportGeneration.current || useSettingsStore.getState().projectId !== projectId) return;
+      const latest = useSettingsStore.getState().draft;
+      if (!latest) return;
+      patchProject({ settings: { ...latest.settings, export: normalizeExportOptions(result.options) } });
+      setTemplateMessage(`已导入 ${file.name}（${result.options.columns.length} 列）。保存项目设置后，该项目后续任务默认使用此模板。${result.sourceEncoding.startsWith("gb") ? "源模板为 GBK/GB18030，输出采用 UTF-8。" : ""}`);
+    } catch (cause) {
+      if (generation === templateImportGeneration.current) setTemplateError(appErrorFromUnknown(cause).message);
+    } finally {
+      if (generation === templateImportGeneration.current) setTemplateImporting(false);
+    }
+  };
   const transferProject = async (operation: "import" | "export") => {
     if (packageBusy || transferBusy) return;
     if (isWorkspaceBusy()) {
@@ -237,7 +263,16 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
       <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>项目资料</p><h2 className={styles.sectionTitle}>名称与描述</h2></div><SlidersHorizontal size={18} /></div><div className={styles.formGrid}><div className={styles.formField}><Field label="项目名称" htmlFor="project-settings-name" error={nameError}><Input id="project-settings-name" value={name} onChange={(event) => { patchProject({ name: event.target.value }); if (nameError) setError(null); }} onBlur={() => { const result = validateProjectName(name); if (!result.ok) setError(result.message); }} disabled={settingsDisabled} /></Field></div><div className={styles.formField}><Field label="描述"><Input value={description} onChange={(event) => { patchProject({ description: event.target.value }); }} disabled={settingsDisabled} /></Field></div></div></Surface>
       <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>识别默认值</p><h2 className={styles.sectionTitle}>识别设置</h2></div></div><div className={styles.formGrid}><div className={styles.formField}><Field label="Provider"><Select value={settings.providerId || ""} onChange={(event) => { updateSettings({ providerId: event.target.value || null, modelId: null }); }} disabled={settingsDisabled}><option value="">跟随当前设备</option>{staleProvider && <option value={settings.providerId || ""}>{settings.providerId} · 接口已移除</option>}{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}{provider.configured ? " · 已配置" : " · 未配置"}</option>)}</Select></Field></div><div className={styles.formField}><Field label="模型" hint={selectedProvider?.configured ? undefined : "Provider 未配置时会在识别前提示。"}><ModelSelect key={settings.providerId} value={settings.modelId || ""} groups={modelGroups} onChange={(modelId) => updateSettings({ modelId: modelId || null })} disabled={settingsDisabled} placeholder="自动选择" /></Field></div><div className={styles.formField}><Field label="准确度"><Select value={settings.accuracyMode} onChange={(event) => updateSettings({ accuracyMode: event.target.value as ProjectSettings["accuracyMode"] })} disabled={settingsDisabled}><option value="high">精确 · 主识别 + 查漏</option><option value="standard">快速 · 单次主识别</option></Select></Field></div><div className={styles.formField}><Field label="场记结构"><Select value={settings.scenarioId || ""} onChange={(event) => updateSettings({ scenarioId: event.target.value || null })} disabled={settingsDisabled}><option value="">自动识别并学习</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label} · {scenario.sampleCount} 次</option>)}</Select></Field></div><div className={`${styles.formField} ${styles.formFieldFull}`}><Field label="识别提示" hint="可选，用于补充项目约定。"><Textarea className="resize-none" value={settings.customPrompt} onChange={(event) => updateSettings({ customPrompt: event.target.value })} maxLength={2000} showCount disabled={settingsDisabled} placeholder="例如：本片使用繁体字；A 机为主机。" /></Field></div></div></Surface>
       <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>Resolve 输出</p><h2 className={styles.sectionTitle}>字段格式与条次标记</h2></div><Button type="button" variant="ghost" size="sm" onClick={resetOutput} disabled={settingsDisabled} startIcon={<RotateCcw size={14} />}>恢复默认</Button></div><Text tone="muted" size="sm">X 表示最小位数，更多位数会保留。</Text><Separator style={{ margin: "16px 0" }} /><div className={styles.formGrid}><Field label="Scene"><Input value={settings.resolve.fieldFormats.scene} onChange={(event) => updateResolveField("scene", event.target.value)} disabled={settingsDisabled} /></Field><Field label="Shot"><Input value={settings.resolve.fieldFormats.shot} onChange={(event) => updateResolveField("shot", event.target.value)} disabled={settingsDisabled} /></Field><Field label="Take"><Input value={settings.resolve.fieldFormats.take} onChange={(event) => updateResolveField("take", event.target.value)} disabled={settingsDisabled} /></Field><Field label="过条标记"><Input value={settings.resolve.comments.goodTake} onChange={(event) => updateResolveComment("goodTake", event.target.value)} disabled={settingsDisabled} /></Field><Field label="保条标记"><Input value={settings.resolve.comments.holdTake} onChange={(event) => updateResolveComment("holdTake", event.target.value)} disabled={settingsDisabled} /></Field></div></Surface>
-      <Surface className={styles.panel}><ExportOptionsPanel options={settings.export} onChange={updateExport} disabled={settingsDisabled} title="项目默认导出" description="识别任务会继承这里的默认值；工作台可以为当前任务临时覆盖。" sourceLabel="项目默认" /></Surface>
+      {/* Project Settings owns export configuration and its existing save/dirty guard. */}
+      <Surface className={styles.panel}>
+        <Stack direction="row" gap={2} align="center" wrap>
+          <Button type="button" variant="secondary" startIcon={<Import size={15} />} loading={templateImporting} disabled={settingsDisabled || workspaceBusy} onClick={() => templateInput.current?.click()}>导入 CSV 模板</Button>
+          <Text size="sm" tone="muted">支持 CSV（最多 5 MB），仅导入列结构和格式。默认使用 Resolve 内置模板。</Text>
+        </Stack>
+        <input ref={templateInput} type="file" accept=".csv,text/csv" aria-label="导入 CSV 模板文件" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importTemplate(file); }} />
+        {templateError && <InlineError message={templateError} />}
+        {templateMessage && <p role="status">{templateMessage}</p>}
+        <ExportOptionsPanel options={settings.export} onChange={updateExport} disabled={settingsDisabled} title="导出配置" description="设置项目默认的导出文件名、编码和列格式，保存项目设置后生效。" sourceLabel="项目默认" /></Surface>
       <div className={styles.formActions}><Button type="submit" disabled={settingsDisabled} loading={saving} startIcon={<Check size={16} />}>保存项目设置</Button></div>
     </form>
     <Surface className={styles.panel} style={{ marginTop: 20 }}>

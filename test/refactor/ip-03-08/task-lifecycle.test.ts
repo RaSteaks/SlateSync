@@ -48,9 +48,10 @@ describe("workspace task lifecycle", () => {
     const source = await readFile(workspaceSource, "utf8");
 
     // The raw table remains the durable source while previewTable is rebuilt
-    // through the CSV Worker after recognition or record edits.
+    // through the CSV Worker after recognition or record edits. Stable headers
+    // preserve active cell editors when only the returned row values change.
     expect(source).toContain('mergePreview({');
-    expect(source).toContain('useExportStore.getState().setPreviewTable(previewTable)');
+    expect(source).toContain('useExportStore.getState().setPreviewTable({ ...previewTable, headers })');
     expect(source).toContain('exportState.previewTable || exportState.table');
     expect(source).toContain('useRecognitionStore.getState().complete(operationId, result);\n        await refreshResolvePreview();');
   });

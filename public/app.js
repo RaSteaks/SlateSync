@@ -32,11 +32,13 @@ import {
 } from "./custom-provider-state.js";
 import {
   DEFAULT_EXPORT_OPTIONS,
+  CUSTOM_EXPORT_OPTIONS,
   mergeExportOptions,
   normalizeExportOptions,
   resolveEffectiveExportOptions,
   resolveExportFilename,
 } from "./export-options.js";
+import { RESOLVE_TEMPLATE_ID, RESOLVE_METADATA_FIELDS, createResolveExportOptions, remapTemplateEdits } from "./resolve-export-template.js";
 import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
@@ -165,6 +167,7 @@ const state = {
   customProviderShowKey: false,
   customProviderDeleteConfirm: "",
   csvEdits: new Map(),
+  csvEditHeaders: null,
   detailSort: { field: null, direction: 1 },
   detailSearch: "",
   detailReviewFilter: "all",
@@ -324,7 +327,6 @@ const elements = {
   projectPackageStatus: document.querySelector("#project-package-status"),
   projectSettingsImportButton: document.querySelector("#project-settings-import-button"),
   projectSettingsExportButton: document.querySelector("#project-settings-export-button"),
-  exportOptionsPanel: document.querySelector("#export-options-panel"),
   globalProvider: document.querySelector("#global-provider-select"),
   globalApiKeyInput: document.querySelector("#global-api-key-input"),
   globalSaveKeyButton: document.querySelector("#global-save-key-button"),
@@ -1001,24 +1003,31 @@ function renderLegacyExportOptions(container, value, scope = "session") {
   if (!container) return;
   const options = normalizeExportOptions(value || effectiveLegacyExportOptions());
   const projectScope = scope === "project";
+  const builtin = options.templateId === RESOLVE_TEMPLATE_ID;
+  const imported = options.templateId === "imported-csv-v1";
   // Symbolic option values survive HTML newline normalization unchanged.
   container.dataset.exportScope = scope;
+  container.dataset.exportTemplate = options.templateId || "custom";
+  container.dataset.exportTemplateName = options.templateName || "";
   container.innerHTML = `
     <div class="export-options-heading">
       <p class="settings-help">预览和最终导出使用同一组配置；支持 {project}、{source}、{date}、{time}。</p>
       ${projectScope ? "" : `<button type="button" class="text-button" data-export-action="clear-session">恢复项目默认</button>`}
     </div>
+    <label class="field"><span>导出模板</span><select data-export-template><option value="custom" ${!builtin && !imported ? "selected" : ""}>自定义 CSV</option><option value="${RESOLVE_TEMPLATE_ID}" ${builtin ? "selected" : ""}>DaVinci Resolve 21.1 · 内置 CSV</option>${imported ? `<option value="imported-csv-v1" selected>${escapeHtml(options.templateName || "导入的 CSV 模板")}</option>` : ""}</select></label>
+    ${projectScope ? `<label class="field"><span>导入 CSV 模板（最多 5 MB）</span><input type="file" accept=".csv,text/csv" data-import-export-template /></label><p class="settings-help" data-template-message>只保存列结构和格式；保存项目设置后，该项目后续任务默认使用此模板。</p>` : ""}
+    ${builtin ? '<p class="settings-help">依据官方手册第 18 章（406–412、421–423 页）。素材匹配字段始终包含；目录与文件名共同定位源文件。缺失值请在预览中补齐，备注保留文本。</p>' : ""}
     <div class="export-options-grid">
       <label class="field"><span>文件名模板</span><input data-export-field="filenameTemplate" value="${escapeHtml(options.filenameTemplate)}" maxlength="160" /></label>
       <label class="field"><span>输出编码</span><select data-export-field="encoding"><option value="utf-8" ${options.format.encoding === "utf-8" ? "selected" : ""}>UTF-8</option><option value="utf-16le" ${options.format.encoding === "utf-16le" ? "selected" : ""}>UTF-16 LE</option><option value="utf-16be" ${options.format.encoding === "utf-16be" ? "selected" : ""}>UTF-16 BE</option></select></label>
-      <label class="field"><span>分隔符</span><input data-export-field="delimiter" value="${escapeHtml(options.format.delimiter)}" maxlength="4" /></label>
+      <label class="field"><span>分隔符</span><input data-export-field="delimiter" value="${escapeHtml(options.format.delimiter)}" maxlength="4" ${builtin ? "readonly" : ""} /></label>
       <label class="field"><span>换行</span><select data-export-field="lineEnding"><option value="crlf" ${options.format.lineEnding === "\r\n" ? "selected" : ""}>CRLF · Windows</option><option value="lf" ${options.format.lineEnding === "\n" ? "selected" : ""}>LF · Unix</option><option value="cr" ${options.format.lineEnding === "\r" ? "selected" : ""}>CR · Classic Mac</option></select></label>
     </div>
     <div class="export-options-checks"><label><input type="checkbox" data-export-field="bom" ${options.format.bom ? "checked" : ""} /> 写入 BOM</label><label><input type="checkbox" data-export-field="finalNewline" ${options.format.finalNewline ? "checked" : ""} /> 末尾追加换行</label></div>
     <div class="export-column-list"><small class="settings-help">勾选列并调整顺序</small>${options.columns.map((column, index) => `
       <div class="export-column-row" data-export-column="${escapeHtml(column.key)}">
-        <label><input type="checkbox" data-export-enabled ${column.enabled ? "checked" : ""} /> ${escapeHtml(LEGACY_EXPORT_COLUMN_LABELS[column.key] || column.key)}</label>
-        <input data-export-header value="${escapeHtml(column.header)}" aria-label="${escapeHtml(column.key)} 列标题" maxlength="80" />
+        <label><input type="checkbox" data-export-enabled ${column.enabled ? "checked" : ""} ${builtin && RESOLVE_METADATA_FIELDS.find((field) => field.key === column.key)?.required ? "disabled" : ""} /> ${escapeHtml((builtin && RESOLVE_METADATA_FIELDS.find((field) => field.key === column.key)?.label) || LEGACY_EXPORT_COLUMN_LABELS[column.key] || column.key)}</label>
+        <input data-export-header value="${escapeHtml(column.header)}" aria-label="${escapeHtml(column.key)} 列标题" maxlength="80" ${builtin || imported ? "readonly" : ""} />
         <button type="button" class="icon-button" data-export-move="-1" ${index === 0 ? "disabled" : ""} aria-label="上移">↑</button>
         <button type="button" class="icon-button" data-export-move="1" ${index === options.columns.length - 1 ? "disabled" : ""} aria-label="下移">↓</button>
       </div>`).join("")}</div>`;
@@ -1043,6 +1052,8 @@ function readLegacyExportOptions(container, fallback = DEFAULT_EXPORT_OPTIONS) {
   }));
   const value = {
     ...current,
+    templateId: container.dataset.exportTemplate || "custom",
+    ...(container.dataset.exportTemplateName ? { templateName: container.dataset.exportTemplateName } : {}),
     filenameTemplate: container.querySelector('[data-export-field="filenameTemplate"]')?.value ?? current.filenameTemplate,
     format: {
       ...current.format,
@@ -1084,6 +1095,35 @@ function bindLegacyExportOptionEvents(container, scope) {
   });
   container.addEventListener("change", (event) => {
     const target = event.target instanceof Element ? event.target : null;
+    if (target?.matches("[data-import-export-template]")) {
+      const file = target.files?.[0]; target.value = "";
+      if (!file || isProjectReadOnly()) return;
+      const projectId = state.currentProject?.id;
+      const message = container.querySelector("[data-template-message]");
+      target.disabled = true;
+      void (async () => {
+        try {
+          if (!/\.csv$/i.test(file.name) || file.size > 5 * 1024 * 1024) throw new Error("请选择不超过 5 MB 的 CSV 模板。");
+          const data = await file.arrayBuffer();
+          const result = await runCsvBackgroundTask({ type: "import-export-template", data, filename: file.name }, [data]);
+          // Retain only schema in this project's draft; never replace task media.
+          if (state.currentProject?.id !== projectId || !container.isConnected) return;
+          renderLegacyExportOptions(container, result.options, scope);
+          markProjectSettingsDirty();
+          container.querySelector("[data-template-message]").textContent = `已导入 ${file.name}。保存项目设置后，后续任务默认使用此模板。`;
+        } catch (error) { if (message?.isConnected) message.textContent = error.message; }
+        finally { target.disabled = false; }
+      })();
+      return;
+    }
+    // Changing adapters is an explicit draft edit, saved by the project form.
+    if (target?.matches("[data-export-template]")) {
+      const next = target.value === RESOLVE_TEMPLATE_ID ? createResolveExportOptions() : { ...CUSTOM_EXPORT_OPTIONS, templateId: "custom" };
+      renderLegacyExportOptions(container, next, scope);
+      if (scope === "project") markProjectSettingsDirty();
+      else { state.exportSessionOptions = next; renderDerivedResultsAfterEdit(); saveCurrentTask(); }
+      return;
+    }
     if (target?.matches("[data-export-field], [data-export-enabled], [data-export-header]")) update(event, true);
   });
   container.addEventListener("click", (event) => {
@@ -1776,6 +1816,7 @@ function applySlateDirectoryResult({
   missingKeys,
 }) {
   state.csvEdits.clear();
+  state.csvEditHeaders = null;
   state.missingMetadataKeys = new Set(missingKeys || []);
   if (!metadata.length) {
     state.slateMetadata = [];
@@ -1900,6 +1941,7 @@ function updateSlateDirectoryState() {
 function clearSlateMetadata() {
   state.slateMetadata = [];
   state.csvEdits.clear();
+  state.csvEditHeaders = null;
   state.missingMetadataKeys = new Set();
   state.slateWarnings = [];
   state.slateScanning = false;
@@ -3377,6 +3419,7 @@ async function loadResolveCsv(file) {
     state.metadataFile = file;
     state.metadataTable = table;
     state.csvEdits.clear();
+    state.csvEditHeaders = null;
     // A different Resolve CSV invalidates scan-derived metadata (it is keyed to
     // the previously loaded file's material set), so drop it and force a
     // re-scan. Mirrors clearSlateMetadata() without its extra renderTable().
@@ -3414,6 +3457,7 @@ function clearResolveCsv() {
   state.metadataTable = null;
   clearCsvWorkerMetadata();
   state.csvEdits.clear();
+  state.csvEditHeaders = null;
   state.previewOutput = null;
   state.previewRevision += 1;
   elements.metadataInput.value = "";
@@ -4282,7 +4326,7 @@ function renderDetailSortIndicators() {
 
 function renderTable({ skipPreview = false } = {}) {
   const output = currentMergeOutput();
-  renderLegacyExportOptions(elements.exportOptionsPanel, effectiveLegacyExportOptions(), "session");
+  // 项目默认导出配置由项目设置编辑；历史任务的临时覆盖仍按原契约恢复。
   const statuses = output.statuses;
   elements.detailReviewFilter.value = state.detailReviewFilter;
   elements.tabDetailBadge.textContent = String(state.records.length);
@@ -4579,9 +4623,10 @@ async function refreshLegacyCsvPreview() {
   const task = {
     type: state.metadataTable ? "merge-preview" : "standalone-preview",
     records: state.records,
+    csvEdits: [...state.csvEdits],
+    csvEditHeaders: state.csvEditHeaders,
     ...(state.metadataTable ? {
       slateMetadata: state.slateMetadata,
-      csvEdits: [...state.csvEdits],
     } : {}),
     fieldFormats: resolveFieldFormats(),
     comments: resolveCommentsConfig(),
@@ -4595,6 +4640,9 @@ async function refreshLegacyCsvPreview() {
   try {
     const output = await runCsvBackgroundTask(task);
     if (revision !== state.previewRevision) return;
+    // Preserve the schema across template reorder, source projection and restore.
+    state.csvEdits = new Map(Object.entries(remapTemplateEdits(state.csvEdits, state.csvEditHeaders || state.metadataTable?.headers, output.table.headers)));
+    state.csvEditHeaders = [...output.table.headers];
     state.previewOutput = output;
     renderTable({ skipPreview: true });
   } catch (error) {
@@ -4612,7 +4660,10 @@ function renderResultSummary(output) {
     0,
   );
   const reviewSummary = ` · 待复核 ${reviewRecordCount} 条 / ${reviewFieldCount} 个字段`;
-  elements.resultSummary.textContent = state.metadataTable
+  // Template projections count delivery rows, not legacy camera sidecar writes.
+  elements.resultSummary.textContent = output.table?.exportTemplateId === RESOLVE_TEMPLATE_ID
+    ? `${base}${reviewSummary} · 可交付 ${output.table.rows.length} 行 · 已关联 ${output.matchedRecordCount} 条场记`
+    : state.metadataTable
     ? `${base}${reviewSummary} · 覆盖 ${output.recognizedMaterialCount}/${output.expectedMaterialCount} 个 CSV 素材 · 可回填 ${output.matchedRecordCount} 条 / ${output.updatedRowCount} 行${state.slateMetadata.length ? ` · Camera FPS ${output.cameraFpsMatchedMaterialCount} 个素材 / ${output.cameraFpsMatchedRowCount} 行 · Shoot Day ${output.shootDayMatchedMaterialCount} 个素材 / ${output.shootDayMatchedRowCount} 行` : ""}`
     : `${base}${reviewSummary} · 可直接导出识别结果`;
 }
@@ -4687,6 +4738,7 @@ async function exportCsv() {
         records: state.records,
         slateMetadata: state.slateMetadata,
         csvEdits: [...state.csvEdits],
+        csvEditHeaders: state.csvEditHeaders,
         fieldFormats: resolveFieldFormats(),
         comments: resolveCommentsConfig(),
         exportOptions,
@@ -4703,6 +4755,8 @@ async function exportCsv() {
     const { bytes } = await runCsvBackgroundTask({
       type: "export-standalone",
       records: state.records,
+      csvEdits: [...state.csvEdits],
+      csvEditHeaders: state.csvEditHeaders,
       fieldFormats: resolveFieldFormats(),
       comments: resolveCommentsConfig(),
       exportOptions,
@@ -4854,6 +4908,7 @@ function normalizeCsvCellEdit(field, value) {
 function resetRecognitionResults() {
   state.records = [];
   state.csvEdits.clear();
+  state.csvEditHeaders = null;
   state.detailSearch = "";
   state.detailReviewFilter = "all";
   state.detailSort = { field: null, direction: 1 };
@@ -5278,6 +5333,8 @@ function restoreTask(task, operation = {}) {
   state.preprocessMetadata = task.preprocessMetadata || null;
 
   restoreResolveCsvState(task);
+  state.csvEditHeaders = task.resolveCsvEditHeaders || null;
+  if (!state.metadataTable && task.resolveCsvEdits) state.csvEdits = new Map(Object.entries(task.resolveCsvEdits));
   renderScenarioOptions(task.scenarioId || "", false);
 
   // Restore recognition config
@@ -5351,6 +5408,7 @@ function restoreResolveCsvState(task) {
   // object cannot survive a reload, so keep a small compatible name object.
   state.metadataFile = { name: saved.metadataFilename };
   state.csvEdits.clear();
+  state.csvEditHeaders = null;
   for (const [key, value] of saved.csvEdits) state.csvEdits.set(key, value);
   state.slateMetadata = saved.slateMetadata;
   state.slateWarnings = saved.slateWarnings;
@@ -5429,6 +5487,7 @@ function captureCurrentTaskSave() {
     metadataTable: state.metadataTable,
     metadataFilename: state.metadataFile?.name,
     csvEdits: state.csvEdits,
+    csvEditHeaders: state.csvEditHeaders,
     slateMetadata: state.slateMetadata,
     slateWarnings: state.slateWarnings,
     missingMetadataKeys: [...state.missingMetadataKeys],

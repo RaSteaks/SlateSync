@@ -15,9 +15,12 @@ interface CsvExportPayload {
   readonly resolvedFilename?: string;
   readonly outputFormat?: ResolveCsvFormat;
   readonly csvEdits?: readonly (readonly [string, string])[];
+  /** Schema of positional edits before the template projects/reorders columns. */
+  readonly csvEditHeaders?: readonly string[] | null;
 }
 
 type CsvTask = CsvExportPayload & (
+  | { readonly type: "import-export-template"; readonly data: ArrayBuffer; readonly filename: string }
   | { readonly type: "decode-metadata"; readonly data: ArrayBuffer }
   | { readonly type: "prime-metadata"; readonly table: ResolveCsvTable }
   | { readonly type: "clear-metadata" }

@@ -223,3 +223,29 @@ test("completed JSON snapshot migration no longer re-imports later manual snapsh
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("healthy task summaries do not read full task payloads", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "slatesync-summary-read-"));
+  const { db } = openSlateDatabase(dir);
+  const store = createTaskStore(dir, { db });
+  try {
+    await store.saveTask({ filename: "large-images.pdf", status: "completed", result: { records: [] } });
+    let payloadReads = 0;
+    // A view makes payload access observable independently of SQL spelling:
+    // SQLite evaluates this function only if the caller requests data_json.
+    db.function("observe_payload", value => { payloadReads++; return value; });
+    db.exec(`
+      ALTER TABLE tasks RENAME TO stored_tasks;
+      CREATE VIEW tasks AS SELECT id, summary_json, created_at, updated_at,
+        observe_payload(data_json) AS data_json FROM stored_tasks;
+    `);
+    const tasks = await store.listTasks();
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].filename, "large-images.pdf");
+    assert.equal(payloadReads, 0);
+  } finally {
+    await store.close();
+    closeSlateDatabase(db);
+    await rm(dir, { recursive: true, force: true });
+  }
+});

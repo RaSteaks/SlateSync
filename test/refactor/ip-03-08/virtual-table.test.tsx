@@ -95,6 +95,18 @@ describe("virtual Resolve table", () => {
     expect(onEdit).toHaveBeenCalledWith("12");
   });
 
+  it("flushes a draft echoed by preview before the debounce commits it", () => {
+    const onEdit = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    mounted.push({ host, root });
+    // A background preview can remount an input with its pending draft as value.
+    act(() => root.render(<EditableCell label="Reel Name" value="A001" committedValue="" edited={false} onCommit={onEdit} />));
+    act(() => host.querySelector("input")?.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(onEdit).toHaveBeenCalledWith("A001");
+  });
+
   it("leaves Enter and Escape to an active IME composition", () => {
     const onCsvCommit = vi.fn();
     const onResultCommit = vi.fn();

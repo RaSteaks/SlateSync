@@ -10,6 +10,7 @@ export function serializeCsvPreviewState({
   metadataTable,
   metadataFilename,
   csvEdits,
+  csvEditHeaders,
   slateMetadata = [],
   slateWarnings = [],
   missingMetadataKeys = [],
@@ -19,6 +20,8 @@ export function serializeCsvPreviewState({
     resolveCsvFilename: cleanFilename(metadataFilename),
     resolveCsvTable: cloneTable(metadataTable),
     resolveCsvEdits: serializeEdits(csvEdits),
+    // Standalone built-ins have no raw CSV; edits still need their own schema.
+    ...(Array.isArray(csvEditHeaders) ? { resolveCsvEditHeaders: csvEditHeaders.map(String) } : {}),
     slateMetadata: Array.isArray(slateMetadata)
       ? slateMetadata.map((entry) => ({ ...entry }))
       : [],

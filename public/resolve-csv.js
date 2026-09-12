@@ -18,6 +18,12 @@ import {
   reviewFieldsFromQuality,
 } from "./metadata-common.js";
 import { parseSlateMetadataText } from "./metadata-sources/kinefinity.js";
+import {
+  HEADER_ALIASES,
+  buildResolveTemplateTable,
+  findHeaderIndexes,
+  isMetadataTemplate,
+} from "./resolve-export-template.js";
 
 export {
   extractCombinedMaterialKey,
@@ -25,26 +31,6 @@ export {
   normalizeShootDay,
   parseSlateMetadataText,
 };
-
-const HEADER_ALIASES = Object.freeze({
-  fileName: ["File Name", "Filename", "文件名"],
-  clipDirectory: ["Clip Directory", "片段目录", "素材目录"],
-  reelName: ["Reel Name", "Reel", "卷名"],
-  clipName: ["Clip Name", "条名", "片段名", "片段名称"],
-  shot: ["Shot", "镜次", "鏡次"],
-  scene: ["Scene", "场景", "場景"],
-  take: ["Take", "镜头", "鏡頭"],
-  comments: ["Comments", "Comment", "备注", "備註", "注释", "註釋"],
-  takeStatus: ["Take Status"],
-  cardNumber: ["Card Number"],
-  videoCode: ["Video Code"],
-  sourcePage: ["Source Page"],
-  cameraFps: ["Camera FPS", "CameraFPS", "摄影机帧率", "攝影機幀率"],
-  shootDay: ["Shoot Day", "ShootDay", "拍摄日期", "拍攝日期"],
-  // Resolve reads only its canonical "Camera #" header; localized variants
-  // are not emitted and are not treated as the camera column.
-  camera: ["Camera #"],
-});
 
 const TARGET_COLUMNS = Object.freeze([
   { field: "shot", header: "Shot" },
@@ -145,8 +131,9 @@ export function decodeResolveCsv(input, options = {}) {
 
   const headers = matrix[0].map((value) => String(value));
   const rows = matrix.slice(1).map((row) => normalizeRowWidth(row, headers.length));
-  const columns = resolveColumnIndexes(headers);
-  if (!hasIdentifierColumns(columns)) {
+  // Template parsing validates literal headers separately and accepts header-only CSVs.
+  const columns = options.templateOnly ? null : resolveColumnIndexes(headers);
+  if (!options.templateOnly && !hasIdentifierColumns(columns)) {
     throw new Error(
       "CSV 中未找到 File Name（文件名）、Reel Name（卷名）或 Clip Name（条名）列。",
     );
@@ -1034,6 +1021,39 @@ export function mergeSlateIntoResolveTable(sourceTable, records, slateMetadata =
   return buildSemanticExportTable({ mode: "resolve", sourceTable, records, slateMetadata, ...options });
 }
 
+// Built-in metadata accepts textual Scene/Shot/Take (including shot letters).
+// Reuse material identity resolution without invoking the legacy numeric and
+// Comments rewrite pipeline or requiring unrelated fields to be populated.
+function matchTemplateRecords(sourceTable, records) {
+  const warnings = [];
+  const columns = resolveColumnIndexes(sourceTable.headers, sourceTable.semanticColumns);
+  const rowsByKey = buildMetadataRowIndex(sourceTable.rows, columns, warnings);
+  const groups = new Map();
+  records.forEach((record, recordIndex) => {
+    const key = canonicalMaterialKey(record.cardNumber, record.videoCode);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ record, recordIndex });
+  });
+  // Matching groups are keyed for lookup, but callers consume statuses by the
+  // original record index; preserve that positional contract explicitly.
+  const statuses = new Array(records.length);
+  let matchedRecordCount = 0;
+  for (const [key, group] of groups) {
+    const signatures = new Set(group.map(({ record }) => JSON.stringify(
+      [record.scene, record.shot, record.take, record.comments, record.description],
+    )));
+    const rowIndexes = rowsByKey.get(key) || [];
+    const status = !key ? "missing-key" : signatures.size > 1 ? "conflict" : rowIndexes.length ? "matched" : "unmatched";
+    group.forEach(({ recordIndex }, index) => {
+      const result = status === "matched" && index > 0 ? "duplicate" : status;
+      statuses[recordIndex] = { recordIndex, status: result, rowIndexes: result === "matched" ? [...rowIndexes] : [] };
+      if (result === "matched") matchedRecordCount++;
+    });
+    if (status !== "matched") warnings.push(`场记记录 ${group.map(({ recordIndex }) => recordIndex + 1).join("、")} ${status === "conflict" ? "内容冲突" : "未匹配到唯一的素材标识"}，保留素材清单原值。`);
+  }
+  return { statuses, warnings, matchedRecordCount, changes: [] };
+}
+
 const SEMANTIC_DEFAULTS = [
   ["scene", "Scene"], ["shot", "Shot"], ["take", "Take"], ["comments", "Comments"],
   ["takeStatus", "Take Status"], ["cardNumber", "Card Number"],
@@ -1080,6 +1100,13 @@ export function buildSemanticExportTable(input = {}) {
   const { mode = "standalone", sourceTable, records = [], slateMetadata = [],
     fieldFormats, comments, resolvedFilename } = input;
   const options = input.exportOptions ?? input.options;
+  if (isMetadataTemplate(options)) {
+    // Use the established material identity rules without legacy value rewriting.
+    const matchResult = mode === "resolve"
+      ? matchTemplateRecords(sourceTable, records)
+      : { statuses: [], warnings: [], changes: [], matchedRecordCount: 0 };
+    return buildResolveTemplateTable({ ...input, mode }, matchResult);
+  }
   const definitions = normalizeSemanticColumns(options?.columns ?? input.semanticColumns ?? sourceTable?.semanticColumns);
   const formats = resolveFieldFormats(fieldFormats);
   const markers = resolveCommentsConfig(comments);
@@ -1387,20 +1414,6 @@ function hasIdentifierColumns(columns) {
     columns.reelName.length > 0 ||
     columns.clipName.length > 0
   );
-}
-
-function findHeaderIndexes(headers, aliases) {
-  const accepted = new Set(aliases.map(normalizeHeader));
-  return headers
-    .map((header, index) => (accepted.has(normalizeHeader(header)) ? index : -1))
-    .filter((index) => index >= 0);
-}
-
-function normalizeHeader(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
 }
 
 function detectDelimiter(text) {
