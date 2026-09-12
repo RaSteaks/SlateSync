@@ -853,12 +853,21 @@ export interface ResolveCsvFormat {
   readonly newline?: "\r\n" | "\n" | "\r";
 }
 
+/** Stable field identity is persisted independently of its display header. */
+export interface SemanticExportColumn extends ExportColumnConfig {
+  readonly index: number;
+}
+
 export interface ResolveCsvTable {
   readonly headers: readonly string[];
   readonly rows: readonly (readonly string[])[];
   readonly format: ResolveCsvFormat;
   /** Kept separate from `format.encoding`, which always describes output bytes. */
   readonly sourceEncoding?: ResolveCsvSourceEncoding;
+  readonly sourceEncodingDetection?: "explicit" | "detected";
+  readonly semanticColumns?: readonly SemanticExportColumn[];
+  /** Values already passed through the shared semantic builder. */
+  readonly semanticBuilt?: boolean;
 }
 
 /** Canonical defaults shared by modern settings and the Main normalizer. */

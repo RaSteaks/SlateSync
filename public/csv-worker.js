@@ -27,6 +27,9 @@ self.addEventListener("message", (event) => {
   } catch (error) {
     self.postMessage({
       id,
+      // Keep the string error for old clients; structured diagnostics are additive.
+      errorName: error?.code ? error.name : undefined,
+      errorCode: error?.code,
       error: error?.message || "CSV 后台任务失败",
     });
   }

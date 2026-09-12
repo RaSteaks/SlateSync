@@ -1291,3 +1291,51 @@ Worker 边界、验收证据和最终治理交接。
   `git diff --check` 均通过；premium strict UI audit 为 0 findings。Modern 构建仅保留
   既有大 chunk 提示；未执行 Electron GUI、真实 provider/OCR 或默认 Project Library
   读写流程。
+
+## 2026-09-12 Recognition CSV Phase 03 implementation
+
+- 已实施 `.codex/recognition-accuracy-csv-export/package/phase-03-csv-backend.md`。
+  施工前分支为 `feat/electron/accuracy-csv`，`git status --short` 为空；Phase 01/02
+  已有实现均保留。冻结并复核全部 baseline CSV fixture SHA-256 与原有 round-trip
+  结果，未修改任何 golden。此次允许增加 CSV 后端行为；不扩展 IPC、数据库或 UI。
+- `public/resolve-csv.js` 提供唯一纯入口 `buildSemanticExportTable`；输入支持
+  `mode/sourceTable/records/slateMetadata/csvEdits/options`（Worker 使用 `exportOptions`）、
+  `fieldFormats/comments/sourceEncoding/semanticColumns/outputFormat/resolvedFilename`。
+  旧 standalone/merge API 委托此入口，modern/public Worker 与 renderer fallback
+  共用处理器。稀疏编辑先应用再规范化，已构建表格编码时不再进行字段变换。
+- 表格持久化可选 `semanticColumns`（key/header/enabled/index）和 `semanticBuilt`，
+  自定义显示文字及重复表头通过稳定 key/index 恢复，不用于推断字段身份。
+  standalone 支持八个固定语义列，默认保持原四列与旧 Comments 字节行为；显式选项
+  下 Comments 使用状态 marker，takeStatus 独立输出业务状态。Resolve 保留源列和
+  顺序，关闭的字段不新增，已有可选列复用原位置。
+- 解码按 BOM/UTF-16 零字节检测、严格 UTF-8、GBK、GB18030 顺序执行；GBK/GB18030
+  另校验字节结构，避免 Node ICU 的宽松私用字符接受行为。可显式指定输入编码，
+  `sourceEncodingDetection` 标注 explicit/detected；GBK 可解码的歧义输入优先记录
+  gbk，并不表示绝对来源鉴定。中文输入默认转 UTF-8，原 Unicode 输入沿用格式；
+  最终只允许 UTF-8/UTF-16LE/UTF-16BE。错误码分别为 `CSV_SOURCE_DECODE` 和
+  `CSV_OUTPUT_ENCODE`，后者也拒绝非法输出格式与孤立代理字符。
+- Worker 协议保持 v1，新增字段可选；新增 `standalone-preview`，旧 payload 仍可用。
+  回复保留 id 与旧字符串 error，追加 errorName/errorCode；失败不替换源表，不清除
+  export store 的 table/preview/edits/filename，基础设施失败可重建 Worker 后重新 prime。
+  prime 对旧 sourceEncoding 的补充仅在内存副本发生；不迁移或重写旧任务。
+- 回归覆盖 GBK、GB18030 四字节字符、三种输出编码及 BOM 组合、截断/非法字节、
+  默认四列/全部八列/可选列/空记录、重复自定义表头 JSON 恢复、稀疏编辑与越界、
+  源额外列及重复 Camera #、直接构建/public Worker/modern service/fallback 一致性、
+  Worker 错误保留数据与重建。所有测试只用合成内存数据或原测试的临时目录，未访问
+  真实 CSV 或默认 Project Library；未启动 Electron GUI、Provider/OCR 或发布流程。
+- 验证通过：`npm run check`、`npm run test:node`（446 项），最终 Node 全量复跑
+  （446 项），`npm run validate:modern`（含 typecheck、31 个文件/196 项 Modern 测试、
+  build:modern）、`git diff --check`。构建仅保留既有大 chunk 提示。全部 baseline fixture
+  哈希及无选项导出字节保持一致。
+- Phase 04 仅接配置优先级、控件及已解析文件名，不在 Renderer 重新拼接 CSV。
+  使用 `merge-preview`/`standalone-preview` 与对应 export 请求传入相同选项和编辑值；
+  `encodeResolveCsv(builder.table)` 即预览对应的最终文件内容。
+
+### Phase 03 review fix：空导出列回退
+
+- `normalizeSemanticColumns` 对空列表或仅含未知 key 的列表恢复默认四列；当有效列
+  全部禁用时，启用输入顺序中的第一个有效列，保持项目设置归一化的回退语义。
+  固定输出列顺序和调用方原始配置保持不变，避免成功导出只有换行的 CSV。
+- 新增空列表、未知列、全部禁用（首列为 sourcePage）三组 Worker 回归，验证预览、
+  直接 builder 与最终解码后的表头/数据一致。CSV 相关 72 项测试、JavaScript 语法检查
+  和 `git diff --check` 均通过，原 baseline 字节断言继续通过。

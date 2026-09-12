@@ -25,6 +25,9 @@ export function createCsvWorkerClient({
     pending.delete(id);
     if (error) {
       const taskError = new Error(error);
+      // Preserve direction-specific encoding diagnostics across the v1 envelope.
+      taskError.name = event.data.errorName || "CsvWorkerTaskError";
+      taskError.code = event.data.errorCode;
       taskError.csvWorkerTask = true;
       request.reject(taskError);
     } else {

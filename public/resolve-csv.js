@@ -35,6 +35,10 @@ const HEADER_ALIASES = Object.freeze({
   scene: ["Scene", "场景", "場景"],
   take: ["Take", "镜头", "鏡頭"],
   comments: ["Comments", "Comment", "备注", "備註", "注释", "註釋"],
+  takeStatus: ["Take Status"],
+  cardNumber: ["Card Number"],
+  videoCode: ["Video Code"],
+  sourcePage: ["Source Page"],
   cameraFps: ["Camera FPS", "CameraFPS", "摄影机帧率", "攝影機幀率"],
   shootDay: ["Shoot Day", "ShootDay", "拍摄日期", "拍攝日期"],
   // Resolve reads only its canonical "Camera #" header; localized variants
@@ -75,14 +79,14 @@ const CAMERA_COLUMN = Object.freeze({
 const TARGET_COLUMN_FIELDS = new Set(
   [...TARGET_COLUMNS, ...SLATE_METADATA_COLUMNS, CAMERA_COLUMN].map(
     (target) => target.field,
-  ),
+  ).concat(["takeStatus", "cardNumber", "videoCode", "sourcePage"]),
 );
 
 // Writable target columns whose duplicate headers resolve to the FIRST match
 // instead of rejecting the whole CSV at load time. A Resolve export may carry
 // two "Camera #" columns (e.g. added by an external tool); the backfill writes
 // to the first and the file still opens for the user to fix.
-const FIRST_MATCH_TARGET_FIELDS = new Set(["camera"]);
+const FIRST_MATCH_TARGET_FIELDS = new Set(["camera", "takeStatus", "cardNumber", "videoCode", "sourcePage"]);
 
 const FIXED_WIDTH_METADATA_FIELDS = Object.freeze([
   { field: "scene", label: "Scene" },
@@ -104,24 +108,33 @@ export const DEFAULT_RESOLVE_COMMENTS = Object.freeze({
   holdTake: "_KP",
 });
 
-export function decodeResolveCsv(input) {
+export function decodeResolveCsv(input, options = {}) {
   const bytes =
     input instanceof Uint8Array
       ? input
       : input instanceof ArrayBuffer
         ? new Uint8Array(input)
         : null;
-  if (!bytes?.length) throw new Error("CSV 文件为空");
+  if (!bytes?.length) throw csvError("source", "源 CSV 文件为空");
 
   const format = detectCsvFormat(bytes);
   let text;
-  try {
-    text = new TextDecoder(format.encoding, { fatal: true }).decode(
-      bytes.subarray(format.bomBytes),
-    );
-  } catch {
-    throw new Error("无法读取 CSV 编码；请从 Resolve 重新导出 UTF-8 或 UTF-16 CSV。");
+  let sourceEncoding;
+  const explicit = options.sourceEncoding;
+  const encodings = explicit ? [explicit] : format.bomBytes || format.encoding !== "utf-8"
+    ? [format.encoding] : ["utf-8", "gbk", "gb18030"];
+  // Fatal decoding never substitutes damaged bytes. GBK wins ambiguous Chinese
+  // input; four-byte GB18030 sequences are accepted only by the final decoder.
+  for (const encoding of encodings) {
+    if (!["utf-8", "utf-16le", "utf-16be", "gbk", "gb18030"].includes(encoding)) break;
+    try {
+      if (encoding.startsWith("gb") && !validChineseEncodingBytes(bytes, encoding)) continue;
+      text = new TextDecoder(encoding, { fatal: true }).decode(bytes.subarray(format.bomBytes));
+      sourceEncoding = encoding;
+      break;
+    } catch { /* Try the next supported source encoding. */ }
   }
+  if (text === undefined) throw csvError("source", "源 CSV 编码无法解码：字节截断、内容损坏或不支持的输入编码");
 
   text = text.replace(/^\uFEFF/, "");
   const delimiter = detectDelimiter(text);
@@ -144,15 +157,32 @@ export function decodeResolveCsv(input) {
     rows,
     // Keep the detected input encoding separate from the output format. The
     // format remains unchanged so existing round-trip bytes stay identical.
-    sourceEncoding: format.encoding,
+    sourceEncoding,
+    sourceEncodingDetection: explicit ? "explicit" : "detected",
     format: {
-      encoding: format.encoding,
+      encoding: sourceEncoding.startsWith("utf-") ? sourceEncoding : "utf-8",
       bom: format.bomBytes > 0,
       delimiter,
       lineEnding: detectLineEnding(text),
       finalNewline: /(?:\r\n|\n|\r)$/.test(text),
     },
   };
+}
+
+// Some ICU GBK decoders accept 0xFF as a private-use character even in fatal
+// mode. Validate the byte grammar first to keep Node and Chromium consistent.
+function validChineseEncodingBytes(bytes, encoding) {
+  for (let index = 0; index < bytes.length; index += 1) {
+    const first = bytes[index];
+    if (first < 0x80 || (encoding === "gbk" && first === 0x80)) continue;
+    if (first < 0x81 || first > 0xfe) return false;
+    const second = bytes[++index];
+    if (second >= 0x40 && second <= 0xfe && second !== 0x7f) continue;
+    if (encoding !== "gb18030" || !(second >= 0x30 && second <= 0x39)) return false;
+    const third = bytes[++index], fourth = bytes[++index];
+    if (!(third >= 0x81 && third <= 0xfe && fourth >= 0x30 && fourth <= 0x39)) return false;
+  }
+  return true;
 }
 
 export function buildSlateMetadataIndex(entries = []) {
@@ -216,7 +246,7 @@ function materialCameraLetter(key) {
   return /[A-Za-z]/.test(letter) ? letter.toUpperCase() : "";
 }
 
-export function mergeSlateIntoResolveTable(
+function mergeResolveSource(
   sourceTable,
   records,
   slateMetadata = [],
@@ -240,11 +270,11 @@ export function mergeSlateIntoResolveTable(
   const slateIndex = buildSlateMetadataIndex(slateMetadata);
   warnings.push(...slateIndex.warnings);
 
-  let columns = resolveColumnIndexes(headers);
+  let columns = resolveColumnIndexes(headers, sourceTable.semanticColumns);
   const hasSlateSource = slateMetadata.length > 0;
   const hasEnrichment = hasSlateSource || records.length > 0;
   const columnsToEnsure = [
-    ...TARGET_COLUMNS,
+    ...TARGET_COLUMNS.filter((target) => !options.columns || options.columns.some((column) => column.key === target.field && column.enabled)),
     ...(hasSlateSource ? SLATE_METADATA_COLUMNS : []),
   ];
   // Camera # is derived from the clip's own name, never from the slate, so it
@@ -257,7 +287,7 @@ export function mergeSlateIntoResolveTable(
     for (const row of rows) row.push("");
     addedColumns.push(target.header);
     warnings.push(`原 CSV 缺少 ${target.header} 列，已按 Resolve 字段名添加。`);
-    columns = resolveColumnIndexes(headers);
+    columns = resolveColumnIndexes(headers, sourceTable.semanticColumns);
   }
 
   const rowIndex = buildMetadataRowIndex(rows, columns, warnings);
@@ -341,6 +371,7 @@ export function mergeSlateIntoResolveTable(
       for (const rowNumber of matchedRows) {
         const row = rows[rowNumber];
         const columnIndex = columns[slateField.field];
+        if (columnIndex < 0) continue;
         const previous = cleanValue(row[columnIndex]);
         const next = slateField.value;
         slateField.matchedRows.add(rowNumber);
@@ -417,13 +448,7 @@ export function mergeSlateIntoResolveTable(
       continue;
     }
 
-    const values = {
-      scene: normalizeSceneValue(record.scene, fieldFormats.scene),
-      shot: normalizeShotValue(record.shot, fieldFormats.shot),
-      take: normalizeTakeValue(record.take, fieldFormats.take),
-      takeStatus: normalizeTakeStatus(record.takeStatus, record.goodTake),
-    };
-    values.comments = commentValueForTakeStatus(values.takeStatus, commentsConfig);
+    const values = semanticRecordValues(record, fieldFormats, commentsConfig);
     const missingFields = [
       [values.scene, "场次"],
       [values.shot, "镜"],
@@ -504,6 +529,7 @@ export function mergeSlateIntoResolveTable(
       const fieldsToWrite = ["scene", "shot", "take", "comments"];
       for (const field of fieldsToWrite) {
         const columnIndex = columns[field];
+        if (columnIndex < 0) continue;
         const previous = cleanValue(row[columnIndex]);
         const next = primary.values[field];
         if (previous === next) continue;
@@ -568,6 +594,7 @@ export function mergeSlateIntoResolveTable(
   for (const [rowNumber, row] of rows.entries()) {
     for (const target of FIXED_WIDTH_METADATA_FIELDS) {
       const columnIndex = columns[target.field];
+      if (columnIndex < 0) continue;
       const previous = cleanValue(row[columnIndex]);
       const fieldResult = normalizeMetadataFieldResult(
         target.field,
@@ -614,6 +641,7 @@ export function mergeSlateIntoResolveTable(
   // previously misrecognized text from surviving in Resolve Comments.
   for (const [rowNumber, row] of rows.entries()) {
     const columnIndex = columns.comments;
+    if (columnIndex < 0) continue;
     const previous = cleanValue(row[columnIndex]);
     const next = canonicalResolveComment(previous, commentsConfig);
     if (previous === next) continue;
@@ -639,6 +667,7 @@ export function mergeSlateIntoResolveTable(
       // Preview/merge tables retain the imported source fact even though their
       // output format remains inherited from the source table.
       sourceEncoding: sourceTable.sourceEncoding || sourceTable.format?.encoding,
+      ...(sourceTable.sourceEncodingDetection ? { sourceEncodingDetection: sourceTable.sourceEncodingDetection } : {}),
       format: { ...defaultFormat(), ...(sourceTable.format || {}) },
     },
     statuses,
@@ -662,14 +691,43 @@ export function mergeSlateIntoResolveTable(
   };
 }
 
+// Keep every output failure distinguishable from source decoding, including
+// malformed restored cells and unsupported output configuration.
 export function encodeResolveCsv(table, options = {}) {
+  try {
+    return encodeSemanticCsv(table, options);
+  } catch (error) {
+    if (error?.code === "CSV_OUTPUT_ENCODE") throw error;
+    throw csvError("output", `导出 CSV 编码失败：${error?.message || "表格值无效"}`);
+  }
+}
+
+function encodeSemanticCsv(table, options = {}) {
   if (!table?.headers || !Array.isArray(table.rows)) {
-    throw new Error("没有可编码的 CSV 表格");
+    throw csvError("output", "没有可编码的 CSV 表格");
   }
   const format = { ...defaultFormat(), ...(table.format || {}) };
   const delimiter = format.delimiter || ",";
   const headers = table.headers.map(stringValue);
-  const columns = resolveColumnIndexes(headers);
+  validateOutputFormat(format);
+  const rows = table.semanticBuilt ? table.rows : normalizeExportRows(table, options);
+  const matrix = [
+    headers,
+    ...rows,
+  ];
+  let text = matrix
+    .map((row) => row.map((value) => csvCell(value, delimiter)).join(delimiter))
+    .join(format.lineEnding);
+  if (format.finalNewline) text += format.lineEnding;
+  // Reject lone UTF-16 surrogates instead of silently replacing them in UTF-8.
+  if (!text.isWellFormed()) throw csvError("output", "导出 CSV 包含无法编码的 Unicode 字符");
+  return encodeText(text, format.encoding, format.bom);
+}
+
+// Legacy raw tables keep their historic normalization; built tables encode verbatim.
+function normalizeExportRows(table, options) {
+  const headers = table.headers;
+  const columns = resolveColumnIndexes(headers, table.semanticColumns);
   const fieldFormats = resolveFieldFormats(options.fieldFormats);
   const commentsConfig = resolveCommentsConfig(options.comments);
   const canonicalizeComments = options.canonicalizeComments === true;
@@ -695,15 +753,24 @@ export function encodeResolveCsv(table, options = {}) {
       );
     }
   }
-  const matrix = [
-    headers,
-    ...rows,
-  ];
-  let text = matrix
-    .map((row) => row.map((value) => csvCell(value, delimiter)).join(delimiter))
-    .join(format.lineEnding);
-  if (format.finalNewline) text += format.lineEnding;
-  return encodeText(text, format.encoding, format.bom);
+  return rows;
+}
+
+function csvError(direction, message) {
+  return Object.assign(new Error(message), {
+    name: direction === "source" ? "CsvSourceDecodeError" : "CsvOutputEncodeError",
+    code: direction === "source" ? "CSV_SOURCE_DECODE" : "CSV_OUTPUT_ENCODE",
+  });
+}
+
+function validateOutputFormat(format) {
+  if (!["utf-8", "utf-16le", "utf-16be"].includes(format.encoding) ||
+      typeof format.delimiter !== "string" || format.delimiter.length !== 1 ||
+      /["\r\n\u0000]/.test(format.delimiter) ||
+      typeof format.bom !== "boolean" || typeof format.finalNewline !== "boolean" ||
+      !["\r\n", "\n", "\r"].includes(format.lineEnding)) {
+    throw csvError("output", "导出 CSV 编码或格式配置非法；仅支持 UTF-8、UTF-16LE、UTF-16BE");
+  }
 }
 
 export function parseCsvText(text, delimiter = ",") {
@@ -748,10 +815,23 @@ export function parseCsvText(text, delimiter = ",") {
   return rows;
 }
 
-export function resolveColumnIndexes(headers) {
+export function resolveColumnIndexes(headers, semanticColumns = []) {
   const indexes = {};
+  const seenKeys = new Set();
+  const bound = new Set();
+  const bindings = (Array.isArray(semanticColumns) ? semanticColumns : []).filter((column) => {
+    if (!column || !SEMANTIC_DEFAULTS.some(([key]) => key === column.key) ||
+        !Number.isInteger(column.index) || column.index < 0 || column.index >= headers.length ||
+        seenKeys.has(column.key) || bound.has(column.index)) return false;
+    seenKeys.add(column.key);
+    bound.add(column.index);
+    return true;
+  });
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
-    const matches = findHeaderIndexes(headers, aliases);
+    const semantic = bindings.find((column) => column.key === field);
+    // Persisted key/index bindings take precedence over display text, including
+    // duplicate custom labels and labels that resemble another semantic field.
+    const matches = semantic ? [semantic.index] : findHeaderIndexes(headers, aliases).filter((index) => !bound.has(index));
     if (
       TARGET_COLUMN_FIELDS.has(field) &&
       matches.length > 1 &&
@@ -773,7 +853,7 @@ export function collectResolveMaterialKeys(table) {
     throw new Error("尚未载入有效的 Resolve CSV");
   }
   const warnings = [];
-  const columns = resolveColumnIndexes(table.headers);
+  const columns = resolveColumnIndexes(table.headers, table.semanticColumns);
   const index = buildMetadataRowIndex(table.rows, columns, warnings);
   return {
     keys: [...index.keys()].sort(compareCanonicalMaterialKeys),
@@ -947,17 +1027,128 @@ export function normalizeTakeValue(value, format = "XX", options = {}) {
 // slate can be processed without loading an existing metadata CSV. Rows with
 // incomplete Scene/Shot/Take are skipped; Comments pass through as recognized.
 export function buildStandaloneResolveTable(records = [], options = {}) {
-  const fieldFormats = resolveFieldFormats(options.fieldFormats);
-  const headers = ["Scene", "Shot", "Take", "Comments"];
-  const rows = [];
-  for (const record of records) {
-    const scene = normalizeSceneValue(record?.scene, fieldFormats.scene);
-    const shot = normalizeShotValue(record?.shot, fieldFormats.shot);
-    const take = normalizeTakeValue(record?.take, fieldFormats.take);
-    if (!scene || !shot || !take) continue;
-    rows.push([scene, shot, take, String(record?.comments || "")]);
+  return buildSemanticExportTable({ mode: "standalone", records, ...options }).table;
+}
+
+export function mergeSlateIntoResolveTable(sourceTable, records, slateMetadata = [], options = {}) {
+  return buildSemanticExportTable({ mode: "resolve", sourceTable, records, slateMetadata, ...options });
+}
+
+const SEMANTIC_DEFAULTS = [
+  ["scene", "Scene"], ["shot", "Shot"], ["take", "Take"], ["comments", "Comments"],
+  ["takeStatus", "Take Status"], ["cardNumber", "Card Number"],
+  ["videoCode", "Video Code"], ["sourcePage", "Source Page"],
+];
+
+// One normalizer governs all export entry points; only recognized keys survive.
+export function normalizeSemanticColumns(columns) {
+  const validColumns = Array.isArray(columns)
+    ? columns.filter((column) => SEMANTIC_DEFAULTS.some(([key]) => column?.key === key))
+    : [];
+  const supplied = validColumns.length > 0;
+  const normalized = SEMANTIC_DEFAULTS.map(([key, header], index) => {
+    const value = supplied ? validColumns.find((column) => column.key === key) : null;
+    const label = String(value?.header ?? header).trim().slice(0, 80);
+    return { key, header: label && !/[\u0000-\u001f\u007f]/.test(label) ? label : header,
+      enabled: supplied ? Boolean(value && (value.enabled ?? index < 4)) : index < 4 };
+  });
+  // Match settings normalization: an empty valid selection restores defaults;
+  // an entirely disabled selection enables its first supplied valid column.
+  // This prevents successful exports containing rows with no cells.
+  if (!normalized.some((column) => column.enabled)) {
+    normalized.find((column) => column.key === validColumns[0].key).enabled = true;
   }
-  return { headers, rows };
+  return normalized;
+}
+
+// Both table modes read the same canonical values and status markers. The
+// optional legacy Comments behavior preserves pre-options standalone bytes.
+function semanticRecordValues(record, formats, markers, legacyComments = false) {
+  const takeStatus = normalizeTakeStatus(record?.takeStatus, record?.goodTake);
+  return {
+    ...record,
+    scene: normalizeSceneValue(record?.scene, formats.scene),
+    shot: normalizeShotValue(record?.shot, formats.shot),
+    take: normalizeTakeValue(record?.take, formats.take),
+    comments: legacyComments ? String(record?.comments || "") : commentValueForTakeStatus(takeStatus, markers),
+    takeStatus,
+  };
+}
+
+/** Pure semantic boundary shared by preview, export, and legacy wrappers. */
+export function buildSemanticExportTable(input = {}) {
+  const { mode = "standalone", sourceTable, records = [], slateMetadata = [],
+    fieldFormats, comments, resolvedFilename } = input;
+  const options = input.exportOptions ?? input.options;
+  const definitions = normalizeSemanticColumns(options?.columns ?? input.semanticColumns ?? sourceTable?.semanticColumns);
+  const formats = resolveFieldFormats(fieldFormats);
+  const markers = resolveCommentsConfig(comments);
+  const valuesFor = (record) => semanticRecordValues(record, formats, markers, !options);
+  let output;
+  let bindings;
+  if (mode === "resolve") {
+    const source = input.semanticColumns ? { ...sourceTable, semanticColumns: input.semanticColumns } : sourceTable;
+    output = mergeResolveSource(source, records, slateMetadata, { fieldFormats, comments, columns: options ? definitions : undefined });
+    const indexes = resolveColumnIndexes(output.table.headers, source?.semanticColumns);
+    bindings = definitions.map((column) => {
+      let index = indexes[column.key] ?? -1;
+      if (index < 0 && column.enabled) {
+        index = output.table.headers.length;
+        output.table.headers.push(column.header);
+        output.table.rows.forEach((row) => row.push(""));
+      }
+      if (index >= 0 && options) output.table.headers[index] = column.header;
+      return { ...column, header: index >= 0 ? output.table.headers[index] : column.header, index };
+    });
+    for (const status of output.statuses) {
+      if (status.status !== "matched") continue;
+      const values = valuesFor(records[status.recordIndex]);
+      for (const rowIndex of status.rowIndexes) for (const column of bindings) {
+        if (column.index >= 0 && column.enabled && !["scene", "shot", "take", "comments"].includes(column.key)) {
+          const previous = output.table.rows[rowIndex][column.index];
+          const next = stringValue(values[column.key]);
+          if (previous !== next) output.changes.push({ rowIndex, field: column.key, header: column.header, previous, next });
+          output.table.rows[rowIndex][column.index] = next;
+        }
+      }
+    }
+  } else if (mode === "standalone") {
+    bindings = definitions.map((column) => ({ ...column, index: -1 }));
+    const enabled = bindings.filter((column) => column.enabled);
+    enabled.forEach((column, index) => { column.index = index; });
+    const values = records.map(valuesFor).filter((record) => record.scene && record.shot && record.take);
+    output = { table: { headers: enabled.map((column) => column.header), rows: values.map((record) => enabled.map((column) => stringValue(record[column.key]))) },
+      changes: [], warnings: [], statuses: [], matchedRecordCount: 0, exportableCount: values.length };
+  } else throw new Error(`未知 CSV 导出模式：${mode}`);
+  const table = { ...output.table, semanticColumns: bindings,
+    format: { ...defaultFormat(), ...output.table.format, ...options?.format, ...input.outputFormat } };
+  if (!table.sourceEncoding && input.sourceEncoding) table.sourceEncoding = input.sourceEncoding;
+  validateOutputFormat(table.format);
+  // Sparse edits are applied once, before canonicalization, so preview bytes
+  // and saved bytes use the exact same values without mutating the source.
+  const edits = input.csvEdits instanceof Map ? [...input.csvEdits] : Array.isArray(input.csvEdits) ? input.csvEdits : Object.entries(input.csvEdits || {});
+  let appliedEditCount = 0;
+  for (const entry of edits) {
+    if (!Array.isArray(entry)) continue;
+    const [key, value] = entry;
+    const match = String(key).match(/^(\d+):(\d+)$/);
+    if (!match) continue;
+    const row = Number(match[1]), column = Number(match[2]);
+    if (table.rows[row] && column < table.headers.length) {
+      table.rows[row][column] = stringValue(value);
+      appliedEditCount += 1;
+    }
+  }
+  table.rows = normalizeExportRows(table, { fieldFormats, comments, canonicalizeComments: mode === "resolve" });
+  table.semanticBuilt = true;
+  return {
+    ...output,
+    ...(output.changedCellCount !== undefined ? {
+      changedCellCount: output.changes.length,
+      overwrittenCellCount: output.changes.filter((change) => change.previous).length,
+    } : {}),
+    table, semanticColumns: bindings, resolvedFilename, appliedEditCount,
+  };
 }
 
 function isFailedMetadataResult(result) {
