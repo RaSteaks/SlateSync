@@ -47,8 +47,12 @@
     "VISIONOCR_USE_LANGUAGE_CORRECTION": { "default": true, "boolean": true, "secret": false },
     "VISIONOCR_MIN_CONFIDENCE": { "default": 0.10, "secret": false },
     "VISIONOCR_MAX_BLOCKS_PER_VIEW": { "default": 0, "integer": true, "secret": false },
+    "VISIONOCR_ALTERNATIVES": { "default": 0, "range": [0, 3], "integer": true, "secret": false },
     "VISIONOCR_TIMEOUT_MS": { "default": "auto/source-defined", "secret": false },
     "VISIONOCR_BINARY": { "default": "", "secret": false },
+    "SLATESYNC_IMAGE_PREPROCESS": { "default": "false", "enum": ["false", "true"], "secret": false },
+    "SLATESYNC_CROP_RECHECK": { "default": "false", "enum": ["false", "true"], "secret": false },
+    "SLATESYNC_CROP_RECHECK_MAX_TARGETS": { "default": 12, "range": [0, 64], "integer": true, "secret": false },
     "PADDLEOCR_PROFILE": { "default": "source-defined", "secret": false },
     "SLATESYNC_PROJECT_DIR": { "default": "Main assigns dev root or packaged resources/app", "secret": false, "internal": true }
   },

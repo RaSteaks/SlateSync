@@ -34,6 +34,7 @@ export function serializeRecognitionRequest(input) {
   if (Array.isArray(input.slateCsvRecords) && input.slateCsvRecords.length) {
     payload.slateCsvRecords = input.slateCsvRecords;
   }
+  if (input.preprocessMetadata) payload.preprocessMetadata = input.preprocessMetadata;
   return JSON.stringify(payload);
 }
 

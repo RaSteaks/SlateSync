@@ -1,0 +1,29 @@
+{
+  "date": "2026-09-12",
+  "branch": "feat/electron/accuracy-csv",
+  "baseHead": "75f6f73",
+  "platform": {
+    "os": "Darwin",
+    "architecture": "arm64",
+    "swiftTarget": "arm64-apple-macosx15.0"
+  },
+  "runtime": {
+    "node": "v24.13.0",
+    "npm": "11.6.2",
+    "python": "3.9.13",
+    "swift": "Apple Swift 6.2.4"
+  },
+  "defaults": {
+    "VISIONOCR_ALTERNATIVES": 0,
+    "SLATESYNC_IMAGE_PREPROCESS": false,
+    "SLATESYNC_CROP_RECHECK": false,
+    "SLATESYNC_CROP_RECHECK_MAX_TARGETS": 12,
+    "cropHardMaximum": 64
+  },
+  "dataSafety": {
+    "providerCredentials": "not included",
+    "originalImages": "not included",
+    "defaultProjectLibrary": "not accessed",
+    "gitMutation": "none"
+  }
+}

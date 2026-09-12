@@ -470,6 +470,36 @@ test("OCR evidence keeps all full-page text while core mode focuses short field 
   assert.match(core, /text="C015"/);
 });
 
+test("OCR evidence keeps bounded alternatives as evidence without changing primary text", () => {
+  // Alternatives are audit context only; the primary block remains the value
+  // consumed by the existing prompt and normalization pipeline.
+  const evidence = formatOcrEvidence({
+    pageNumber: 1,
+    views: [{
+      viewIndex: 0,
+      viewType: "full",
+      width: 100,
+      height: 100,
+      blocks: [{
+        order: 0,
+        text: "068",
+        confidence: 0.98,
+        bboxNormalized: [0, 0, 1, 1],
+        alternatives: [
+          { text: "O68", confidence: 0.61 },
+          { text: "68", confidence: 0.4 },
+          { text: "extra", confidence: 0.2 },
+          { text: "ignored", confidence: 0.1 },
+        ],
+      }],
+    }],
+  }, { mode: "full", engine: "vision" });
+  assert.match(evidence, /text="068" alternatives=/);
+  assert.match(evidence, /O68/);
+  assert.match(evidence, /extra/);
+  assert.doesNotMatch(evidence, /ignored/);
+});
+
 test("optional PaddleOCR failure degrades cleanly and required mode blocks", async () => {
   const execute = async () => {
     throw new Error("module not installed");

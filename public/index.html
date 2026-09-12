@@ -377,6 +377,7 @@
         <p id="result-summary" class="result-summary">识别完成</p>
 
         <div id="panel-csv" class="tab-panel" role="tabpanel" aria-labelledby="tab-csv">
+          <div id="export-options-panel" class="legacy-export-options result-export-options"></div>
           <p id="csv-preview-summary" class="csv-preview-summary">回填预览</p>
           <div class="csv-preview-wrap">
             <table class="csv-preview-table">
@@ -553,6 +554,17 @@
             <label class="field"><span>过条标记</span><input id="project-good-comment" type="text" maxlength="32" /></label>
             <label class="field"><span>保条标记</span><input id="project-hold-comment" type="text" maxlength="32" /></label>
           </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="settings-card-heading">
+            <div>
+              <span class="preview-kicker">CSV EXPORT</span>
+              <h2>项目默认导出</h2>
+            </div>
+            <span class="settings-note">可被任务临时覆盖</span>
+          </div>
+          <div id="project-export-options" class="legacy-export-options"></div>
         </section>
 
         <div class="settings-actions">

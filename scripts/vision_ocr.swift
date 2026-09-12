@@ -33,7 +33,14 @@ struct OcrRequest: Decodable {
     let usesLanguageCorrection: Bool?
     let minimumConfidence: Double?
     let maxBlocksPerView: Int?
+    let alternativesCount: Int?
+    let includeCrops: Bool?
     let pages: [ViewRequest]
+}
+
+struct Alternative: Encodable {
+    let text: String
+    let confidence: Double
 }
 
 struct Block: Encodable {
@@ -42,6 +49,8 @@ struct Block: Encodable {
     let confidence: Double
     let bbox: [Int]
     let bboxNormalized: [Double]
+    let alternatives: [Alternative]?
+    let cropImage: String?
 }
 
 struct ViewResult: Encodable {
@@ -65,6 +74,7 @@ struct OcrSuccess: Encodable {
     let modelVersion: String
     let language: String
     let recognitionLevel: String
+    let outputSchemaVersion: String
     let durationMs: Int
     let pages: [PageResult]
 }
@@ -144,7 +154,9 @@ func recognizeView(
     level: VNRequestTextRecognitionLevel,
     usesLanguageCorrection: Bool,
     minimumConfidence: Double,
-    maxBlocksPerView: Int
+    maxBlocksPerView: Int,
+    alternativesCount: Int,
+    includeCrops: Bool
 ) throws -> ViewResult {
     guard let data = decodeDataURL(dataURL) else {
         throw OcrBridgeError("图片不是有效 Data URL")
@@ -172,7 +184,8 @@ func recognizeView(
 
     var blocks: [Block] = []
     for observation in request.results ?? [] {
-        guard let candidate = observation.topCandidates(1).first else { continue }
+        let candidates = observation.topCandidates(max(1, alternativesCount + 1))
+        guard let candidate = candidates.first else { continue }
         let text = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
         let confidence = Double(candidate.confidence)
         guard !text.isEmpty, confidence >= minimumConfidence else { continue }
@@ -184,6 +197,15 @@ func recognizeView(
         let right = clamp(box.maxX, 0, 1)
         let top = clamp(1 - box.maxY, 0, 1)
         let bottom = clamp(1 - box.minY, 0, 1)
+        var alternatives: [Alternative]? = nil
+        if alternativesCount > 0 {
+            let candidatesAfterPrimary: [Alternative] = candidates.dropFirst().compactMap { (next: VNRecognizedText) -> Alternative? in
+                let nextText = String(next.string.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160))
+                guard !nextText.isEmpty, nextText != text else { return nil }
+                return Alternative(text: nextText, confidence: rounded(Double(next.confidence), 5))
+            }
+            alternatives = Array(candidatesAfterPrimary.prefix(alternativesCount))
+        }
         blocks.append(Block(
             order: 0,
             text: text,
@@ -199,7 +221,9 @@ func recognizeView(
                 rounded(top, 5),
                 rounded(right, 5),
                 rounded(bottom, 5),
-            ]
+            ],
+            alternatives: alternatives?.isEmpty == false ? alternatives : nil,
+            cropImage: includeCrops ? cropDataURL(cgImage, left: left, top: top, right: right, bottom: bottom) : nil
         ))
     }
 
@@ -227,6 +251,26 @@ func recognizeView(
         truncated: truncated,
         blocks: blocks
     )
+}
+
+func cropDataURL(_ image: CGImage, left: Double, top: Double, right: Double, bottom: Double) -> String? {
+    let width = Double(image.width)
+    let height = Double(image.height)
+    let paddingX = max(4, (right - left) * width * 0.18)
+    let paddingY = max(4, (bottom - top) * height * 0.45)
+    let cropLeft = max(0, left * width - paddingX)
+    let cropTop = max(0, top * height - paddingY)
+    let cropRight = min(width, right * width + paddingX)
+    let cropBottom = min(height, bottom * height + paddingY)
+    guard cropRight > cropLeft, cropBottom > cropTop,
+          let cropped = image.cropping(to: CGRect(x: cropLeft, y: cropTop, width: cropRight - cropLeft, height: cropBottom - cropTop)) else {
+        return nil
+    }
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return nil }
+    CGImageDestinationAddImage(destination, cropped, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return "data:image/jpeg;base64,\(data.base64EncodedString())"
 }
 
 func selectBlocksWithPageCoverage(_ blocks: [Block], limit: Int) -> [Block] {
@@ -280,6 +324,9 @@ func main() {
     let usesLanguageCorrection = request.usesLanguageCorrection ?? true
     let minimumConfidence = clamp(request.minimumConfidence ?? 0.1, 0, 1)
     let maxBlocksPerView = max(0, request.maxBlocksPerView ?? 0)
+    let alternativesCount = min(3, max(0, request.alternativesCount ?? 0))
+    let includeCrops = request.includeCrops ?? false
+    let outputSchemaVersion = alternativesCount > 0 ? "vision-ocr-v2-alternatives" : "vision-ocr-v1"
 
     let started = Date()
     let totalViews = request.pages.reduce(0) { $0 + $1.images.count }
@@ -307,7 +354,9 @@ func main() {
                     level: level,
                     usesLanguageCorrection: usesLanguageCorrection,
                     minimumConfidence: minimumConfidence,
-                    maxBlocksPerView: maxBlocksPerView
+                    maxBlocksPerView: maxBlocksPerView,
+                    alternativesCount: alternativesCount,
+                    includeCrops: includeCrops
                 )
                 view.durationMs = Int(Date().timeIntervalSince(viewStarted) * 1000)
                 completedViews += 1
@@ -340,6 +389,7 @@ func main() {
         modelVersion: "macOS-Vision",
         language: languages.joined(separator: ","),
         recognitionLevel: recognitionLevel,
+        outputSchemaVersion: outputSchemaVersion,
         durationMs: Int(Date().timeIntervalSince(started) * 1000),
         pages: pages
     ))

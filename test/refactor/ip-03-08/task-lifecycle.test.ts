@@ -76,8 +76,11 @@ describe("workspace task lifecycle", () => {
     expect(app).toContain("getSlateSync().recognition.onProgress");
     expect(workspace).toContain("markWorkspaceHandoff");
     expect(workspace).toContain("resumeFromLogViewer");
-    expect(worker).toContain("return preparePageViews(canvas, 0.92, 0.93);");
-    expect(worker).toContain("const imageDataGroups = isPdf ? await rasterizePdf(data, id) : [await rasterizeImage(data, fileType)];");
+    // The preparation Worker now forwards the optional Phase 05 preprocessing
+    // contract while retaining the existing view qualities and PDF split.
+    expect(worker).toContain("return preparePageViews(canvas, 0.92, 0.93, preprocessOptions);");
+    expect(worker).toContain("const prepared = await rasterizePdf(data, id, preprocessOptions);");
+    expect(worker).toContain("const prepared = await rasterizeImage(data, fileType, preprocessOptions);");
   });
 
   it("keeps the workspace mounted across logs and settings, then refreshes on return", async () => {

@@ -1331,6 +1331,26 @@ Worker 边界、验收证据和最终治理交接。
   使用 `merge-preview`/`standalone-preview` 与对应 export 请求传入相同选项和编辑值；
   `encodeResolveCsv(builder.table)` 即预览对应的最终文件内容。
 
+## 2026-09-12 Recognition CSV Phase 04–07 implementation plan
+
+- Phase 04 已完成共享导出配置边界：Modern/Legacy 共用 `ExportOptions`、CSV Worker
+  builder、session > project > system 优先级、任务恢复/新任务隔离，以及安全的
+  `{project}`/`{source}`/`{task}`/`{date}`/`{time}` 文件名 token。预览和最终导出
+  传递同一份解析后的选项，避免 Renderer 与 Worker 产生字节差异。
+- Phase 05 已完成 alternatives、图像预处理和裁剪证据契约：Vision alternatives
+  限制为 0–3，预处理默认关闭并统一记录版本、回退和耗时；Vision/PaddleOCR 的
+  crop image 仅在高精度与显式预算同时开启时生成，且 cache key/schema 与开关隔离。
+- Phase 06 已完成 crop recheck 纯模块和高精度运行时接入：默认关闭、`maxTargets=0`
+  零调用、硬上限 64；目标携带 `targetId/field/sourcePage/currentValue/bbox`，按批次
+  执行并支持超时、取消和失败回退，回填通过 shared normalizer 且不覆盖非复核字段。
+- Phase 07 已完成本地代码门禁、环境记录、手工验收矩阵和回滚说明，证据位于
+  `docs/phase04-07-evidence/`。`npm run check`、`npm run typecheck`、Node 460/460、
+  Modern 31 文件/196 项、`validate:modern`、Swift typecheck、Python compile 和
+  `git diff --check` 均通过；Electron 前台/E2E、真实 Provider/OCR、签名和发布仍需
+  Owner 授权后执行，当前发布结论保持 NO-GO。
+- 本次修改同步补充了相关代码注释和 optional/additive 兼容字段；默认 Project Library、
+  用户凭据、原图和 Git 历史均未被自动化流程访问或修改。
+
 ### Phase 03 review fix：空导出列回退
 
 - `normalizeSemanticColumns` 对空列表或仅含未知 key 的列表恢复默认四列；当有效列
@@ -1339,3 +1359,14 @@ Worker 边界、验收证据和最终治理交接。
 - 新增空列表、未知列、全部禁用（首列为 sourcePage）三组 Worker 回归，验证预览、
   直接 builder 与最终解码后的表头/数据一致。CSV 相关 72 项测试、JavaScript 语法检查
   和 `git diff --check` 均通过，原 baseline 字节断言继续通过。
+
+### Phase 04/06 review fix：换行选项与裁剪证据歧义
+
+- Modern 导出换行选项使用 JSX 表达式保留真实换行字节；Legacy 使用 crlf/lf/cr
+  符号值并在读取表单时映射，避免 HTML 将 CRLF/CR 归一化为 LF。
+- 裁剪复核仅接受同页记录字段中唯一的整字段值及唯一 OCR 区域；不再以置信度
+  排序消除歧义，不做子串匹配，不合并场次中的标点。多个区域或多个视图命中时
+  保守跳过，直到存在可靠的行列映射。上下文图片取自该 OCR 块实际所属视图。
+- 回归覆盖重复行值、同值跨字段、高置信度错误区域、子串/标点、跨视图歧义与
+  原视图缺失；Modern 控件 change/rerender 与 Legacy HTML/readback 均验证三种换行。
+- 验证：23 项 Node 裁剪/导出测试、2 项界面交互测试及 `npm run typecheck` 通过。

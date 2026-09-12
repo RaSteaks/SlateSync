@@ -67,7 +67,10 @@ export function createCsvTaskProcessor() {
           ...task, mode, sourceTable: metadataTable, records,
           slateMetadata: Array.isArray(task.slateMetadata) ? task.slateMetadata : [],
         });
-        if (task.type.endsWith("preview")) return { table: output.table, semanticColumns: output.semanticColumns, resolvedFilename: output.resolvedFilename };
+        // Preview keeps status/warning counters beside the table so the legacy
+        // renderer can use the same Worker result as final export without
+        // recalculating a second merge on the main UI thread.
+        if (task.type.endsWith("preview")) return output;
         if (mode === "resolve" && (!records.length || (!output.matchedRecordCount && !output.appliedEditCount))) {
           throw new Error("没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。");
         }

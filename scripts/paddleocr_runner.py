@@ -123,6 +123,9 @@ def request_config(request):
         "maxBlocksPerView": clamp_int(
             request.get("maxBlocksPerView"), 0, 10000, 0
         ),
+        # Crop encoding is only requested by the high-accuracy recheck path;
+        # keeping it false preserves the lightweight legacy response shape.
+        "includeCrops": bool(request.get("includeCrops", False)),
     }
 
 
@@ -339,6 +342,7 @@ def recognize_request(request, pipeline, cv2, np, request_id=None, config=None):
                     config["minimumConfidence"],
                     config["maxBlocksPerView"],
                     config["textDetLimitSideLen"],
+                    config["includeCrops"],
                 )
                 views.append(view)
                 completed_views += 1
@@ -391,6 +395,7 @@ def recognize_view(
     minimum_confidence,
     max_blocks,
     text_det_limit_side_len,
+    include_crops,
 ):
     raw = decode_data_url(data_url)
     image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -440,6 +445,10 @@ def recognize_view(
                         round(x2 / width, 5),
                         round(y2 / height, 5),
                     ],
+                    # Keep a focused local crop alongside the bbox so the
+                    # optional high-accuracy recheck never has to guess a
+                    # region from a full-page image in Main.
+                    "cropImage": crop_image_data_url(cv2, np, image, (x1, y1, x2, y2)) if include_crops else "",
                 }
             )
 
@@ -458,6 +467,29 @@ def recognize_view(
         "truncated": truncated,
         "blocks": blocks,
     }
+
+
+def crop_image_data_url(cv2, np, image, box):
+    """Encode a padded, bounded OCR box as a small JPEG Data URL."""
+    height, width = image.shape[:2]
+    x1, y1, x2, y2 = [safe_float(value) for value in box]
+    pad_x = max(4.0, (x2 - x1) * 0.18)
+    pad_y = max(4.0, (y2 - y1) * 0.45)
+    left = max(0, int(x1 - pad_x))
+    top = max(0, int(y1 - pad_y))
+    right = min(width, int(x2 + pad_x + 1))
+    bottom = min(height, int(y2 + pad_y + 1))
+    if right <= left or bottom <= top:
+        return ""
+    crop = image[top:bottom, left:right]
+    longest = max(crop.shape[0], crop.shape[1])
+    if longest > 900:
+        scale = 900 / longest
+        crop = cv2.resize(crop, (max(1, round(crop.shape[1] * scale)), max(1, round(crop.shape[0] * scale))), interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    if not ok:
+        return ""
+    return "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
 
 
 def select_blocks_with_page_coverage(blocks, limit):

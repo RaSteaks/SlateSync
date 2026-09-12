@@ -21,6 +21,8 @@ const INTEGER_RANGES = {
   PADDLEOCR_MAX_BLOCKS_PER_VIEW: [0, 10_000],
   PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: [320, 4096],
   VISIONOCR_MAX_BLOCKS_PER_VIEW: [0, 10_000],
+  VISIONOCR_ALTERNATIVES: [0, 3],
+  SLATESYNC_CROP_RECHECK_MAX_TARGETS: [0, 64],
 };
 
 const NUMBER_RANGES = {
@@ -40,6 +42,8 @@ const ENUM_VALUES = {
   VISIONOCR_REQUIRED: ["true", "false"],
   VISIONOCR_RECOGNITION_LEVEL: ["accurate", "fast"],
   VISIONOCR_USE_LANGUAGE_CORRECTION: ["true", "false"],
+  SLATESYNC_IMAGE_PREPROCESS: ["false", "true"],
+  SLATESYNC_CROP_RECHECK: ["false", "true"],
 };
 
 const DEFAULT_VALUES = {
@@ -84,8 +88,13 @@ const DEFAULT_VALUES = {
   VISIONOCR_USE_LANGUAGE_CORRECTION: "true",
   VISIONOCR_MIN_CONFIDENCE: "0.10",
   VISIONOCR_MAX_BLOCKS_PER_VIEW: "0",
+  // Zero preserves the original Vision block schema and cache behavior.
+  VISIONOCR_ALTERNATIVES: "0",
   VISIONOCR_TIMEOUT_MS: "auto",
   VISIONOCR_BINARY: "",
+  SLATESYNC_IMAGE_PREPROCESS: "false",
+  SLATESYNC_CROP_RECHECK: "false",
+  SLATESYNC_CROP_RECHECK_MAX_TARGETS: "12",
 };
 
 // Keep this list explicit so a renderer request cannot write arbitrary

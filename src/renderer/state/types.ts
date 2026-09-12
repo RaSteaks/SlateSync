@@ -5,6 +5,7 @@ import type {
   GlobalSettingKey,
   GlobalSettingsData,
   GlobalSettingValues,
+  ImagePreprocessMetadata,
   LibraryInfo,
   ModelDiscoveryResult,
   OcrSettings,
@@ -20,6 +21,7 @@ import type {
   ScenarioSummary,
   SlateCsvRecord,
   TaskData,
+  ExportOptions,
   TaskListItem,
 } from "../../shared/contracts/index.js";
 
@@ -74,11 +76,12 @@ export interface SlateSlice {
   fileSize: number;
   pageCount: number;
   imageDataGroups: readonly (readonly string[])[];
+  preprocessMetadata: ImagePreprocessMetadata | null;
   preparing: boolean;
   preparationProgress: number;
   preparationMessage: string;
   error: AppError | null;
-  setInput(input: { filename: string; fileType: string; fileSize: number; pageCount: number; imageDataGroups: readonly (readonly string[])[] }): void;
+  setInput(input: { filename: string; fileType: string; fileSize: number; pageCount: number; imageDataGroups: readonly (readonly string[])[]; preprocessMetadata?: ImagePreprocessMetadata | null }): void;
   clearInput(): void;
   setPreparing(preparing: boolean, progress?: number, message?: string): void;
   setError(error: AppError | null): void;
@@ -159,6 +162,10 @@ export interface ExportSlice {
   slateCsvFilename: string | null;
   processing: boolean;
   error: AppError | null;
+  /** Per-task override; null means inherit the project default. */
+  sessionOverride: ExportOptions | null;
+  effectiveOptions: ExportOptions | null;
+  effectiveSource: "session" | "project" | "system" | null;
   setTable(table: ResolveCsvTable | null, filename?: string | null): void;
   setPreviewTable(table: ResolveCsvTable | null): void;
   setEdit(key: `${number}:${number}`, value: string): void;
@@ -166,6 +173,8 @@ export interface ExportSlice {
   setSlateCsvRecords(records: readonly SlateCsvRecord[] | null, filename?: string | null): void;
   setProcessing(processing: boolean): void;
   setError(error: AppError | null): void;
+  setSessionOverride(options: ExportOptions | null): void;
+  setEffectiveOptions(options: ExportOptions | null, source?: ExportSlice["effectiveSource"]): void;
   clear(): void;
 }
 

@@ -7,6 +7,163 @@
 const DEFAULT_DARK_THRESHOLD = 225;
 const DEFAULT_ROW_DENSITY = 0.02;
 
+// Phase 05 quality stages are deliberately pure and opt-in. The fixed version
+// string belongs in OCR cache metadata so changing the math cannot reuse an
+// older recognition payload by accident.
+export const IMAGE_PREPROCESS_VERSION = "slatesync-image-preprocess-v1";
+export const DEFAULT_IMAGE_PREPROCESS_OPTIONS = Object.freeze({
+  enabled: false,
+  grayscale: false,
+  contrast: 1.08,
+  sharpen: 0.18,
+  deskew: false,
+  deskewAngle: 0,
+});
+
+export function analyzeImageQuality(imageData) {
+  const { data, width, height } = imageData || {};
+  if (!data || !width || !height) return { mean: 255, contrast: 0, score: 0 };
+  let sum = 0;
+  let sumSquares = 0;
+  const count = Math.max(1, width * height);
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const luminance = data[offset] * 0.299 + data[offset + 1] * 0.587 + data[offset + 2] * 0.114;
+    sum += luminance;
+    sumSquares += luminance * luminance;
+  }
+  const mean = sum / count;
+  const variance = Math.max(0, sumSquares / count - mean * mean);
+  const contrast = Math.sqrt(variance);
+  // A bounded score is for diagnostics only; it never changes recognition.
+  const score = Math.round(Math.min(1, contrast / 72) * 1000) / 1000;
+  return { mean: Math.round(mean * 100) / 100, contrast: Math.round(contrast * 100) / 100, score };
+}
+
+export function preprocessImageData(imageData, options = {}) {
+  const requested = { ...DEFAULT_IMAGE_PREPROCESS_OPTIONS, ...(options || {}) };
+  const before = analyzeImageQuality(imageData);
+  if (!requested.enabled) {
+    return {
+      imageData,
+      metadata: {
+        version: IMAGE_PREPROCESS_VERSION,
+        applied: false,
+        fallback: false,
+        deskewApplied: false,
+        qualityBefore: before,
+        qualityAfter: before,
+      },
+    };
+  }
+  try {
+    let output = cloneImageData(imageData);
+    if (requested.grayscale) output = mapPixels(output, (r, g, b) => {
+      const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+      return [luminance, luminance, luminance];
+    });
+    if (Number(requested.contrast) !== 1) output = mapPixels(output, (r, g, b) => [
+      clampByte((r - 128) * Number(requested.contrast) + 128),
+      clampByte((g - 128) * Number(requested.contrast) + 128),
+      clampByte((b - 128) * Number(requested.contrast) + 128),
+    ]);
+    if (Number(requested.sharpen) > 0) output = sharpenImageData(output, Number(requested.sharpen));
+    let deskewApplied = false;
+    const angle = Number(requested.deskewAngle) || 0;
+    if (requested.deskew && Math.abs(angle) > 0.01) {
+      output = rotateImageDataExpanded(output, angle);
+      deskewApplied = true;
+    }
+    return {
+      imageData: output,
+      metadata: {
+        version: IMAGE_PREPROCESS_VERSION,
+        applied: true,
+        fallback: false,
+        deskewApplied,
+        qualityBefore: before,
+        qualityAfter: analyzeImageQuality(output),
+      },
+    };
+  } catch {
+    // Recognition must continue with the original pixels if a browser/Worker
+    // implementation rejects an optional enhancement stage.
+    return {
+      imageData,
+      metadata: {
+        version: IMAGE_PREPROCESS_VERSION,
+        applied: false,
+        fallback: true,
+        deskewApplied: false,
+        qualityBefore: before,
+        qualityAfter: before,
+      },
+    };
+  }
+}
+
+function cloneImageData(imageData) {
+  return { data: new Uint8ClampedArray(imageData.data), width: imageData.width, height: imageData.height };
+}
+
+function mapPixels(imageData, transform) {
+  const output = cloneImageData(imageData);
+  for (let offset = 0; offset < output.data.length; offset += 4) {
+    const [r, g, b] = transform(output.data[offset], output.data[offset + 1], output.data[offset + 2]);
+    output.data[offset] = clampByte(r);
+    output.data[offset + 1] = clampByte(g);
+    output.data[offset + 2] = clampByte(b);
+  }
+  return output;
+}
+
+function sharpenImageData(imageData, amount) {
+  const source = imageData.data;
+  const output = cloneImageData(imageData);
+  const strength = Math.min(1, Math.max(0, amount));
+  for (let y = 1; y < imageData.height - 1; y += 1) {
+    for (let x = 1; x < imageData.width - 1; x += 1) {
+      const center = (y * imageData.width + x) * 4;
+      for (let channel = 0; channel < 3; channel += 1) {
+        const blurred = (source[(y - 1) * imageData.width * 4 + x * 4 + channel]
+          + source[(y + 1) * imageData.width * 4 + x * 4 + channel]
+          + source[y * imageData.width * 4 + (x - 1) * 4 + channel]
+          + source[y * imageData.width * 4 + (x + 1) * 4 + channel]) / 4;
+        output.data[center + channel] = clampByte(source[center + channel] + (source[center + channel] - blurred) * strength);
+      }
+    }
+  }
+  return output;
+}
+
+function rotateImageDataExpanded(imageData, degrees) {
+  const radians = degrees * Math.PI / 180;
+  const cosine = Math.abs(Math.cos(radians));
+  const sine = Math.abs(Math.sin(radians));
+  const width = Math.max(1, Math.ceil(imageData.width * cosine + imageData.height * sine));
+  const height = Math.max(1, Math.ceil(imageData.width * sine + imageData.height * cosine));
+  const output = { data: new Uint8ClampedArray(width * height * 4), width, height };
+  output.data.fill(255);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const sourceCenterX = (imageData.width - 1) / 2;
+  const sourceCenterY = (imageData.height - 1) / 2;
+  const targetCenterX = (width - 1) / 2;
+  const targetCenterY = (height - 1) / 2;
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+    const translatedX = x - targetCenterX;
+    const translatedY = y - targetCenterY;
+    const sourceX = Math.round(translatedX * cos + translatedY * sin + sourceCenterX);
+    const sourceY = Math.round(-translatedX * sin + translatedY * cos + sourceCenterY);
+    if (sourceX < 0 || sourceY < 0 || sourceX >= imageData.width || sourceY >= imageData.height) continue;
+    const sourceOffset = (sourceY * imageData.width + sourceX) * 4;
+    const targetOffset = (y * width + x) * 4;
+    output.data.set(imageData.data.slice(sourceOffset, sourceOffset + 4), targetOffset);
+  }
+  return output;
+}
+
+function clampByte(value) { return Math.max(0, Math.min(255, Math.round(Number(value) || 0))); }
+
 export function findDenseRowBand(
   imageData,
   {

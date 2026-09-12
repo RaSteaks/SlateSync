@@ -3,12 +3,27 @@ import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 // The browser-safe compatibility module is the single source for crop and
 // segmentation math used by both legacy and modern preparation paths.
 // @ts-expect-error public compatibility modules intentionally ship as JS.
-import { calculateCoreColumnWidth, calculateDetailSegments, findDenseRowBand } from "../../../public/image-preprocess.js";
+import { calculateCoreColumnWidth, calculateDetailSegments, findDenseRowBand, IMAGE_PREPROCESS_VERSION, preprocessImageData } from "../../../public/image-preprocess.js";
 
-type PrepareMessage = { id: number; type?: "prepare"; fileType: string; data: ArrayBuffer; filename: string };
+type ImagePreprocessOptions = {
+  enabled?: boolean;
+  grayscale?: boolean;
+  contrast?: number;
+  sharpen?: number;
+  deskew?: boolean;
+  deskewAngle?: number;
+};
+type PreprocessSummary = {
+  version: string;
+  applied: boolean;
+  fallbackCount: number;
+  deskewApplied: boolean;
+  durationMs: number;
+};
+type PrepareMessage = { id: number; type?: "prepare"; fileType: string; data: ArrayBuffer; filename: string; preprocessOptions?: ImagePreprocessOptions };
 type RecompressMessage = { id: number; type: "recompress"; imageDataGroups: string[][]; maxDimension: number; quality: number };
 type ProgressMessage = { id: number; type: "progress"; progress: number; message: string };
-type ResultMessage = { id: number; type: "result"; pageCount: number; imageDataGroups: string[][] };
+type ResultMessage = { id: number; type: "result"; pageCount: number; imageDataGroups: string[][]; preprocess?: PreprocessSummary };
 type RecompressedMessage = { id: number; type: "recompressed"; imageDataGroups: string[][] };
 type ErrorMessage = { id: number; type: "error"; message: string };
 
@@ -45,7 +60,65 @@ function drawWhite(canvas: OffscreenCanvas) {
   return context;
 }
 
-async function rasterizeImage(data: ArrayBuffer, fileType: string) {
+function imageDataForCanvas(value: { data: Uint8ClampedArray; width: number; height: number }) {
+  // `preprocessImageData` intentionally returns a plain object so it remains
+  // Node-testable; turn it back into a platform ImageData only at the canvas
+  // boundary inside the browser Worker.
+  const imageData = new ImageData(value.width, value.height);
+  imageData.data.set(value.data);
+  return imageData;
+}
+
+function applyPreprocess(source: OffscreenCanvas, options?: ImagePreprocessOptions) {
+  const started = performance.now();
+  if (!options?.enabled) {
+    return {
+      canvas: source,
+      summary: { version: IMAGE_PREPROCESS_VERSION, applied: false, fallbackCount: 0, deskewApplied: false, durationMs: 0 } satisfies PreprocessSummary,
+    };
+  }
+  try {
+    const context = context2d(source);
+    const result = preprocessImageData(context.getImageData(0, 0, source.width, source.height), options);
+    if (!result.metadata.applied && !result.metadata.fallback) {
+      return {
+        canvas: source,
+        summary: { version: result.metadata.version, applied: false, fallbackCount: 0, deskewApplied: false, durationMs: Math.round(performance.now() - started) } satisfies PreprocessSummary,
+      };
+    }
+    const output = new OffscreenCanvas(result.imageData.width, result.imageData.height);
+    drawWhite(output).putImageData(imageDataForCanvas(result.imageData), 0, 0);
+    return {
+      canvas: output,
+      summary: {
+        version: result.metadata.version,
+        applied: result.metadata.applied,
+        fallbackCount: result.metadata.fallback ? 1 : 0,
+        deskewApplied: result.metadata.deskewApplied,
+        durationMs: Math.round(performance.now() - started),
+      } satisfies PreprocessSummary,
+    };
+  } catch {
+    // Optional quality stages cannot make input preparation fail; keep the
+    // original pixels and surface the fallback in the preparation metadata.
+    return {
+      canvas: source,
+      summary: { version: IMAGE_PREPROCESS_VERSION, applied: false, fallbackCount: 1, deskewApplied: false, durationMs: Math.round(performance.now() - started) } satisfies PreprocessSummary,
+    };
+  }
+}
+
+function mergePreprocessSummary(left: PreprocessSummary, right: PreprocessSummary): PreprocessSummary {
+  return {
+    version: right.version || left.version,
+    applied: left.applied || right.applied,
+    fallbackCount: left.fallbackCount + right.fallbackCount,
+    deskewApplied: left.deskewApplied || right.deskewApplied,
+    durationMs: left.durationMs + right.durationMs,
+  };
+}
+
+async function rasterizeImage(data: ArrayBuffer, fileType: string, preprocessOptions?: ImagePreprocessOptions) {
   const bitmap = await createImageBitmap(new Blob([data], { type: fileType }));
   try {
     const scale = Math.min(1, 2600 / Math.max(bitmap.width, bitmap.height));
@@ -56,7 +129,7 @@ async function rasterizeImage(data: ArrayBuffer, fileType: string) {
     // Keep the full page plus two header-repeated core crops for raster images,
     // matching the PDF path so high-accuracy mode can inspect small C0XX and
     // scene/shot/take cells without asking the model to upscale one JPEG.
-    return preparePageViews(canvas, 0.92, 0.93);
+    return preparePageViews(canvas, 0.92, 0.93, preprocessOptions);
   } finally {
     bitmap.close();
   }
@@ -132,8 +205,9 @@ async function encodeCanvas(source: OffscreenCanvas, maxDimension: number, quali
   return blobToDataUrl(await resized.convertToBlob({ type: "image/jpeg", quality }));
 }
 
-async function preparePageViews(source: OffscreenCanvas, fullQuality: number, detailQuality: number) {
-  const cropped = cropVerticalWhitespace(source);
+async function preparePageViews(source: OffscreenCanvas, fullQuality: number, detailQuality: number, preprocessOptions?: ImagePreprocessOptions) {
+  const prepared = applyPreprocess(source, preprocessOptions);
+  const cropped = cropVerticalWhitespace(prepared.canvas);
   const layout = calculateDetailSegments(cropped.height);
   const output = [await encodeCanvas(cropped, 2600, fullQuality)];
   for (const segment of layout.segments) {
@@ -143,10 +217,10 @@ async function preparePageViews(source: OffscreenCanvas, fullQuality: number, de
     // the preparation worker's event loop while progress UI remains responsive.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
-  return output;
+  return { views: output, preprocess: prepared.summary };
 }
 
-async function preparePdfPage(document: Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>, pageNumber: number) {
+async function preparePdfPage(document: Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>, pageNumber: number, preprocessOptions?: ImagePreprocessOptions) {
   const page = await document.getPage(pageNumber);
   try {
     const baseViewport = page.getViewport({ scale: 1 });
@@ -155,20 +229,23 @@ async function preparePdfPage(document: Awaited<ReturnType<typeof pdfjs.getDocum
     const canvas = new OffscreenCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
     const context = drawWhite(canvas);
     await page.render({ canvas: canvas as unknown as HTMLCanvasElement, canvasContext: context as unknown as CanvasRenderingContext2D, viewport, background: "#ffffff" }).promise;
-    return preparePageViews(canvas, 0.92, 0.93);
+    return preparePageViews(canvas, 0.92, 0.93, preprocessOptions);
   } finally {
     page.cleanup();
   }
 }
 
-async function rasterizePdf(data: ArrayBuffer, id: number) {
+async function rasterizePdf(data: ArrayBuffer, id: number, preprocessOptions?: ImagePreprocessOptions) {
   const document = await pdfjs.getDocument({ data: data.slice(0), isEvalSupported: false }).promise;
   if (!document.numPages) { await document.destroy(); throw new Error("PDF 中没有可识别的页面"); }
   if (document.numPages > MAX_PDF_PAGES) { await document.destroy(); throw new Error("PDF 最多支持 20 页，请拆分后重新上传"); }
   const groups: string[][] = [];
+  let preprocess: PreprocessSummary = { version: IMAGE_PREPROCESS_VERSION, applied: false, fallbackCount: 0, deskewApplied: false, durationMs: 0 };
   try {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      groups.push(await preparePdfPage(document, pageNumber));
+      const prepared = await preparePdfPage(document, pageNumber, preprocessOptions);
+      groups.push(prepared.views);
+      preprocess = mergePreprocessSummary(preprocess, prepared.preprocess);
       scope.postMessage({ id, type: "progress", progress: Math.round((pageNumber / document.numPages) * 100), message: `已生成 ${pageNumber}/${document.numPages} 页整页图与局部放大图` });
       // One-page batches keep pdf.js/canvas work outside the Renderer and
       // provide an explicit cancellation/resource-release boundary.
@@ -177,7 +254,7 @@ async function rasterizePdf(data: ArrayBuffer, id: number) {
   } finally {
     await document.destroy();
   }
-  return groups;
+  return { groups, preprocess };
 }
 
 scope.onmessage = (event) => {
@@ -190,13 +267,23 @@ scope.onmessage = (event) => {
         scope.postMessage({ id, type: "recompressed", imageDataGroups });
         return;
       }
-      const { data, fileType, filename } = message;
+      const { data, fileType, filename, preprocessOptions } = message;
       scope.postMessage({ id, type: "progress", progress: 5, message: `正在读取 ${filename}` });
       const isPdf = fileType === "application/pdf";
-      const imageDataGroups = isPdf ? await rasterizePdf(data, id) : [await rasterizeImage(data, fileType)];
+      let preprocess: PreprocessSummary = { version: IMAGE_PREPROCESS_VERSION, applied: false, fallbackCount: 0, deskewApplied: false, durationMs: 0 };
+      let imageDataGroups: string[][];
+      if (isPdf) {
+        const prepared = await rasterizePdf(data, id, preprocessOptions);
+        imageDataGroups = prepared.groups;
+        preprocess = prepared.preprocess;
+      } else {
+        const prepared = await rasterizeImage(data, fileType, preprocessOptions);
+        imageDataGroups = [prepared.views];
+        preprocess = prepared.preprocess;
+      }
       // The original PDF is only an input to local rasterization. Returning it
       // would reintroduce a model-side path that bypasses local OCR evidence.
-      scope.postMessage({ id, type: "result", pageCount: imageDataGroups.length, imageDataGroups });
+      scope.postMessage({ id, type: "result", pageCount: imageDataGroups.length, imageDataGroups, preprocess });
     } catch (error) {
       const named = error as { name?: string; message?: string };
       const fileType = message.type === "recompress" ? "image/jpeg" : message.fileType;

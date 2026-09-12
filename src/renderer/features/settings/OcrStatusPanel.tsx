@@ -101,6 +101,15 @@ const VisionEngineCard = memo(function VisionEngineCard({ vision, selected, visi
             <Field label="语言校正"><Select disabled={locked} value={values.VISIONOCR_USE_LANGUAGE_CORRECTION || "true"} onChange={(event) => setDraftValue("VISIONOCR_USE_LANGUAGE_CORRECTION", event.target.value)}><option value="true">启用</option><option value="false">关闭</option></Select></Field>
             <NumericSettingField settingKey="VISIONOCR_MIN_CONFIDENCE" label="最低置信度" hint="0–1，低于此值的文字块不会作为证据。" fallback="0.10" min="0" max="1" step="0.01" />
             <NumericSettingField settingKey="VISIONOCR_MAX_BLOCKS_PER_VIEW" label="每个视图最多文字块" hint="0 表示不限制。" fallback="0" min="0" max="10000" step="1" />
+            <NumericSettingField settingKey="VISIONOCR_ALTERNATIVES" label="Vision 备选结果" hint="0–3；默认 0，开启后仅在 OCR 证据中保留有界候选。" fallback="0" min="0" max="3" step="1" />
+          </div>
+        </div>
+        <div className={styles.settingsFieldGroup}>
+          <p className={styles.settingsFieldGroupTitle}>可选质量阶段</p>
+          <div className={styles.formGrid}>
+            <Field label="图像增强"><Select disabled={locked} value={values.SLATESYNC_IMAGE_PREPROCESS || "false"} onChange={(event) => setDraftValue("SLATESYNC_IMAGE_PREPROCESS", event.target.value)}><option value="false">关闭（默认）</option><option value="true">启用对比度与锐化</option></Select></Field>
+            <Field label="裁剪复核"><Select disabled={locked} value={values.SLATESYNC_CROP_RECHECK || "false"} onChange={(event) => setDraftValue("SLATESYNC_CROP_RECHECK", event.target.value)}><option value="false">关闭（默认）</option><option value="true">高精度模式启用</option></Select></Field>
+            <NumericSettingField settingKey="SLATESYNC_CROP_RECHECK_MAX_TARGETS" label="裁剪复核上限" hint="0–64；0 表示不调用复核，默认每次任务最多 12 个目标。" fallback="12" min="0" max="64" step="1" />
           </div>
         </div>
         <div className={styles.settingsFieldGroup}>

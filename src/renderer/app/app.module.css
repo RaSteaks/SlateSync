@@ -228,6 +228,10 @@
 .sectionHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .sectionTitle { margin: 0; color: var(--ss-color-ink); font-size: 1rem; }
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ss-layout-gap); }
+.exportOptionsPanel { display: grid; gap: 14px; }
+.exportOptionsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ss-layout-gap); margin-top: 14px; }
+.exportColumnList { display: grid; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--ss-color-line); }
+.exportColumnRow { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1.2fr) auto auto; gap: 8px; align-items: center; }
 .formField { display: grid; gap: 8px; }
 .formFieldFull { grid-column: 1 / -1; }
 .formActions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }
@@ -460,6 +464,8 @@
 @media (max-width: 720px) {
   .pageHeader { align-items: flex-start; flex-direction: column; }
   .gridThree, .gridTwo, .formGrid, .settingsOverviewGrid, .cardGrid { grid-template-columns: 1fr; }
+  .exportOptionsGrid { grid-template-columns: 1fr; }
+  .exportColumnRow { grid-template-columns: minmax(130px, 1fr) minmax(100px, 1fr) auto auto; }
   .customProviderLayout { grid-template-columns: 1fr; }
   .formFieldFull { grid-column: auto; }
   .pageActions { width: 100%; }
