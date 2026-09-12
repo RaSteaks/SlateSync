@@ -23,9 +23,9 @@ test("project settings derive Resolve defaults from the workflow config", () => 
   });
   assert.equal(settings.providerId, null);
   assert.equal(settings.accuracyMode, "high");
-  assert.equal(settings.export.format.encoding, "utf-16le");
+  assert.equal(settings.export.format.encoding, "utf-8");
   assert.equal(settings.export.format.bom, true);
-  assert.equal(settings.export.filenameTemplate, "{source}_场记识别.csv");
+  assert.equal(settings.export.filenameTemplate, "{source}_Resolve元数据.csv");
 });
 
 test("normalization keeps project settings independent from mutable defaults", () => {

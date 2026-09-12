@@ -1370,3 +1370,105 @@ Worker 边界、验收证据和最终治理交接。
 - 回归覆盖重复行值、同值跨字段、高置信度错误区域、子串/标点、跨视图歧义与
   原视图缺失；Modern 控件 change/rerender 与 Legacy HTML/readback 均验证三种换行。
 - 验证：23 项 Node 裁剪/导出测试、2 项界面交互测试及 `npm run typecheck` 通过。
+
+## 2026-09-12 Electron / Swift 本地加密兼容
+
+- 启动 `SQLITE_NOTADB` 的实际原因是默认库已由 Swift 客户端转换为
+  `SLATESYNC-AES-GCM-1`，不是普通 SQLite 损坏；保留原目录、原密钥和加密格式。
+- 新增兼容存储适配器：使用原 `com.slatesync.local-project-encryption` 钥匙串
+  service/UUID account，按 Swift CryptoKit 的完整 header AAD、12 字节 nonce、
+  16 字节 tag 读写 AES-256-GCM。密钥仅驻留进程内，不输出、不新建替代密钥。
+- macOS SQLite 扩展提供 Security.framework 查询和与 Swift 相同的 `.lock.tmp`
+  flock。每个外层数据库操作在锁内加载内存 SQLite；事务成功后 fsync 加密临时
+  文件并原子替换，失败则丢弃内存连接。不会生成明文数据库/WAL 临时副本。
+  未完成加密迁移的普通库通过 SQLite serialize 读取，以包含已提交的 WAL 数据。
+- JSON manifest/任务/诊断快照沿用祖先目录加密标记；导出的便携包解密数据并去掉
+  机器本地密钥标记，导入到加密库的暂存数据保持加密。改名同步更新数据库路径。
+- `postbuild:main` 在 macOS 构建 universal `bin/local-encryption.dylib`，使用已有
+  app/bin 打包资源路径；其他平台仍可打开普通库，加密库需原 Mac 钥匙串或便携导出。
+- 合成测试覆盖 CryptoKit 双向互通、篡改/错误密钥、事务回滚、连接间刷新、只读保护、
+  WAL 迁移、完整加密库任务保存/项目导入导出/改名。实际默认库已只读解密并验证
+  library 及两个 project 数据库 integrity_check=ok；此验证未修改原文件。
+- 最终验证：Node 469/469、Modern 32 文件/198 项、typecheck、build:modern、
+  universal dylib 架构检查及 git diff --check 通过。Electron 使用真实加密库的
+  临时副本启动成功，Modern 项目库页面与 getLibraryInfo IPC 正常；退出后删除
+  副本，原库未修改。better-sqlite3 已恢复 Electron ABI，可直接运行 npm run dev。
+- 钥匙串权限由 macOS 正常授权界面控制；拒绝或密钥缺失时停止打开，保留原数据。
+  签名发布包未在本次执行发行验证。
+
+## 2026-09-12 导出配置入口归属
+
+- 按用户要求，导出配置统一归属项目设置。Modern 移除工作台重复的 ExportOptionsPanel
+  和“保存为项目默认”处理器，复用已有项目设置表单及保存/脏状态守卫，标题统一为
+  “导出配置”。Legacy 同步移除工作台入口，保留项目设置中的配置表单。
+- 工作台继续负责预览、校对和导出；导出选项解析、任务快照及历史 session override
+  不变，避免布局调整改变旧任务导出结果。相关代码注释同步更新。
+- 验证：typecheck、项目设置/离开守卫/换行/状态生命周期 4 文件 20 项测试通过。
+- 浏览器合成数据验证通过：工作台无导出配置面板；项目设置编辑文件名模板并保存成功，
+  往返页面后值保持；页面异常为 0。已检查工作台/设置截图，Renderer 构建与 diff 检查通过。
+
+## 2026-09-12 加密数据库查询卡顿修复
+
+- 实际项目数据库约 682 MB；原加密适配器在 prepare 和查询执行时分别读取、解密并
+  重建整个内存库，导致路由切换中的元数据查询放大为多次整库处理。
+- 每个连接保留已认证的内存 SQLite。每次外层操作仍在 Swift 兼容 flock 内比较
+  dev/inode/size/mtimeNs/ctimeNs；文件未变直接复用，外部提交后重新认证加载。
+  写入成功刷新版本，异常丢弃缓存，close 释放内存。未完成迁移的明文 WAL 库不缓存。
+- 保留项目数据实时刷新与任务恢复逻辑，不通过跳过数据读取掩盖过期状态。
+- 32 MiB 合成库 30 次 COUNT 查询：修复前 1266 ms、62 次 keyProvider 调用；
+  修复后约 1 ms、2 次调用（首次解锁/解密）。此为存储基准，不等同于端到端路由耗时。
+- Electron ABI 下 36 项加密/持久化/项目运行时测试通过，覆盖无重复解密、外部提交刷新、
+  事务回滚、删除失效、篡改拒绝、Swift 互通和项目导入导出；语法与 diff 检查通过。
+- 实际库副本路由测量进一步定位 list-tasks 仍需 550–585 ms：摘要查询包含 data_json，
+  即使不 JSON.parse 也会把全部大任务内容复制到 JavaScript。改为只查询 id/summary_json，
+  单条缺失或损坏才按 ID 取详情回填；正常摘要不读取 payload 的 SQLite view 回归通过。
+- 两项优化后的定向测试 37/37 通过，包含旧摘要回填与导入导出兼容。
+- 最终真实加密库临时副本验证（3 轮）：进入项目设置 26–38 ms、返回工作台
+  49–55 ms；list-tasks IPC 降至 22–23 ms，list-scenarios 为 1–2 ms。
+  退出后已清理副本，原库未修改。Main 侧修改需重启 Electron 才生效。
+
+## 2026-09-12 Resolve 内置元数据交付模板
+
+- 根据本轮用户授权新增显式选择的 `resolve-21.1-csv-v1`，项目设置保存后生效；
+  五项素材匹配列固定包含 File Name、Start TC、End TC、Reel Name、Clip Directory。
+  后者与文件名共同定位源路径，不另造未经确认的原生 Source File Path 列。
+- 官方来源与字段边界记录在 `docs/resolve-metadata-template.md`：21.1 参考手册
+  第 18 章 pp.406–412、421–423，以及 Resolve 18 编辑指南 pp.254、257–260。
+  只开放 15 个可追溯的文本字段；Good Take/评分等文件值表示不明的类型及 ALE
+  写入器留待官方格式和真实样本验证，不宣称已支持全部原生字段。
+- Browser/Main 共用模板列约束。新适配器复用素材身份匹配，不使用旧的数字补位、
+  Comments 标记白名单或机位推断；文本、字母镜号、前导零、时码及路径原样保留。
+  自定义 CSV 和历史默认字节语义继续兼容；无新增 IPC、数据库迁移或识别算法变更。
+- Modern 与 Legacy 项目配置支持选择内置模板、勾选可选字段及排序。无后期样表时
+  工作台可预览并补录素材信息；不猜测文件名/扩展名/时码。缺失文件名阻止最终保存，
+  其他缺失匹配值逐列提示。预览与最终文件共用 Worker。
+- 编辑列头随任务保存，恢复/重排列后按列头对应更正；同结构预览复用表头引用，
+  防止异步结果重建正在输入的单元格。修复 StrictMode 重放后工作台存活标记没有
+  恢复而丢弃预览的实际问题，并在导出重试时清除过期错误。
+- 验证：Node 全套 476/476；最终 CSV/设置/字节基线定向回归 42/42；Modern
+  32 文件 199/199；typecheck、check、build:modern、build:storybook、diff 检查通过。
+  合成无头 Chromium 流程验证选择/保存、暗亮主题、960px、键盘、空文件名失败、
+  连续补录、成功清除旧错误、项目设置重排与返回后再次导出，页面异常 0。
+- Premium strict audit 0 findings；官方 DESIGN.md lint 0 errors，26 个 token warning
+  与本轮修改前内容一致。设计 token 未变化。Node 测试后已恢复 Electron 原生 ABI。
+- 尚未在真实 Resolve 中执行导入/再导出；表头线格式、关键词表示和路径匹配需
+  用目标版本真实样本做后续验收。未启动 Electron/Resolve、未接触真实项目库或凭据，
+  未暂存、提交、推送或改写已有用户变更。
+
+## 2026-09-12 项目默认 Resolve CSV 与后期样表导入
+
+- 未配置导出选项的项目使用 `resolve-21.1-csv-v1`，浏览器、Main 和共享类型默认值一致；明确保存的历史自定义配置保持原行为。
+- 项目设置增加 CSV 样表导入（最多 5 MB、256 列），通过现有设置草稿和保存接口持久化 `imported-csv-v1`、样表名称、原始列名/顺序和输出格式。后续新任务无会话覆盖时默认继承该项目模板，不依赖原样表文件继续存在。
+- CSV 解码在既有 Worker 中完成；模板解析不替换任务素材清单，只持久化结构，丢弃全部样本行。空白/重复/控制字符表头拒绝，导入失败保留当前模板；异步结果不能写入已切换项目。
+- 导入模板遵循样表的列集合，不强行追加列；内置默认模板仍固定包含 File Name、Start TC、End TC、Reel Name、Clip Directory。已知字段按官方语义映射，同名素材列原样带入；其他列保留为空供人工填写。GBK/GB18030 输入采用 UTF-8 输出并提示。
+- 已保存的任务会话覆盖保留；导入模板经“保存项目设置”后成为项目后续任务默认。可切回内置 Resolve CSV。
+- 验证使用合成项目与临时输出，覆盖默认值、历史配置、模板结构持久化与继承、拒绝错误表头、源清单隔离、自由文本和手工编辑导出；不访问真实项目库，不声称实际 Resolve 往返认证。
+- 浏览器复验补齐：识别记录更新会触发项目模板预览；单元格失焦比较已提交值，避免异步预览回显了待保存草稿后跳过提交，导致立即导出漏值。已加入针对性回归。
+- 本轮验证：Node 全套 478 项通过；模板/设置定向 17 项通过；浏览器 `project-import-template` 与 `resolve-builtin-template` 通过，未报告页面错误；深浅主题截图无页面横向溢出；静态 UI 审计零问题。类型/语法检查和 Modern 构建通过；Node 测试后恢复 Electron 原生模块 ABI。
+
+## 2026-09-12 应用图标统一到 v5
+
+- `assets/slatesync-icon-v5.png` 是当前唯一规范的应用图标来源；Modern Renderer 和开发环境
+  Dock/窗口直接使用该文件。
+- macOS 打包仍使用 `build/slatesync.icon`，因为 electron-builder 的 macOS 配置要求
+  `.icon`/`.icns` 容器；其中的 `Assets/icon.png` 与 v5 文件保持字节一致，不代表另一套图标。

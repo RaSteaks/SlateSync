@@ -17,7 +17,8 @@ directories:
 # retain both supported architectures; Windows builds are intentionally x64-only.
 mac:
   category: public.app-category.productivity
-  # Use the layered Icon Composer asset for macOS and keep the PNG as a fallback.
+  # electron-builder requires the layered container; its embedded artwork is
+  # the canonical assets/slatesync-icon-v5.png raster.
   icon: build/slatesync.icon
   target:
     - target: dmg

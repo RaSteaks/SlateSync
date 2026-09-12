@@ -200,6 +200,8 @@ export interface ConfigData {
 
 /** Columns that the Resolve CSV exporter can expose as semantic fields. */
 export type ExportColumnKey =
+  | "fileName" | "startTimecode" | "endTimecode" | "reelName" | "clipDirectory"
+  | "description" | "keywords" | "camera" | "shootDay" | "cameraType" | "audioNotes"
   | "scene"
   | "shot"
   | "take"
@@ -207,7 +209,8 @@ export type ExportColumnKey =
   | "takeStatus"
   | "cardNumber"
   | "videoCode"
-  | "sourcePage";
+  | "sourcePage"
+  | `imported:${number}`;
 
 export interface ExportColumnConfig {
   readonly key: ExportColumnKey;
@@ -217,6 +220,9 @@ export interface ExportColumnConfig {
 
 /** Project-owned CSV export preferences; encoding is the final output encoding. */
 export interface ExportOptions {
+  /** Absent on historical custom CSV configurations; new projects default to Resolve. */
+  readonly templateId?: "custom" | "resolve-21.1-csv-v1" | "imported-csv-v1";
+  readonly templateName?: string;
   readonly columns: readonly ExportColumnConfig[];
   readonly format: ResolveCsvFormat;
   readonly filenameTemplate: string;
@@ -922,6 +928,9 @@ export interface SemanticExportColumn extends ExportColumnConfig {
 }
 
 export interface ResolveCsvTable {
+  /** Template projections carry advisory missing-identity diagnostics to preview. */
+  readonly exportTemplateId?: "resolve-21.1-csv-v1" | "imported-csv-v1";
+  readonly exportWarnings?: readonly string[];
   readonly headers: readonly string[];
   readonly rows: readonly (readonly string[])[];
   readonly format: ResolveCsvFormat;
@@ -934,28 +943,30 @@ export interface ResolveCsvTable {
 }
 
 /** Canonical defaults shared by modern settings and the Main normalizer. */
-export const DEFAULT_EXPORT_COLUMN_CONFIGS: readonly ExportColumnConfig[] =
-  Object.freeze([
-    Object.freeze({ key: "scene", header: "Scene", enabled: true }),
-    Object.freeze({ key: "shot", header: "Shot", enabled: true }),
-    Object.freeze({ key: "take", header: "Take", enabled: true }),
-    Object.freeze({ key: "comments", header: "Comments", enabled: true }),
-    Object.freeze({ key: "takeStatus", header: "Take Status", enabled: false }),
-    Object.freeze({ key: "cardNumber", header: "Card Number", enabled: false }),
-    Object.freeze({ key: "videoCode", header: "Video Code", enabled: false }),
-    Object.freeze({ key: "sourcePage", header: "Source Page", enabled: false }),
-  ]);
+export const DEFAULT_EXPORT_COLUMN_CONFIGS: readonly ExportColumnConfig[] = Object.freeze([
+  Object.freeze({ key: "fileName", header: "File Name", enabled: true }),
+  Object.freeze({ key: "startTimecode", header: "Start TC", enabled: true }),
+  Object.freeze({ key: "endTimecode", header: "End TC", enabled: true }),
+  Object.freeze({ key: "reelName", header: "Reel Name", enabled: true }),
+  Object.freeze({ key: "clipDirectory", header: "Clip Directory", enabled: true }),
+  Object.freeze({ key: "scene", header: "Scene", enabled: true }),
+  Object.freeze({ key: "shot", header: "Shot", enabled: true }),
+  Object.freeze({ key: "take", header: "Take", enabled: true }),
+  Object.freeze({ key: "comments", header: "Comments", enabled: true }),
+  Object.freeze({ key: "description", header: "Description", enabled: false }),
+  Object.freeze({ key: "keywords", header: "Keywords", enabled: false }),
+  Object.freeze({ key: "camera", header: "Camera #", enabled: false }),
+  Object.freeze({ key: "shootDay", header: "Shoot Day", enabled: false }),
+  Object.freeze({ key: "cameraType", header: "Camera Type", enabled: false }),
+  Object.freeze({ key: "audioNotes", header: "Audio Notes", enabled: false }),
+]);
 
+// Kept aligned with the Worker registry; covered by the default-contract test.
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = Object.freeze({
+  templateId: "resolve-21.1-csv-v1",
   columns: DEFAULT_EXPORT_COLUMN_CONFIGS,
-  format: Object.freeze({
-    encoding: "utf-16le",
-    bom: true,
-    delimiter: ",",
-    lineEnding: "\r\n",
-    finalNewline: true,
-  }),
-  filenameTemplate: "{source}_场记识别.csv",
+  format: Object.freeze({ encoding: "utf-8", bom: true, delimiter: ",", lineEnding: "\r\n", finalNewline: true }),
+  filenameTemplate: "{source}_Resolve元数据.csv",
 });
 
 export type ResolveCsvEdits = Readonly<Record<`${number}:${number}`, string>>;
@@ -1000,6 +1011,8 @@ export interface TaskData {
   readonly resolveCsvFilename?: string | null;
   readonly resolveCsvTable?: ResolveCsvTable | null;
   readonly resolveCsvEdits?: ResolveCsvEdits | null;
+  /** Column schema associated with positional edits, including standalone templates. */
+  readonly resolveCsvEditHeaders?: readonly string[] | null;
   /** Explicit session override; project defaults remain in projectSettingsSnapshot. */
   readonly exportSessionOptions?: ExportOptions | null;
   readonly slateMetadata?: readonly PersistedSlateMetadata[] | null;

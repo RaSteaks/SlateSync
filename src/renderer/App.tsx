@@ -1,7 +1,9 @@
 import { BookOpen, Download, FolderKanban, Import, LayoutDashboard, MapPin, Monitor, Moon, PackageOpen, PanelLeftClose, PanelLeftOpen, PencilLine, ScrollText, Settings, Sun, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import appIconUrl from "../../build/icon.png";
+// Keep the renderer brand mark on the canonical v5 artwork used by the app
+// documentation and the macOS package's derived icon assets.
+import appIconUrl from "../../assets/slatesync-icon-v5.png";
 import { AppShell, Button, ContextMenu, Dialog, Field, Icon, IconButton, InlineError, Input, Separator, Sidebar, Stack, Text, Toast, Toolbar } from "./design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "./services/api";
 import { createOperationGuard } from "./services/operation-guard";

@@ -6,6 +6,7 @@ export const useExportStore = create<ExportSlice>((set) => ({
   previewTable: null,
   filename: null,
   edits: {},
+  editHeaders: null,
   slateCsvRecords: null,
   slateCsvFilename: null,
   processing: false,
@@ -13,10 +14,12 @@ export const useExportStore = create<ExportSlice>((set) => ({
   sessionOverride: null,
   effectiveOptions: null,
   effectiveSource: null,
-  setTable: (table, filename = null) => set({ table, previewTable: null, filename, edits: {}, error: null }),
+  setTable: (table, filename = null) => set({ table, previewTable: null, filename, edits: {}, editHeaders: null, error: null }),
   setPreviewTable: (previewTable) => set({ previewTable }),
   setEdit: (key, value) => set((state) => ({ edits: { ...state.edits, [key]: value } })),
   setEdits: (edits) => set({ edits: { ...edits } }),
+  // The schema travels with edits independently of the raw imported table.
+  setEditHeaders: (editHeaders) => set({ editHeaders }),
   setSlateCsvRecords: (slateCsvRecords, slateCsvFilename = null) => set({ slateCsvRecords: slateCsvRecords ? [...slateCsvRecords] : null, slateCsvFilename }),
   setProcessing: (processing) => set({ processing }),
   // Worker failures only change transient status; source, preview and edits
@@ -24,5 +27,5 @@ export const useExportStore = create<ExportSlice>((set) => ({
   setError: (error) => set({ error, processing: false }),
   setSessionOverride: (sessionOverride) => set({ sessionOverride }),
   setEffectiveOptions: (effectiveOptions, effectiveSource = null) => set({ effectiveOptions, effectiveSource }),
-  clear: () => set({ table: null, previewTable: null, filename: null, edits: {}, slateCsvRecords: null, slateCsvFilename: null, processing: false, error: null, sessionOverride: null, effectiveOptions: null, effectiveSource: null }),
+  clear: () => set({ table: null, previewTable: null, filename: null, edits: {}, editHeaders: null, slateCsvRecords: null, slateCsvFilename: null, processing: false, error: null, sessionOverride: null, effectiveOptions: null, effectiveSource: null }),
 }));

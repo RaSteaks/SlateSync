@@ -34,6 +34,7 @@
     "storybook": "storybook dev -p 6006",
     "build:storybook": "storybook build",
     "build:main": "tsc -p tsconfig.main.json --pretty false",
+    "postbuild:main": "node scripts/build-local-encryption.mjs",
     "build:preload": "vite build --config vite.preload.config.ts",
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "build:modern": "npm run build:main && npm run build:preload && npm run build:renderer",

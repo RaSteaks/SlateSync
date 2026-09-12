@@ -41,5 +41,5 @@ test("filename expansion is deterministic and remains a basename", () => {
     }, clock),
     "片名_.._危险_A001C001.mov_20260912_030405.csv",
   );
-  assert.equal(resolveExportFilename("{missing}", { source: "slate" }, clock), "slate_场记识别.csv");
+  assert.equal(resolveExportFilename("{missing}", { source: "slate" }, clock), "slate_Resolve元数据.csv");
 });

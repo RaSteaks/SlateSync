@@ -62,15 +62,14 @@ import { createOcrEnvironmentProbe } from "./ocr-environment.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
-const ICON_COMPOSER_PATH = join(
+// electron-builder consumes the derived .icon container for macOS packages,
+// while the development Dock/window APIs need the canonical v5 raster asset.
+// The embedded PNG in build/slatesync.icon is kept byte-identical to this file.
+const DEV_ICON_PATH = join(
   resolve(__dirname, ".."),
-  "build",
-  "slatesync.icon",
+  "assets",
+  "slatesync-icon-v5.png",
 );
-// electron-builder consumes the .icon container, while the dev Dock/window
-// APIs need a raster image. This PNG is the artwork inside that same bundle,
-// so development and packaged builds use one source of truth.
-const DEV_ICON_PATH = join(ICON_COMPOSER_PATH, "Assets", "icon.png");
 // Keep app teardown bounded while allowing the OCR queue to observe its
 // invalidation and let the native Worker receive SIGTERM before Electron exits.
 const PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS = 2_000;
