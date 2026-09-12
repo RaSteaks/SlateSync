@@ -10,6 +10,9 @@ export const useExportStore = create<ExportSlice>((set) => ({
   slateCsvFilename: null,
   processing: false,
   error: null,
+  sessionOverride: null,
+  effectiveOptions: null,
+  effectiveSource: null,
   setTable: (table, filename = null) => set({ table, previewTable: null, filename, edits: {}, error: null }),
   setPreviewTable: (previewTable) => set({ previewTable }),
   setEdit: (key, value) => set((state) => ({ edits: { ...state.edits, [key]: value } })),
@@ -19,5 +22,7 @@ export const useExportStore = create<ExportSlice>((set) => ({
   // Worker failures only change transient status; source, preview and edits
   // remain available for retry after the service recreates its Worker.
   setError: (error) => set({ error, processing: false }),
-  clear: () => set({ table: null, previewTable: null, filename: null, edits: {}, slateCsvRecords: null, slateCsvFilename: null, processing: false, error: null }),
+  setSessionOverride: (sessionOverride) => set({ sessionOverride }),
+  setEffectiveOptions: (effectiveOptions, effectiveSource = null) => set({ effectiveOptions, effectiveSource }),
+  clear: () => set({ table: null, previewTable: null, filename: null, edits: {}, slateCsvRecords: null, slateCsvFilename: null, processing: false, error: null, sessionOverride: null, effectiveOptions: null, effectiveSource: null }),
 }));

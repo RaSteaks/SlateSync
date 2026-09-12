@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, FolderSearch, Pla
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type {
+  ExportOptions,
   OcrSummary,
   PersistedRecognitionRecord,
   ProjectSettings,
@@ -24,6 +25,7 @@ import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateCsvFile } from "../../validation/input-validation";
 import { CsvVirtualTable } from "../csv/CsvVirtualTable";
 import { RecognitionResultPanel } from "../recognition/RecognitionResultPanel";
+import { ExportOptionsPanel } from "../export/ExportOptionsPanel";
 import { acquireWorkspaceOperation, isRecognitionBusy, isWorkspaceBusy } from "../../services/workspace-operation";
 import { useProviderModels } from "../recognition/useProviderModels";
 import { ModelSelect } from "../recognition/ModelSelect";
@@ -39,6 +41,8 @@ import { REQUEST_COMPRESSION_PROFILES, requestBodyBytes, requestBodyFits, select
 import { manualRecognitionTargetId, restoreRecognitionTargetId } from "../../../../public/recognition-target.js";
 // @ts-expect-error The shared normalization contract is intentionally consumed by both renderers.
 import { reviewFieldsFromQuality } from "../../../../public/metadata-common.js";
+// @ts-expect-error Shared browser module intentionally has no generated declarations.
+import { normalizeExportOptions, resolveEffectiveExportOptions, resolveExportFilename } from "../../../../public/export-options.js";
 
 const EMPTY_OCR: OcrSummary = {
   enabled: false,
@@ -59,6 +63,15 @@ const EMPTY_OCR: OcrSummary = {
   lowConfidenceBlockCount: 0,
   durationMs: 0,
   warning: null,
+  alternativesEnabled: false,
+  alternativeCount: 0,
+  outputSchemaVersion: null,
+  preprocessVersion: null,
+  preprocessApplied: false,
+  preprocessFallbackCount: 0,
+  deskewApplied: false,
+  preprocessDurationMs: 0,
+  cropRecheck: null,
 };
 
 function defaultSettings(config: ReturnType<typeof useProjectStore.getState>["config"]): ProjectSettings {
@@ -142,6 +155,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     fileSize: state.fileSize,
     pageCount: state.pageCount,
     imageDataGroups: state.imageDataGroups,
+    preprocessMetadata: state.preprocessMetadata,
     preparing: state.preparing,
   })));
   const recognition = useRecognitionStore(useShallow((state) => ({
@@ -166,6 +180,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     slateCsvFilename: state.slateCsvFilename,
     processing: state.processing,
     error: state.error,
+    sessionOverride: state.sessionOverride,
   })));
   const metadata = useMetadataStore(useShallow((state) => ({ result: state.result, scanning: state.scanning })));
   const { draft, dirty: draftDirty, replace: replaceDraft, patch: patchDraft, setModelFallback, markClean: markDraftClean } = useRecognitionDraft();
@@ -330,6 +345,22 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     };
   }, [accuracyMode, config, customPrompt, modelId, project?.settings, providerId, scenarioId]);
 
+  // Resolve the three-level export precedence from current inputs during
+  // render. The store keeps a diagnostic mirror, but preview/export actions
+  // must not observe the previous task's effective options for one frame.
+  const systemExportOptions = useMemo(() => defaultSettings(config).export, [config]);
+  const exportResolution = useMemo(() => resolveEffectiveExportOptions({
+    sessionOverride: exportState.sessionOverride,
+    projectDefault: project?.settings?.export,
+    systemDefault: systemExportOptions,
+  }), [exportState.sessionOverride, project?.settings?.export, systemExportOptions]);
+  const effectiveExportOptions = exportResolution.options as ExportOptions;
+  const effectiveExportSource = exportResolution.source;
+
+  useEffect(() => {
+    useExportStore.getState().setEffectiveOptions(effectiveExportOptions, effectiveExportSource);
+  }, [effectiveExportOptions, effectiveExportSource]);
+
   const invalidateResolvePreview = useCallback(() => {
     // Each recognition run owns a new preview scope; clear the old projection
     // before async work can fail or be canceled without producing a result.
@@ -347,6 +378,11 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
 
     const operationId = previewGuard.start();
     const settings = settingsSnapshot();
+    const previewExportOptions = resolveEffectiveExportOptions({
+      sessionOverride: currentExport.sessionOverride,
+      projectDefault: project?.settings?.export,
+      systemDefault: systemExportOptions,
+    }).options as ExportOptions;
     try {
       const previewTable = await getCsvWorkerService().mergePreview({
         type: "merge-preview",
@@ -354,6 +390,12 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
         slateMetadata: useMetadataStore.getState().result?.metadata || [],
         fieldFormats: settings.resolve.fieldFormats,
         comments: settings.resolve.comments,
+        exportOptions: previewExportOptions,
+        resolvedFilename: resolveExportFilename(previewExportOptions.filenameTemplate, {
+          project: project?.name,
+          source: currentExport.filename || slate.filename || project?.name || "slate",
+          task: recognition.taskId || "",
+        }),
       });
       const latestExport = useExportStore.getState();
       const latestRecognition = useRecognitionStore.getState();
@@ -365,7 +407,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       useExportStore.getState().setError(appError);
       setError(appError.message);
     }
-  }, [invalidateResolvePreview, previewGuard, settingsSnapshot]);
+  }, [effectiveExportOptions, invalidateResolvePreview, previewGuard, project?.name, project?.settings?.export, recognition.taskId, settingsSnapshot, slate.filename, systemExportOptions]);
 
   const captureTask = useCallback((): TaskData | null => {
     const currentProject = useProjectStore.getState().current;
@@ -386,9 +428,11 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       fileSize: currentSlate.fileSize,
       pageCount: currentSlate.pageCount,
       imageDataGroups: currentSlate.imageDataGroups,
+      preprocessMetadata: currentSlate.preprocessMetadata,
       resolveCsvTable: currentExport.table,
       resolveCsvEdits: currentExport.edits,
       resolveCsvFilename: currentExport.filename,
+      exportSessionOptions: currentExport.sessionOverride,
       slateMetadata: currentMetadata.result?.metadata || [],
       slateWarnings: currentMetadata.result?.warnings || [],
       missingMetadataKeys: currentMetadata.result?.missingKeys || [],
@@ -577,6 +621,11 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     useSlateStore.getState().clearInput();
     useExportStore.getState().clear();
     useMetadataStore.getState().clear();
+    // Restore only the requested task's session layer. New-task and project
+    // reset paths intentionally leave it empty so overrides never leak.
+    if (task.exportSessionOptions) {
+      useExportStore.getState().setSessionOverride(normalizeExportOptions(task.exportSessionOptions));
+    }
     if (task.imageDataGroups?.length) {
       useSlateStore.getState().setInput({
         filename: task.filename || "恢复的场记单",
@@ -584,6 +633,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
         fileSize: task.fileSize || 0,
         pageCount: task.pageCount || task.imageDataGroups.length,
         imageDataGroups: task.imageDataGroups,
+        preprocessMetadata: task.preprocessMetadata || null,
       });
     }
     if (task.resolveCsvTable) useExportStore.getState().setTable(task.resolveCsvTable, task.resolveCsvFilename);
@@ -923,6 +973,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
       ...(currentSlate.filename ? { filename: currentSlate.filename } : {}),
       ...(customPrompt.trim() ? { customPrompt: customPrompt.trim() } : {}),
       ...(slateCsvRecords?.length ? { slateCsvRecords } : {}),
+      ...(currentSlate.preprocessMetadata ? { preprocessMetadata: currentSlate.preprocessMetadata } : {}),
     } as const;
     // PDFs are rasterized by PreparationService before this builder runs. The
     // model request deliberately contains only page images so local OCR always
@@ -942,6 +993,7 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
           fileSize: currentSlate.fileSize,
           pageCount: currentSlate.pageCount,
           imageDataGroups,
+          preprocessMetadata: currentSlate.preprocessMetadata,
         });
         return request;
       }
@@ -1055,6 +1107,21 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     }
   };
 
+  const saveExportAsProjectDefault = async () => {
+    if (!project || isWorkspaceBusy()) return;
+    try {
+      const nextSettings = { ...project.settings, export: effectiveExportOptions };
+      const updated = await unwrap(await getSlateSync().projects.update({ id: project.id, settings: nextSettings }));
+      useProjectStore.getState().setCurrent(updated);
+      // Main has accepted and normalized the full project snapshot; clear the
+      // session layer so the effective source visibly returns to project.
+      useExportStore.getState().setSessionOverride(null);
+      setToast({ tone: "success", message: "已保存为项目默认导出设置" });
+    } catch (nextError) {
+      setError(appErrorFromUnknown(nextError).message);
+    }
+  };
+
   // Keep the global listener stable while always invoking the latest draft and
   // project state captured by the recognition action.
   runRecognitionRef.current = () => { void runRecognition(); };
@@ -1072,11 +1139,15 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
     setError(null);
     try {
       const settings = settingsSnapshot();
-      const filename = `${(slate.filename || project.name).replace(/\.[^.]+$/, "")}.resolve.csv`;
+      const filename = resolveExportFilename(effectiveExportOptions.filenameTemplate, {
+        project: project.name,
+        source: slate.filename || project.name,
+        task: recognition.taskId || "",
+      });
       const slateMetadata: ScannedSlateMetadata[] = metadata.result?.metadata ? [...metadata.result.metadata] : [];
       const bytes = exportState.table
-        ? await getCsvWorkerService().exportResolve({ type: "export-resolve", records, csvEdits: Object.entries(exportState.edits), slateMetadata, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments })
-        : await getCsvWorkerService().exportStandalone({ type: "export-standalone", records, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments });
+        ? await getCsvWorkerService().exportResolve({ type: "export-resolve", records, csvEdits: Object.entries(exportState.edits), slateMetadata, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments, exportOptions: effectiveExportOptions, resolvedFilename: filename })
+        : await getCsvWorkerService().exportStandalone({ type: "export-standalone", records, fieldFormats: settings.resolve.fieldFormats, comments: settings.resolve.comments, exportOptions: effectiveExportOptions, resolvedFilename: filename });
       const saved = await unwrap(await getSlateSync().files.save({ defaultFilename: filename, data: bytes }));
       if (saved.saved) setToast({ tone: "success", message: saved.filePath ? `已保存：${saved.filePath}` : "Resolve CSV 已保存" });
     } catch (nextError) {
@@ -1199,6 +1270,18 @@ export function WorkspacePage({ registerToolbarExport, registerTransferPreparati
             {exportState.error && <InlineError message={exportState.error.message} />}
             {(exportState.previewTable || exportState.table) && <div style={{ marginTop: 14 }}><CsvVirtualTable table={exportState.previewTable || exportState.table} edits={exportState.edits} onEdit={onEdit} /></div>}
             {!exportState.table && <div className={styles.routeHint} style={{ marginTop: 14 }}>请在左侧可选输入中载入 Resolve CSV 后预览并编辑回填结果。</div>}
+          </Surface>
+          <Surface className={styles.panel}>
+            <ExportOptionsPanel
+              options={effectiveExportOptions}
+              onChange={(next) => { useExportStore.getState().setSessionOverride(next); void refreshResolvePreview(); autosave.markDirty(captureTask()); }}
+              onClearOverride={exportState.sessionOverride ? () => { useExportStore.getState().setSessionOverride(null); void refreshResolvePreview(); autosave.markDirty(captureTask()); } : undefined}
+              onSaveProjectDefault={() => void saveExportAsProjectDefault()}
+              disabled={taskActionsBlocked || exportState.processing}
+              sourceLabel={effectiveExportSource === "session" ? "当前任务覆盖" : "项目默认"}
+              title="导出配置"
+              description="当前任务可临时覆盖项目默认值；保存为项目默认会在 Main 返回成功后清除临时层。"
+            />
           </Surface>
           <RecognitionResultPanel onRecordEdited={() => { void refreshResolvePreview(); autosave.markDirty(captureTask()); }} />
         </div>

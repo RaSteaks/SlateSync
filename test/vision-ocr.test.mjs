@@ -164,6 +164,64 @@ test("Vision cache separates page/view grouping and output settings", async () =
   assert.equal(calls, 4);
 });
 
+test("Vision alternatives are bounded, normalized, and versioned separately", async () => {
+  clearVisionOcrCache();
+  let payload;
+  const result = await runVisionOcrForPages([[imageDataUrl]], {
+    env: { VISIONOCR_ENABLED: "true", VISIONOCR_ALTERNATIVES: "9" },
+    execute: async (nextPayload) => {
+      payload = nextPayload;
+      return {
+        ...rawVisionResult(),
+        outputSchemaVersion: "vision-ocr-v2-alternatives",
+        pages: [{
+          ...rawVisionResult().pages[0],
+          views: [{
+            ...rawVisionResult().pages[0].views[0],
+            blocks: [{
+              ...rawVisionResult().pages[0].views[0].blocks[0],
+              alternatives: [
+                { text: "O68", confidence: 0.61 },
+                { text: "068", confidence: 0.55 },
+                { text: "68", confidence: 0.4 },
+                { text: "extra", confidence: 0.2 },
+              ],
+            }],
+          }],
+        }],
+      };
+    },
+  });
+  assert.equal(payload.alternativesCount, 3);
+  assert.equal(payload.outputSchemaVersion, "vision-ocr-v2-alternatives");
+  assert.equal(payload.includeCrops, false);
+  assert.equal(result.alternativesEnabled, true);
+  assert.equal(result.alternativeCount, 3);
+  assert.equal(result.outputSchemaVersion, "vision-ocr-v2-alternatives");
+  assert.deepEqual(result.pages[0].views[0].blocks[0].alternatives, [
+    { text: "O68", confidence: 0.61 },
+    { text: "68", confidence: 0.4 },
+    { text: "extra", confidence: 0.2 },
+  ]);
+});
+
+test("Vision crop evidence is opt-in and isolated in the cache key", async () => {
+  clearVisionOcrCache();
+  let calls = 0;
+  const execute = async () => {
+    calls += 1;
+    const result = rawVisionResult();
+    result.pages[0].views[0].blocks[0].cropImage = secondImageDataUrl;
+    return result;
+  };
+  const env = { VISIONOCR_ENABLED: "true" };
+  const withoutCrops = await runVisionOcrForPages([[imageDataUrl]], { env, execute });
+  const withCrops = await runVisionOcrForPages([[imageDataUrl]], { env, execute, includeCrops: true });
+  assert.equal(calls, 2);
+  assert.equal(withoutCrops.pages[0].views[0].blocks[0].cropImage, undefined);
+  assert.equal(withCrops.pages[0].views[0].blocks[0].cropImage, secondImageDataUrl);
+});
+
 test("Vision config honours explicit enable and disable flags", () => {
   const enabled = visionOcrPublicConfig(
     { VISIONOCR_ENABLED: "true" },

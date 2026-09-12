@@ -4,7 +4,7 @@ import { Button, Icon, InlineError, Progress, Stack, Surface, Text } from "../..
 import { asPreparationError, getPreparationService } from "../../services/preparation-service";
 import { createOperationGuard } from "../../services/operation-guard";
 import { acquireWorkspaceOperation, isWorkspaceBusy } from "../../services/workspace-operation";
-import { useProjectStore, useRecognitionStore, useSlateStore, useTaskStore } from "../../state";
+import { useGlobalSettingsStore, useProjectStore, useRecognitionStore, useSlateStore, useTaskStore } from "../../state";
 import styles from "../../app/app.module.css";
 import { useFileDrop } from "../../hooks/use-file-drop";
 import { validateSlateFile } from "../../validation/input-validation";
@@ -30,6 +30,7 @@ export const SlateInputPanel = forwardRef<SlateInputPanelHandle, { readonly onIn
   const setError = useSlateStore((state) => state.setError);
   const recognition = useRecognitionStore((state) => state.running);
   const operation = useTaskStore((state) => state.operation);
+  const preprocessEnabled = useGlobalSettingsStore((state) => state.draftValues.SLATESYNC_IMAGE_PREPROCESS ?? state.saved?.values.SLATESYNC_IMAGE_PREPROCESS ?? "false") === "true";
   const blocked = recognition || Boolean(operation);
   const preparationGuard = useMemo(() => createOperationGuard(), []);
   useImperativeHandle(ref, () => ({ openPicker: () => { if (!isWorkspaceBusy()) inputRef.current?.click(); } }), []);
@@ -50,9 +51,9 @@ export const SlateInputPanel = forwardRef<SlateInputPanelHandle, { readonly onIn
     const operationId = preparationGuard.start();
     setError(null); setPreparing(true, 2, "正在读取场记单");
     try {
-      const result = await getPreparationService().prepare(file, (nextProgress, message) => { if (preparationGuard.isCurrent(operationId)) setPreparing(true, nextProgress, message); });
+      const result = await getPreparationService().prepare(file, (nextProgress, message) => { if (preparationGuard.isCurrent(operationId)) setPreparing(true, nextProgress, message); }, { enabled: preprocessEnabled });
       if (!preparationGuard.isCurrent(operationId) || !owner.isCurrent()) return;
-      setInput({ filename: file.name, fileType: type, fileSize: file.size, pageCount: result.pageCount, imageDataGroups: result.imageDataGroups });
+      setInput({ filename: file.name, fileType: type, fileSize: file.size, pageCount: result.pageCount, imageDataGroups: result.imageDataGroups, preprocessMetadata: result.preprocess || null });
       onInputChanged?.();
     } catch (nextError) { if (preparationGuard.isCurrent(operationId) && owner.isCurrent()) setError(asPreparationError(nextError)); }
     finally { owner.release(); }

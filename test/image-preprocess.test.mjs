@@ -4,6 +4,8 @@ import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
   findDenseRowBand,
+  IMAGE_PREPROCESS_VERSION,
+  preprocessImageData,
 } from "../public/image-preprocess.js";
 
 function whiteImage(width, height) {
@@ -75,4 +77,31 @@ test("core-column detail views crop away narrative columns to enlarge handwritte
   assert.equal(calculateCoreColumnWidth(3000), 1860);
   assert.equal(calculateCoreColumnWidth(1000, 0.4), 500);
   assert.equal(calculateCoreColumnWidth(1000, 2), 1000);
+});
+
+test("optional enhancement is a deterministic no-op when disabled", () => {
+  const image = whiteImage(3, 3);
+  image.data[4 * 1] = 10;
+  const result = preprocessImageData(image);
+  assert.equal(result.metadata.version, IMAGE_PREPROCESS_VERSION);
+  assert.equal(result.metadata.applied, false);
+  assert.equal(result.metadata.fallback, false);
+  assert.deepEqual([...result.imageData.data], [...image.data]);
+});
+
+test("enabled enhancement reports quality metadata and deskew expands the canvas", () => {
+  const image = whiteImage(8, 4);
+  for (let x = 1; x < 7; x += 1) drawDarkRow(image, 1, x, x + 1);
+  const result = preprocessImageData(image, {
+    enabled: true,
+    grayscale: true,
+    contrast: 1.2,
+    sharpen: 0.2,
+    deskew: true,
+    deskewAngle: 12,
+  });
+  assert.equal(result.metadata.applied, true);
+  assert.equal(result.metadata.deskewApplied, true);
+  assert.ok(result.imageData.width > image.width || result.imageData.height > image.height);
+  assert.ok(result.metadata.qualityAfter.score >= 0);
 });

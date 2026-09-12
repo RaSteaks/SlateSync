@@ -129,6 +129,8 @@ export interface OcrEngineStatus {
   readonly usesLanguageCorrection?: boolean;
   readonly minimumConfidence?: number;
   readonly maxBlocksPerView?: number;
+  readonly alternativesCount?: number;
+  readonly outputSchemaVersion?: string;
   readonly modelVersion?: string;
   /** Effective Paddle preset and model-side detection sizing, when exposed. */
   readonly preset?: string;
@@ -400,8 +402,12 @@ export type GlobalSettingKey =
   | "VISIONOCR_USE_LANGUAGE_CORRECTION"
   | "VISIONOCR_MIN_CONFIDENCE"
   | "VISIONOCR_MAX_BLOCKS_PER_VIEW"
+  | "VISIONOCR_ALTERNATIVES"
   | "VISIONOCR_TIMEOUT_MS"
-  | "VISIONOCR_BINARY";
+  | "VISIONOCR_BINARY"
+  | "SLATESYNC_IMAGE_PREPROCESS"
+  | "SLATESYNC_CROP_RECHECK"
+  | "SLATESYNC_CROP_RECHECK_MAX_TARGETS";
 
 export type GlobalSettingValues = Readonly<Record<GlobalSettingKey, string>>;
 export type GlobalSettingsPatch = Partial<Record<GlobalSettingKey, string | null>>;
@@ -445,6 +451,7 @@ export interface RecognitionRequest {
   readonly pageCount?: number;
   readonly filename?: string;
   readonly accuracyMode?: "high" | "standard";
+  readonly preprocessMetadata?: ImagePreprocessMetadata | null;
   readonly customPrompt?: string;
   readonly scenarioId?: string | null;
   readonly projectId?: string | null;
@@ -651,6 +658,7 @@ export interface FieldQualityMetadata {
   readonly confidence: "high" | "medium" | "low" | null;
   readonly reviewRequired: boolean;
   readonly warnings: readonly NormalizationWarning[];
+  readonly cropRechecked?: boolean;
 }
 
 export interface RecognitionQualityMetadata {
@@ -675,6 +683,12 @@ export interface RecognitionRecord {
   readonly confidence: "high" | "medium" | "low";
   readonly reviewRequiredFields?: readonly string[];
   readonly quality?: RecognitionQualityMetadata;
+}
+
+/** Optional Vision candidates; omitted entirely when alternatives are disabled. */
+export interface OcrAlternative {
+  readonly text: string;
+  readonly confidence: number;
 }
 
 /** Older task snapshots can contain normalized records predating newer keys. */
@@ -740,6 +754,55 @@ export interface OcrSummary {
   readonly blockCount: number;
   readonly lowConfidenceBlockCount: number;
   readonly durationMs: number;
+  readonly warning: string | null;
+  /** Additive diagnostics introduced by Phase 05/06; old tasks may omit them. */
+  readonly alternativesEnabled?: boolean;
+  readonly alternativeCount?: number;
+  readonly outputSchemaVersion?: string | null;
+  readonly preprocessVersion?: string | null;
+  readonly preprocessApplied?: boolean;
+  readonly preprocessFallbackCount?: number;
+  readonly deskewApplied?: boolean;
+  readonly preprocessDurationMs?: number;
+  readonly cropRecheck?: CropRecheckSummary | null;
+}
+
+export interface CropRecheckTarget {
+  readonly targetId: string;
+  readonly sourcePage: number;
+  readonly field: string;
+  readonly currentValue: string;
+  readonly coreImage: string;
+  readonly cropImage: string;
+  readonly bboxNormalized: readonly [number, number, number, number];
+  readonly reason: "low-confidence" | "review-required";
+}
+
+export type CropRecheckResultStatus = "confirmed" | "uncertain" | "not-found" | "failed";
+
+export interface CropRecheckResult {
+  readonly targetId: string;
+  readonly sourcePage: number;
+  readonly field: string;
+  readonly status: CropRecheckResultStatus;
+  readonly value: string | null;
+  readonly confidence: "high" | "medium" | "low" | null;
+  readonly warningCode: string | null;
+  readonly durationMs: number;
+}
+
+export interface CropRecheckSummary {
+  readonly enabled: boolean;
+  readonly attempted: number;
+  readonly confirmed: number;
+  readonly rejected: number;
+  readonly skipped: number;
+  readonly batchCount: number;
+  readonly selectedCount?: number;
+  readonly deduplicatedCount?: number;
+  readonly providerCallCount?: number;
+  readonly timedOut: boolean;
+  readonly canceled: boolean;
   readonly warning: string | null;
 }
 
@@ -913,6 +976,15 @@ export interface PersistedSlateMetadata {
   readonly shootDay?: string | null;
 }
 
+/** Renderer preparation evidence carried into the persisted OCR summary. */
+export interface ImagePreprocessMetadata {
+  readonly version: string;
+  readonly applied: boolean;
+  readonly fallbackCount: number;
+  readonly deskewApplied: boolean;
+  readonly durationMs?: number;
+}
+
 /** Known task snapshot fields; all are optional because old rows are additive. */
 export interface TaskData {
   readonly id?: string | null;
@@ -928,6 +1000,8 @@ export interface TaskData {
   readonly resolveCsvFilename?: string | null;
   readonly resolveCsvTable?: ResolveCsvTable | null;
   readonly resolveCsvEdits?: ResolveCsvEdits | null;
+  /** Explicit session override; project defaults remain in projectSettingsSnapshot. */
+  readonly exportSessionOptions?: ExportOptions | null;
   readonly slateMetadata?: readonly PersistedSlateMetadata[] | null;
   readonly slateWarnings?: readonly string[] | null;
   readonly missingMetadataKeys?: readonly string[] | null;
@@ -939,6 +1013,7 @@ export interface TaskData {
   readonly model?: string | null;
   readonly customPrompt?: string | null;
   readonly accuracyMode?: "high" | "standard" | null;
+  readonly preprocessMetadata?: ImagePreprocessMetadata | null;
   readonly result?: PersistedRecognitionSheet | null;
   readonly usage?: TokenUsage | null;
   readonly durationMs?: number;

@@ -1,8 +1,18 @@
-import type { AppError } from "../../shared/contracts/index.js";
+import type { AppError, ImagePreprocessMetadata } from "../../shared/contracts/index.js";
 
-interface PreparationResult {
+export interface PreparationResult {
   readonly pageCount: number;
   readonly imageDataGroups: readonly (readonly string[])[];
+  readonly preprocess?: ImagePreprocessMetadata;
+}
+
+export interface ImagePreprocessOptions {
+  readonly enabled?: boolean;
+  readonly grayscale?: boolean;
+  readonly contrast?: number;
+  readonly sharpen?: number;
+  readonly deskew?: boolean;
+  readonly deskewAngle?: number;
 }
 
 interface Pending {
@@ -24,12 +34,25 @@ export class PreparationService {
   private ensureWorker() {
     if (this.worker) return this.worker;
     this.worker = new Worker(new URL("../workers/preparation.worker.ts", import.meta.url), { type: "module" });
-    this.worker.addEventListener("message", (event: MessageEvent<{ id: number; type: string; progress?: number; message?: string; pageCount?: number; imageDataGroups?: string[][] }>) => {
+    this.worker.addEventListener("message", (event: MessageEvent<{ id: number; type: string; progress?: number; message?: string; pageCount?: number; imageDataGroups?: string[][]; preprocess?: { version?: string; applied?: boolean; fallbackCount?: number; deskewApplied?: boolean; durationMs?: number } }>) => {
       const message = event.data;
       const request = this.pending.get(message.id);
       if (!request) return;
       if (message.type === "progress") this.queueProgress(message.id, request, message.progress || 0, message.message || "正在准备素材");
-      else if (message.type === "result") { this.finishRequest(message.id, request); request.resolve({ pageCount: message.pageCount || 0, imageDataGroups: message.imageDataGroups || [] }); }
+      else if (message.type === "result") {
+        this.finishRequest(message.id, request);
+        request.resolve({
+          pageCount: message.pageCount || 0,
+          imageDataGroups: message.imageDataGroups || [],
+          ...(message.preprocess ? { preprocess: {
+            version: message.preprocess.version || "slatesync-image-preprocess-v1",
+            applied: Boolean(message.preprocess.applied),
+            fallbackCount: Number(message.preprocess.fallbackCount) || 0,
+            deskewApplied: Boolean(message.preprocess.deskewApplied),
+            durationMs: Number(message.preprocess.durationMs) || 0,
+          } satisfies ImagePreprocessMetadata } : {}),
+        });
+      }
       else if (message.type === "recompressed") { this.finishRequest(message.id, request); request.resolve(message.imageDataGroups || []); }
       else { this.finishRequest(message.id, request); request.reject(new Error(message.message || "场记单准备失败")); }
     });
@@ -79,14 +102,14 @@ export class PreparationService {
     this.pending.clear();
   }
 
-  prepare(file: File, onProgress: (progress: number, message: string) => void): Promise<PreparationResult> {
+  prepare(file: File, onProgress: (progress: number, message: string) => void, preprocessOptions?: ImagePreprocessOptions): Promise<PreparationResult> {
     const worker = this.ensureWorker();
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as Pending["resolve"], reject, onProgress, lastProgressAt: Number.NEGATIVE_INFINITY, deferredProgress: null, progressTimer: null });
       void file.arrayBuffer().then((data) => {
         if (!this.pending.has(id)) return;
-        worker.postMessage({ id, fileType: file.type || "image/jpeg", data, filename: file.name }, [data]);
+        worker.postMessage({ id, fileType: file.type || "image/jpeg", data, filename: file.name, preprocessOptions }, [data]);
       }).catch((error: unknown) => {
         if (!this.pending.has(id)) return;
         this.pending.delete(id);

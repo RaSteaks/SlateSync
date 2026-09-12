@@ -54,6 +54,8 @@ test("Global Settings validates patches and only overlays approved keys", () => 
   assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_PROFILE: "turbo" }), /fast、balanced、accurate/);
   assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_PRESET: "turbo" }), /custom、performance、balanced、fast/);
   assert.throws(() => normalizeGlobalSettingsPatch({ PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: "319" }), /320–4096/);
+  assert.equal(normalizeGlobalSettingsPatch({ SLATESYNC_CROP_RECHECK_MAX_TARGETS: "0" }).SLATESYNC_CROP_RECHECK_MAX_TARGETS, "0");
+  assert.throws(() => normalizeGlobalSettingsPatch({ SLATESYNC_CROP_RECHECK_MAX_TARGETS: "65" }), /0–64/);
   assert.equal(normalizeGlobalSettingsPatch({ VISIONOCR_TIMEOUT_MS: "1800000" }).VISIONOCR_TIMEOUT_MS, "1800000");
   assert.throws(() => normalizeGlobalSettingsPatch({ VISIONOCR_TIMEOUT_MS: "1800001" }), /10000–1800000/);
   assert.throws(() => normalizeGlobalSettingsPatch({ MAX_BODY_MB: 120 }), /必须是文本值/);

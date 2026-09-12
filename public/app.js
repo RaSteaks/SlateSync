@@ -31,9 +31,18 @@ import {
   mergeCustomProviderDiscovery,
 } from "./custom-provider-state.js";
 import {
+  DEFAULT_EXPORT_OPTIONS,
+  mergeExportOptions,
+  normalizeExportOptions,
+  resolveEffectiveExportOptions,
+  resolveExportFilename,
+} from "./export-options.js";
+import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
   findDenseRowBand,
+  IMAGE_PREPROCESS_VERSION,
+  preprocessImageData,
 } from "./image-preprocess.js";
 import {
   canExportResolveCsv,
@@ -123,6 +132,7 @@ const state = {
   exporting: false,
   exportButtonEnabledBeforeBusy: false,
   imageDataGroups: [],
+  preprocessMetadata: null,
   pageCount: 0,
   records: [],
   latestResponse: null,
@@ -143,6 +153,10 @@ const state = {
   // model generation so a round trip between v5 and v6 is reversible.
   paddleModelDrafts: {},
   globalSettingsLoading: false,
+  // Last semantic preview returned by the CSV Worker; the source table never
+  // becomes this derived object, so failed retries can safely reuse it.
+  previewOutput: null,
+  previewRevision: 0,
   customProviders: [],
   selectedCustomProviderId: "",
   customProviderDiscovery: {},
@@ -163,6 +177,10 @@ const state = {
   libraryInfo: null,
   route: "projects",
   activeTaskSettings: null,
+  // Task-local export overrides never replace the project default snapshot.
+  exportSessionOptions: null,
+  effectiveExportOptions: null,
+  effectiveExportSource: null,
   projectTransferBusy: null,
   libraryActionBusy: false,
 };
@@ -300,11 +318,13 @@ const elements = {
   projectTakeFormat: document.querySelector("#project-take-format"),
   projectGoodComment: document.querySelector("#project-good-comment"),
   projectHoldComment: document.querySelector("#project-hold-comment"),
+  projectExportOptions: document.querySelector("#project-export-options"),
   projectSettingsReset: document.querySelector("#project-settings-reset"),
   projectSettingsStatus: document.querySelector("#project-settings-status"),
   projectPackageStatus: document.querySelector("#project-package-status"),
   projectSettingsImportButton: document.querySelector("#project-settings-import-button"),
   projectSettingsExportButton: document.querySelector("#project-settings-export-button"),
+  exportOptionsPanel: document.querySelector("#export-options-panel"),
   globalProvider: document.querySelector("#global-provider-select"),
   globalApiKeyInput: document.querySelector("#global-api-key-input"),
   globalSaveKeyButton: document.querySelector("#global-save-key-button"),
@@ -570,6 +590,10 @@ function resetProjectWorkspace() {
   clearResolveCsv();
   resetRecognitionResults();
   state.activeTaskSettings = null;
+  state.exportSessionOptions = null;
+  state.effectiveExportOptions = null;
+  state.effectiveExportSource = null;
+  state.preprocessMetadata = null;
   taskAutosave.reset();
 }
 
@@ -951,6 +975,143 @@ function renderProjectPackageActions() {
   elements.projectSettingsExportButton.toggleAttribute("aria-busy", exporting);
 }
 
+const LEGACY_EXPORT_COLUMN_LABELS = Object.freeze({
+  scene: "场次",
+  shot: "镜号",
+  take: "条次",
+  comments: "Comments",
+  takeStatus: "条次状态",
+  cardNumber: "卡号",
+  videoCode: "视频码",
+  sourcePage: "来源页",
+});
+
+function effectiveLegacyExportOptions() {
+  const resolved = resolveEffectiveExportOptions({
+    sessionOverride: state.exportSessionOptions,
+    projectDefault: state.currentProject?.settings?.export,
+    systemDefault: defaultRendererProjectSettings().export || DEFAULT_EXPORT_OPTIONS,
+  });
+  state.effectiveExportOptions = resolved.options;
+  state.effectiveExportSource = resolved.source;
+  return resolved.options;
+}
+
+function renderLegacyExportOptions(container, value, scope = "session") {
+  if (!container) return;
+  const options = normalizeExportOptions(value || effectiveLegacyExportOptions());
+  const projectScope = scope === "project";
+  // Symbolic option values survive HTML newline normalization unchanged.
+  container.dataset.exportScope = scope;
+  container.innerHTML = `
+    <div class="export-options-heading">
+      <p class="settings-help">预览和最终导出使用同一组配置；支持 {project}、{source}、{date}、{time}。</p>
+      ${projectScope ? "" : `<button type="button" class="text-button" data-export-action="clear-session">恢复项目默认</button>`}
+    </div>
+    <div class="export-options-grid">
+      <label class="field"><span>文件名模板</span><input data-export-field="filenameTemplate" value="${escapeHtml(options.filenameTemplate)}" maxlength="160" /></label>
+      <label class="field"><span>输出编码</span><select data-export-field="encoding"><option value="utf-8" ${options.format.encoding === "utf-8" ? "selected" : ""}>UTF-8</option><option value="utf-16le" ${options.format.encoding === "utf-16le" ? "selected" : ""}>UTF-16 LE</option><option value="utf-16be" ${options.format.encoding === "utf-16be" ? "selected" : ""}>UTF-16 BE</option></select></label>
+      <label class="field"><span>分隔符</span><input data-export-field="delimiter" value="${escapeHtml(options.format.delimiter)}" maxlength="4" /></label>
+      <label class="field"><span>换行</span><select data-export-field="lineEnding"><option value="crlf" ${options.format.lineEnding === "\r\n" ? "selected" : ""}>CRLF · Windows</option><option value="lf" ${options.format.lineEnding === "\n" ? "selected" : ""}>LF · Unix</option><option value="cr" ${options.format.lineEnding === "\r" ? "selected" : ""}>CR · Classic Mac</option></select></label>
+    </div>
+    <div class="export-options-checks"><label><input type="checkbox" data-export-field="bom" ${options.format.bom ? "checked" : ""} /> 写入 BOM</label><label><input type="checkbox" data-export-field="finalNewline" ${options.format.finalNewline ? "checked" : ""} /> 末尾追加换行</label></div>
+    <div class="export-column-list"><small class="settings-help">勾选列并调整顺序</small>${options.columns.map((column, index) => `
+      <div class="export-column-row" data-export-column="${escapeHtml(column.key)}">
+        <label><input type="checkbox" data-export-enabled ${column.enabled ? "checked" : ""} /> ${escapeHtml(LEGACY_EXPORT_COLUMN_LABELS[column.key] || column.key)}</label>
+        <input data-export-header value="${escapeHtml(column.header)}" aria-label="${escapeHtml(column.key)} 列标题" maxlength="80" />
+        <button type="button" class="icon-button" data-export-move="-1" ${index === 0 ? "disabled" : ""} aria-label="上移">↑</button>
+        <button type="button" class="icon-button" data-export-move="1" ${index === options.columns.length - 1 ? "disabled" : ""} aria-label="下移">↓</button>
+      </div>`).join("")}</div>`;
+  if (container.dataset.exportEventsBound !== scope) {
+    bindLegacyExportOptionEvents(container, scope);
+    container.dataset.exportEventsBound = scope;
+  }
+  if (!projectScope) {
+    container.querySelectorAll("input, select, button").forEach((control) => {
+      control.disabled = isProjectReadOnly() || state.recognizing || state.exporting;
+    });
+  }
+}
+
+function readLegacyExportOptions(container, fallback = DEFAULT_EXPORT_OPTIONS) {
+  if (!container) return normalizeExportOptions(fallback);
+  const current = normalizeExportOptions(fallback);
+  const columns = [...container.querySelectorAll("[data-export-column]")].map((row) => ({
+    key: row.dataset.exportColumn,
+    header: row.querySelector("[data-export-header]")?.value ?? "",
+    enabled: Boolean(row.querySelector("[data-export-enabled]")?.checked),
+  }));
+  const value = {
+    ...current,
+    filenameTemplate: container.querySelector('[data-export-field="filenameTemplate"]')?.value ?? current.filenameTemplate,
+    format: {
+      ...current.format,
+      encoding: container.querySelector('[data-export-field="encoding"]')?.value ?? current.format.encoding,
+      delimiter: container.querySelector('[data-export-field="delimiter"]')?.value ?? current.format.delimiter,
+      lineEnding: ({ crlf: "\r\n", lf: "\n", cr: "\r" })[container.querySelector('[data-export-field="lineEnding"]')?.value] ?? current.format.lineEnding,
+      bom: Boolean(container.querySelector('[data-export-field="bom"]')?.checked),
+      finalNewline: Boolean(container.querySelector('[data-export-field="finalNewline"]')?.checked),
+    },
+    columns,
+  };
+  return normalizeExportOptions(value, current);
+}
+
+function bindLegacyExportOptionEvents(container, scope) {
+  const update = (event, rerender = false) => {
+    const current = scope === "project"
+      ? state.currentProject?.settings?.export || defaultRendererProjectSettings().export
+      : effectiveLegacyExportOptions();
+    const options = readLegacyExportOptions(container, current);
+    if (scope === "project") {
+      markProjectSettingsDirty();
+    } else {
+      state.exportSessionOptions = options;
+      effectiveLegacyExportOptions();
+      saveCurrentTask();
+    }
+    if (rerender) {
+      if (scope === "project") renderLegacyExportOptions(container, options, scope);
+      else renderDerivedResultsAfterEdit();
+    }
+    if (event?.type === "change" && scope === "session") renderLegacyExportOptions(container, options, scope);
+  };
+  container.addEventListener("input", (event) => {
+    // EventTarget is nullable in the DOM type and may be a non-Element in
+    // synthetic tests; normalize it before using Element-only selectors.
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("[data-export-column]") || target?.matches("[data-export-field]")) update(event, false);
+  });
+  container.addEventListener("change", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.matches("[data-export-field], [data-export-enabled], [data-export-header]")) update(event, true);
+  });
+  container.addEventListener("click", (event) => {
+    const eventTarget = event.target instanceof Element ? event.target : null;
+    const button = eventTarget?.closest("[data-export-action], [data-export-move]");
+    if (!button) return;
+    if (button.dataset.exportAction === "clear-session") {
+      state.exportSessionOptions = null;
+      renderLegacyExportOptions(container, effectiveLegacyExportOptions(), "session");
+      renderDerivedResultsAfterEdit();
+      saveCurrentTask();
+      return;
+    }
+    const direction = Number(button.dataset.exportMove);
+    const current = readLegacyExportOptions(container, effectiveLegacyExportOptions());
+    const index = [...container.querySelectorAll("[data-export-column]")].findIndex((row) => row.contains(button));
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.columns.length) return;
+    const columns = current.columns.map((column) => ({ ...column }));
+    [columns[index], columns[target]] = [columns[target], columns[index]];
+    const next = normalizeExportOptions({ ...current, columns });
+    if (scope === "project") markProjectSettingsDirty();
+    else { state.exportSessionOptions = next; saveCurrentTask(); }
+    renderLegacyExportOptions(container, next, scope);
+    if (scope === "session") renderDerivedResultsAfterEdit();
+  });
+}
+
 function renderProjectSettingsForm() {
   const project = state.currentProject;
   if (!project || !elements.projectSettingsForm) return;
@@ -981,6 +1142,7 @@ function renderProjectSettingsForm() {
     elements.projectTakeFormat.value = settings.resolve.fieldFormats.take;
     elements.projectGoodComment.value = settings.resolve.comments.goodTake;
     elements.projectHoldComment.value = settings.resolve.comments.holdTake;
+    renderLegacyExportOptions(elements.projectExportOptions, normalizeExportOptions(settings.export || defaultRendererProjectSettings().export), "project");
   }
   const readOnly = Boolean(project.archivedAt);
   // Archived projects remain inspectable, but every control is disabled until
@@ -1020,6 +1182,7 @@ function buildProjectSettingsFromForm() {
     throw new Error("过条和保条标记不能为空，且不能包含换行。");
   }
   const current = state.currentProject?.settings || defaultRendererProjectSettings();
+  const exportOptions = readLegacyExportOptions(elements.projectExportOptions, current.export);
   // The legacy adapter only owns the visible fields; spreading the current
   // snapshot keeps v2 export preferences and future JSON-safe branches intact.
   return {
@@ -1034,6 +1197,7 @@ function buildProjectSettingsFromForm() {
       fieldFormats: { scene, shot, take },
       comments: { goodTake, holdTake },
     },
+    export: exportOptions,
   };
 }
 
@@ -1090,6 +1254,7 @@ function resetProjectOutputSettings() {
   elements.projectTakeFormat.value = defaults.fieldFormats.take;
   elements.projectGoodComment.value = defaults.comments.goodTake;
   elements.projectHoldComment.value = defaults.comments.holdTake;
+  renderLegacyExportOptions(elements.projectExportOptions, defaultRendererProjectSettings().export, "project");
   markProjectSettingsDirty();
   elements.projectSettingsStatus.textContent = "默认值已填入，保存后生效";
 }
@@ -1113,6 +1278,7 @@ function defaultRendererProjectSettings() {
         holdTake: state.config?.workflow?.resolve?.comments?.holdTake || "_KP",
       },
     },
+    export: normalizeExportOptions(DEFAULT_EXPORT_OPTIONS),
   };
 }
 
@@ -1953,6 +2119,10 @@ const GLOBAL_SETTINGS_GROUPS = [
       { key: "VISIONOCR_USE_LANGUAGE_CORRECTION", label: "语言校正", options: [["true", "启用"], ["false", "关闭"]] },
       { key: "VISIONOCR_MIN_CONFIDENCE", label: "最低置信度", type: "number", min: 0, max: 1, step: 0.01 },
       { key: "VISIONOCR_MAX_BLOCKS_PER_VIEW", label: "每个视图最多文字块", type: "number", min: 0, max: 10000, step: 1 },
+      { key: "VISIONOCR_ALTERNATIVES", label: "Vision 备选结果", type: "number", min: 0, max: 3, step: 1, hint: "0–3；默认关闭，开启后保留有界候选。" },
+      { key: "SLATESYNC_IMAGE_PREPROCESS", label: "图像增强", options: [["false", "关闭（默认）"], ["true", "启用对比度与锐化"]] },
+      { key: "SLATESYNC_CROP_RECHECK", label: "裁剪复核", options: [["false", "关闭（默认）"], ["true", "高精度模式启用"]] },
+      { key: "SLATESYNC_CROP_RECHECK_MAX_TARGETS", label: "裁剪复核上限", type: "number", min: 0, max: 64, step: 1, hint: "0 表示不调用复核；默认每次任务最多 12 个目标。" },
       { key: "VISIONOCR_TIMEOUT_MS", label: "超时", hint: "填写 auto 或 10000–1800000 毫秒。" },
       { key: "VISIONOCR_BINARY", label: "Vision bridge 路径", hint: "留空则优先使用打包内置 bridge；开发环境会自动编译。" },
     ],
@@ -3244,6 +3414,8 @@ function clearResolveCsv() {
   state.metadataTable = null;
   clearCsvWorkerMetadata();
   state.csvEdits.clear();
+  state.previewOutput = null;
+  state.previewRevision += 1;
   elements.metadataInput.value = "";
   elements.metadataCard.hidden = true;
   elements.metadataDropzone.hidden = false;
@@ -3333,6 +3505,9 @@ async function loadReportFile(file) {
   renderTaskSwitcher();
 
   if (state.metadataTable || state.slateMetadata.length) clearResolveCsv();
+  state.exportSessionOptions = null;
+  state.effectiveExportOptions = null;
+  state.effectiveExportSource = null;
   resetRecognitionResults();
   try {
     setPreparing(true);
@@ -3343,12 +3518,14 @@ async function loadReportFile(file) {
     if (isPdf) {
       const prepared = await preparePdf(file);
       imageGroups = prepared.imageDataGroups;
+      state.preprocessMetadata = prepared.preprocess || null;
       previewPages = imageGroups.map((group) => group[0]);
       pageCount = prepared.pageCount;
       meta = `${formatBytes(file.size)} · ${pageCount} 页 · 多视图双重查漏`;
     } else {
       const processed = await prepareImage(file);
       imageGroups = [processed.imageDataGroup];
+      state.preprocessMetadata = processed.preprocess || null;
       previewPages = [processed.dataUrl];
       pageCount = 1;
       meta = `${formatBytes(file.size)} · ${processed.width} × ${processed.height} · 多视图核心复核`;
@@ -3385,6 +3562,7 @@ function clearReportFile() {
   if (state.metadataTable || state.slateMetadata.length) clearResolveCsv();
   state.reportFile = null;
   state.imageDataGroups = [];
+  state.preprocessMetadata = null;
   state.pageCount = 0;
   resetRecognitionResults();
   elements.imageInput.value = "";
@@ -3434,7 +3612,8 @@ async function prepareImage(file) {
   context.fillRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
 
-  const croppedCanvas = cropVerticalWhitespace(canvas);
+  const preprocessed = applyLegacyImagePreprocess(canvas);
+  const croppedCanvas = cropVerticalWhitespace(preprocessed.canvas);
   const detailLayout = calculateDetailSegments(croppedCanvas.height);
   // Image uploads must receive the same full + repeated-header core views as
   // PDFs; otherwise high-accuracy mode gets only one downscaled JPEG for the
@@ -3457,6 +3636,7 @@ async function prepareImage(file) {
     imageDataGroup,
     width,
     height,
+    preprocess: preprocessed.metadata,
   };
   updateTaskProgress({
     phase: "preparing",
@@ -3484,7 +3664,7 @@ async function preparePdf(file) {
       { length: documentHandle.numPages },
       (_, index) => index + 1,
     );
-    const imageDataGroups = await mapWithConcurrency(
+    const preparedPages = await mapWithConcurrency(
       pageNumbers,
       PDF_PREPARE_CONCURRENCY,
       async (pageNumber) => {
@@ -3508,10 +3688,12 @@ async function preparePdf(file) {
       },
     );
 
+    const imageDataGroups = preparedPages.map((page) => page.views);
     return {
       imageDataGroups,
       previewDataUrl: imageDataGroups[0][0],
       pageCount: documentHandle.numPages,
+      preprocess: mergeLegacyPreprocessMetadata(preparedPages.map((page) => page.preprocess)),
     };
   } catch (error) {
     if (error?.name === "PasswordException") {
@@ -3543,7 +3725,8 @@ async function preparePdfPage(documentHandle, pageNumber) {
       viewport,
       background: "#ffffff",
     }).promise;
-    const croppedCanvas = cropVerticalWhitespace(canvas);
+    const preprocessed = applyLegacyImagePreprocess(canvas);
+    const croppedCanvas = cropVerticalWhitespace(preprocessed.canvas);
     const outputCanvas = resizeCanvas(croppedCanvas, 2600);
     const detailLayout = calculateDetailSegments(croppedCanvas.height);
     const output = [await canvasToDataUrl(outputCanvas, "image/jpeg", 0.92)];
@@ -3556,10 +3739,59 @@ async function preparePdfPage(documentHandle, pageNumber) {
       );
       output.push(await canvasToDataUrl(detailCanvas, "image/jpeg", 0.93));
     }
-    return output;
+    return { views: output, preprocess: preprocessed.metadata };
   } finally {
     page.cleanup();
   }
+}
+
+function applyLegacyImagePreprocess(sourceCanvas) {
+  const started = performance.now();
+  const enabled = state.globalSettingsDraft?.SLATESYNC_IMAGE_PREPROCESS === "true";
+  const fallback = {
+    version: IMAGE_PREPROCESS_VERSION,
+    applied: false,
+    fallbackCount: 0,
+    deskewApplied: false,
+    durationMs: 0,
+  };
+  if (!enabled) return { canvas: sourceCanvas, metadata: fallback };
+  try {
+    const context = sourceCanvas.getContext("2d", { alpha: false });
+    const result = preprocessImageData(context.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height), { enabled: true });
+    if (!result.metadata.applied && !result.metadata.fallback) return { canvas: sourceCanvas, metadata: fallback };
+    const output = document.createElement("canvas");
+    output.width = result.imageData.width;
+    output.height = result.imageData.height;
+    const outputContext = output.getContext("2d", { alpha: false });
+    outputContext.fillStyle = "#ffffff";
+    outputContext.fillRect(0, 0, output.width, output.height);
+    outputContext.putImageData(new ImageData(result.imageData.data, result.imageData.width, result.imageData.height), 0, 0);
+    return {
+      canvas: output,
+      metadata: {
+        version: result.metadata.version,
+        applied: result.metadata.applied,
+        fallbackCount: result.metadata.fallback ? 1 : 0,
+        deskewApplied: result.metadata.deskewApplied,
+        durationMs: Math.round(performance.now() - started),
+      },
+    };
+  } catch {
+    // Keep the optional enhancement fail-open so a browser codec cannot block
+    // the legacy recognition path; the fallback is persisted for diagnostics.
+    return { canvas: sourceCanvas, metadata: { ...fallback, fallbackCount: 1, durationMs: Math.round(performance.now() - started) } };
+  }
+}
+
+function mergeLegacyPreprocessMetadata(items) {
+  return items.reduce((summary, item) => ({
+    version: item?.version || summary.version,
+    applied: summary.applied || Boolean(item?.applied),
+    fallbackCount: summary.fallbackCount + (Number(item?.fallbackCount) || 0),
+    deskewApplied: summary.deskewApplied || Boolean(item?.deskewApplied),
+    durationMs: summary.durationMs + (Number(item?.durationMs) || 0),
+  }), { version: IMAGE_PREPROCESS_VERSION, applied: false, fallbackCount: 0, deskewApplied: false, durationMs: 0 });
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -3828,6 +4060,7 @@ function serializeCurrentRecognitionRequest() {
     // would make the main process fall back to the project's older prompt.
     payload.customPrompt = elements.customPromptInput.value.trim();
   }
+  if (state.preprocessMetadata) payload.preprocessMetadata = state.preprocessMetadata;
   return JSON.stringify(payload);
 }
 
@@ -4047,8 +4280,9 @@ function renderDetailSortIndicators() {
   }
 }
 
-function renderTable() {
+function renderTable({ skipPreview = false } = {}) {
   const output = currentMergeOutput();
+  renderLegacyExportOptions(elements.exportOptionsPanel, effectiveLegacyExportOptions(), "session");
   const statuses = output.statuses;
   elements.detailReviewFilter.value = state.detailReviewFilter;
   elements.tabDetailBadge.textContent = String(state.records.length);
@@ -4125,14 +4359,17 @@ function renderTable() {
   renderWarnings(output);
   renderResultSummary(output);
   updateExportState(output);
+  if (!skipPreview) void refreshLegacyCsvPreview();
 }
 
 function renderDerivedResultsAfterEdit() {
+  state.previewOutput = null;
   const output = currentMergeOutput();
   renderCsvPreview(output);
   renderWarnings(output);
   renderResultSummary(output);
   updateExportState(output);
+  void refreshLegacyCsvPreview();
 }
 
 function renderCsvPreview(output) {
@@ -4270,6 +4507,8 @@ function bindCsvPreviewEdits(columns) {
       );
       const key = `${rowIndex}:${columnIndex}`;
       state.csvEdits.set(key, value);
+      state.previewOutput = null;
+      state.previewRevision += 1;
       input.closest("td")?.classList.add("csv-cell-edited");
       // Keep the current input mounted; rebuilding a large CSV table on every
       // keystroke made manual correction noticeably laggy and lost focus.
@@ -4281,11 +4520,31 @@ function bindCsvPreviewEdits(columns) {
       applyInput();
       const key = `${input.dataset.row}:${input.dataset.col}`;
       input.value = state.csvEdits.get(key) || "";
+      void refreshLegacyCsvPreview();
     });
   }
 }
 
 function currentMergeOutput() {
+  if (state.previewOutput) return state.previewOutput;
+  // While the Worker is rebuilding, keep the result pane stable and make the
+  // pending state explicit instead of calculating a competing renderer merge.
+  if (state.metadataTable || state.records.length) {
+    return {
+      table: null,
+      statuses: state.records.map((_, recordIndex) => ({ recordIndex, status: state.metadataTable ? "pending" : "no-metadata" })),
+      warnings: state.metadataTable ? ["正在由 CSV Worker 生成回填预览…"] : [],
+      matchedRecordCount: 0,
+      updatedRowCount: 0,
+      exportableCount: 0,
+    };
+  }
+  const exportOptions = effectiveLegacyExportOptions();
+  const resolvedFilename = resolveExportFilename(exportOptions.filenameTemplate, {
+    project: state.currentProject?.name,
+    source: state.metadataFile?.name || state.latestResponse?.result?.sheetTitle || "slate",
+    task: state.currentTaskId || "",
+  });
   if (state.metadataTable) {
     return mergeSlateIntoResolveTable(
       state.metadataTable,
@@ -4294,6 +4553,9 @@ function currentMergeOutput() {
       {
         fieldFormats: resolveFieldFormats(),
         comments: resolveCommentsConfig(),
+        exportOptions,
+        csvEdits: state.csvEdits,
+        resolvedFilename,
       },
     );
   }
@@ -4308,6 +4570,37 @@ function currentMergeOutput() {
     updatedRowCount: 0,
     exportableCount: 0,
   };
+}
+
+async function refreshLegacyCsvPreview() {
+  if (!state.records.length) return;
+  const revision = ++state.previewRevision;
+  const exportOptions = effectiveLegacyExportOptions();
+  const task = {
+    type: state.metadataTable ? "merge-preview" : "standalone-preview",
+    records: state.records,
+    ...(state.metadataTable ? {
+      slateMetadata: state.slateMetadata,
+      csvEdits: [...state.csvEdits],
+    } : {}),
+    fieldFormats: resolveFieldFormats(),
+    comments: resolveCommentsConfig(),
+    exportOptions,
+    resolvedFilename: resolveExportFilename(exportOptions.filenameTemplate, {
+      project: state.currentProject?.name,
+      source: state.metadataFile?.name || state.latestResponse?.result?.sheetTitle || "slate",
+      task: state.currentTaskId || "",
+    }),
+  };
+  try {
+    const output = await runCsvBackgroundTask(task);
+    if (revision !== state.previewRevision) return;
+    state.previewOutput = output;
+    renderTable({ skipPreview: true });
+  } catch (error) {
+    if (revision !== state.previewRevision) return;
+    showError(error.message || "无法生成 CSV 预览。");
+  }
 }
 
 function renderResultSummary(output) {
@@ -4381,6 +4674,12 @@ async function exportCsv() {
   setExporting(true);
   try {
     await refreshRuntimeConfig();
+    const exportOptions = effectiveLegacyExportOptions();
+    const resolvedFilename = resolveExportFilename(exportOptions.filenameTemplate, {
+      project: state.currentProject?.name,
+      source: state.metadataFile?.name || state.latestResponse?.result?.sheetTitle || "slate",
+      task: state.currentTaskId || "",
+    });
     await yieldToRenderer();
     if (state.metadataTable && state.metadataFile) {
       const { bytes } = await runCsvBackgroundTask({
@@ -4390,8 +4689,10 @@ async function exportCsv() {
         csvEdits: [...state.csvEdits],
         fieldFormats: resolveFieldFormats(),
         comments: resolveCommentsConfig(),
+        exportOptions,
+        resolvedFilename,
       });
-      await downloadCsv(bytes, `${baseName(state.metadataFile.name)}_场记已回填.csv`);
+      await downloadCsv(bytes, resolvedFilename);
       return;
     }
 
@@ -4404,8 +4705,10 @@ async function exportCsv() {
       records: state.records,
       fieldFormats: resolveFieldFormats(),
       comments: resolveCommentsConfig(),
+      exportOptions,
+      resolvedFilename,
     });
-    await downloadCsv(bytes, `${baseName(title)}_场记识别.csv`);
+    await downloadCsv(bytes, resolvedFilename);
   } catch (error) {
     showError(error.message || "无法导出 CSV。");
   } finally {
@@ -4558,6 +4861,10 @@ function resetRecognitionResults() {
   if (elements.detailReviewFilter) elements.detailReviewFilter.value = "all";
   renderDetailSortIndicators();
   state.latestResponse = null;
+  state.previewOutput = null;
+  state.previewRevision += 1;
+  state.effectiveExportOptions = null;
+  state.effectiveExportSource = null;
   elements.results.hidden = true;
   elements.resultBody.innerHTML = "";
   elements.csvPreviewSummary.textContent = "回填预览";
@@ -4910,6 +5217,11 @@ async function switchTask() {
   if (!taskId) {
     // "新任务" — reset workspace
     state.currentTaskId = null;
+    // A session export override belongs to the old task and must not leak
+    // into a new task that will inherit the project default.
+    state.exportSessionOptions = null;
+    state.effectiveExportOptions = null;
+    state.effectiveExportSource = null;
     applyNewTaskRecognitionDefaults();
     clearReportFile();
     clearResolveCsv();
@@ -4953,11 +5265,17 @@ function restoreTask(task, operation = {}) {
   state.activeTaskSettings = task.projectSettingsSnapshot
     || state.currentProject?.settings
     || defaultRendererProjectSettings();
+  state.exportSessionOptions = task.exportSessionOptions
+    ? normalizeExportOptions(task.exportSessionOptions)
+    : null;
+  state.previewOutput = null;
+  state.previewRevision += 1;
 
   // Clear current state
   clearReportFile();
   clearResolveCsv();
   resetRecognitionResults();
+  state.preprocessMetadata = task.preprocessMetadata || null;
 
   restoreResolveCsvState(task);
   renderScenarioOptions(task.scenarioId || "", false);
@@ -5075,6 +5393,10 @@ async function deleteCurrentTask() {
     ) return;
 
     state.currentTaskId = null;
+    // Deleting the active task also ends its session-only export layer.
+    state.exportSessionOptions = null;
+    state.effectiveExportOptions = null;
+    state.effectiveExportSource = null;
     clearReportFile();
     clearResolveCsv();
     resetRecognitionResults();
@@ -5116,6 +5438,8 @@ function captureCurrentTaskSave() {
     projectId: state.currentProjectId,
     task: JSON.parse(JSON.stringify({
       id: state.currentTaskId,
+      exportSessionOptions: state.exportSessionOptions,
+      preprocessMetadata: state.preprocessMetadata,
       editedRecords: state.records,
       status: "edited",
       ...csvState,

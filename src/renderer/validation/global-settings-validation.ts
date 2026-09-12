@@ -23,9 +23,11 @@ export const GLOBAL_NUMERIC_RANGES: Partial<Record<GlobalSettingKey, NumericRang
   VISIONOCR_MIN_CONFIDENCE: { min: 0, max: 1, decimals: 2 },
   PADDLEOCR_MIN_CONFIDENCE: { min: 0, max: 1, decimals: 2 },
   VISIONOCR_MAX_BLOCKS_PER_VIEW: { min: 0, max: 10000, integer: true },
+  VISIONOCR_ALTERNATIVES: { min: 0, max: 3, integer: true },
   PADDLEOCR_MAX_BLOCKS_PER_VIEW: { min: 0, max: 10000, integer: true },
   PADDLEOCR_RECOGNITION_BATCH_SIZE: { min: 1, max: 64, integer: true },
   PADDLEOCR_TEXT_DET_LIMIT_SIDE_LEN: { min: 320, max: 4096, integer: true },
+  SLATESYNC_CROP_RECHECK_MAX_TARGETS: { min: 0, max: 64, integer: true },
 };
 
 /** Timeout keys accept the literal "auto" plus a per-engine millisecond range. */

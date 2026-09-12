@@ -1380,6 +1380,7 @@ function recognitionInput(body, workflowConfig, projectSettings) {
     // Electron accuracy is project-owned; the workspace mirrors this value
     // and intentionally cannot override it for a single task.
     accuracyMode: settings.accuracyMode,
+    preprocessMetadata: body.preprocessMetadata || null,
     scenarioId: settings.scenarioId || body.scenarioId,
     customPrompt: Object.hasOwn(body, "customPrompt")
       ? body.customPrompt
