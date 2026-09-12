@@ -263,6 +263,44 @@ test("OpenAI Responses request uses image input and parses structured output", a
   assert.equal(result.result.records[0].targetId, "page:1:record:0");
 });
 
+test("final recognition gate preserves Chinese and confusable provenance after merge", async () => {
+  const fetchImpl = async () => jsonResponse({
+    output_text: JSON.stringify({
+      sheetTitle: "复核来源",
+      records: [{
+        ...modelResult.records[0],
+        cardNumber: "A O 1",
+        videoCode: "C O 1",
+        scene: "二〇三",
+        shot: "十一",
+        take: "一百零五",
+      }],
+      warnings: [],
+    }),
+  });
+
+  const result = await recognizeSlate(
+    {
+      providerId: "openai",
+      modelId: "openai/gpt-4o-mini",
+      imageDataUrl,
+      filename: "provenance.jpg",
+    },
+    { env: { OPENAI_API_KEY: "test-key" }, fetchImpl },
+  );
+  const record = result.result.records[0];
+  assert.deepEqual(
+    [record.cardNumber, record.videoCode, record.scene, record.shot, record.take],
+    ["A001", "C001", "203", "11", "105"],
+  );
+  assert.equal(record.targetId, "page:1:record:0");
+  assert.deepEqual(record.reviewRequiredFields, ["cardNumber", "videoCode", "scene", "shot", "take"]);
+  assert.equal(record.quality.fields.scene.originalValue, "二〇三");
+  assert.equal(record.quality.fields.scene.warnings[0].code, "chinese-numeral-converted");
+  assert.equal(record.quality.fields.videoCode.originalValue, "C O 1");
+  assert.equal(record.quality.fields.videoCode.warnings[0].code, "confusable-character");
+});
+
 test("Electron project output settings override Profile output metadata", async () => {
   const requests = [];
   const fetchImpl = async (_url, request) => {

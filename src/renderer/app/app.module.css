@@ -305,6 +305,7 @@
 .topGap { margin-top: 14px; }
 .resultControls { margin: 16px 0 10px; }
 .searchWrap { min-width: 200px; flex: 1; }
+.reviewFilterLabel { color: var(--ss-color-ink-subtle); font-size: .72rem; white-space: nowrap; }
 .resultTableFrame { min-width: 0; overflow: hidden; border: 1px solid var(--ss-color-line); border-radius: var(--ss-radius-lg); background: var(--ss-color-surface-sunken); }
 .resultTableScroll { max-height: min(620px, 62vh); overflow: auto; overscroll-behavior: contain; }
 .resultTable { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: .76rem; }
@@ -313,12 +314,18 @@
 .resultTable th:last-child { min-width: 44px; }
 .resultTable td { padding: 4px; border-bottom: 1px solid var(--ss-color-line); background: var(--ss-color-surface-sunken); }
 .resultTable td[data-wide="true"] { min-width: 180px; }
+.resultFieldCell { min-width: 92px; vertical-align: middle; }
+.resultFieldCell[data-wide="true"] { min-width: 180px; }
+.resultFieldContent { display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; }
 .resultTable tr:hover td { background: var(--ss-color-surface-hover); }
 .resultTable tr[data-low="true"] td { background: var(--ss-color-warning-soft); }
 .resultPageCell { padding-inline: 12px !important; color: var(--ss-color-ink-subtle); font-family: var(--ss-font-mono); text-align: center; }
 .resultCellInput, .resultCellSelect { width: 100%; min-width: 84px; height: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--ss-radius-sm); color: var(--ss-color-ink); background: transparent; font: inherit; }
 .resultCellInput:hover, .resultCellInput:focus, .resultCellSelect:hover, .resultCellSelect:focus { border-color: var(--ss-color-line-strong); background: var(--ss-color-surface); outline: none; }
 .resultCellInput:focus, .resultCellSelect:focus { box-shadow: var(--ss-shadow-focus); }
+.reviewBadge { display: inline-flex; flex: 0 0 auto; align-items: center; min-height: 20px; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--ss-color-warning) 38%, var(--ss-color-line)); border-radius: 999px; color: var(--ss-color-warning); background: var(--ss-color-warning-soft); font-size: .62rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+/* Keep <td> in the table formatting context; only its contents need flex. */
+.resultFieldContent .resultCellInput { flex: 1; min-width: 84px; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .routeHint { padding: 16px; border: 1px dashed var(--ss-color-line-strong); border-radius: var(--ss-radius-md); color: var(--ss-color-ink-subtle); text-align: center; }
 .dangerZone { display: flex; align-items: center; justify-content: space-between; gap: var(--ss-space-4); border-color: color-mix(in srgb, var(--ss-color-danger) 42%, var(--ss-color-line)); }

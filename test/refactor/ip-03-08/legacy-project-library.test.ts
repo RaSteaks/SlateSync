@@ -55,6 +55,19 @@ describe("Legacy project package transfer contract", () => {
     expect(legacyScript).toContain("targetId: restoreRecognitionTargetId");
   });
 
+  it("keeps legacy review filtering and provenance accessible", () => {
+    // Legacy 结果表没有 React DOM harness；锁住 HTML 入口与 escape 后的
+    // badge/恢复路径，避免审计信息只在 modern surface 中可见。
+    expect(legacyHtml).toContain('id="detail-review-filter"');
+    expect(legacyHtml).toContain('aria-label="筛选识别复核状态"');
+    expect(legacyScript).toContain("detailReviewFilter: \"all\"");
+    expect(legacyScript).toContain('state.detailReviewFilter === "review"');
+    expect(legacyScript).toContain("reviewFieldsFromQuality(record)");
+    expect(legacyScript).toContain('title=\"\${escapeHtml(details)}\"');
+    expect(legacyScript).toContain("function restoreRecognitionRecord");
+    expect(legacyScript).toContain("reviewFieldsFromQuality(record)");
+  });
+
   it("guards both operations with autosave, cancellation, refresh, and busy cleanup", () => {
     const importSource = functionSource("importProject", "exportProject");
     const exportSource = functionSource("exportProject", "importProjectLibrary");

@@ -43,6 +43,62 @@ test("task updates preserve recognition data and use owner-only files", async ()
   }
 });
 
+test("task snapshots round-trip recognition quality and review provenance", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-quality-task-"));
+  try {
+    const store = createTaskStore(dataDir);
+    const record = {
+      id: "record-quality",
+      targetId: "target-quality",
+      sourcePage: 1,
+      cardNumber: "A001",
+      videoCode: "C001",
+      scene: "203",
+      shot: "01",
+      take: "01",
+      takeStatus: "过",
+      description: "近景",
+      comments: null,
+      shotSize: "CU",
+      cameraPosition: "A",
+      confidence: "high",
+      reviewRequiredFields: ["scene"],
+      quality: {
+        fields: {
+          scene: {
+            field: "scene",
+            originalValue: "二〇三",
+            normalizedValue: "203",
+            changed: true,
+            confidence: "high",
+            reviewRequired: true,
+            warnings: [{
+              code: "chinese-numeral-converted",
+              field: "scene",
+              message: "已将中文数字归一化为阿拉伯数字，请人工确认",
+              originalValue: "二〇三",
+              normalizedValue: "203",
+            }],
+          },
+        },
+      },
+    };
+    const id = await store.saveTask({
+      id: "quality-task",
+      filename: "quality.png",
+      status: "completed",
+      result: { sheetTitle: "Quality", records: [record], warnings: [] },
+      editedRecords: [record],
+    });
+    const loaded = await store.loadTask(id);
+    assert.deepEqual(loaded.result.records, [record]);
+    assert.deepEqual(loaded.editedRecords, [record]);
+    await store.close();
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("diagnostic sessions use owner-only files and validated IDs", async () => {
   const dataDir = await mkdtemp(join(tmpdir(), "slatesync-diagnostics-"));
   try {
