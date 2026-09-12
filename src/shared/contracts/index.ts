@@ -623,12 +623,14 @@ export type RecognitionFieldKey =
   | "shotSize"
   | "cameraPosition";
 
+/** Additive warning codes keep persisted quality metadata forward-compatible. */
 export type NormalizationWarningCode =
   | "ambiguous-numeric-token"
   | "invalid-numeric-token"
   | "out-of-range"
   | "conflicting-value"
   | "confusable-character"
+  | "chinese-numeral-converted"
   | "missing-value";
 
 /** A user-visible explanation for a value changed during recognition normalization. */

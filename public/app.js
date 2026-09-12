@@ -18,6 +18,7 @@ import {
   normalizeTakeValue,
   resolveColumnIndexes,
 } from "./resolve-csv.js";
+import { reviewFieldsFromQuality } from "./metadata-common.js";
 import {
   restoreCsvPreviewState,
   serializeCsvPreviewState,
@@ -152,6 +153,7 @@ const state = {
   csvEdits: new Map(),
   detailSort: { field: null, direction: 1 },
   detailSearch: "",
+  detailReviewFilter: "all",
   missingMetadataKeys: new Set(),
   currentProjectId: null,
   currentProject: null,
@@ -220,6 +222,7 @@ const elements = {
   resultBody: document.querySelector("#result-body"),
   addRow: document.querySelector("#add-row"),
   detailSearch: document.querySelector("#detail-search"),
+  detailReviewFilter: document.querySelector("#detail-review-filter"),
   exportButton: document.querySelector("#export-button"),
   tabCsv: document.querySelector("#tab-csv"),
   tabDetail: document.querySelector("#tab-detail"),
@@ -1472,13 +1475,21 @@ function bindEvents() {
   elements.addRow.addEventListener("click", () => {
     if (isProjectReadOnly()) return;
     state.detailSearch = "";
+    state.detailReviewFilter = "all";
     elements.detailSearch.value = "";
+    elements.detailReviewFilter.value = "all";
     state.records.push(emptyRecord());
     renderTable();
     saveCurrentTask();
   });
   elements.detailSearch.addEventListener("input", () => {
     state.detailSearch = elements.detailSearch.value;
+    renderTable();
+  });
+  elements.detailReviewFilter.addEventListener("change", () => {
+    state.detailReviewFilter = elements.detailReviewFilter.value === "review"
+      ? "review"
+      : "all";
     renderTable();
   });
   for (const th of document.querySelectorAll("th[data-sort]")) {
@@ -3946,6 +3957,32 @@ function detailSearchMatches(record, query) {
   return hay.includes(query);
 }
 
+const REVIEW_FIELD_LABELS = Object.freeze({
+  cardNumber: "卡号",
+  videoCode: "视频码",
+  scene: "场次",
+  shot: "镜",
+  take: "次",
+});
+
+function recordReviewFields(record) {
+  return reviewFieldsFromQuality(record);
+}
+
+function reviewBadge(field, record) {
+  if (!recordReviewFields(record).includes(field)) return "";
+  const quality = record.quality?.fields?.[field];
+  const warningSummary = Array.isArray(quality?.warnings)
+    ? quality.warnings.map((item) => item.message).filter(Boolean).join("；")
+    : "";
+  const details = [
+    `需复核：${REVIEW_FIELD_LABELS[field] || field}`,
+    quality?.originalValue != null ? `原始值：${quality.originalValue}` : "",
+    warningSummary ? `原因：${warningSummary}` : "",
+  ].filter(Boolean).join("；");
+  return `<span class="review-badge" title="${escapeHtml(details)}" aria-label="${escapeHtml(details)}">需复核</span>`;
+}
+
 function detailSortKey(field, record) {
   const value = record[field];
   if (value == null || value === "") return null;
@@ -3971,8 +4008,10 @@ function visibleDetailRecords() {
   const query = state.detailSearch.trim().toUpperCase();
   const entries = [];
   for (let index = 0; index < state.records.length; index++) {
-    if (!detailSearchMatches(state.records[index], query)) continue;
-    entries.push({ index, record: state.records[index] });
+    const record = state.records[index];
+    if (!detailSearchMatches(record, query)) continue;
+    if (state.detailReviewFilter === "review" && !recordReviewFields(record).length) continue;
+    entries.push({ index, record });
   }
   if (state.detailSort.field) {
     entries.sort((a, b) => {
@@ -4011,6 +4050,7 @@ function renderDetailSortIndicators() {
 function renderTable() {
   const output = currentMergeOutput();
   const statuses = output.statuses;
+  elements.detailReviewFilter.value = state.detailReviewFilter;
   elements.tabDetailBadge.textContent = String(state.records.length);
   elements.tabDetailBadge.hidden = state.records.length === 0;
   renderCsvPreview(output);
@@ -4021,23 +4061,26 @@ function renderTable() {
       <tr data-index="${index}"${record.takeStatus === "过" ? ' class="is-keeper"' : ""}>
         <td>${index + 1}</td>
         <td>${record.sourcePage || "-"}</td>
-        ${textCell("cardNumber", record.cardNumber)}
-        ${textCell("videoCode", record.videoCode)}
-        ${textCell("scene", record.scene)}
-        ${textCell("shot", record.shot)}
-        ${textCell("take", record.take)}
-        <td>
-          <select data-field="takeStatus"${isProjectReadOnly() ? " disabled" : ""}>
-            <option value="" ${record.takeStatus == null ? "selected" : ""}>未标记（留空）</option>
-            <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → ${escapeHtml(resolveCommentsConfig().goodTake)}</option>
-            <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → ${escapeHtml(resolveCommentsConfig().holdTake)}</option>
-            <option value="废条" ${record.takeStatus === "废条" ? "selected" : ""}>X / × → 留空</option>
-          </select>
+        ${textCell("cardNumber", record.cardNumber, "", record)}
+        ${textCell("videoCode", record.videoCode, "", record)}
+        ${textCell("scene", record.scene, "", record)}
+        ${textCell("shot", record.shot, "", record)}
+        ${textCell("take", record.take, "", record)}
+        <td class="result-field-cell">
+          <div class="result-field-content">
+            ${reviewBadge("takeStatus", record)}
+            <select data-field="takeStatus"${isProjectReadOnly() ? " disabled" : ""}>
+              <option value="" ${record.takeStatus == null ? "selected" : ""}>未标记（留空）</option>
+              <option value="过" ${record.takeStatus === "过" ? "selected" : ""}>☑ / √ → ${escapeHtml(resolveCommentsConfig().goodTake)}</option>
+              <option value="保" ${record.takeStatus === "保" ? "selected" : ""}>△ / 三角形 → ${escapeHtml(resolveCommentsConfig().holdTake)}</option>
+              <option value="废条" ${record.takeStatus === "废条" ? "selected" : ""}>X / × → 留空</option>
+            </select>
+          </div>
         </td>
-        ${textCell("description", record.description, "min-width:180px")}
-        ${textCell("comments", record.comments, "min-width:160px")}
-        ${textCell("shotSize", record.shotSize)}
-        ${textCell("cameraPosition", record.cameraPosition)}
+        ${textCell("description", record.description, "min-width:180px", record)}
+        ${textCell("comments", record.comments, "min-width:160px", record)}
+        ${textCell("shotSize", record.shotSize, "", record)}
+        ${textCell("cameraPosition", record.cameraPosition, "", record)}
         <td>${exportLabel(status, record)}${missingMetadataBadge(record)}</td>
         <td><span class="confidence ${escapeHtml(record.confidence)}">${confidenceLabel(record.confidence)}</span></td>
         <td><button class="delete-row" type="button" aria-label="删除这一行"${isProjectReadOnly() ? " disabled" : ""}>×</button></td>
@@ -4270,9 +4313,15 @@ function currentMergeOutput() {
 function renderResultSummary(output) {
   const title = state.latestResponse?.result?.sheetTitle || "未命名场记单";
   const base = `${title} · 识别 ${state.records.length} 条`;
+  const reviewRecordCount = state.records.filter((record) => recordReviewFields(record).length > 0).length;
+  const reviewFieldCount = state.records.reduce(
+    (count, record) => count + recordReviewFields(record).length,
+    0,
+  );
+  const reviewSummary = ` · 待复核 ${reviewRecordCount} 条 / ${reviewFieldCount} 个字段`;
   elements.resultSummary.textContent = state.metadataTable
-    ? `${base} · 覆盖 ${output.recognizedMaterialCount}/${output.expectedMaterialCount} 个 CSV 素材 · 可回填 ${output.matchedRecordCount} 条 / ${output.updatedRowCount} 行${state.slateMetadata.length ? ` · Camera FPS ${output.cameraFpsMatchedMaterialCount} 个素材 / ${output.cameraFpsMatchedRowCount} 行 · Shoot Day ${output.shootDayMatchedMaterialCount} 个素材 / ${output.shootDayMatchedRowCount} 行` : ""}`
-    : `${base} · 可直接导出识别结果`;
+    ? `${base}${reviewSummary} · 覆盖 ${output.recognizedMaterialCount}/${output.expectedMaterialCount} 个 CSV 素材 · 可回填 ${output.matchedRecordCount} 条 / ${output.updatedRowCount} 行${state.slateMetadata.length ? ` · Camera FPS ${output.cameraFpsMatchedMaterialCount} 个素材 / ${output.cameraFpsMatchedRowCount} 行 · Shoot Day ${output.shootDayMatchedMaterialCount} 个素材 / ${output.shootDayMatchedRowCount} 行` : ""}`
+    : `${base}${reviewSummary} · 可直接导出识别结果`;
 }
 
 function renderWarnings(output) {
@@ -4291,9 +4340,12 @@ function renderWarnings(output) {
     .join("<br>");
 }
 
-function textCell(field, value, style = "") {
+function textCell(field, value, style = "", record = null) {
   const readOnly = isProjectReadOnly() ? " readonly" : "";
-  return `<td><input style="${style}" data-field="${field}" value="${escapeHtml(value || "")}"${readOnly} /></td>`;
+  const badge = record ? reviewBadge(field, record) : "";
+  // Keep the semantic table cell intact; the inner wrapper owns the badge/input
+  // flex layout so long evidence never changes the table formatting context.
+  return `<td class="result-field-cell"><div class="result-field-content">${badge}<input style="${style}" data-field="${field}" value="${escapeHtml(value || "")}"${readOnly} /></div></td>`;
 }
 
 function exportLabel(status, record) {
@@ -4407,11 +4459,35 @@ function resolveCommentsConfig() {
 
 function applyRecordFieldFormats(record) {
   const formats = resolveFieldFormats();
+  // Recognition output is a lossless evidence projection: uncertain numeric
+  // text remains visible for review, while normalizeEditedField below keeps
+  // manual edits on the strict export-ready path.
   return {
     ...record,
-    scene: normalizeSceneValue(record.scene, formats.scene) || null,
-    shot: normalizeShotValue(record.shot, formats.shot) || null,
-    take: normalizeTakeValue(record.take, formats.take) || null,
+    scene: normalizeSceneValue(record.scene, formats.scene, { preserveUncertain: true }) || null,
+    shot: normalizeShotValue(record.shot, formats.shot, { preserveUncertain: true }) || null,
+    take: normalizeTakeValue(record.take, formats.take, { preserveUncertain: true }) || null,
+  };
+}
+
+// Historical task restoration is a lossless projection: quality.originalValue,
+// warnings, and manually edited field values are already evidence and must not
+// be normalized again just because the result table is being rendered.
+function restoreRecognitionRecord(record, index) {
+  const legacyManualTarget = !record?.targetId && String(record?.id || "").startsWith("manual-")
+    ? manualRecognitionTargetId(record.id)
+    : record?.targetId;
+  const reviewRequiredFields = reviewFieldsFromQuality(record);
+  return {
+    ...record,
+    targetId: restoreRecognitionTargetId(
+      legacyManualTarget,
+      record?.sourcePage ?? null,
+      index,
+    ),
+    ...(reviewRequiredFields.length || Array.isArray(record?.reviewRequiredFields)
+      ? { reviewRequiredFields }
+      : {}),
   };
 }
 
@@ -4476,8 +4552,10 @@ function resetRecognitionResults() {
   state.records = [];
   state.csvEdits.clear();
   state.detailSearch = "";
+  state.detailReviewFilter = "all";
   state.detailSort = { field: null, direction: 1 };
   if (elements.detailSearch) elements.detailSearch.value = "";
+  if (elements.detailReviewFilter) elements.detailReviewFilter.value = "all";
   renderDetailSortIndicators();
   state.latestResponse = null;
   elements.results.hidden = true;
@@ -4912,23 +4990,10 @@ function restoreTask(task, operation = {}) {
 
   // Restore recognition result
   if (task.result?.records?.length) {
-    // Re-apply field normalization so older saved tasks also display and
-    // export scene suffixes such as 87a as the canonical value 87A. Derive a
-    // target once for legacy rows while preserving identities already saved.
+    // Derive a target once for legacy rows and project quality review fields;
+    // saved values themselves stay byte-for-byte intact on restore.
     const restoredRecords = (task.editedRecords || task.result.records).map(
-      (record, index) => {
-        const legacyManualTarget = !record?.targetId && String(record?.id || "").startsWith("manual-")
-          ? manualRecognitionTargetId(record.id)
-          : record?.targetId;
-        return {
-          ...applyRecordFieldFormats(record),
-          targetId: restoreRecognitionTargetId(
-            legacyManualTarget,
-            record?.sourcePage ?? null,
-            index,
-          ),
-        };
-      },
+      restoreRecognitionRecord,
     );
     state.records = restoredRecords;
     state.latestResponse = {

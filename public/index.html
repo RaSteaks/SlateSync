@@ -391,7 +391,13 @@
           <div class="process-header">
             <div class="metrics" id="metrics"></div>
             <div class="detail-tools">
-              <input id="detail-search" type="search" placeholder="搜索卡号 / 视频码 / 场次 / 镜 / 次" />
+              <!-- Review filtering changes visibility only; record order stays stable. -->
+              <label class="detail-filter-label" for="detail-review-filter">显示</label>
+              <select id="detail-review-filter" aria-label="筛选识别复核状态">
+                <option value="all">全部记录</option>
+                <option value="review">待复核</option>
+              </select>
+              <input id="detail-search" type="search" aria-label="搜索识别记录" placeholder="搜索卡号 / 视频码 / 场次 / 镜 / 次" />
               <button id="add-row" class="secondary-button" type="button">＋ 添加一行</button>
             </div>
           </div>

@@ -5,14 +5,17 @@
 // Resolve-ready table, and encodes the result back to CSV. Also re-exports the
 // shared metadata helpers from metadata-common.js / metadata-sources/.
 import {
+  canonicalRecognitionValue,
   canonicalKeyToMaterialPrefix,
-  chineseNumeralsToArabic,
   cleanValue,
   detectCsvFormat,
   extractCombinedMaterialKey,
+  isCanonicalRecognitionValue,
   normalizeCameraFps,
+  normalizeRecognitionField,
   normalizeShootDay,
   parseCanonicalMaterialKey,
+  reviewFieldsFromQuality,
 } from "./metadata-common.js";
 import { parseSlateMetadataText } from "./metadata-sources/kinefinity.js";
 
@@ -100,8 +103,6 @@ export const DEFAULT_RESOLVE_COMMENTS = Object.freeze({
   goodTake: "_OK",
   holdTake: "_KP",
 });
-
-const FIELD_NUMBER_LIMIT = 10 ** 6;
 
 export function decodeResolveCsv(input) {
   const bytes =
@@ -568,20 +569,38 @@ export function mergeSlateIntoResolveTable(
     for (const target of FIXED_WIDTH_METADATA_FIELDS) {
       const columnIndex = columns[target.field];
       const previous = cleanValue(row[columnIndex]);
-      const next = normalizeMetadataField(
+      const fieldResult = normalizeMetadataFieldResult(
         target.field,
         previous,
         fieldFormats,
       );
+      const next = normalizedMetadataValue(
+        target.field,
+        previous,
+        fieldFormats,
+        { preserveUncertain: true },
+      );
+      if (fieldResult.reviewRequired && isFailedMetadataResult(fieldResult) && next === previous) {
+        const fileName = rowDisplayName(row, columns) || "未知素材";
+        warnings.push(
+          `CSV 第 ${rowNumber + 2} 行 ${fileName} 的 ${target.label}“${previous}”无法安全规范化，已保留原值，请人工复核。`,
+        );
+      }
       if (previous === next) continue;
       row[columnIndex] = next;
-      changes.push({
+      const change = {
         rowIndex: rowNumber,
         field: target.field,
         header: headers[columnIndex],
         previous,
         next,
-      });
+      };
+      const firstWarning = fieldResult.warnings[0];
+      if (firstWarning) {
+        change.warningCode = firstWarning.code;
+        change.reviewRequired = fieldResult.reviewRequired;
+      }
+      changes.push(change);
       updatedRows.add(rowNumber);
       const fileName = rowDisplayName(row, columns) || "未知素材";
       warnings.push(
@@ -763,16 +782,16 @@ export function collectResolveMaterialKeys(table) {
 }
 
 export function canonicalMaterialKey(cardNumber, videoCode) {
-  const card = parseCardNumber(cardNumber);
-  const video = normalizeClipNumber(videoCode);
+  const card = canonicalRecognitionValue("cardNumber", cardNumber);
+  const video = canonicalRecognitionValue("videoCode", videoCode);
   if (!card || !video) return "";
-  return `${card.camera}:${card.reel}:${Number(video.slice(1))}`;
+  return `${card.charAt(0)}:${Number(card.slice(1))}:${Number(video.slice(1))}`;
 }
 
 export function materialPrefix(cardNumber, videoCode) {
-  const card = normalizeToken(cardNumber);
-  const video = normalizeClipNumber(videoCode);
-  if (!parseCardNumber(card) || !video) return null;
+  const card = canonicalRecognitionValue("cardNumber", cardNumber);
+  const video = canonicalRecognitionValue("videoCode", videoCode);
+  if (!card || !video) return null;
   return `${card}${video}`;
 }
 
@@ -784,20 +803,30 @@ export function detectSlateSequenceAnomalies(records = []) {
   const anomalies = [];
   const byReel = new Map();
   records.forEach((record, index) => {
-    const card = parseCardNumber(record?.cardNumber);
-    const clipCode = normalizeClipNumber(record?.videoCode);
-    if (!card || !clipCode) return;
-    const reelKey = `${card.camera}${card.reel}`;
+    const materialKey = canonicalMaterialKey(record?.cardNumber, record?.videoCode);
+    const clipCode = canonicalRecognitionValue("videoCode", record?.videoCode);
+    if (!materialKey || !clipCode) return;
+    const parsed = parseCanonicalMaterialKey(materialKey);
+    if (!parsed) return;
+    const reelKey = `${parsed.camera}${parsed.reel}`;
     const group = byReel.get(reelKey) || [];
     group.push({ record, index, clip: Number(clipCode.slice(1)) });
     byReel.set(reelKey, group);
   });
 
-  const numberValue = (value) =>
-    /^\d+$/.test(String(value || "")) ? Number(value) : null;
-  const needsReview = (record, field) =>
-    Array.isArray(record?.reviewRequiredFields) &&
-    record.reviewRequiredFields.includes(field);
+  const numberValue = (field, value) => {
+    const normalized = canonicalRecognitionValue(field, value, {
+      fieldFormats: { [field]: field === "scene" ? "XXX" : "XX" },
+    });
+    return normalized && /^\d+$/.test(normalized) ? Number(normalized) : null;
+  };
+  const normalizedScene = (value) => canonicalRecognitionValue("scene", value, {
+    fieldFormats: { scene: "XXX" },
+  });
+  const normalizedOrdinal = (field, value) => canonicalRecognitionValue(field, value, {
+    fieldFormats: { [field]: "XX" },
+  }) || String(value || "");
+  const needsReview = (record, field) => reviewFieldsFromQuality(record).includes(field);
   const clipLabel = (clip) => `C${String(clip).padStart(3, "0")}`;
 
   for (const group of byReel.values()) {
@@ -835,38 +864,40 @@ export function detectSlateSequenceAnomalies(records = []) {
       ) {
         continue;
       }
-      const previousTake = numberValue(previous.record.take);
-      const currentTake = numberValue(current.record.take);
-      const previousShot = numberValue(previous.record.shot);
-      const currentShot = numberValue(current.record.shot);
+      const previousTake = numberValue("take", previous.record.take);
+      const currentTake = numberValue("take", current.record.take);
+      const previousShot = numberValue("shot", previous.record.shot);
+      const currentShot = numberValue("shot", current.record.shot);
       if (
         previousTake == null ||
         currentTake == null ||
-        !previous.record.scene ||
-        !current.record.scene ||
-        previous.record.scene !== current.record.scene
+        normalizedScene(previous.record.scene) == null ||
+        normalizedScene(current.record.scene) == null ||
+        normalizedScene(previous.record.scene) !== normalizedScene(current.record.scene)
       ) {
         continue;
       }
 
       if (previousShot != null && currentShot != null && previousShot === currentShot) {
+        const sceneLabel = normalizedScene(current.record.scene) || String(current.record.scene || "");
+        const shotLabel = normalizedOrdinal("shot", current.record.shot);
         if (currentTake === previousTake) {
           anomalies.push({
             key,
             type: "take-sequence",
-            message: `与上一条同为 ${current.record.scene} ${current.record.shot} 镜 ${currentTake} 次，次序可能重复`,
+            message: `与上一条同为 ${sceneLabel} ${shotLabel} 镜 ${currentTake} 次，次序可能重复`,
           });
         } else if (currentTake > previousTake + 1) {
           anomalies.push({
             key,
             type: "take-sequence",
-            message: `${current.record.scene} ${current.record.shot} 镜的次从 ${previousTake} 跳到 ${currentTake}，中间可能漏 ${currentTake - previousTake - 1} 条`,
+            message: `${sceneLabel} ${shotLabel} 镜的次从 ${previousTake} 跳到 ${currentTake}，中间可能漏 ${currentTake - previousTake - 1} 条`,
           });
         } else if (currentTake < previousTake) {
           anomalies.push({
             key,
             type: "take-sequence",
-            message: `${current.record.scene} ${current.record.shot} 镜的次从 ${previousTake} 回落到 ${currentTake}`,
+            message: `${sceneLabel} ${shotLabel} 镜的次从 ${previousTake} 回落到 ${currentTake}`,
           });
         }
         continue;
@@ -878,10 +909,12 @@ export function detectSlateSequenceAnomalies(records = []) {
         currentShot !== previousShot &&
         currentTake > 1
       ) {
+        const sceneLabel = normalizedScene(current.record.scene) || String(current.record.scene || "");
+        const shotLabel = normalizedOrdinal("shot", current.record.shot);
         anomalies.push({
           key,
           type: "take-sequence",
-          message: `进入 ${current.record.scene} ${current.record.shot} 镜的第一条次为 ${currentTake}，通常应从 1 开始`,
+          message: `进入 ${sceneLabel} ${shotLabel} 镜的第一条次为 ${currentTake}，通常应从 1 开始`,
         });
       }
     }
@@ -890,43 +923,24 @@ export function detectSlateSequenceAnomalies(records = []) {
 }
 
 export function normalizeClipNumber(value) {
-  let video = normalizeToken(value);
-  const combined = video.match(/^[A-Z]+\d+C(\d+)$/);
-  if (combined) video = combined[1];
-
-  const match = video.match(/^C?(\d+)$/);
-  if (!match) return "";
-
-  let digits = match[1];
-  while (digits.length > 3 && digits.startsWith("0")) {
-    digits = digits.slice(1);
-  }
-  if (digits.length > 3) return "";
-
-  digits = digits.padStart(3, "0");
-  if (!digits.startsWith("0")) return "";
-  return `C${digits}`;
+  const normalizedToken = normalizeToken(value);
+  const combined = normalizedToken.match(/^[A-Z]+\d+C(\d+)$/);
+  const candidate = combined ? `C${combined[1]}` : value;
+  return canonicalRecognitionValue("videoCode", candidate) || "";
 }
 
-export function normalizeSceneValue(value, format = "XXX") {
-  return normalizeSceneCode(
-    chineseNumeralsToArabic(value),
-    fieldFormatWidth(format, 3),
-  );
+// Strict CSV builders omit the option; recognition display projections can
+// opt into retaining numeric evidence that still needs human confirmation.
+export function normalizeSceneValue(value, format = "XXX", options = {}) {
+  return normalizedMetadataValue("scene", value, { scene: format }, options);
 }
 
-export function normalizeShotValue(value, format = "XX") {
-  return normalizeFixedWidthNumber(
-    chineseNumeralsToArabic(value),
-    fieldFormatWidth(format, 2),
-  );
+export function normalizeShotValue(value, format = "XX", options = {}) {
+  return normalizedMetadataValue("shot", value, { shot: format }, options);
 }
 
-export function normalizeTakeValue(value, format = "XX") {
-  return normalizeFixedWidthNumber(
-    chineseNumeralsToArabic(value),
-    fieldFormatWidth(format, 2),
-  );
+export function normalizeTakeValue(value, format = "XX", options = {}) {
+  return normalizedMetadataValue("take", value, { take: format }, options);
 }
 
 // Builds a Resolve-compatible table straight from recognized records, so a
@@ -946,43 +960,34 @@ export function buildStandaloneResolveTable(records = [], options = {}) {
   return { headers, rows };
 }
 
-function normalizeFixedWidthNumber(value, width) {
-  const match = cleanValue(value).match(/\d+/);
-  if (!match) return "";
-  const number = Number(match[0]);
-  if (
-    !Number.isSafeInteger(number) ||
-    number < 0 ||
-    number >= FIELD_NUMBER_LIMIT
-  ) {
-    return "";
-  }
-  return String(number).padStart(width, "0");
+function isFailedMetadataResult(result) {
+  return result.warnings.some((item) =>
+    ["ambiguous-numeric-token", "invalid-numeric-token", "out-of-range"].includes(item.code),
+  );
 }
 
-// Keep every scene token and use the canonical " / " separator for
-// multi-scene values instead of dropping all but the last number; suffix
-// letters are always uppercase.
-function normalizeSceneCode(value, width) {
-  const normalized = cleanValue(value).toUpperCase();
-  const matches = [...normalized.matchAll(/(\d+)\s*([A-Z]+)?/g)];
-  if (!matches.length) return "";
+function isNumericEvidence(value) {
+  return /[0-9零〇一壹二两贰三叁四肆五伍六陆七柒八捌九玖十百OoОоIiLl|丨Ss]/.test(String(value || ""));
+}
 
-  const parts = matches.map((match) => {
-    const number = Number(match[1]);
-    if (
-      !Number.isSafeInteger(number) ||
-      number < 0 ||
-      number >= FIELD_NUMBER_LIMIT
-    ) {
-      return null;
-    }
-    const suffix = match[2] || "";
-    return suffix ? `${number}${suffix}` : String(number);
+function metadataFieldResult(field, value, formats = {}) {
+  return normalizeRecognitionField(field, value, {
+    fieldFormats: formats,
   });
-  if (parts.some((part) => part == null)) return "";
-  if (parts.length > 1 || /[A-Z]/.test(parts[0])) return parts.join(" / ");
-  return parts[0].padStart(width, "0");
+}
+
+export function normalizeMetadataFieldResult(field, value, formats = {}) {
+  return metadataFieldResult(field, value, formats);
+}
+
+function normalizedMetadataValue(field, value, formats = {}, { preserveUncertain = false } = {}) {
+  const result = metadataFieldResult(field, value, formats);
+  if (!isFailedMetadataResult(result) && isCanonicalRecognitionValue(field, result.normalizedValue)) {
+    return result.normalizedValue;
+  }
+  return preserveUncertain && result.originalValue != null && isNumericEvidence(result.originalValue)
+    ? result.originalValue
+    : "";
 }
 
 function resolveFieldFormats(value = {}) {
@@ -1011,9 +1016,9 @@ function fieldFormatWidth(value, fallback) {
 }
 
 function normalizeMetadataField(field, value, formats) {
-  if (field === "scene") return normalizeSceneValue(value, formats.scene);
-  if (field === "shot") return normalizeShotValue(value, formats.shot);
-  if (field === "take") return normalizeTakeValue(value, formats.take);
+  if (field === "scene" || field === "shot" || field === "take") {
+    return normalizedMetadataValue(field, value, formats, { preserveUncertain: true });
+  }
   return cleanValue(value);
 }
 
@@ -1170,9 +1175,9 @@ function extractLooseClipOrdinal(value) {
 }
 
 function parseCardNumber(value) {
-  const match = normalizeToken(value).match(/^([A-Z]+)0*(\d+)$/);
-  if (!match) return null;
-  return { camera: match[1], reel: Number(match[2]) };
+  const normalized = canonicalRecognitionValue("cardNumber", value);
+  if (!normalized) return null;
+  return { camera: normalized.charAt(0), reel: Number(normalized.slice(1)) };
 }
 
 function rowDisplayName(row, columns) {

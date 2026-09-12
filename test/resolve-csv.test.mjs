@@ -14,6 +14,7 @@ import {
   normalizeCameraFps,
   normalizeShootDay,
   normalizeSceneValue,
+  normalizeMetadataFieldResult,
   normalizeShotValue,
   normalizeTakeValue,
   collectResolveMaterialKeys,
@@ -25,6 +26,7 @@ import {
   materialKey,
   syntheticProductionDayGroundTruth,
 } from "../test-support/synthetic-production-day.mjs";
+import { normalizeRecognitionField } from "../public/metadata-common.js";
 
 const ENGLISH_HEADERS = [
   "File Name",
@@ -88,6 +90,9 @@ test("scene suffixes stay uppercase while numeric fields keep zero padding up to
   assert.equal(normalizeSceneValue("57a/58"), "57A / 58");
   assert.equal(normalizeSceneValue("58 / 59 场"), "58 / 59");
   assert.equal(normalizeSceneValue("1"), "001");
+  assert.equal(normalizeSceneValue("12O"), "");
+  assert.equal(normalizeSceneValue("12O", "XXX", { preserveUncertain: true }), "12O");
+  assert.equal(normalizeSceneValue("1百", "XXX", { preserveUncertain: true }), "1百");
   assert.equal(normalizeShotValue("镜 2"), "02");
   assert.equal(normalizeTakeValue("9 次"), "09");
   assert.equal(normalizeSceneValue("1000"), "1000");
@@ -109,6 +114,36 @@ test("full-width digits and Chinese numerals normalize into padded numbers", () 
   assert.equal(normalizeSceneValue("二十三"), "023");
   assert.equal(normalizeSceneValue("十一A"), "11A");
   assert.equal(normalizeSceneValue("五十七、五十八"), "57 / 58");
+});
+
+test("CSV adapters share Chinese conversion and preserve uncertain source cells", () => {
+  const sharedScene = normalizeRecognitionField("scene", "二〇三", {
+    fieldFormats: { scene: "XXX" },
+  });
+  const csvScene = normalizeMetadataFieldResult("scene", "二〇三", {
+    scene: "XXX",
+  });
+  assert.deepEqual(csvScene, sharedScene);
+
+  const standalone = buildStandaloneResolveTable([
+    completeRecord({ scene: "二〇三", shot: "十一", take: "一百零五" }),
+  ]);
+  assert.deepEqual(standalone.rows, [["203", "11", "105", ""]]);
+
+  const source = sourceTable([
+    ["A001C001.mov", "/A", "A001C001", "十一", "12O", "一百零五", "", ""],
+  ]);
+  const output = mergeSlateIntoResolveTable(source, []);
+  const columns = resolveColumnIndexes(output.table.headers);
+  const row = output.table.rows[0];
+  assert.equal(row[columns.scene], "12O");
+  assert.equal(row[columns.shot], "11");
+  assert.equal(row[columns.take], "105");
+  assert.ok(output.warnings.some((warning) => warning.includes("12O") && warning.includes("保留原值")));
+  assert.ok(output.changes.some((change) => change.field === "take" && change.warningCode === "chinese-numeral-converted"));
+
+  const roundTrip = decodeResolveCsv(encodeResolveCsv(output.table));
+  assert.equal(roundTrip.rows[0][columns.scene], "12O");
 });
 
 test("clip gaps map to the material key after the gap without cross-camera noise", () => {

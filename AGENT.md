@@ -1265,3 +1265,29 @@ Worker 边界、验收证据和最终治理交接。
   已修正为与 ip-02 契约一致的 7 个；复跑
   `IP0102_PRODUCTION_ELECTRON_SMOKE_OK development` 通过，脚本自动
   恢复 Node ABI，Node 套件复验 4/4。
+
+## 2026-09-11 Recognition CSV Phase 02 implementation
+
+- 在 `public/metadata-common.js` 收敛 Node、CSV、modern 和 legacy 共用的纯归一化规则：
+  支持逐字中文数字、十/百单位、全角数字、字段位宽、场次后缀和有限混淆字符映射；
+  越界、非法或有歧义的值保留原值，并写入结构化 warning 与字段级复核标记。
+  `chinese-numeral-converted` 已同步加入 shared contract。
+- `lib/schema.mjs` 保留旧导出函数作为兼容适配；`lib/ai-client.mjs` 让页面响应只做
+  shape/null/status/confidence 防御性校验，在页面合并、冲突处理、sequence repair 和
+  `targetId` 生成之后执行唯一的最终归一化闸门。高精度冲突比较也只使用 shared canonical
+  候选，不改写原始审计响应。
+- `public/resolve-csv.js` 的 standalone、merge 和 encode 路径复用同一字段 helper；
+  不确定源单元格不被猜测替换，变化通过 `changes` 的 warning/review 信息追踪，原有
+  编码、BOM、分隔符、换行和非目标列契约保持不变。
+- modern 与 legacy 结果表都增加字段级“需复核”徽章、可访问的复核筛选和记录/字段计数；
+  筛选不改变记录顺序，编辑、confidence、IME、删除和任务自动保存行为保持原语义。
+  legacy/modern 恢复统一投影 `quality.fields → reviewRequiredFields`，已有手工值、旧
+  review 字符串、`targetId`、OCR 证据和诊断扩展字段不被恢复过程二次归一化或丢失。
+- 新增 shared normalization、final-gate、CSV parity、质量/复核持久化 round-trip 及
+  modern/legacy UI contract 测试；未新增 IPC channel、SQLite migration、provider/OCR
+  策略或 Phase 03–06 功能。
+- 验证事实：`npm run check`、`npm run typecheck`、`npm run test:node`（436 项）、
+  `npm run test:modern`（31 个文件 / 195 项）、`npm run validate:modern` 和
+  `git diff --check` 均通过；premium strict UI audit 为 0 findings。Modern 构建仅保留
+  既有大 chunk 提示；未执行 Electron GUI、真实 provider/OCR 或默认 Project Library
+  读写流程。

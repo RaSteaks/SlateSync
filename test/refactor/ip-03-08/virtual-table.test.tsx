@@ -255,6 +255,91 @@ describe("virtual Resolve table", () => {
     expect(table?.querySelector<HTMLInputElement>('input[aria-label^="场次"]')?.value).toBe("12");
   });
 
+  it("shows review provenance, filters reviewed records, and preserves it during edits", () => {
+    const sceneWarning = {
+      code: "chinese-numeral-converted",
+      field: "scene",
+      message: "已将中文数字归一化为阿拉伯数字，请人工确认",
+      originalValue: "二〇三",
+      normalizedValue: "203",
+    };
+    const shotWarning = {
+      code: "confusable-character",
+      field: "shot",
+      message: "已按数字上下文转换易混淆字符，请人工确认",
+      originalValue: "1O",
+      normalizedValue: "10",
+    };
+    const records = [
+      { id: "review-scene", targetId: "target-scene", sourcePage: 1, cardNumber: "A001", videoCode: "C001", scene: "203", shot: "01", take: "01", takeStatus: "过", description: "近景", comments: null, shotSize: "CU", cameraPosition: "A", confidence: "high", reviewRequiredFields: ["scene"], quality: { fields: { scene: { field: "scene", originalValue: "二〇三", normalizedValue: "203", changed: true, confidence: "high", reviewRequired: true, warnings: [sceneWarning] } } } },
+      { id: "review-shot", targetId: "target-shot", sourcePage: 2, cardNumber: "A001", videoCode: "C002", scene: "204", shot: "10", take: "02", takeStatus: "保", description: "中景", comments: null, shotSize: "MS", cameraPosition: "B", confidence: "medium", quality: { fields: { shot: { field: "shot", originalValue: "1O", normalizedValue: "10", changed: true, confidence: "medium", reviewRequired: true, warnings: [shotWarning] } } } },
+      { id: "low-only", targetId: "target-low", sourcePage: 3, cardNumber: "A001", videoCode: "C003", scene: "205", shot: "01", take: "01", takeStatus: "废条", description: "远景", comments: null, shotSize: "LS", cameraPosition: "A", confidence: "low" },
+    ];
+    const result = {
+      pageCount: 1,
+      result: { sheetTitle: "复核场记单", warnings: [], records },
+    } as unknown as RecognitionData;
+    useRecognitionStore.getState().start(2, "project-1", 1);
+    useRecognitionStore.getState().complete(2, result);
+
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    mounted.push({ host, root });
+    act(() => root.render(<RecognitionResultPanel />));
+
+    expect(host.textContent).toContain("2 条记录待复核");
+    expect(host.textContent).toContain("2 个字段待复核");
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(3);
+    const sceneBadge = host.querySelector<HTMLSpanElement>('[aria-label*="原始值：二〇三"]');
+    expect(sceneBadge?.getAttribute("title")).toContain("已将中文数字归一化");
+    expect(sceneBadge?.getAttribute("aria-label")).toContain("需复核：场次");
+    expect(host.querySelector('tr[data-low="true"] [aria-label*="需复核"]')).toBeNull();
+
+    const filter = host.querySelector<HTMLSelectElement>('select[aria-label="筛选识别复核状态"]');
+    expect(filter?.value).toBe("all");
+    act(() => {
+      if (filter) {
+        filter.value = "review";
+        filter.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(host.querySelector('tr[data-low="true"]')).toBeNull();
+
+    const addRecordButton = [...host.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("添加记录"));
+    act(() => addRecordButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(host.querySelector<HTMLSelectElement>('select[aria-label="筛选识别复核状态"]')?.value).toBe("all");
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(4);
+
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="场次，第 1 页"]');
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    act(() => {
+      input?.focus();
+      valueSetter?.call(input, "204");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+      input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      window.dispatchEvent(new Event("beforeunload"));
+    });
+    const edited = useRecognitionStore.getState().records.find((record) => record.id === "review-scene");
+    expect(edited?.scene).toBe("204");
+    expect(edited?.reviewRequiredFields).toEqual(["scene"]);
+    expect(edited?.quality?.fields.scene?.originalValue).toBe("二〇三");
+    expect(edited?.quality?.fields.scene?.warnings[0]?.code).toBe("chinese-numeral-converted");
+
+    const replacementResult = {
+      pageCount: 1,
+      result: { sheetTitle: "新场记单", warnings: [], records: [records[2]] },
+    } as unknown as RecognitionData;
+    act(() => {
+      useRecognitionStore.getState().start(3, "project-1", 1);
+      useRecognitionStore.getState().complete(3, replacementResult);
+    });
+    expect(host.querySelector<HTMLSelectElement>('select[aria-label="筛选识别复核状态"]')?.value).toBe("all");
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
+  });
+
   it("flushes a queued recognition edit before the window closes", () => {
     const result = {
       pageCount: 1,

@@ -37,6 +37,8 @@ import styles from "../../app/app.module.css";
 import { REQUEST_COMPRESSION_PROFILES, requestBodyBytes, requestBodyFits, selectRecognitionImageGroups } from "../../../../public/recognition-request.js";
 // @ts-expect-error The stable identity helper is shared with Main without a TS build boundary.
 import { manualRecognitionTargetId, restoreRecognitionTargetId } from "../../../../public/recognition-target.js";
+// @ts-expect-error The shared normalization contract is intentionally consumed by both renderers.
+import { reviewFieldsFromQuality } from "../../../../public/metadata-common.js";
 
 const EMPTY_OCR: OcrSummary = {
   enabled: false,
@@ -84,29 +86,26 @@ function normalizeRecord(record: PersistedRecognitionRecord, index: number): Rec
     ? manualRecognitionTargetId(record.id)
     : record.targetId;
   const targetId = restoreRecognitionTargetId(legacyManualTarget, record.sourcePage ?? null, index);
-  const qualityReviewFields = Object.values(record.quality?.fields || {})
-    .filter((field) => field?.reviewRequired && field.field)
-    .map((field) => field.field);
-  const reviewRequiredFields = [...new Set([
-    ...(record.reviewRequiredFields || []),
-    ...qualityReviewFields,
-  ])].sort();
+  const reviewRequiredFields = reviewFieldsFromQuality(record);
   return {
+    // Keep forward-compatible OCR evidence and diagnostics on restored rows;
+    // this adapter only fills renderer defaults and projects review metadata.
+    ...record,
     id: record.id || `restored-${index}`,
     // Old snapshots had no targetId; derive it once from persisted position and
     // never replace an identity already assigned by a recognition run.
     targetId,
     sourcePage: record.sourcePage ?? null,
-    cardNumber: record.cardNumber || null,
-    videoCode: record.videoCode || null,
-    scene: record.scene || null,
-    shot: record.shot || null,
-    take: record.take || null,
-    takeStatus: record.takeStatus || null,
-    description: record.description || null,
-    comments: record.comments || null,
-    shotSize: record.shotSize || null,
-    cameraPosition: record.cameraPosition || null,
+    cardNumber: record.cardNumber ?? null,
+    videoCode: record.videoCode ?? null,
+    scene: record.scene ?? null,
+    shot: record.shot ?? null,
+    take: record.take ?? null,
+    takeStatus: record.takeStatus ?? null,
+    description: record.description ?? null,
+    comments: record.comments ?? null,
+    shotSize: record.shotSize ?? null,
+    cameraPosition: record.cameraPosition ?? null,
     confidence: record.confidence || "medium",
     ...(reviewRequiredFields.length ? { reviewRequiredFields } : {}),
     ...(record.quality ? { quality: record.quality } : {}),
