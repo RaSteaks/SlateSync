@@ -142,6 +142,10 @@ buttons or containers.
 `SlatePanelHeading`, `SlateSearchField`, `SlateEmptyState` and `SlateStatusBar`
 own repeated headings, local clearable search, empty guidance and feedback.
 Status bars preserve feature-owned operation lifetimes and never add toast timers.
+`SlateBadge`, `TakeMark`, `LeaderProgress`, `LightTable`, `CredentialChip` and
+`WarnRow` extend the shared kit for the 2026-09-14 workspace direction (dated
+section below); every color comes from `SlateSyncTheme`, and each stays quiet
+outside its owning business state.
 Recognition progress remains visible across routes in the app shell.
 Buttons combine safe/danger intent with native emphasis. Forms keep visible
 labels and inline recovery. Project rows/cards expose one primary open action and
@@ -194,3 +198,22 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
 
 侧栏左上角品牌图标采用运行中应用的 applicationIconImage，32×32 pt 原色等比显示；
 功能导航继续使用 SF Symbols。
+
+### 单一主题与工作台组件扩展（2026-09-14）
+
+- Slate Workbench 是唯一视觉语言；深色/浅色只是同一语义 Token 的外观 mode，
+  不新增主题色，功能视图继续禁止内嵌 RGB 字面量。
+- 圆角阶梯的运行时常量由 `SlateSyncTheme` 提供：`smallRadius` 6 / `controlRadius` 8 /
+  `panelRadius` 12 / `largeRadius` 16 pt，自定义容器一律使用 `.continuous` 圆角；
+  功能视图不得写 7/9/10 pt 局部圆角，药丸形仍只用于状态徽章。
+- 新增共享组件（与现有组件并列于 `SlateSyncUI/Components/`）：
+  `SlateBadge`（项目身份斜纹左缘，仅用于项目层级）、
+  `TakeMark`（待定空心点 / 好条保条铅笔圈 / 作废油笔划线，确认描边 240 ms，遵循减弱动态）、
+  `LeaderProgress`（识别进行中的真实页码进度，减弱动态时退化为原生进度条，完成后停止不空转）、
+  `LightTable`（灯箱证据容器，页码/缩放/导入控件放在相邻控制栏，纸面内不放表单按钮）、
+  `CredentialChip`（凭据四态：已配置/缺失/需要授权/读取失败）、
+  `WarnRow`（告警行 dim 底 + 3 pt 左缘 + 行尾动作）。
+- 片场痕迹按业务状态单点出现：输入页突出灯箱证据，结果页使用铅笔圈/油笔划线，
+  识别进行中才显示 LeaderProgress，项目身份只保留低调斜纹边缘。
+- 识别完成不自动抢占当前工作页：状态栏给出“识别完成 · n 条结果”与“查看识别结果”动作，
+  结果 tab 点亮圆点（含 VoiceOver 文案），用户访问后熄灭。

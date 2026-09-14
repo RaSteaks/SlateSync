@@ -13,7 +13,12 @@ public enum SlateSyncTheme {
     public static let success = adaptive(light: 0x18794E, dark: 0x79D5A5)
     public static let warning = adaptive(light: 0x865B0A, dark: 0xEBC572)
     public static let danger = adaptive(light: 0xB33A32, dark: 0xFF9A91)
+    // DESIGN.md `rounded` ladder. Custom containers use `.continuous` corners;
+    // feature views must not introduce local 7/9/10 pt radii (single-theme rule).
+    public static let smallRadius: CGFloat = 6
+    public static let controlRadius: CGFloat = 8
     public static let panelRadius: CGFloat = 12
+    public static let largeRadius: CGFloat = 16
 
     private static func adaptive(light: UInt32, dark: UInt32) -> Color {
         Color(

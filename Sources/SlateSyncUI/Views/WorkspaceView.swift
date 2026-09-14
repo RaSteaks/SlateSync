@@ -2,12 +2,24 @@ import SlateSyncDomain
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// A route hint for Help shortcuts. The workspace keeps ownership of its
-/// segmented selection; the hint only chooses the initial section after a
-/// cross-route navigation and never changes task data.
+/// A route hint for Help shortcuts and status-bar actions. The workspace
+/// keeps ownership of its segmented selection; the hint only chooses the
+/// initial/target section and never changes task data.
 public enum WorkspaceEntryPoint: String, Hashable, Sendable {
     case input
+    case result
     case resolveCSV
+}
+
+/// The stable pages shared by the workspace picker and its window-owned
+/// unread-content ledger. Keeping this identity outside the view lets a dot
+/// survive route changes without mixing one task's results into another's.
+public enum WorkspaceSection: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case input = "输入"
+    case result = "识别结果"
+    case csv = "Resolve CSV"
+
+    public var id: String { rawValue }
 }
 
 public struct WorkspaceView: View {
@@ -25,8 +37,14 @@ public struct WorkspaceView: View {
     @State private var showsAdvanced = false
     @State private var layoutError: String?
     @State private var changingLayout = false
+    // A route hint can arrive while another editor transition owns the
+    // barrier; retain the latest target until that transition succeeds.
+    @State private var pendingEntryPoint: WorkspaceEntryPoint?
     @State private var importsFile = false
     @State private var importKind = ImportKind.media
+    // The parent owns this ledger so completion events are not lost when the
+    // workspace route is replaced by Projects, Logs, or Help.
+    @Binding private var unseenSections: Set<WorkspaceSection>
 
     private enum ImportKind {
         case media, metadata, slateCSV, resolveCSV
@@ -45,14 +63,8 @@ public struct WorkspaceView: View {
     @State private var accuracy = ProjectSettings.AccuracyMode.high
     private let settingsRevision: Int
     private let entryPoint: WorkspaceEntryPoint
+    private let onSectionChanged: (WorkspaceSection) -> Void
     private let onEntryPointConsumed: () -> Void
-
-    private enum WorkspaceSection: String, CaseIterable, Identifiable {
-        case input = "输入"
-        case result = "识别结果"
-        case csv = "Resolve CSV"
-        var id: String { rawValue }
-    }
 
     public init(
         workspace: WorkspaceModel,
@@ -62,6 +74,8 @@ public struct WorkspaceView: View {
         media: MediaInputModel,
         settingsRevision: Int = 0,
         entryPoint: WorkspaceEntryPoint = .input,
+        unseenSections: Binding<Set<WorkspaceSection>> = .constant([]),
+        onSectionChanged: @escaping (WorkspaceSection) -> Void = { _ in },
         onEntryPointConsumed: @escaping () -> Void = {}
     ) {
         self.workspace = workspace
@@ -71,8 +85,16 @@ public struct WorkspaceView: View {
         self.media = media
         self.settingsRevision = settingsRevision
         self.entryPoint = entryPoint
+        self._unseenSections = unseenSections
+        self.onSectionChanged = onSectionChanged
         self.onEntryPointConsumed = onEntryPointConsumed
-        _section = State(initialValue: entryPoint == .resolveCSV ? .csv : .input)
+        _section = State(initialValue: {
+            switch entryPoint {
+            case .input: .input
+            case .result: .result
+            case .resolveCSV: .csv
+            }
+        }())
     }
 
     public var body: some View {
@@ -96,6 +118,9 @@ public struct WorkspaceView: View {
             autosaveBanner
             if let layoutError {
                 SlateStatusBar(message: layoutError, tone: .warning) {
+                    if entryPoint != .input {
+                        Button("重试") { routeToEntryPoint(entryPoint) }
+                    }
                     Button("关闭") { self.layoutError = nil }
                 }
             }
@@ -174,12 +199,31 @@ public struct WorkspaceView: View {
             adoptTaskRecognitionOptions()
         }
         .onAppear {
-            // Consume the Help shortcut once the workspace is mounted so a
-            // later sidebar visit does not unexpectedly reopen the CSV tab.
-            if entryPoint == .resolveCSV {
-                section = .csv
+            // Consume the entry hint once the workspace is mounted so a later
+            // sidebar visit does not unexpectedly reopen a specific tab.
+            let initialSection: WorkspaceSection = switch entryPoint {
+            case .input: .input
+            case .result: .result
+            case .resolveCSV: .csv
+            }
+            visit(initialSection)
+            if entryPoint != .input {
                 onEntryPointConsumed()
             }
+        }
+        .onChange(of: entryPoint) { _, destination in
+            // The status-bar action can retarget the section while this view
+            // is already mounted. Route it through the guarded transition so
+            // a live field editor keeps its draft.
+            guard destination != .input else {
+                pendingEntryPoint = nil
+                return
+            }
+            routeToEntryPoint(destination)
+        }
+        .onChange(of: section) { _, newValue in
+            unseenSections.remove(newValue)
+            onSectionChanged(newValue)
         }
         .onChange(of: settingsRevision) {
             // Settings is a separate scene and does not remount this view.
@@ -215,6 +259,30 @@ public struct WorkspaceView: View {
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .frame(maxWidth: 360)
+                // "New content" dots ride over the native segmented control
+                // without replacing it: selection, keyboard and VoiceOver
+                // behavior stay platform-owned; dots never steal focus and
+                // clear on the next visit to their section.
+                .overlay(alignment: .top) {
+                    GeometryReader { proxy in
+                        let segmentWidth = proxy.size.width / CGFloat(WorkspaceSection.allCases.count)
+                        ForEach(Array(WorkspaceSection.allCases.enumerated()), id: \.element) { index, tab in
+                            if unseenSections.contains(tab) {
+                                Circle()
+                                    .fill(SlateSyncTheme.accent)
+                                    .frame(width: 6, height: 6)
+                                    .offset(x: segmentWidth * (CGFloat(index) + 0.82), y: 3)
+                            }
+                        }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+                // Keep the selected section in the value and announce unread
+                // sections as a hint; replacing the value with only the dot
+                // message hides the Picker's current selection from VoiceOver.
+                .accessibilityValue(section.rawValue)
+                .accessibilityHint(pendingSectionsAccessibilityHint)
                 Spacer(minLength: 0)
                 if section == .input {
                     Button("识别配置", systemImage: "slider.horizontal.3") {
@@ -304,6 +372,13 @@ public struct WorkspaceView: View {
                     .opacity(visible ? 1 : 0)
                     .allowsHitTesting(visible)
                     .accessibilityHidden(!visible)
+                // The leader dial is the single "recognition in progress"
+                // trace and reports the real page stream from the workflow.
+                if recognition.operation.isRunning {
+                    recognitionProgressCard
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(density.panelPadding)
+                }
             }
         }
         .onGeometryChange(for: CGFloat.self) {
@@ -312,6 +387,42 @@ public struct WorkspaceView: View {
             availableWidth = $0
         }
         .disabled(recognition.operation.isRunning)
+    }
+
+    /// Academy-leader card for the running recognition. The dial advances
+    /// only with real page completions from the workflow stream; a total of
+    /// zero (or unknown) falls back to the named phase instead of a fake
+    /// fraction. The card sits bottom-leading so evidence stays visible.
+    private var recognitionProgressCard: some View {
+        HStack(alignment: .center, spacing: 14) {
+            if let progress = recognition.progress, progress.total > 0 {
+                LeaderProgress(completedPages: progress.completed, totalPages: progress.total)
+            } else {
+                LeaderProgress(phaseText: progressPhaseFallback)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(recognition.progress?.message ?? "正在识别场记单…")
+                    .font(.callout).lineLimit(2)
+                Text("输入页在识别期间暂停编辑")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: 360, alignment: .leading)
+        .background(
+            SlateSyncTheme.evidenceSurface,
+            in: RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius, style: .continuous)
+                .strokeBorder(SlateSyncTheme.separator, lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var progressPhaseFallback: String {
+        let phase = recognition.progress?.phase ?? ""
+        return phase.isEmpty ? "识别中" : phase
     }
 
     private var configurationPanel: some View {
@@ -411,7 +522,8 @@ public struct WorkspaceView: View {
                     if !recognition.slateCSVRecords.isEmpty {
                         Button("从场记 CSV 生成结果") {
                             recognition.generateLocalRecords(
-                                flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords)
+                                flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
+                                taskID: workspace.selectedTaskID)
                         }
                     }
                 }.fixedSize()
@@ -440,11 +552,52 @@ public struct WorkspaceView: View {
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                     }
+                    // Scanner warnings share the reconciliation alert language:
+                    // dim severity background with a leading edge, capped inline
+                    // so the disclosure never grows a second scroller.
+                    ForEach(result.warnings.prefix(6), id: \.self) { warning in
+                        WarnRow(severity: .warning) {
+                            Text(warning).font(.caption).lineLimit(2)
+                        }
+                    }
+                    if result.warnings.count > 6 {
+                        Text("其余 \(result.warnings.count - 6) 条警告已记录在日志中。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .padding(density.panelPadding)
         .disabled(recognition.operation.isRunning)
+    }
+
+    /// Single-point confirmation traces for the result page. The canonical
+    /// NSTableView keeps its frozen cell identity, so the pencil circle and
+    /// grease strike summarize row statuses beside the table instead of
+    /// rewriting its cells (deviation recorded in AGENT.md 2026-09-14).
+    @ViewBuilder private var takeMarkSummary: some View {
+        let records = recognition.resolveRecords
+        if !records.isEmpty {
+            let circled = records.filter { $0.takeStatus == .passed || $0.takeStatus == .hold }.count
+            let struck = records.filter { $0.takeStatus == .rejected }.count
+            HStack(spacing: 16) {
+                takeMarkCount(mark: TakeMark(phase: .circled), label: "过 / 保", count: circled)
+                takeMarkCount(mark: TakeMark(phase: .struck), label: "废条", count: struck)
+                takeMarkCount(mark: TakeMark(phase: .pending), label: "待定", count: records.count - circled - struck)
+                Spacer(minLength: 0)
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .padding(.horizontal, density.panelPadding)
+            .padding(.vertical, 8)
+            Divider()
+        }
+    }
+
+    private func takeMarkCount(mark: TakeMark, label: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            mark
+            Text("\(label) \(count)").monospacedDigit()
+        }
     }
 
     private var resultView: some View {
@@ -454,10 +607,13 @@ public struct WorkspaceView: View {
             ZStack(alignment: .leading) {
                 // Never switch the result table between separate layout branches:
                 // padding changes preserve its field editor, selection and scroll.
-                RecognitionResultView(
-                    model: recognition, workspace: workspace,
-                    onInput: { changeLayout { section = .input } }
-                )
+                VStack(spacing: 0) {
+                    takeMarkSummary
+                    RecognitionResultView(
+                        model: recognition, workspace: workspace,
+                        onInput: { changeLayout { visit(.input) } }
+                    )
+                }
                 .padding(.leading, wide && showsOriginal ? previewWidth : 0)
                 if let document = media.document {
                     VStack(spacing: 0) {
@@ -496,16 +652,40 @@ public struct WorkspaceView: View {
         Binding(get: { showsOriginal }, set: { value in changeLayout { showsOriginal = value } })
     }
 
+    private func routeToEntryPoint(_ destination: WorkspaceEntryPoint) {
+        guard destination != .input else { return }
+        if changingLayout {
+            pendingEntryPoint = destination
+            return
+        }
+        let target = destination == .resolveCSV ? WorkspaceSection.csv : .result
+        pendingEntryPoint = nil
+        changeLayout {
+            visit(target)
+            // The callback is deliberately inside the guarded update: a
+            // failed transition leaves the parent hint available for Retry.
+            onEntryPointConsumed()
+        }
+    }
+
     private func changeLayout(_ update: @escaping @MainActor () -> Void) {
         guard !changingLayout else { return }
         changingLayout = true
+        var succeeded = false
         Task {
-            defer { changingLayout = false }
+            defer {
+                changingLayout = false
+                if succeeded, let pendingEntryPoint {
+                    self.pendingEntryPoint = nil
+                    routeToEntryPoint(pendingEntryPoint)
+                }
+            }
             do {
                 try editorBoundary.prepare()
                 try await workspace.flush()
                 layoutError = nil
                 update()
+                succeeded = true
             } catch { layoutError = "请完成当前编辑并重试：\(error.localizedDescription)" }
         }
     }
@@ -514,8 +694,19 @@ public struct WorkspaceView: View {
         Binding(
             get: { section },
             set: { destination in
-                changeLayout { section = destination }
+                changeLayout { visit(destination) }
             })
+    }
+
+    private var pendingSectionsAccessibilityHint: String {
+        let pending = WorkspaceSection.allCases.filter { unseenSections.contains($0) }
+        return pending.isEmpty ? "" : pending.map { "\($0.rawValue)有新内容" }.joined(separator: "、")
+    }
+
+    private func visit(_ destination: WorkspaceSection) {
+        section = destination
+        unseenSections.remove(destination)
+        onSectionChanged(destination)
     }
 
     private var canRecognize: Bool {

@@ -212,7 +212,7 @@ private struct ProjectRow: View {
                 .font(.title3)
                 .foregroundStyle(archived ? .secondary : SlateSyncTheme.accent)
                 .frame(width: 40, height: 40)
-                .background(SlateSyncTheme.canvas, in: RoundedRectangle(cornerRadius: 8))
+                .background(SlateSyncTheme.canvas, in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(project.name).font(.headline).lineLimit(1).help(project.name)
@@ -231,9 +231,12 @@ private struct ProjectRow: View {
         // The identity stripe is reserved for projects, never repeated on tasks.
         .padding(.leading, 10)
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(archived ? Color.secondary.opacity(0.3) : SlateSyncTheme.accent.opacity(0.65))
-                .frame(width: 3).padding(.vertical, 4)
+            // Clapperboard stripe edge (DESIGN.md signature, black/white is
+            // content-sanctioned); archived projects dim it instead of
+            // recoloring it.
+            SlateBadge()
+                .frame(height: 24)
+                .opacity(archived ? 0.35 : 1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(project.name)，\(archived ? "已归档" : "活跃")，\(project.taskCount) 个任务")

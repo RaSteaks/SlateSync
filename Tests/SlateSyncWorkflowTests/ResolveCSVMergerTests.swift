@@ -25,6 +25,9 @@ final class ResolveCSVMergerTests: XCTestCase {
         XCTAssertEqual(sha256(merged), "c601ab2c779b2b4d474966fef727bb9225cb9c011e61b4f4de282fe4e1a89ab3")
         XCTAssertEqual(result.matchedRecordCount, 2)
         XCTAssertEqual(result.unrecognizedMaterials, ["A001C999"])
+        // Export review must include records that the merger skipped, not just
+        // unmatched CSV rows and sidecar gaps.
+        XCTAssertEqual(result.unresolvedStatuses.map(\.status), ["missing-key"])
 
         let standalone = try await merger.standaloneTable(records: [
             .init(cardNumber: "A001", videoCode: "C001", scene: "37a", shot: "2", take: "11", comments: "HOLD"),
@@ -51,6 +54,7 @@ final class ResolveCSVMergerTests: XCTestCase {
             .init(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "2", take: "3", takeStatus: .passed),
         ])
         XCTAssertEqual(equal.statuses.map { $0?.status }, ["matched", "duplicate"])
+        XCTAssertEqual(equal.unresolvedStatuses.map(\.status), ["duplicate"])
         let conflict = try await merger.merge(source: table, records: [
             .init(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "2", take: "3"),
             .init(cardNumber: "A001", videoCode: "C001", scene: "9", shot: "2", take: "3"),

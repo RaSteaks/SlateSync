@@ -1,8 +1,9 @@
 # SlateSync 新版前端 UI · 设计系统
 
-> 状态:设计提案(2026-09-14 优化版,未实施)。当前运行时的主题仍由 `SlateSyncTheme` 与 `DESIGN.md` 定义;
-> 本文档描述**下一版**界面的完整视觉与组件规范。可交互预览见 [prototype.html](prototype.html),
-> 界面之间的流转规则见 [interaction-map.md](interaction-map.md)。
+> 状态:**已实施(2026-09-14 第一轮)**。六个共享组件落于 `SlateSyncUI/Components/WorkbenchComponents.swift`,
+> 圆角 Token 增补进 `SlateSyncTheme`,工作台/外壳/设置整合见 `AGENT.md` 顶部 2026-09-14 实施记录。
+> 与原型的有意偏差(行→页映射、表内 TakeMark、徽章过滤)同样记录在 AGENT.md。本文档保留为该视觉语言的规范来源;
+> 可交互预览见 [prototype.html](prototype.html),界面之间的流转规则见 [interaction-map.md](interaction-map.md)。
 
 ---
 

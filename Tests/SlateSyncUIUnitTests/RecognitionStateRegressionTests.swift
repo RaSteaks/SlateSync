@@ -10,10 +10,10 @@ import XCTest
 /// draining the progress task must not overwrite .succeeded with .canceled.
 @MainActor
 final class RecognitionStateRegressionTests: XCTestCase {
-    private func startRecognition(_ model: RecognitionModel) {
+    private func startRecognition(_ model: RecognitionModel, taskID: String? = nil) {
         model.recognize(
             .init(projectID: "p1", input: .bytes(Data([0x01]), filename: "a.jpg"), filename: "a.jpg",
-                providerID: "custom-test", modelID: "vision-test"),
+                taskID: taskID, providerID: "custom-test", modelID: "vision-test"),
             flush: {})
     }
 
@@ -40,6 +40,23 @@ final class RecognitionStateRegressionTests: XCTestCase {
         // Cancelling a finished operation is a no-op and cannot repaint it.
         model.cancel()
         guard case .succeeded = model.operation else { return XCTFail("已完成操作不得被取消改写：\(model.operation)") }
+    }
+
+    func testLoadingAnotherTaskClearsResultRouteIdentity() async throws {
+        let service = RecognitionStateFake()
+        let model = RecognitionModel(service: service, settings: RecognitionSettingsFake())
+        await model.loadOptions()
+        startRecognition(model, taskID: "task-a")
+        for _ in 0..<16 { await Task.yield() }
+        await service.openRecognize()
+        await waitForTerminalState(model)
+
+        XCTAssertEqual(model.resultTaskID, "task-a")
+        // A window-level result action must not survive publication of a new
+        // task, even when the previous operation had already succeeded.
+        model.load(task: TaskData())
+        XCTAssertNil(model.resultTaskID)
+        XCTAssertEqual(model.operation, .idle)
     }
 
     func testFinishOperationClearsOperationIDOnCancel() async throws {

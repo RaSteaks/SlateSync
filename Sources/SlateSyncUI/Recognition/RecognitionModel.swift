@@ -102,6 +102,9 @@ public final class RecognitionModel {
     public private(set) var operation: OperationState = .idle
     public private(set) var progress: RecognitionProgress?
     public private(set) var result: RecognitionData?
+    /// The task whose records are currently represented by the successful
+    /// result. Window-level actions use this identity before opening Results.
+    public private(set) var resultTaskID: String?
     public private(set) var operationID: UUID?
     public private(set) var providers: [ProviderSummary] = []
     public private(set) var models: [ModelData] = []
@@ -178,6 +181,7 @@ public final class RecognitionModel {
         operation = .running(label: "准备识别…")
         progress = nil
         result = nil
+        resultTaskID = nil
         recognitionTask = Task { [weak self] in
             guard let self else { return }
             // File-import security scope remains paired for the complete
@@ -202,6 +206,7 @@ public final class RecognitionModel {
                 try await didComplete?(request, value)
                 result = value
                 editableRecords = value.result.records.map(EditableRecognitionRecord.init)
+                resultTaskID = request.taskID
                 resultTableID = UUID()
                 operation = .succeeded(message: "已识别 \(value.result.records.count) 条场记")
             } catch {
@@ -224,6 +229,7 @@ public final class RecognitionModel {
         self.projectID = projectID
         operationID = id
         operation = .running(label: "正在读取场记 CSV…")
+        resultTaskID = nil
         recognitionTask = Task { [self] in
             do {
                 try await flush()
@@ -243,8 +249,11 @@ public final class RecognitionModel {
         }
     }
 
-    public func generateLocalRecords(flush: @escaping @MainActor () async throws -> Void,
-                                     commit: @escaping @MainActor ([PersistedRecognitionRecord], String) -> Void) {
+    public func generateLocalRecords(
+        flush: @escaping @MainActor () async throws -> Void,
+        commit: @escaping @MainActor ([PersistedRecognitionRecord], String) -> Void,
+        taskID: String? = nil
+    ) {
         guard permitsNewOperation?() != false else { return }
         guard recognitionTask == nil, cancelTask == nil, !slateCSVRecords.isEmpty,
               let local = service as? any LocalSlateWorkflowServing else { return }
@@ -252,6 +261,7 @@ public final class RecognitionModel {
         let id = UUID()
         operationID = id
         operation = .running(label: "正在生成本地结果…")
+        resultTaskID = nil
         let records = slateCSVRecords
         let filename = slateCSVFilename ?? "场记 CSV"
         recognitionTask = Task { [self] in
@@ -264,6 +274,7 @@ public final class RecognitionModel {
                     result = nil
                     resultTableID = UUID()
                     editableRecords = value.enumerated().map { EditableRecognitionRecord($0.element, fallbackID: "slate-csv-\($0.offset)") }
+                    resultTaskID = taskID
                     commit(value, filename)
                     operation = .succeeded(message: "已生成 \(value.count) 条本地结果")
                 }
@@ -319,7 +330,14 @@ public final class RecognitionModel {
 
     public func load(task: TaskData?) {
         guard recognitionTask == nil, cancelTask == nil else { return }
+        // A task switch invalidates the previous operation message and its
+        // route action; otherwise a success from task A could open task B's
+        // result table after the user changes selection.
+        operation = .idle
+        progress = nil
+        operationID = nil
         result = nil
+        resultTaskID = nil
         resultTableID = UUID()
         slateCSVRecords = []
         slateCSVFilename = nil

@@ -1,5 +1,36 @@
 # SlateSync 当前项目方案
 
+## 2026-09-14 Slate Workbench 实施落码（第一轮）
+
+- 新共享组件落 `SlateSyncUI/Components/WorkbenchComponents.swift`：`SlateBadge`（场记板斜纹身份左缘）、
+  `TakeMark`（待定空心点 / 过·保铅笔圈 / 废条油笔划线，确认描边 240 ms，遵循减弱动态）、
+  `LeaderProgress`（真实页码进度表盘，总数未知显示命名阶段，减弱动态退化为原生进度条）、
+  `LightTable`（灯箱证据容器，控制件留在相邻栏）、`CredentialChip`（凭据四态）、`WarnRow`（告警行）。
+- `SlateSyncTheme` 增补圆角 Token：smallRadius 6 / controlRadius 8 / panelRadius 12 / largeRadius 16
+  （`.continuous`）；`SlateSearchField`、项目库图标底座、设置模型校验面板共 5 处裸 8 pt 圆角改为 Token。
+- 工作台：三段 tab 上方叠加“有新内容”圆点（识别结果 / Resolve CSV，Picker 保留当前选中值并通过
+  `accessibilityHint` 提供未读文案，访问后熄灭）；识别进行中输入页显示 LeaderProgress 卡片（页数来自 workflow 流）；
+  状态栏“识别完成”分支新增“查看识别结果”动作，`WorkspaceEntryPoint` 增加 `.result`，已挂载时经既有
+  guard 换页（过编辑屏障）；原稿对照表格单元格不动，在结果页表格上方加 TakeMark 汇总条（过/保、废条、待定计数）。
+- Resolve CSV：`ResolveCSVModel` 加性保留最近一次合并诊断 `lastMergeDiagnostics`（导出字节路径不变，
+  canonical re-merge 冻结合同不动）；新增三类告警徽章条与内联详情（WarnRow，封顶 8 条，不筛选/重排表格）；
+  存在未解决告警时导出先经确认对话框（返回校对 / 仍要导出）。
+- 外壳：侧栏底部新增外观循环（跟随系统→浅色→深色）与密度切换图标钮，与设置场景共享
+  `@AppStorage("appearance"/"density")`；设置 Provider 行凭据状态改用 `CredentialChip`（四态映射不变）。
+- 与原型的有意偏差（已记录）：不做行点击→原稿翻页映射（DESIGN.md 冻结“翻页不暗示行页对应”）；
+  TakeMark 不写入 canonical NSTableView、不提供表内状态循环（SM08 表格身份/IME 冻结合同），仅表外汇总；
+  告警徽章点击展开详情而非过滤行。
+- 验证：`swift build -Xswiftc -warnings-as-errors` 通过；SwiftPM 全量 346 项测试通过、2 项按环境跳过、
+  0 失败（含新增 WorkbenchComponentTests 3 项与 SM08 所有权/原生表格、导出回归等既有合同）。
+
+## 2026-09-14 Workbench review follow-up
+
+- 未读结果/Resolve CSV 标记提升到窗口级并按任务 ID 保存；切换任务或项目不会串用旧圆点，离开工作台期间完成的操作也会在返回后保留提示。
+- 识别完成状态携带结果所属任务；任务切换会清理旧完成动作，状态栏只允许打开当前任务的有效结果。
+- 工作区路由提示仅在保存屏障成功后消费；已有布局变更时排队，失败后保留提示并提供重试。
+- Resolve CSV 导出先运行 canonical merge，再依据完整的未写入记录诊断决定是否确认，并缓存同一份导出字节供用户确认后保存；Picker 保留当前页 VoiceOver value，把未读提示放入 hint。
+- 验证：`swift build -Xswiftc -warnings-as-errors` 通过；`swift test --quiet` 通过（347 项，2 项按环境跳过，0 失败）；`git diff --check HEAD` 通过。
+
 ## 2026-09-14 新版 UI 方案收敛与 Figma 预览
 
 - 新版界面统一为单一 `Slate Workbench` 主题；深色/浅色只是同一语义 Token 的外观 mode，

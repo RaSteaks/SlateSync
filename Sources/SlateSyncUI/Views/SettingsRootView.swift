@@ -198,18 +198,18 @@ public struct SettingsRootView: View {
     }
 
     /// Authorization and read failures remain visible instead of claiming that
-    /// a stored credential is absent. Text carries the state independently of color.
-    private func credentialStatusLabel(_ id: String) -> some View {
+    /// a stored credential is absent. The shared chip pairs every state with
+    /// a symbol so color is never the only signal (DESIGN.md 2026-09-11).
+    private func credentialStatusChip(_ id: String) -> some View {
         let state = settings.live?.credentialStatuses[id]
             ?? (settings.live?.configuredCredentialProviderIDs.contains(id) == true ? .configured : .missing)
-        let text: String = switch state {
-        case .configured: "已配置"
-        case .missing: "缺失"
-        case .authorizationRequired: "需要授权"
-        case .unavailable: "读取失败"
+        let chip: CredentialChip.State = switch state {
+        case .configured: .configured
+        case .missing: .missing
+        case .authorizationRequired: .needsAuthorization
+        case .unavailable: .readFailed
         }
-        return Label(text, systemImage: state == .configured ? "checkmark.circle.fill" : "exclamationmark.circle")
-            .foregroundStyle(state == .configured ? SlateSyncTheme.success : .secondary)
+        return CredentialChip(chip)
     }
 
     private var providers: some View {
@@ -223,7 +223,7 @@ public struct SettingsRootView: View {
                                 Text(provider.id).font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            credentialStatusLabel(provider.id)
+                            credentialStatusChip(provider.id)
                             Button("刷新模型") { Task { await settings.discover(providerID: provider.id) } }
                                 .disabled(
                                     settings.providerOperations[provider.id]?.isRunning == true || !provider.configured)
@@ -766,7 +766,7 @@ private struct BuiltinProviderConfigurationSheet: View {
             }
         }
         .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
     }
 
     private func modelRow(_ model: ModelData) -> some View {

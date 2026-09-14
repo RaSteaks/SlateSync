@@ -6,6 +6,11 @@ public struct AppRootView: View {
     // saved split-view geometry from another project or test launch.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var workspaceEntryPoint = WorkspaceEntryPoint.input
+    // Completion events are observed at the window boundary so they remain
+    // observable while WorkspaceView is replaced by another route. The task
+    // key prevents a result dot from following a user into a different task.
+    @State private var unseenSectionsByTask: [String: Set<WorkspaceSection>] = [:]
+    @State private var activeWorkspaceSection = WorkspaceSection.input
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("density") private var density = "comfortable"
     @Bindable private var session: AppSessionModel
@@ -94,9 +99,40 @@ public struct AppRootView: View {
                 SlateStatusBar(message: error.message, tone: .error) {
                     SettingsLink { Text("检查识别配置") }
                 }
+            } else if case .succeeded(let message) = recognition.operation, canViewRecognitionResult {
+                // Completion never steals focus or seizes the current page;
+                // the status bar only offers the route to the new results.
+                SlateStatusBar(message: message, tone: .success) {
+                    Button("查看识别结果") {
+                        workspaceEntryPoint = .result
+                        if session.route != .workspace {
+                            Task { await session.navigate(to: .workspace) }
+                        }
+                    }
+                }
             } else if case .succeeded(let message) = recognition.operation {
                 SlateStatusBar(message, tone: .success)
             }
+        }
+        .onChange(of: recognition.operation) { _, newValue in
+            guard case .succeeded = newValue,
+                  let taskID = recognition.resultTaskID,
+                  taskID == session.taskID,
+                  !recognition.editableRecords.isEmpty,
+                  !(session.route == .workspace && activeWorkspaceSection == .result) else { return }
+            markUnseen(.result, for: taskID)
+        }
+        .onChange(of: csv.operation) { _, newValue in
+            guard case .succeeded = newValue,
+                  let taskID = session.taskID,
+                  !(session.route == .workspace && activeWorkspaceSection == .csv) else { return }
+            markUnseen(.csv, for: taskID)
+        }
+        .onChange(of: session.projectID) { _, _ in
+            // Task IDs are only meaningful inside their active project; drop
+            // the old ledger when the window acquires a different project.
+            unseenSectionsByTask.removeAll()
+            activeWorkspaceSection = .input
         }
     }
 
@@ -117,6 +153,8 @@ public struct AppRootView: View {
                 media: media,
                 settingsRevision: settingsRevision,
                 entryPoint: workspaceEntryPoint,
+                unseenSections: unseenSectionsBinding,
+                onSectionChanged: { activeWorkspaceSection = $0 },
                 onEntryPointConsumed: { workspaceEntryPoint = .input }
             )
         case .projectSettings:
@@ -154,6 +192,31 @@ public struct AppRootView: View {
             get: { session.route },
             set: { destination in Task { await session.navigate(to: destination) } }
         )
+    }
+
+    private var canViewRecognitionResult: Bool {
+        guard let taskID = session.taskID else { return false }
+        return recognition.resultTaskID == taskID && !recognition.editableRecords.isEmpty
+    }
+
+    private var unseenSectionsBinding: Binding<Set<WorkspaceSection>> {
+        Binding(
+            get: {
+                guard let taskID = session.taskID else { return [] }
+                return unseenSectionsByTask[taskID] ?? []
+            },
+            set: { value in
+                guard let taskID = session.taskID else { return }
+                if value.isEmpty {
+                    unseenSectionsByTask.removeValue(forKey: taskID)
+                } else {
+                    unseenSectionsByTask[taskID] = value
+                }
+            })
+    }
+
+    private func markUnseen(_ section: WorkspaceSection, for taskID: String) {
+        unseenSectionsByTask[taskID, default: []].insert(section)
     }
 
     private var focusedActions: SlateSyncFocusedActions {

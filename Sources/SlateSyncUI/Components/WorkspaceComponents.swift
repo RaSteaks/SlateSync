@@ -151,9 +151,9 @@ struct SlateSearchField: View {
             .accessibilityHidden(text.isEmpty)
         }
         .padding(7)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: 8).strokeBorder(
+            RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius).strokeBorder(
                 focused ? SlateSyncTheme.accent : SlateSyncTheme.separator, lineWidth: focused ? 2 : 0.5)
         }
     }

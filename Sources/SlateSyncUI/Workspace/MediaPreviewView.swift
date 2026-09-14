@@ -15,12 +15,16 @@ struct MediaPreviewView: View {
     var body: some View {
         VStack(spacing: 8) {
             Button { showsLightbox = true } label: {
-                // Geometry bounds the image independently of its pixel size.
+                // Geometry bounds the image independently of its pixel size;
+                // the LightTable keeps the evidence page the brightest region
+                // (灯箱反转) while paging controls stay in the adjacent bar.
                 GeometryReader { geometry in
-                    preview.frame(width: geometry.size.width, height: geometry.size.height)
+                    LightTable {
+                        preview.frame(
+                            width: max(0, geometry.size.width - density.panelPadding * 2),
+                            height: max(0, geometry.size.height - density.panelPadding * 2))
+                    }
                 }
-                .padding(density.panelPadding)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }.buttonStyle(.plain).accessibilityLabel("放大场记单预览").accessibilityIdentifier("workspace.preview.enlarge").help("放大场记单预览")
             Divider()
             navigation.padding(.horizontal, 12).padding(.bottom, 12)
@@ -32,7 +36,7 @@ struct MediaPreviewView: View {
         .sheet(isPresented: $showsLightbox) {
             VStack {
                 HStack { navigation; Spacer(); Button("关闭预览") { showsLightbox = false }.keyboardShortcut(.cancelAction) }
-                preview.frame(maxWidth: .infinity, maxHeight: .infinity)
+                LightTable { preview }
             }
             .padding(20).frame(minWidth: 720, minHeight: 480)
             // Paging shortcuts exist only inside the lightbox, so arrow keys

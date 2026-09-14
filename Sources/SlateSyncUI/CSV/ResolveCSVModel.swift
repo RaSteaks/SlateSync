@@ -38,6 +38,10 @@ public final class ResolveCSVModel {
     public private(set) var revision = 0
     public private(set) var filename: String?
     public private(set) var operation: OperationState = .idle
+    // Reconciliation diagnostics from the latest canonical merge (badge
+    // strip + detail rows). Purely presentational retention: export bytes
+    // keep coming from the same frozen re-merge path.
+    public private(set) var lastMergeDiagnostics: ResolveMergeResult?
     // Retained raw import bytes (the old worker's metadataTable) plus the
     // manual edits keyed "row:column"; a canonical export re-merges from
     // these instead of re-encoding the merged display table.
@@ -71,6 +75,8 @@ public final class ResolveCSVModel {
             rawData = data
             rawBase64 = data.base64EncodedString()
             sparseEdits = [:]
+            // A new table geometry invalidates the previous merge's row keys.
+            lastMergeDiagnostics = nil
             revision += 1
             onTableChange?(CSVStageSnapshot(table: decoded, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
             operation = .succeeded(message: "已载入 \(decoded.rows.count) 行")
@@ -127,7 +133,11 @@ public final class ResolveCSVModel {
         // table; the merge is still recomputed from the latest records.
         let source: Data
         if let rawData { source = rawData } else { source = try await service.encodeResolveCSV(current) }
-        return try await exporter.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits).data
+        let result = try await exporter.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
+        // The export re-merge is also the freshest reconciliation report; the
+        // badge strip shows what the exported bytes actually contain.
+        lastMergeDiagnostics = result.merge
+        return result.data
     }
 
     /// Suggested export filename, frozen from the old renderer naming
@@ -196,6 +206,7 @@ public final class ResolveCSVModel {
             try Task.checkCancellation()
             try requireUnchangedEdits(edits)
             self.table = result.merge.table
+            lastMergeDiagnostics = result.merge
             revision += 1
             onTableChange?(CSVStageSnapshot(table: result.merge.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
             operation = .succeeded(message: "已更新 \(result.merge.updatedRowCount) 行")
@@ -247,6 +258,7 @@ public final class ResolveCSVModel {
         rawData = nil
         rawBase64 = nil
         sparseEdits = [:]
+        lastMergeDiagnostics = nil
         revision += 1
         operation = .idle
     }
