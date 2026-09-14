@@ -14,6 +14,9 @@ public final class AppSessionModel {
     public private(set) var generation = 0
     public private(set) var navigationError: SlateSyncError?
 
+    // Published before any suspension; each window owns its own pending open.
+    public private(set) var openingProjectName: String?
+
     private let workspace: WorkspaceModel
     public var flushProjectSettings: (@MainActor () async throws -> Void)?
 
@@ -42,35 +45,29 @@ public final class AppSessionModel {
     }
 
     public func openProject(_ project: ProjectSummary) async {
-        generation += 1
-        let request = generation
-        do {
-            if route == .projectSettings { try await flushProjectSettings?() }
-            guard generation == request else { return }
-            try await workspace.activate(projectID: project.id)
-            // Keep the acquired workspace owner, but only the latest intent
-            // may change the visible route after a suspended database read.
-            guard generation == request else { return }
-            route = .workspace
-            navigationError = nil
-        } catch {
-            guard generation == request else { return }
-            navigationError = ProductPrivacy.error(error)
-        }
+        await open(project, destination: .workspace)
     }
 
     public func showProjectSettings(_ project: ProjectSummary) async {
+        await open(project, destination: .projectSettings)
+    }
+
+    private func open(_ project: ProjectSummary, destination: SidebarDestination) async {
+        // Repeated clicks must neither start another read nor invalidate the
+        // generation of the opening request already crossing the save barrier.
+        guard openingProjectName == nil else { return }
+        openingProjectName = project.name
+        navigationError = nil
+        defer { openingProjectName = nil }
         generation += 1
         let request = generation
         do {
             if route == .projectSettings { try await flushProjectSettings?() }
             guard generation == request else { return }
-            // Settings and Workspace must name the same acquired project;
-            // changing only the sidebar identity leaves commands on old data.
             try await workspace.activate(projectID: project.id)
+            // Keep the acquired workspace owner; newer navigation owns the route.
             guard generation == request else { return }
-            route = .projectSettings
-            navigationError = nil
+            route = destination
         } catch {
             guard generation == request else { return }
             navigationError = ProductPrivacy.error(error)

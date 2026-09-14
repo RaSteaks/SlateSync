@@ -12,6 +12,7 @@ struct SlateSyncApp: App {
     @NSApplicationDelegateAdaptor(SlateSyncAppDelegate.self) private var appDelegate
     private let workflow: SlateSyncWorkflowFacade
     @State private var globalSettings: GlobalSettingsModel
+    @State private var settingsNavigation: SettingsNavigationModel
     @State private var paddleInstaller: PaddleInstallerModel
     @State private var termination: TerminationCoordinator
     private let projectOwnership = ProjectWindowOwnership()
@@ -85,6 +86,7 @@ struct SlateSyncApp: App {
         )
         self.workflow = workflow
         _globalSettings = State(initialValue: GlobalSettingsModel(service: workflow))
+        _settingsNavigation = State(initialValue: SettingsNavigationModel())
         _paddleInstaller = State(initialValue: PaddleInstallerModel(service: workflow))
         _termination = State(initialValue: TerminationCoordinator(lifecycle: workflow))
     }
@@ -97,11 +99,12 @@ struct SlateSyncApp: App {
             SlateSyncWindowRoot(
                 workflow: workflow,
                 globalSettings: globalSettings,
+                settingsNavigation: settingsNavigation,
                 termination: termination,
                 projectOwnership: projectOwnership
             )
                 .defaultAppStorage(preferences)
-                .frame(minWidth: 960, minHeight: 600)
+                .slateWindowMinimumSize(width: 960, height: 600)
                 .task {
                     appDelegate.termination = termination
                     termination.applicationDrain = { [globalSettings, paddleInstaller] in
@@ -114,10 +117,17 @@ struct SlateSyncApp: App {
         .commands { SlateSyncCommands() }
 
         Settings {
-            SettingsRootView(settings: globalSettings, paddleInstaller: paddleInstaller)
+            SettingsRootView(
+                settings: globalSettings,
+                paddleInstaller: paddleInstaller,
+                navigation: settingsNavigation
+            )
                 .defaultAppStorage(preferences)
                 .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired)
         }
+        // Settings keeps a readable default while permitting longer forms.
+        .defaultSize(width: 780, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }
 
@@ -126,6 +136,10 @@ struct SlateSyncApp: App {
 private actor IsolatedAppKeychain: KeychainBackend {
     private struct Item { let data: Data; let ownership: Data }
     private var items: [String: [String: Item]] = [:]
+    // Mirror production metadata queries without reading any credential bytes.
+    func status(service: String, account: String) -> CredentialStatus {
+        items[service]?[account] == nil ? .missing : .configured
+    }
     func read(service: String, account: String) -> Data? { items[service]?[account]?.data }
     func write(_ data: Data, service: String, account: String) {
         items[service, default: [:]][account] = Item(data: data, ownership: Data(UUID().uuidString.utf8))
@@ -147,6 +161,7 @@ private actor IsolatedAppKeychain: KeychainBackend {
 @MainActor
 private struct SlateSyncWindowRoot: View {
     private let globalSettings: GlobalSettingsModel
+    private let settingsNavigation: SettingsNavigationModel
     private let termination: TerminationCoordinator
     @State private var windowID: UUID
     @State private var projects: ProjectLibraryModel
@@ -163,10 +178,12 @@ private struct SlateSyncWindowRoot: View {
     init(
         workflow: SlateSyncWorkflowFacade,
         globalSettings: GlobalSettingsModel,
+        settingsNavigation: SettingsNavigationModel,
         termination: TerminationCoordinator,
         projectOwnership: ProjectWindowOwnership
     ) {
         self.globalSettings = globalSettings
+        self.settingsNavigation = settingsNavigation
         self.termination = termination
         let windowID = UUID()
         _windowID = State(initialValue: windowID)
@@ -201,6 +218,7 @@ private struct SlateSyncWindowRoot: View {
             projectSettings: projectSettings,
             logs: logs,
             help: help,
+            settingsNavigation: settingsNavigation,
             termination: termination,
             settingsRevision: globalSettings.revision
         )

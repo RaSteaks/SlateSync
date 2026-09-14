@@ -4,6 +4,68 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectStoresTests: XCTestCase {
+    func testLibraryListingDoesNotRewriteEncryptedProjectSnapshots() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("readonly-library-statistics")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let library = try ProjectLibraryStore(libraryRoot: root)
+        let project = try await library.createProject(name: "统计只读", description: "")
+        let store = try ProjectTaskStore(projectDirectory: root.appending(path: project.relativePath))
+        _ = try await store.saveTask(Data(#"{"id":"sample","status":"draft"}"#.utf8))
+        try await store.close()
+        // An encrypted rewrite uses a new nonce even for identical content;
+        // exact bytes prove that listing did not re-encrypt the project DB.
+        let before = try Data(contentsOf: store.databaseURL)
+        let projects = try await library.listProjects()
+        XCTAssertEqual(projects.first { $0.id == project.id }?.taskCount, 1)
+        XCTAssertEqual(try Data(contentsOf: store.databaseURL), before)
+        try await library.close()
+    }
+
+    func testTaskListProjectionMatchesLegacyWithLargeMediaAndIrregularRecords() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("task-projection-performance")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ProjectTaskStore(projectDirectory: root)
+        // Exercise empty edited arrays, malformed edited values and fallback
+        // result counts while retaining large media and unknown payload fields.
+        for index in 0..<24 {
+            let edited: Any = index % 3 == 0 ? [] : index % 3 == 1 ? NSNull() : "invalid"
+            _ = try await store.saveTask(PersistenceTestSupport.jsonData([
+                "id": "task-\(index)", "filename": "长中文场记单-\(index).pdf",
+                "provider": "test", "model": "fixture", "pageCount": 2,
+                "status": "completed", "editedRecords": edited,
+                "result": ["records": [["id": "one"], ["id": "two"]]],
+                "imageDataUrls": [String(repeating: "A", count: 512 * 1024)],
+                "futureField": ["preserved": true],
+            ]))
+        }
+        let database = try SQLiteDatabase(url: store.databaseURL)
+        let start = ContinuousClock.now
+        let rows = try await database.rows("SELECT data_json FROM tasks ORDER BY updated_at DESC;")
+        let expected = try rows.map { row -> TaskListItem in
+            let object = try PersistenceTestSupport.jsonObject(Data(try XCTUnwrap(row["data_json"] ?? nil).utf8))
+            return TaskListItem(
+                id: PersistenceJSON.string(object["id"]), filename: PersistenceJSON.string(object["filename"]),
+                provider: PersistenceJSON.string(object["provider"]), model: PersistenceJSON.string(object["model"]),
+                pageCount: PersistenceJSON.int(object["pageCount"]), scenarioId: PersistenceJSON.string(object["scenarioId"]),
+                recordCount: (object["editedRecords"] as? [Any])?.count ?? ((object["result"] as? [String: Any])?["records"] as? [Any])?.count ?? 0,
+                status: PersistenceJSON.string(object["status"]) ?? "unknown",
+                createdAt: PersistenceJSON.string(object["createdAt"]), updatedAt: PersistenceJSON.string(object["updatedAt"])
+            )
+        }
+        let legacyTime = start.duration(to: .now)
+        let projectedStart = ContinuousClock.now
+        let actual = try await store.listTasks()
+        let projectedTime = projectedStart.duration(to: .now)
+        XCTAssertEqual(actual, expected)
+        let preserved = try PersistenceTestSupport.jsonObject(await store.loadTask("task-0"))
+        XCTAssertEqual((preserved["imageDataUrls"] as? [String])?.first?.count, 512 * 1024)
+        // Report comparative local timing without a flaky wall-clock assertion.
+        print("Task list 24 × 512 KiB: legacy=\(legacyTime), projection=\(projectedTime)")
+        try await database.close()
+        try await store.close()
+    }
+
     func testProjectRuntimeExposesCompleteStoreMutationSurface() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("runtime-store-surface")
         defer { try? FileManager.default.removeItem(at: root) }

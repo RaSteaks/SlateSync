@@ -85,6 +85,8 @@ public actor SlateSyncWorkflowFacade:
         }
     }
 
+    public func retryProjectLibraryUnlock() async { await LocalProjectEncryption.allowUnlockRetry() }
+
     public func projectLibrary() async throws -> ProjectLibraryProjection {
         try await library.projectLibrary()
     }
@@ -241,6 +243,7 @@ public actor SlateSyncWorkflowFacade:
 
     public func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData {
         try requireExternalOperations()
+        await runtime.keychainStore.beginUserOperation(providerID: request.providerID)
         let cancellationTicket = recognitionCancellations.ticket(for: request.projectID)
         try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
         let coordinator = try await recognitionCoordinator()
@@ -301,11 +304,13 @@ public actor SlateSyncWorkflowFacade:
             customProviders: config.customProviders,
             credentials: runtime.keychainStore
         )
-        let providers = await registry.providerSummaries()
-        var credentialIDs = Set<String>()
-        for provider in providers where (try? await runtime.keychainStore.isCredentialConfigured(for: provider.id)) == true {
-            credentialIDs.insert(provider.id)
+        // Query attributes once, never secrets, while building settings state.
+        var credentialStatuses: [String: CredentialStatus] = [:]
+        for id in Set(ProviderCatalog.definitions.map(\.id) + config.customProviders.map(\.id)) {
+            credentialStatuses[id] = await runtime.keychainStore.status(providerID: id)
         }
+        let providers = await registry.providerSummaries(credentialStatuses: credentialStatuses)
+        let credentialIDs = Set(credentialStatuses.filter { $0.value == .configured }.map(\.key))
         let vision = VisionOCRService(configuration: VisionOCRConfiguration(runtimeSnapshot.configuration.values))
         let visionAvailable = await vision.isAvailable()
         await vision.close()
@@ -329,7 +334,8 @@ public actor SlateSyncWorkflowFacade:
                     ? nil
                     : runtimeSnapshot.workflowConfigPath
             ),
-            restartRequired: restartRequired
+            restartRequired: restartRequired,
+            credentialStatuses: credentialStatuses
         )
     }
 
@@ -367,6 +373,7 @@ public actor SlateSyncWorkflowFacade:
         forceRefresh: Bool
     ) async throws -> ModelDiscoveryResult {
         try requireExternalOperations()
+        await runtime.keychainStore.beginUserOperation(providerID: providerID)
         return try await settingsProviderRuntime().discovery.discover(
             providerID: providerID,
             forceRefresh: forceRefresh
@@ -379,6 +386,7 @@ public actor SlateSyncWorkflowFacade:
         progress: @escaping @Sendable (ModelProbeProgress) -> Void
     ) async throws -> ModelProbeResult {
         try requireExternalOperations()
+        await runtime.keychainStore.beginUserOperation(providerID: providerID)
         let value = try await settingsProviderRuntime().probe.probe(
             providerID: providerID,
             modelIDs: modelIDs,
@@ -702,6 +710,7 @@ public actor SlateSyncWorkflowFacade:
     ) -> LegacyCredentialMigrationStatus {
         switch status {
         case .notRun: .notRun
+        case .awaitingAuthorization: .awaitingAuthorization
         case .sourceMissing: .sourceMissing
         case .noCredentials: .noCredentials
         case .migrated: .migrated

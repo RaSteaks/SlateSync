@@ -87,18 +87,37 @@ public actor ProjectTaskStore {
 
     public func listTasks() async throws -> [TaskListItem] {
         try await bootstrap()
-        let rows = try await database.rows(
-            "SELECT data_json FROM tasks ORDER BY updated_at DESC;"
-        )
+        // Project only sidebar fields inside SQLite: image data URLs and full
+        // recognition/CSV arrays must not cross into Swift for every task.
+        // Keep the persisted JSON and ordering unchanged; malformed rows retain
+        // the legacy skip behavior and only actual arrays contribute counts.
+        let rows = try await database.rows("""
+            SELECT CASE WHEN json_valid(data_json) THEN
+                CASE WHEN json_type(data_json) = 'object' THEN json_object(
+                    'id', json_extract(data_json, '$.id'),
+                    'filename', json_extract(data_json, '$.filename'),
+                    'provider', json_extract(data_json, '$.provider'),
+                    'model', json_extract(data_json, '$.model'),
+                    'pageCount', json_extract(data_json, '$.pageCount'),
+                    'scenarioId', json_extract(data_json, '$.scenarioId'),
+                    'status', json_extract(data_json, '$.status'),
+                    'createdAt', json_extract(data_json, '$.createdAt'),
+                    'updatedAt', json_extract(data_json, '$.updatedAt'),
+                    'recordCount', CASE
+                        WHEN json_type(data_json, '$.editedRecords') = 'array'
+                            THEN json_array_length(data_json, '$.editedRecords')
+                        WHEN json_type(data_json, '$.result.records') = 'array'
+                            THEN json_array_length(data_json, '$.result.records')
+                        ELSE 0 END
+                ) END END AS data_json
+            FROM tasks ORDER BY updated_at DESC;
+            """)
         return rows.compactMap { row in
             guard
                 let text = row["data_json"] ?? nil,
                 let data = text.data(using: .utf8),
                 let object = try? PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
             else { return nil }
-            let editedCount = (object["editedRecords"] as? [Any])?.count
-            let result = object["result"] as? [String: Any]
-            let resultCount = (result?["records"] as? [Any])?.count
             return TaskListItem(
                 id: PersistenceJSON.string(object["id"]),
                 filename: PersistenceJSON.string(object["filename"]),
@@ -106,7 +125,7 @@ public actor ProjectTaskStore {
                 model: PersistenceJSON.string(object["model"]),
                 pageCount: PersistenceJSON.int(object["pageCount"]),
                 scenarioId: PersistenceJSON.string(object["scenarioId"]),
-                recordCount: editedCount ?? resultCount ?? 0,
+                recordCount: PersistenceJSON.int(object["recordCount"]) ?? 0,
                 status: PersistenceJSON.string(object["status"]) ?? "unknown",
                 createdAt: PersistenceJSON.string(object["createdAt"]),
                 updatedAt: PersistenceJSON.string(object["updatedAt"])
@@ -171,7 +190,7 @@ public actor ProjectTaskStore {
         for url in entries {
             // One malformed legacy snapshot must not prevent project startup.
             guard
-                let data = try? Data(contentsOf: url),
+                let data = try? LocalProjectEncryption.read(from: url),
                 var object = try? PersistenceJSON.object(from: data, errorCode: "TASK_INVALID"),
                 let id = try? PersistenceIdentifiers.task(
                     PersistenceJSON.string(object["id"]) ?? url.deletingPathExtension().lastPathComponent

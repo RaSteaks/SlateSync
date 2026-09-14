@@ -6,14 +6,28 @@ import SwiftUI
 struct MediaPreviewView: View {
     let document: PreparedDocument
     @Binding var pageIndex: Int
+    @Environment(\.slateSyncDensity) private var density
     @State private var showsLightbox = false
+    // Retain only the visible page image. Progress/layout updates reuse it;
+    // page or document changes replace it without retaining the full PDF.
+    @State private var previewImage: NSImage?
 
     var body: some View {
         VStack(spacing: 8) {
             Button { showsLightbox = true } label: {
-                preview.frame(maxHeight: 180)
-            }.buttonStyle(.plain).accessibilityLabel("放大场记单预览")
-            navigation
+                // Geometry bounds the image independently of its pixel size.
+                GeometryReader { geometry in
+                    preview.frame(width: geometry.size.width, height: geometry.size.height)
+                }
+                .padding(density.panelPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }.buttonStyle(.plain).accessibilityLabel("放大场记单预览").accessibilityIdentifier("workspace.preview.enlarge").help("放大场记单预览")
+            Divider()
+            navigation.padding(.horizontal, 12).padding(.bottom, 12)
+        }
+        .background(SlateSyncTheme.canvas)
+        .onChange(of: previewJPEG, initial: true) {
+            previewImage = previewJPEG.flatMap { NSImage(data: $0) }
         }
         .sheet(isPresented: $showsLightbox) {
             VStack {
@@ -29,19 +43,22 @@ struct MediaPreviewView: View {
     }
 
     @ViewBuilder private var preview: some View {
-        if document.pages.indices.contains(pageIndex),
-           let jpeg = document.pages[pageIndex].views.first?.image.jpeg,
-           let image = NSImage(data: jpeg) {
+        if let image = previewImage {
             Image(nsImage: image).resizable().scaledToFit()
                 .accessibilityLabel("场记单第 \(pageIndex + 1) 页，共 \(document.pages.count) 页")
         }
     }
 
+    private var previewJPEG: Data? {
+        guard document.pages.indices.contains(pageIndex) else { return nil }
+        return document.pages[pageIndex].views.first?.image.jpeg
+    }
+
     private var navigation: some View {
         HStack {
-            Button("上一页", systemImage: "chevron.left", action: previous).disabled(pageIndex == 0)
+            Button("上一页", systemImage: "chevron.left", action: previous).labelStyle(.iconOnly).help("上一页").accessibilityIdentifier("workspace.preview.previous").disabled(pageIndex == 0)
             Text("\(pageIndex + 1) / \(document.pages.count)").monospacedDigit()
-            Button("下一页", systemImage: "chevron.right", action: next).disabled(pageIndex + 1 >= document.pages.count)
+            Button("下一页", systemImage: "chevron.right", action: next).labelStyle(.iconOnly).help("下一页").accessibilityIdentifier("workspace.preview.next").disabled(pageIndex + 1 >= document.pages.count)
         }
     }
 

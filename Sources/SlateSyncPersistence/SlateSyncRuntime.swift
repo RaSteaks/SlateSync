@@ -3,6 +3,7 @@ import SlateSyncDomain
 
 public enum SlateSyncRuntimeMigrationStatus: String, Codable, Hashable, Sendable {
     case notRun
+    case awaitingAuthorization
     case sourceMissing
     case noCredentials
     case migrated
@@ -199,7 +200,13 @@ public actor SlateSyncRuntime: SettingsServing {
 
         var migration = snapshot.migration
         if !snapshot.isBootstrapped || retryFailedMigration || migration.status == .notRun {
-            migration = await migrateLegacyCredentials()
+            // Legacy import can read existing secrets to compare values. Defer
+            // it to the explicit settings action instead of prompting at launch.
+            if !retryFailedMigration && FileManager.default.fileExists(atPath: legacyCredentialURL.path) {
+                migration = SlateSyncRuntimeMigrationState(status: .awaitingAuthorization, sourceURL: legacyCredentialURL)
+            } else {
+                migration = await migrateLegacyCredentials()
+            }
         }
 
         snapshot = SlateSyncRuntimeSnapshot(

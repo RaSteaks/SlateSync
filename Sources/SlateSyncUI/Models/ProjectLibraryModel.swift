@@ -42,6 +42,14 @@ public final class ProjectLibraryModel {
         (activeProjects + archivedProjects).first { $0.id == selection }
     }
 
+    /// Only a deliberate retry clears an authorization refusal. Automatic
+    /// window loads keep the failure latched and cannot reopen system prompts.
+    public func retryLoad() async {
+        guard !operation.isRunning else { return }
+        await service.retryProjectLibraryUnlock()
+        await load()
+    }
+
     public func load() async {
         loadGeneration += 1
         let generation = loadGeneration

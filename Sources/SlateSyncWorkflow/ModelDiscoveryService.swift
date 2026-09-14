@@ -51,6 +51,13 @@ public actor ModelDiscoveryService {
                 cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
                 return result
             }
+            // Authentication, account, and endpoint failures must reach the
+            // Settings panel instead of looking like a usable offline list.
+            // Network/server failures still retain the established static
+            // catalog fallback, which keeps configuration possible offline.
+            if provider.origin == .builtin, [400, 401, 402, 403, 404, 429].contains(error.status ?? -1) {
+                throw error
+            }
             // Configuration errors are actionable and must never masquerade as
             // successful static discovery. Runtime endpoint failures retain a
             // secret-free fallback so the settings UI remains usable offline.

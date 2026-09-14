@@ -34,7 +34,9 @@ public struct LegacyMigrationReport: Codable, Hashable, Sendable {
 }
 
 /// Native owner of the v1 Project Library index and project directories.
-/// Each project keeps an independent `project.sqlite`; the Library database is
+/// Internal files use authenticated encryption after startup activation; export
+/// decodes them into the portable v1 format. Each project keeps its own database.
+/// The Library database is
 /// only a registry and never becomes a second store for project settings/tasks.
 public actor ProjectLibraryStore: ProjectLibraryServing {
     private var isClosed = false
@@ -212,6 +214,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             }
             throw error
         }
+        await database.relocateEncryptedBacking(to: newRoot.appending(path: SQLiteV1.libraryDatabaseFilename))
         root = newRoot
         projectsRoot = newRoot.appending(path: "Projects", directoryHint: .isDirectory)
         manifest = current
@@ -648,9 +651,20 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         var latestTaskAt: String?
         let projectDatabaseURL = try checkedProjectDatabaseURL(projectDirectory)
         if FileManager.default.fileExists(atPath: projectDatabaseURL.path) {
-            let projectDatabase = try SQLiteDatabase(url: projectDatabaseURL)
+            // Library startup needs aggregates only. A read-only connection
+            // avoids schema writes and encrypted snapshot reserialization for
+            // every already-initialized project. Legacy empty databases still
+            // take the original bootstrap path before querying their tasks.
+            var projectDatabase = try SQLiteDatabase(url: projectDatabaseURL, mode: .readOnly)
             do {
-                try await SQLiteV1.bootstrapProject(projectDatabase)
+                let hasTasks = try await projectDatabase.rows(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks';"
+                ).isEmpty == false
+                if !hasTasks {
+                    try await projectDatabase.close()
+                    projectDatabase = try SQLiteDatabase(url: projectDatabaseURL)
+                    try await SQLiteV1.bootstrapProject(projectDatabase)
+                }
                 if let aggregate = try await projectDatabase.rows(
                     "SELECT COUNT(*) AS count, MAX(updated_at) AS latest FROM tasks;"
                 ).first {
@@ -850,7 +864,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             do {
                 let manifest = try JSONDecoder().decode(
                     LibraryV1Manifest.self,
-                    from: Data(contentsOf: url)
+                    from: LocalProjectEncryption.read(from: url)
                 )
                 guard manifest.formatVersion == Self.libraryFormatVersion else {
                     throw SlateSyncError(code: "LIBRARY_VERSION", message: "不支持的项目库格式版本")
@@ -1028,7 +1042,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         for sourceURL in entries {
             let targetURL = target.appending(path: sourceURL.lastPathComponent)
             guard !FileManager.default.fileExists(atPath: targetURL.path) else { continue }
-            let sourceData = try Data(contentsOf: sourceURL)
+            let sourceData = try LocalProjectEncryption.read(from: sourceURL)
             let output: Data
             if var object = try? PersistenceJSON.object(from: sourceData, errorCode: "LEGACY_MIGRATION") {
                 if PersistenceJSON.string(object["projectId"])?.isEmpty != false {

@@ -24,7 +24,9 @@ ditto -x -k "${result_dir}/artifacts/SlateSync-1.0.0-macOS-universal.zip" "${smo
 "${script_dir}/verify_bundle.sh" "$app" 1.0.0 1 adhoc
 # Build only the test harness. XCUIApplication(url:) explicitly launches the
 # extracted app, so XCTest cannot silently substitute the development build.
+# Sign the isolated harness explicitly; clean CI runners have no local identity.
 xcodebuild -quiet -project "${project_root}/SlateSync.xcodeproj" -scheme SlateSync \
+  CODE_SIGN_IDENTITY=- \
   -configuration Debug -destination 'platform=macOS' \
   -derivedDataPath "${smoke_root}/DerivedData" build-for-testing
 python3 - "${smoke_root}/DerivedData/Build/Products" "$app" <<'PY'

@@ -294,8 +294,11 @@ clean_workspace_check() {
 # 与其他 Gate 检查一样支持自测注入故障 rg，验证扫描工具自身故障时 fail-closed。
 
 sm01_debug_settings_check() {
+  # Gate artifacts run against isolated roots and are ad-hoc candidates, so
+  # every build explicitly bypasses the machine-local development certificate.
   local settings
   settings="$(xcodebuild \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Debug \
@@ -543,6 +546,7 @@ swift_test_check() {
 run_check swift_test true "SwiftPM 核心测试通过" swift_test_check
 run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   xcodebuild -quiet \
+  CODE_SIGN_IDENTITY=- \
   -project SlateSync.xcodeproj \
   -scheme SlateSync \
   -configuration Debug \
@@ -584,6 +588,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_real_app_launch_check
   run_check sm01_release_build true "Release generic macOS 构建通过" \
     xcodebuild -quiet \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Release \
@@ -594,6 +599,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_release_artifact_check
   run_check sm01_archive true "共享 Scheme 可生成 Release Archive" \
     xcodebuild -quiet \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Release \

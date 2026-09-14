@@ -267,7 +267,9 @@ gate_xcode_test_plan_check() {
     cd "$project_root" &&
     # Preserve XCTest PASS lines in the raw Gate log for acceptance-scoped
     # evidence generation; result classification still comes from xcresult.
+    # The isolated test host needs no developer's local signing certificate.
     xcodebuild \
+      CODE_SIGN_IDENTITY=- \
       -project SlateSync.xcodeproj \
       -scheme SlateSync \
       -testPlan SlateSync \

@@ -81,7 +81,7 @@ private actor SM07ProbeSaveLog {
 
 @MainActor final class SM07TransportDiscoveryTests: XCTestCase {
     private func configuration() -> URLSessionConfiguration { let value = URLSessionConfiguration.ephemeral; value.protocolClasses = [SM07URLProtocol.self]; return value }
-    private func provider(id: String = "openrouter", required: Bool = true) -> ProviderDescriptor { .init(id: id, label: id, origin: .builtin, providerKind: ProviderKind(id: id), baseURL: URL(string: "https://example.com/v1")!, transport: .chatCompletions, credentialRequired: required, openRouterSiteURL: "https://slatesync.example") }
+    private func provider(id: String = "openrouter", required: Bool = true, site: String? = "https://slatesync.example", title: String? = nil) -> ProviderDescriptor { .init(id: id, label: id, origin: .builtin, providerKind: ProviderKind(id: id), baseURL: URL(string: "https://example.com/v1")!, transport: .chatCompletions, credentialRequired: required, openRouterSiteURL: site, openRouterTitle: title) }
 
     func testNET02URLSessionHeadersAndSuccessDrain() async throws {
         SM07URLProtocol.configure(.response(200, Data(#"{"ok":true}"#.utf8)))
@@ -91,7 +91,17 @@ private actor SM07ProbeSaveLog {
         XCTAssertEqual(response.status, 200); XCTAssertEqual(activeCount, 0)
         let capture = try XCTUnwrap(SM07URLProtocol.snapshot().captures.first)
         XCTAssertEqual(capture.url, "https://example.com/v1/chat/completions"); XCTAssertEqual(capture.method, "POST")
-        XCTAssertEqual(capture.headers["Authorization"], "Bearer secret"); XCTAssertEqual(capture.headers["X-Title"], "SlateSync"); XCTAssertEqual(capture.headers["HTTP-Referer"], "https://slatesync.example")
+        XCTAssertEqual(capture.headers["Authorization"], "Bearer secret"); XCTAssertEqual(capture.headers["X-OpenRouter-Title"], "SlateSync"); XCTAssertEqual(capture.headers["HTTP-Referer"], "https://slatesync.example")
+        await transport.close()
+    }
+
+    func testNET02OpenRouterTitleCanBeConfiguredAndEmptySiteOmitsReferer() async throws {
+        SM07URLProtocol.configure(.response(200, Data(#"{"ok":true}"#.utf8)))
+        let transport = URLSessionProviderTransport(credentials: SM07TestCredentials(["openrouter": "secret"]), configuration: configuration(), clock: SM07SlowClock())
+        _ = try await transport.send(.init(provider: provider(site: nil, title: "SlateSync Preview"), purpose: .recognition, method: .post, body: Data("{}".utf8), timeoutMilliseconds: 1_000))
+        let capture = try XCTUnwrap(SM07URLProtocol.snapshot().captures.first)
+        XCTAssertEqual(capture.headers["X-OpenRouter-Title"], "SlateSync Preview")
+        XCTAssertNil(capture.headers["HTTP-Referer"])
         await transport.close()
     }
 

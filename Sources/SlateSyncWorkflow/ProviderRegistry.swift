@@ -92,6 +92,7 @@ public actor ProviderRegistry {
             baseURL: baseURL, transport: transport, jsonMode: jsonMode,
             imageDetail: detail, credentialRequired: definition.credentialRequired,
             openRouterSiteURL: definition.kind == .openRouter ? settings[.openRouterSiteUrl] : nil,
+            openRouterTitle: definition.kind == .openRouter ? settings[.openRouterAppTitle] : nil,
             isLegacyCompatible: kind == .openAICompatible
         )
     }
@@ -150,11 +151,18 @@ public actor ProviderRegistry {
         else { registrations.removeAll() }
     }
 
-    public func providerSummaries() async -> [ProviderSummary] {
+    public func providerSummaries(credentialStatuses: [String: CredentialStatus]? = nil) async -> [ProviderSummary] {
         var result: [ProviderSummary] = []
         for definition in ProviderCatalog.definitions {
             let descriptor = try? descriptor(providerID: definition.id)
-            let keyConfigured = (try? await credentials?.isCredentialConfigured(for: definition.id)) ?? false
+            // Settings supplies one secret-free snapshot for every consumer.
+            let keyConfigured: Bool
+            if let credentialStatuses {
+                keyConfigured = credentialStatuses[definition.id] == .configured
+                    || credentialStatuses[definition.id] == .authorizationRequired
+            } else {
+                keyConfigured = (try? await credentials?.isCredentialConfigured(for: definition.id)) ?? false
+            }
             let configured = descriptor != nil && (!definition.credentialRequired || keyConfigured)
             result.append(.init(id: definition.id, label: definition.label, configured: configured, requiredEnv: definition.credentialRequired ? [credentialName(definition.id)] : [], type: .builtin, editable: definition.kind == .openAICompatible))
         }

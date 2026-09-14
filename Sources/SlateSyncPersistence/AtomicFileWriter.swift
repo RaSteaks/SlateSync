@@ -60,6 +60,7 @@ enum CrossProcessFileLock {
     static func withExclusiveLock<Value>(
         at url: URL,
         timeout: TimeInterval = 5,
+        isolation: isolated (any Actor)? = #isolation,
         _ operation: () throws -> Value
     ) throws -> Value {
         do {
@@ -109,6 +110,14 @@ public struct FileManagerAtomicFileWriter: AtomicFileWriting, Sendable {
     public init() {}
 
     public func writeAtomically(_ data: Data, to url: URL, permissions: Int = 0o600) throws {
+        // Only files beneath an activated encrypted library are sealed. Export
+        // destinations outside that boundary retain their portable format.
+        let id = try LocalProjectEncryption.identifier(for: url)
+        let output = try id.map { try LocalProjectEncryption.seal(data, id: $0) } ?? data
+        try writeRaw(output, to: url, permissions: permissions)
+    }
+
+    func writeRaw(_ data: Data, to url: URL, permissions: Int) throws {
         let fileManager = FileManager.default
         let directory = url.deletingLastPathComponent()
         try SecureFilePermissions.prepareDirectory(at: directory)

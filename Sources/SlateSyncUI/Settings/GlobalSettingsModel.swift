@@ -2,6 +2,35 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+/// Result of the Provider panel's two persistence transactions. Keeping the
+/// two flags separate lets the UI explain a successful ordinary-config write
+/// when a subsequent Keychain write fails.
+public struct BuiltinProviderSaveResult: Hashable, Sendable {
+    public let configurationSaved: Bool
+    public let credentialUpdateRequested: Bool
+    public let credentialSaved: Bool
+    public let message: String
+    public let error: SlateSyncError?
+
+    public var isComplete: Bool {
+        configurationSaved && (!credentialUpdateRequested || credentialSaved)
+    }
+
+    public init(
+        configurationSaved: Bool,
+        credentialUpdateRequested: Bool,
+        credentialSaved: Bool,
+        message: String,
+        error: SlateSyncError? = nil
+    ) {
+        self.configurationSaved = configurationSaved
+        self.credentialUpdateRequested = credentialUpdateRequested
+        self.credentialSaved = credentialSaved
+        self.message = message
+        self.error = error
+    }
+}
+
 /// Global settings keeps editing and live snapshots separate. Provider key
 /// bytes are accepted only as method arguments and are never published by this
 /// observable model.
@@ -83,6 +112,167 @@ public final class GlobalSettingsModel {
         // Keychain edits refresh configured status without discarding unrelated
         // typed settings or an unsaved custom Provider revision.
         refreshPreservingDraft(try await service.globalSettings())
+    }
+
+    /// Saves only the fields owned by one built-in Provider. The current live
+    /// snapshot is used as the base so an independent settings draft is not
+    /// accidentally cleared when the small Provider sheet saves itself.
+    public func saveBuiltinProviderConfiguration(
+        providerID: String,
+        values: [GlobalSettingKey: String?],
+        apiKey: String?
+    ) async -> BuiltinProviderSaveResult {
+        guard beginOperation() else {
+            let error = SlateSyncError(code: "SETTINGS_CLOSING", message: "设置正在关闭，请稍后重试")
+            return .init(
+                configurationSaved: false,
+                credentialUpdateRequested: apiKey != nil,
+                credentialSaved: false,
+                message: error.message,
+                error: error
+            )
+        }
+        defer { endOperation() }
+        operation = .running(label: "正在保存 Provider 配置…")
+
+        let cleanedKey: String?
+        if let apiKey {
+            let value = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else {
+                let error = SlateSyncError(code: "PROVIDER_KEY_INVALID", message: "API Key 不能是纯空白；留空表示保留当前 Key")
+                operation = .failed(error)
+                return .init(
+                    configurationSaved: false,
+                    credentialUpdateRequested: true,
+                    credentialSaved: false,
+                    message: error.message,
+                    error: error
+                )
+            }
+            cleanedKey = value
+        } else {
+            cleanedKey = nil
+        }
+
+        var candidate = live?.values ?? draft
+        let baseURLKeys: Set<GlobalSettingKey> = [
+            .openAIBaseUrl,
+            .openRouterBaseUrl,
+            .tokenPlanBaseUrl,
+            .dashScopeBaseUrl,
+            .openAICompatibleBaseUrl,
+        ]
+        do {
+            for (key, rawValue) in values {
+                guard let rawValue else {
+                    candidate[key] = nil
+                    continue
+                }
+                let normalized = try GlobalSettingsValidator.normalizedPatchValue(rawValue, for: key)
+                if normalized?.isEmpty == true {
+                    guard !baseURLKeys.contains(key) else {
+                        throw SlateSyncError(code: "PROVIDER_URL", message: "API 基础地址不能为空；请填写地址或恢复默认地址")
+                    }
+                    candidate[key] = nil
+                } else {
+                    candidate[key] = normalized
+                }
+            }
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            return .init(
+                configurationSaved: false,
+                credentialUpdateRequested: apiKey != nil,
+                credentialSaved: false,
+                message: "配置未保存：\(sanitized.message)",
+                error: sanitized
+            )
+        }
+
+        let saved: GlobalSettingsProjection
+        do {
+            saved = try await service.saveGlobalSettings(values: candidate, customProviders: customProviders)
+            // A changed Base URL or protocol invalidates the old discovery and
+            // probe result immediately; the workflow façade also resets its
+            // Provider runtime before committing the ordinary configuration.
+            providerRequests[providerID] = nil
+            discoveryResults[providerID] = nil
+            providerOperations[providerID] = nil
+            probeProgress[providerID] = nil
+            probingProviderIDs.remove(providerID)
+            refreshPreservingDraft(saved)
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            return .init(
+                configurationSaved: false,
+                credentialUpdateRequested: apiKey != nil,
+                credentialSaved: false,
+                message: "配置未保存：\(sanitized.message)",
+                error: sanitized
+            )
+        }
+
+        guard let cleanedKey else {
+            operation = .succeeded(message: "Provider 配置已保存；未修改当前 API Key")
+            return .init(
+                configurationSaved: true,
+                credentialUpdateRequested: false,
+                credentialSaved: false,
+                message: "Provider 配置已保存；未修改当前 API Key"
+            )
+        }
+
+        do {
+            try await service.setProviderCredential(cleanedKey, providerID: providerID)
+            // The write API intentionally returns no secret. Refresh only the
+            // secret-free projection so status changes are visible in both the
+            // list and this still-open configuration panel.
+            if let refreshed = try? await service.globalSettings() {
+                refreshPreservingDraft(refreshed)
+            }
+            operation = .succeeded(message: "Provider 配置与 API Key 已保存")
+            return .init(
+                configurationSaved: true,
+                credentialUpdateRequested: true,
+                credentialSaved: true,
+                message: "Provider 配置与 API Key 已保存"
+            )
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            return .init(
+                configurationSaved: true,
+                credentialUpdateRequested: true,
+                credentialSaved: false,
+                message: "普通配置已保存，但 API Key 保存失败：\(sanitized.message)",
+                error: sanitized
+            )
+        }
+    }
+
+    /// Key deletion is independent from the blank API Key field. A dedicated
+    /// call prevents an accidental empty submit from destroying a valid key.
+    public func removeProviderCredential(providerID: String) async throws {
+        guard beginOperation() else {
+            throw SlateSyncError(code: "SETTINGS_CLOSING", message: "设置正在关闭，请稍后重试")
+        }
+        defer { endOperation() }
+        operation = .running(label: "正在删除 API Key…")
+        do {
+            try await service.setProviderCredential(nil, providerID: providerID)
+            if let refreshed = try? await service.globalSettings() {
+                refreshPreservingDraft(refreshed)
+            }
+            discoveryResults[providerID] = nil
+            providerOperations[providerID] = nil
+            operation = .succeeded(message: "\(providerID) 的 API Key 已删除")
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            throw sanitized
+        }
     }
 
     public func retryLegacyCredentialMigration() async {

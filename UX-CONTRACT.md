@@ -9,7 +9,7 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 | Table Selection | Native `List`/`NSTableView` selection | `ProjectLibraryView`, `TaskRailView`, and `EditableCSVTableRepresentable` | Single stable project/task/CSV row identity | UI workflow plus 500/1,000/10k scale tests |
 | Select/Listbox | Native SwiftUI `Picker` | `SettingsRootView` | System menu or segmented style when the value set is bounded | Keyboard and VoiceOver behavior remains platform-owned |
 | Form | Shared SwiftUI form composition | `CreateProjectSheet` and `SettingsRootView` | Sheet form or Settings form | Visible labels, default/cancel actions and focus order in UI tests |
-| Toast | SlateSyncUI feedback policy | Error banner in `ProjectLibraryView` | Inline or persistent banner until the shared transient surface is introduced | No screen-local transient toast in SM-01 |
+| Toast | `SlateStatusBar` with feature-owned operation state | `WorkspaceComponents` and `AppRootView` | Inline error/recovery or persistent cross-route recognition status; no toast timers | Native UI workflow and error/export regression tests |
 | CRUD | Feature model backed by workflow façade | `ProjectLibraryModel`, `ProjectSettingsModel`, and UI workflow protocols | SM-08 project/task/settings mutations; views never open Persistence directly | SwiftPM ownership tests plus Xcode workflow/UI tests |
 | Navigation | `NavigationSplitView` shell | `AppRootView` and `SidebarView` | Dedicated macOS Settings scene for global settings | App-launch UI test and native keyboard navigation |
 
@@ -72,3 +72,24 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Theme follows system by default, respects increased contrast and reduced motion.
 - Chinese IME composition must not trigger Enter shortcuts, autosave commits,
   search dispatch or table cell completion prematurely.
+
+## Native UI refresh (2026-09-11)
+
+- `SlateSearchField` owns clearable task/help/category input; clearing preserves
+  selection and returns keyboard focus to the field.
+- Task rail, recognition configuration and original comparison have named,
+  accessible toggle controls. Hidden panels are excluded from hit testing and AX.
+- Layout changes first call the window-local `WorkspaceEditorBoundary`, then
+  `WorkspaceModel.flush`. Marked text or failed saving keeps the old layout.
+- Result table identity remains stable while comparison changes or windows resize.
+  Density changes adjust row geometry without reloading data, and defer until
+  an active native field editor finishes.
+- Existing file import/export, deletion confirmations, actor ownership and
+  secret-handling rules are unchanged by presentation updates.
+
+
+### Project opening feedback
+
+- Native List primary action owns double-click/keyboard opening of active project rows; archived rows retain restore actions.
+- AppSessionModel owns the single pending open. The app-wide centered rounded progress panel shows the project and real loading stage without moving list geometry or estimating percentages.
+- Success enters the workspace; failure removes the panel and retains the previous project. Duplicate opens remain blocked throughout the save/load barrier.

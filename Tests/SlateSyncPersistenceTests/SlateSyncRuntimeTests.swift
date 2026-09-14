@@ -40,7 +40,13 @@ final class SlateSyncRuntimeTests: XCTestCase {
             keychainBackend: backend
         )
 
-        let snapshot = await runtime.bootstrap()
+        // Bootstrap reports pending migration without touching any secret.
+        let initial = await runtime.bootstrap()
+        XCTAssertEqual(initial.migration.status, .awaitingAuthorization)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
+        let beforeMigration = await backend.value(account: "openai")
+        XCTAssertNil(beforeMigration)
+        let snapshot = await runtime.retryLegacyMigration()
 
         XCTAssertEqual(snapshot.migration.status, .migrated)
         XCTAssertEqual(snapshot.migration.verifiedProviderIDs, ["custom", "openai"])
@@ -67,7 +73,7 @@ final class SlateSyncRuntimeTests: XCTestCase {
             keychainBackend: backend
         )
 
-        let failed = await runtime.bootstrap()
+        let failed = await runtime.retryLegacyMigration()
         XCTAssertTrue(failed.isBootstrapped)
         XCTAssertEqual(failed.migration.status, .failed)
         XCTAssertEqual(failed.migration.errorCode, "KEYCHAIN_MIGRATION_WRITE")

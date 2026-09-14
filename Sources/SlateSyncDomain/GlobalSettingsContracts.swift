@@ -4,6 +4,7 @@ public enum GlobalSettingKey: String, CaseIterable, Codable, Hashable, Sendable 
     case openAIBaseUrl = "OPENAI_BASE_URL"
     case openRouterBaseUrl = "OPENROUTER_BASE_URL"
     case openRouterSiteUrl = "OPENROUTER_SITE_URL"
+    case openRouterAppTitle = "OPENROUTER_APP_TITLE"
     case tokenPlanBaseUrl = "TOKENPLAN_BASE_URL"
     case dashScopeBaseUrl = "DASHSCOPE_BASE_URL"
     case openAICompatibleBaseUrl = "OPENAI_COMPATIBLE_BASE_URL"
@@ -175,6 +176,7 @@ public enum GlobalSettingsValidator {
         .openAIBaseUrl: "https://api.openai.com/v1",
         .openRouterBaseUrl: "https://openrouter.ai/api/v1",
         .openRouterSiteUrl: "https://github.com/RaSteaks/SlateSync",
+        .openRouterAppTitle: "SlateSync",
         .tokenPlanBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         .dashScopeBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         .openAICompatibleBaseUrl: "https://your-provider.example/v1",
@@ -341,7 +343,8 @@ public enum GlobalSettingsValidator {
         switch key {
         case .paddleOCRLanguage, .visionOCRLanguage: maximum = 120
         case .openAICompatibleModel, .paddleOCRModelVersion,
-             .paddleOCRDetectionModel, .paddleOCRRecognitionModel: maximum = 200
+             .paddleOCRDetectionModel, .paddleOCRRecognitionModel,
+             .openRouterAppTitle: maximum = 200
         case .slateSyncConfigPath, .paddlePDXCacheHome, .visionOCRBinary: maximum = 2_048
         case .paddleOCRPython: maximum = 200
         default: maximum = 200

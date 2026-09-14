@@ -79,12 +79,32 @@ final class SM08OwnershipTests: XCTestCase {
     }
 
     @MainActor
-    func testHelpIsFrozenToSixOfflineSearchableSections() {
+    func testHelpIsFrozenToSevenOfflineSearchableSections() {
         let help = HelpModel()
-        XCTAssertEqual(help.sections.count, 6)
+        XCTAssertEqual(help.sections.count, 7)
         help.query = "OCR"
         XCTAssertFalse(help.results.isEmpty)
-        XCTAssertTrue(help.results.allSatisfy { $0.title.contains("OCR") || $0.body.contains("OCR") })
+        // Structured help search includes steps, tips, and FAQs as well as the
+        // legacy body fields retained for bundle compatibility.
+        XCTAssertTrue(help.results.allSatisfy { $0.searchableText.contains { $0.contains("OCR") } })
+    }
+
+    @MainActor
+    func testSettingsNavigationUsesTypedTargetsAndUniqueRequests() {
+        let navigation = SettingsNavigationModel()
+        navigation.navigate(to: .ocr, subregion: .paddleOCR)
+        let first = navigation.pendingRequest
+        navigation.navigate(to: .providers, providerID: "openrouter")
+        let second = navigation.pendingRequest
+
+        XCTAssertNotEqual(first?.id, second?.id)
+        XCTAssertEqual(second?.category, .providers)
+        XCTAssertEqual(second?.providerID, "openrouter")
+        // Consuming an older request cannot clear a newer destination.
+        if let first { navigation.consume(first) }
+        XCTAssertEqual(navigation.pendingRequest?.id, second?.id)
+        if let second { navigation.consume(second) }
+        XCTAssertNil(navigation.pendingRequest)
     }
 
     @MainActor
@@ -1458,9 +1478,13 @@ extension SM08OwnershipTests {
     func testBundledHelpChineseHashAndNoResults() {
         let help = HelpModel()
         XCTAssertNil(help.resourceError)
-        XCTAssertEqual(help.sections.count, 6)
+        XCTAssertEqual(help.sections.count, 7)
         XCTAssertEqual(help.contentSHA256.count, 64)
-        XCTAssertEqual(Set(help.sections.map(\.id)).count, 6)
+        XCTAssertEqual(Set(help.sections.map(\.id)).count, 7)
+        XCTAssertEqual(help.sections.map(\.id), ["quick-start", "projects", "recognition", "providers", "ocr", "resolve", "recovery"])
+        XCTAssertTrue(help.sections.allSatisfy { !$0.steps.isEmpty })
+        help.selection = "settings"
+        XCTAssertEqual(help.selection, "providers")
         // Language acceptance is Chinese only under the Owner's scope update.
         XCTAssertEqual(help.title(help.sections[0]), "快速开始")
         help.query = "永久删除"
@@ -1710,6 +1734,49 @@ private func sm08Milliseconds(_ duration: Duration) -> Double {
 }
 
 extension SM08OwnershipTests {
+    // Suspended I/O makes opening feedback deterministic without timing sleeps.
+    @MainActor
+    func testProjectOpeningFeedbackDeduplicatesAndRemainsWindowOwned() async throws {
+        let gate = SM08TestGate()
+        let workspace = WorkspaceModel(service: WorkspaceFake(rowCount: 0, loadGate: gate))
+        let session = AppSessionModel(workspace: workspace)
+        let other = AppSessionModel(workspace: WorkspaceModel(service: WorkspaceFake(rowCount: 0)))
+        let project = ProjectLibraryFake().projectSummary
+        let open = Task { await session.openProject(project) }
+        await gate.entered()
+        XCTAssertEqual(session.openingProjectName, project.name)
+        XCTAssertEqual(workspace.activationStage, "正在恢复任务…")
+        XCTAssertNil(other.openingProjectName)
+        let generation = session.generation
+        await session.openProject(project)
+        XCTAssertEqual(session.generation, generation)
+        XCTAssertNil(session.navigationError)
+        await gate.release()
+        await open.value
+        XCTAssertEqual(session.route, .workspace)
+        XCTAssertNil(session.openingProjectName)
+        XCTAssertNil(workspace.activationStage)
+        try await workspace.close()
+    }
+
+    @MainActor
+    func testProjectOpeningFailureClearsFeedbackAndPreservesProject() async throws {
+        let workspace = WorkspaceModel(service: WorkspaceFake(rowCount: 0))
+        try await workspace.activate(projectID: "original")
+        // An editor barrier failure must keep the acquired project and route.
+        workspace.flushEditor = { throw SlateSyncError(code: "TEST_SAVE", message: "保存失败") }
+        let session = AppSessionModel(workspace: workspace)
+        await session.openProject(ProjectLibraryFake().projectSummary)
+        XCTAssertEqual(session.projectID, "original")
+        XCTAssertEqual(session.route, .projects)
+        XCTAssertEqual(session.navigationError?.code, "TEST_SAVE")
+        XCTAssertNil(session.openingProjectName)
+        XCTAssertNil(workspace.activationStage)
+        XCTAssertFalse(workspace.isTransitioning)
+        workspace.flushEditor = nil
+        try await workspace.close()
+    }
+
     @MainActor
     func testLateProjectOpenCannotOverrideNewerHelpNavigation() async throws {
         let gate = SM08TestGate()

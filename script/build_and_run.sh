@@ -35,6 +35,14 @@ done
 cd "$project_root"
 app_path="${derived_data}/Build/Products/${configuration}/SlateSync.app"
 app_executable="${app_path}/Contents/MacOS/SlateSync"
+# Fail before stopping the running app if the persistent identity is unavailable.
+# Only an explicitly isolated test run may opt into ad-hoc signing.
+typeset -a signing_arguments=()
+if [[ -n "${SLATESYNC_TEST_ROOT:-}" ]]; then
+  signing_arguments=(CODE_SIGN_IDENTITY=-)
+else
+  python3 script/setup_local_signing.py --check
+fi
 # Process ownership is determined by the full executable path, not the shared
 # process name, so development runs never terminate another SlateSync install.
 if ! slatesync_stop_executable SlateSync "$app_executable"; then
@@ -47,10 +55,14 @@ xcodebuild \
   -configuration "$configuration" \
   -destination 'platform=macOS' \
   -derivedDataPath "$derived_data" \
+  "${signing_arguments[@]}" \
   build
 
 test -d "$app_path"
 test -x "$app_executable"
+if [[ -z "${SLATESYNC_TEST_ROOT:-}" ]]; then
+  python3 script/setup_local_signing.py --verify-app "$app_path"
+fi
 # Automated Gate runs launch without activating the app, while the normal Run
 # action preserves the expected foreground development experience.
 typeset -a launch_environment=() launch_arguments=()

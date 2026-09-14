@@ -24,14 +24,9 @@ final class SlateSyncTests: XCTestCase {
         let service = "com.slatesync.test.\(UUID().uuidString)"
         let account = "account-\(UUID().uuidString)"
         let backend = SecurityKeychainBackend(
-            coordinationDirectory: root.appending(path: "coordination", directoryHint: .isDirectory),
-            // The local Xcode test bundle is ad-hoc signed and has no
-            // provisioning profile/application identifier, so macOS rejects
-            // Data Protection Keychain calls with errSecMissingEntitlement.
-            // Exercise the real Security.framework backend against the
-            // isolated legacy namespace here; production keeps the default
-            // Data Protection Keychain path and AfterFirstUnlock policy.
-            usesDataProtectionKeychain: false
+            // Exercise the production default from an ad-hoc signed bundle;
+            // overriding the mode here would hide a missing-entitlement regression.
+            coordinationDirectory: root.appending(path: "coordination", directoryHint: .isDirectory)
         )
         let secret = Data("isolated-keychain-secret".utf8)
 

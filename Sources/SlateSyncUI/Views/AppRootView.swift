@@ -2,6 +2,10 @@ import SlateSyncDomain
 import SwiftUI
 
 public struct AppRootView: View {
+    // Each window starts with visible navigation, independent of AppKit's
+    // saved split-view geometry from another project or test launch.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var workspaceEntryPoint = WorkspaceEntryPoint.input
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("density") private var density = "comfortable"
     @Bindable private var session: AppSessionModel
@@ -14,6 +18,7 @@ public struct AppRootView: View {
     private let projectSettings: ProjectSettingsModel
     private let logs: LogsModel
     private let help: HelpModel
+    private let settingsNavigation: SettingsNavigationModel
     private let termination: TerminationCoordinator
     private let settingsRevision: Int
 
@@ -28,6 +33,7 @@ public struct AppRootView: View {
         projectSettings: ProjectSettingsModel,
         logs: LogsModel,
         help: HelpModel,
+        settingsNavigation: SettingsNavigationModel,
         termination: TerminationCoordinator,
         settingsRevision: Int = 0
     ) {
@@ -41,12 +47,13 @@ public struct AppRootView: View {
         self.projectSettings = projectSettings
         self.logs = logs
         self.help = help
+        self.settingsNavigation = settingsNavigation
         self.termination = termination
         self.settingsRevision = settingsRevision
     }
 
     public var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: routeBinding)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
         } detail: {
@@ -55,19 +62,40 @@ public struct AppRootView: View {
         .tint(SlateSyncTheme.accent)
         .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         .controlSize(density == "compact" ? .small : .regular)
+        // One scene-level preference drives native controls and content metrics.
+        .environment(\.slateSyncDensity, SlateSyncDensity(rawValue: density) ?? .comfortable)
         .safeAreaInset(edge: .top) { sessionError }
         .focusedSceneValue(\.slateSyncActions, focusedActions)
-        .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning)
+        .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning || session.openingProjectName != nil)
+        .overlay {
+            // Attach to the entire split view so the panel is window-centered,
+            // outside the disabled content, without resizing the project list.
+            if let name = session.openingProjectName {
+                ZStack {
+                    Color.black.opacity(0.12).ignoresSafeArea()
+                        .accessibilityHidden(true)
+                    ProjectOpeningProgressPanel(
+                        projectName: name,
+                        stage: workspace.activationStage ?? "正在保存项目设置…"
+                    )
+                    .padding(24)
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             if termination.restartRequired { Text("项目库已更新，请退出并重新打开 SlateSync。").padding(12) }
             // Recognition remains window-owned across Library/Logs/Help routes.
             // Its status and recovery message must not disappear with a tab.
             if recognition.operation.isRunning {
-                HStack { ProgressView().controlSize(.small); Text(recognition.progress?.message ?? "正在处理场记…"); Spacer(); Button("取消") { recognition.cancel() } }.padding(10)
+                SlateStatusBar(message: recognition.progress?.message ?? "正在处理场记…", busy: true) {
+                    Button("取消") { recognition.cancel() }
+                }
             } else if case .failed(let error) = recognition.operation {
-                Label(error.message, systemImage: "exclamationmark.triangle").padding(10)
+                SlateStatusBar(message: error.message, tone: .error) {
+                    SettingsLink { Text("检查识别配置") }
+                }
             } else if case .succeeded(let message) = recognition.operation {
-                Text(message).font(.caption).padding(8)
+                SlateStatusBar(message, tone: .success)
             }
         }
     }
@@ -87,7 +115,9 @@ public struct AppRootView: View {
                 csv: csv,
                 metadata: metadata,
                 media: media,
-                settingsRevision: settingsRevision
+                settingsRevision: settingsRevision,
+                entryPoint: workspaceEntryPoint,
+                onEntryPointConsumed: { workspaceEntryPoint = .input }
             )
         case .projectSettings:
             ProjectSettingsView(
@@ -99,7 +129,23 @@ public struct AppRootView: View {
         case .logs:
             LogsView(model: logs, recognition: recognition)
         case .help:
-            HelpView(model: help)
+            HelpView(
+                model: help,
+                settingsNavigation: settingsNavigation,
+                hasProject: session.projectID != nil,
+                hasTask: session.taskID != nil,
+                onOpenProjectLibrary: { Task { await session.navigate(to: .projects) } },
+                onOpenProjectSettings: { Task { await session.navigate(to: .projectSettings) } },
+                onEnterCurrentTask: {
+                    workspaceEntryPoint = .input
+                    Task { await session.navigate(to: .workspace) }
+                },
+                onOpenLogs: { Task { await session.navigate(to: .logs) } },
+                onOpenCSV: {
+                    workspaceEntryPoint = .resolveCSV
+                    Task { await session.navigate(to: .workspace) }
+                }
+            )
         }
     }
 
@@ -113,7 +159,7 @@ public struct AppRootView: View {
     private var focusedActions: SlateSyncFocusedActions {
         // Menu commands do not inherit the disabled state of the content
         // view. Withdraw their closures while an application barrier is held.
-        if termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning {
+        if termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning || session.openingProjectName != nil {
             return SlateSyncFocusedActions(newProject: nil, newTask: nil, save: nil, cancelRecognition: nil)
         }
         return SlateSyncFocusedActions(
@@ -134,26 +180,47 @@ public struct AppRootView: View {
 
     @ViewBuilder private var sessionError: some View {
         if let error = session.navigationError {
-            HStack {
-                Label(error.message, systemImage: "exclamationmark.triangle")
-                Spacer()
+            SlateStatusBar(message: error.message, tone: .error) {
                 Button("重试保存") { Task { await workspace.retryAutosave() } }
                 Button("关闭") { session.clearError() }
             }
-            .padding(10)
-            .background(.bar)
-            .accessibilityElement(children: .combine)
         } else if let error = termination.error {
-            HStack {
-                Label(error.message, systemImage: "exclamationmark.triangle")
-                Spacer()
-                // Close/quit failures include IME composition and Library
-                // barriers; an autosave retry is not valid for those owners.
+            // Close/quit errors belong to termination, not to autosave retry.
+            SlateStatusBar(message: error.message, tone: .error) {
                 Button("关闭") { termination.clearError() }
             }
-            .padding(10)
-            .background(.bar)
-            .accessibilityElement(children: .combine)
         }
+    }
+}
+
+/// Stable, compact geometry keeps changing stage text from moving the dialog.
+/// Indeterminate progress reports activity without inventing a percentage.
+struct ProjectOpeningProgressPanel: View {
+    let projectName: String
+    let stage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("正在打开项目").font(.headline)
+                Text(projectName).font(.subheadline).foregroundStyle(.secondary)
+                    .lineLimit(1).help(projectName)
+            }
+            ProgressView().progressViewStyle(.linear)
+                .accessibilityLabel("正在打开项目")
+            Text(stage).font(.callout).foregroundStyle(.secondary)
+                .lineLimit(2).frame(minHeight: 34, alignment: .topLeading)
+        }
+        .padding(24)
+        .frame(maxWidth: 360, alignment: .leading)
+        .background(SlateSyncTheme.evidenceSurface,
+                    in: .rect(cornerRadius: SlateSyncTheme.panelRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius)
+                .strokeBorder(SlateSyncTheme.separator, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project.opening.progress")
     }
 }

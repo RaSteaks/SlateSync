@@ -67,3 +67,13 @@ xcuserdata/
 
 # Phase Gate raw logs, DerivedData, Archives, and JSON runs are local/CI evidence.
 /.codex/gate-results/
+
+# Per-machine signing identity reference; private keys stay in Keychain.
+/Configuration/LocalSigning.xcconfig
+
+# Local UI audit evidence and optional HTML prototype are not release inputs.
+/premium-audit.json
+/docs/ui-redesign-2026-09-12.md
+/docs/ui-refresh-validation.md
+/docs/ui-redesign-assets/
+/.claude/ui-design/prototype.html

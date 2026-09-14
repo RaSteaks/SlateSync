@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct ProjectLibraryView: View {
+    @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ProjectLibraryModel
     private let onOpen: (ProjectSummary) -> Void
     private let onSettings: (ProjectSummary) -> Void
@@ -31,8 +32,6 @@ public struct ProjectLibraryView: View {
                 ForEach(model.activeProjects) { project in
                     ProjectRow(project: project, archived: false)
                         .tag(project.id)
-                        .contextMenu { actions(for: project) }
-                        .onTapGesture(count: 2) { onOpen(project) }
                 }
             }
             if !model.archivedProjects.isEmpty {
@@ -40,22 +39,52 @@ public struct ProjectLibraryView: View {
                     ForEach(model.archivedProjects) { project in
                         ProjectRow(project: project, archived: true)
                             .tag(project.id)
-                            .contextMenu { actions(for: project) }
                     }
                 }
+            }
+        }
+        // Let the native List own double-click/Return activation, including
+        // row whitespace. A row tap gesture competes with native selection.
+        .contextMenu(forSelectionType: String.self) { ids in
+            if let id = ids.first,
+               let project = (model.activeProjects + model.archivedProjects).first(where: { $0.id == id }) {
+                actions(for: project)
+            }
+        } primaryAction: { ids in
+            if let id = ids.first, let project = model.activeProjects.first(where: { $0.id == id }) {
+                onOpen(project)
             }
         }
         .overlay {
             if model.isLoading, model.activeProjects.isEmpty { ProgressView("正在读取项目库…") }
             if !model.isLoading, model.activeProjects.isEmpty, model.archivedProjects.isEmpty, model.error == nil {
-                ContentUnavailableView(
-                    "还没有项目",
-                    systemImage: "film.stack",
-                    description: Text("创建项目后即可导入场记单并开始识别。")
-                )
+                SlateEmptyState(title: "还没有项目", symbol: "film.stack",
+                                message: "创建项目后即可导入场记单并开始识别。") {
+                    Button("新建项目") { model.showsCreateSheet = true }
+                        .buttonStyle(.borderedProminent)
+                }
             }
         }
         .navigationTitle(model.library?.name ?? "项目库")
+        .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(SlateSyncTheme.evidenceSurface)
+        // The library overview stays fixed while the native project list owns
+        // scrolling, selection and double-click activation below it.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: density.sectionSpacing) {
+                SlatePageHeading(title: model.library?.name ?? "项目库",
+                                 subtitle: "整理拍摄项目，从场记单到剪辑数据。", symbol: "film.stack")
+                HStack(spacing: 20) {
+                    SlateCountLabel(title: "活跃项目", count: model.activeProjects.count)
+                    SlateCountLabel(title: "已归档", count: model.archivedProjects.count)
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(density.panelPadding)
+            .background(SlateSyncTheme.canvas)
+            .overlay(alignment: .bottom) { Divider() }
+        }
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom) { errorBanner }
         .sheet(isPresented: $model.showsCreateSheet) {
@@ -114,6 +143,10 @@ public struct ProjectLibraryView: View {
             if let project = model.selectedProject, project.archivedAt == nil {
                 Button("打开", systemImage: "arrow.right.circle") { onOpen(project) }
             }
+            // Mirror contextual operations for keyboard and toolbar access.
+            if let project = model.selectedProject {
+                Menu("项目操作", systemImage: "slider.horizontal.3") { actions(for: project) }
+            }
             Menu("项目库操作", systemImage: "ellipsis.circle") {
                 Button("导入项目…") { importsProject = true }
                 if let project = model.selectedProject {
@@ -126,6 +159,7 @@ public struct ProjectLibraryView: View {
                 Button("重命名项目库…") { showsRename = true }
             }
             Button("新建项目", systemImage: "plus") { model.showsCreateSheet = true }
+                .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier(AccessibilityID.projectCreate)
         }
     }
@@ -154,46 +188,53 @@ public struct ProjectLibraryView: View {
 
     @ViewBuilder private var errorBanner: some View {
         if model.libraryRestartRequired {
-            HStack {
-                Label("项目库已切换；重启 SlateSync 后生效。", systemImage: "arrow.clockwise.circle")
-                Spacer()
-            }
-            .padding(12).background(.bar)
+            SlateStatusBar("项目库已切换；重启 SlateSync 后生效。", tone: .warning)
         } else if let error = model.error {
-            HStack {
-                Label(error.message, systemImage: "exclamationmark.triangle")
-                Spacer()
+            // The shared surface presents feedback; retry ownership stays here.
+            SlateStatusBar(message: error.message, tone: .error) {
                 Button("关闭") { model.clearError() }
-                if error.retryable { Button("重试") { Task { await model.load() } } }
+                if error.retryable { Button("重试") { Task { await model.retryLoad() } } }
             }
-            .padding(12)
-            .background(.bar)
             .accessibilityIdentifier("project.error")
         }
     }
+
 }
 
 private struct ProjectRow: View {
+    @Environment(\.slateSyncDensity) private var density
     let project: ProjectSummary
     let archived: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: archived ? "archivebox" : "film.stack")
+                .font(.title3)
                 .foregroundStyle(archived ? .secondary : SlateSyncTheme.accent)
+                .frame(width: 40, height: 40)
+                .background(SlateSyncTheme.canvas, in: RoundedRectangle(cornerRadius: 8))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(project.name).font(.headline)
+                Text(project.name).font(.headline).lineLimit(1).help(project.name)
                 if !project.description.isEmpty {
-                    Text(project.description).foregroundStyle(.secondary).lineLimit(1)
+                    Text(project.description).font(.callout).foregroundStyle(.secondary).lineLimit(1).help(project.description)
                 }
             }
             Spacer()
             Text("\(project.taskCount) 个任务")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+            Image(systemName: archived ? "archivebox" : "chevron.right")
+                .font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, density.rowPadding)
+        // The identity stripe is reserved for projects, never repeated on tasks.
+        .padding(.leading, 10)
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(archived ? Color.secondary.opacity(0.3) : SlateSyncTheme.accent.opacity(0.65))
+                .frame(width: 3).padding(.vertical, 4)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(project.name)，\(archived ? "已归档" : "活跃")，\(project.taskCount) 个任务")
     }
@@ -218,7 +259,7 @@ private struct CreateProjectSheet: View {
                     // Form renders its visible title as a sibling element.
                     .accessibilityLabel("描述（可选）")
             }
-            if let error = model.error { Text(error.message).foregroundStyle(.red) }
+            if let error = model.error { Text(error.message).foregroundStyle(SlateSyncTheme.danger) }
             HStack {
                 Spacer()
                 Button("取消", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
@@ -245,11 +286,11 @@ private struct ProjectDeletionSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label("永久删除项目", systemImage: "trash")
-                .font(.title2.bold()).foregroundStyle(.red)
+                .font(.title2.bold()).foregroundStyle(SlateSyncTheme.danger)
             Text("此操作不可撤销。请输入 **\(project.name)** 以确认。")
             TextField("项目名称", text: $model.deletionConfirmation)
                 .accessibilityIdentifier("project.delete.confirmation")
-            if let error = model.error { Text(error.message).foregroundStyle(.red) }
+            if let error = model.error { Text(error.message).foregroundStyle(SlateSyncTheme.danger) }
             HStack {
                 Spacer()
                 Button("取消", role: .cancel) { dismiss() }

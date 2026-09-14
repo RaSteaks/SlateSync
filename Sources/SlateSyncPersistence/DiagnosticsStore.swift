@@ -157,7 +157,7 @@ public actor DiagnosticsStore {
         var commands: [SQLiteCommand] = []
         for url in entries {
             guard
-                let data = try? Data(contentsOf: url),
+                let data = try? LocalProjectEncryption.read(from: url),
                 var object = try? PersistenceJSON.object(from: data, errorCode: "DIAGNOSTIC_INVALID"),
                 let id = try? PersistenceIdentifiers.diagnostic(
                     PersistenceJSON.string(object["id"]) ?? url.deletingPathExtension().lastPathComponent

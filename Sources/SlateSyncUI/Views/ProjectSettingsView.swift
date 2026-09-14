@@ -2,6 +2,7 @@ import SlateSyncDomain
 import SwiftUI
 
 public struct ProjectSettingsView: View {
+    @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ProjectSettingsModel
     @Bindable private var recognition: RecognitionModel
     private let projectID: String?
@@ -25,6 +26,7 @@ public struct ProjectSettingsView: View {
                 Form {
                     Section("项目") {
                         TextField("名称", text: $model.name)
+                            .accessibilityIdentifier("project.settings.name")
                         TextField("描述", text: $model.description, axis: .vertical)
                             .lineLimit(2...5)
                             // Vertical Form fields need an explicit accessible
@@ -44,9 +46,11 @@ public struct ProjectSettingsView: View {
                             if let unavailableModelID {
                                 Text("不可用：\(unavailableModelID)").tag(unavailableModelID)
                             }
-                            ForEach(recognition.availableModels(
-                                providerID: model.settings.providerId ?? ""
-                            ), id: \.id) { Text($0.label).tag($0.id) }
+                            ForEach(
+                                recognition.availableModels(
+                                    providerID: model.settings.providerId ?? ""
+                                ), id: \.id
+                            ) { Text($0.label).tag($0.id) }
                         }
                         if unavailableProviderID != nil || unavailableModelID != nil {
                             LabeledContent("已保存的识别选项不可用", value: "请选择可用项或先在全局设置中完成配置")
@@ -71,23 +75,52 @@ public struct ProjectSettingsView: View {
                         TextField("保条标记", text: $model.settings.resolve.comments.holdTake)
                     }
                 }
+                // Keep long project forms scrollable at the minimum height.
                 .formStyle(.grouped)
+                .padding(.horizontal, density == .compact ? 0 : 8)
                 .disabled(model.operation.isRunning)
+            } else if projectID != nil {
+                // A project already exists while its options are loading;
+                // avoid flashing the unrelated "no open project" empty state.
+                if case .failed = model.operation {
+                    ContentUnavailableView("无法读取项目设置", systemImage: "exclamationmark.triangle")
+                } else {
+                    ProgressView("正在读取项目设置…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else {
-                ContentUnavailableView("未打开项目", systemImage: "slider.horizontal.3", description: Text("请先从项目库打开一个活跃项目。"))
+                ContentUnavailableView(
+                    "未打开项目", systemImage: "slider.horizontal.3", description: Text("请先从项目库打开一个活跃项目。"))
             }
         }
         .navigationTitle("项目设置")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("保存", systemImage: "square.and.arrow.down") { Task { await model.save() } }
+                    .buttonStyle(.borderedProminent)
                     .disabled(model.project == nil || model.operation.isRunning)
             }
         }
         .safeAreaInset(edge: .bottom) {
             if case .failed(let error) = model.operation {
-                Label(error.message, systemImage: "exclamationmark.triangle")
-                    .padding(10).frame(maxWidth: .infinity, alignment: .leading).background(.bar)
+                SlateStatusBar(message: error.message, tone: .error) {
+                    Button(model.project == nil ? "重试读取" : "重试保存") {
+                        Task {
+                            if model.project == nil {
+                                await model.load(projectID: projectID)
+                            } else {
+                                await model.save()
+                            }
+                        }
+                    }.disabled(model.operation.isRunning)
+                }
+            } else if case .succeeded(let message) = model.operation,
+                let project = model.project, model.name == project.name,
+                model.description == project.description, model.settings == project.settings
+            {
+                // A successful save describes only that snapshot; hide the
+                // acknowledgement as soon as the user creates another draft.
+                SlateStatusBar(message, tone: .success)
             }
         }
         .task(id: projectID) {
@@ -103,14 +136,16 @@ public struct ProjectSettingsView: View {
 
     private var unavailableProviderID: String? {
         guard let id = model.settings.providerId, !id.isEmpty,
-              !recognition.providers.contains(where: { $0.id == id }) else { return nil }
+            !recognition.providers.contains(where: { $0.id == id })
+        else { return nil }
         return id
     }
 
     private var unavailableModelID: String? {
         guard let id = model.settings.modelId, !id.isEmpty,
-              !recognition.availableModels(providerID: model.settings.providerId ?? "")
-                .contains(where: { $0.id == id }) else { return nil }
+            !recognition.availableModels(providerID: model.settings.providerId ?? "")
+                .contains(where: { $0.id == id })
+        else { return nil }
         return id
     }
 

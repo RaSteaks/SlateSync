@@ -1,5 +1,102 @@
 # SlateSync 当前项目方案
 
+## 2026-09-14 新版 UI 方案收敛与 Figma 预览
+
+- 新版界面统一为单一 `Slate Workbench` 主题；深色/浅色只是同一语义 Token 的外观 mode，
+  不再维护第二套视觉语言或独立色板。
+- 圆角沿用 `DESIGN.md` / `SlateSyncTheme`：small 6pt、control 8pt、panel 12pt、large 16pt，
+  SwiftUI 自定义容器使用 `.continuous`；功能视图不得写局部 RGB 或 7/9/10pt 圆角。
+- 保留 `NavigationSplitView`、原生 `List`/`Picker`/`NSTableView` 与 macOS Settings 场景；
+  异步反馈统一由 `SlateStatusBar` 承载，识别完成不自动抢占当前页面，以 Tab 圆点和状态栏动作引导查看结果。
+- 灯箱只承载真实场记单证据，页码/缩放/导入控件放在相邻控制栏；片场痕迹按场景单点出现，避免主题化过度。
+- Figma 预览按 `Foundations → Project Library → Workspace/Input → Results → Resolve CSV` 建立，
+  Figma 变量只镜像 SwiftUI Token，不替代运行时主题来源；预览目标为 `朱煜天's team` 中现有的
+  `codex` draft，当前先完成 Light 预览，同时按 Light/Dark 可切换的语义结构组织 token，
+  不另建第二套文件。
+- 本轮仅优化设计文档与方案记录，未修改 Swift 运行时代码；SwiftUI 继续保留 Light/Dark 自适应，
+  Figma 当前先交付 Light 画板，Dark 作为后续 mode 补齐。当前 Figma Starter MCP 调用额度已耗尽，
+  文件已写入基础 token，语义 alias 与页面画板待额度恢复后继续。
+
+## 2026-09-13 Keychain 状态查询与加密 SQLite 恢复
+
+- Keychain 凭据状态查询使用配置为 `interactionNotAllowed` 的 `LAContext`，保持状态刷新不弹授权框，并兼容当前 macOS SDK 的严格告警构建。
+- 真实钥匙串探针与生产查询共享同一非交互认证上下文，并显式链接 `LocalAuthentication`，避免回归覆盖验证过时的 API。
+- 加密 SQLite 只使用内存连接；已加密主快照在迁移或直接打开时，均在数据库协调锁内清理可能由中断快照替换遗留的 `-wal`、`-shm` 和 `-journal` sidecar，避免明文页残留。
+- 增加加密数据库残留 sidecar 的迁移与直接打开回归测试。
+- 验证：`swift build -Xswiftc -warnings-as-errors` 通过；SwiftPM 全量 343 项测试通过、2 项按环境跳过、0 失败；加密专项 9 项测试全部通过；临时钥匙串探针通过三次独立读取、重签名拒绝、属性查询、锁定与恢复场景。
+
+## 2026-09-12 侧栏品牌图标
+
+- 左上角品牌区使用 NSApplication.shared.applicationIconImage，跟随应用打包图标。
+- 以原色、32×32 pt 等比显示，替换 film.stack.fill；不复制图标资源或施加主题染色。
+- 验证：swift build 与 git diff --check 通过；不更改导航与业务行为。
+
+## 2026-09-12 场记工作台 UI 重设计
+
+- 在已有未提交界面上增量实现，保留当前业务模型、项目/任务选择与保存屏障。
+- 增加共用 SlatePageHeading / SlateCountLabel；项目库固定概览与原生滚动列表分层。
+- 侧栏加入品牌和全局设置入口；任务栏增加标题、真实数量及文字+符号状态；
+  工作区统一任务标题层级，保留输入/识别结果/Resolve CSV 的原生分段选择。
+- 所有颜色复用 SlateSyncTheme，间距复用 SlateSyncDensity；已为新增组合与行为边界添加注释。
+- DESIGN.md 同步记录新构图；本轮验证结果见 docs/ui-redesign-2026-09-12.md。
+
+
+## 2026-09-11 启动、识别与运行性能优化
+
+- 项目库启动统计对已有 tasks 表使用只读连接，避免每个加密项目执行无效 schema 写入和重新加密；未初始化的旧数据库保留原初始化回退。
+- 历史任务列表在 SQLite 内投影名称、状态、时间和记录数，不再向 Swift 返回全部图片/CSV/识别内容；保留空 editedRecords 优先、异常数组回退、原有排序及完整持久化格式。
+- 识别后处理预计算物料排序键与继承排序键，保留稳定排序及卡号语义；场次正则只编译一次，跨页共享只读实例。
+- 预览仅缓存当前页 NSImage，识别进度及布局刷新复用它，换页/换素材时更新；缓存属于视图，不跨窗口共享。
+- 新增大图片列表旧新一致性、加密统计文件不改写、2,000 条识别排序兼容回归。性能测量使用隔离合成数据，不使用真实项目或外部模型请求。
+- 验证：严格构建通过；完整 `swift test` 330 项、0 失败、2 项专用环境跳过；补充识别回归 8/8（包含完整套件后新增的排序测试）及启用前台 Gate 的原生表格 8/8 通过。离线实际 Paddle 模型测试未运行。
+- 本机 Debug 单次样本（24 任务，每个含 512 KiB 图片字符串）：旧完整读取/Swift 解析 30.202 ms，SQLite 摘要投影 5.106 ms，约 5.9 倍；两者结果逐字段一致，完整任务图片仍保留。该样本不代表端到端启动、云端识别或 Release 性能。
+- Xcode `testPreviewPagingPreservesResultSelection` 首次在文件面板等待超时，其他测试结束后单独重跑 1/1 通过；保留首次失败事实，不将其隐藏为始终稳定。未修改文件面板或放宽断言。
+- 本轮临时测试库由 UI 测试 teardown 清除；构建目录、截图、结果包及日志均清理，仅保留源码与文字验证记录。未提交、未推送。
+
+
+## 2026-09-11 历史任务选择反馈修复
+
+- TaskRailView 同步记录点击的 pendingSelection，原生 List 在保存/加载挂起时维持目标行高亮，避免旧 selectedTaskID 回写造成新旧行跳动。
+- 挂起期间忽略选择回声；成功后使用已提交的任务 ID，失败后恢复原行并保留 WorkspaceModel 的错误反馈。未提前替换编辑数据或绕过保存屏障。
+- 验证：语法解析与 `git diff --check` 通过。严格构建、UI 目标构建及 Ownership 测试均被当前持久化层编译错误阻挡（SQLiteDatabase.swift 并发发送检查、LocalProjectEncryption.swift 异步迭代检查），未宣称运行回归通过；未改动这些无关文件。
+
+## 2026-09-11 项目打开反馈
+
+- AppSessionModel 在首个 await 前发布窗口独立的项目名称，统一工作区/项目设置打开入口，加载期间忽略重复打开请求。
+- WorkspaceModel 按保存草稿、等待操作、读取列表、恢复任务、读取配置及完成切换发布阶段；保留全部保存屏障及成功后原子发布规则。
+- AppRootView 在禁用内容之外显示原生不确定进度条与阶段说明（`project.opening.progress`），成功或失败均清除；不显示虚假百分比。
+- 本轮改善等待反馈与重复请求，不声称数据库加载耗时降低；实际性能优化仍需对慢项目分阶段测量。
+- 验证：`swift build -Xswiftc -warnings-as-errors` 通过；`swift test --filter SM08OwnershipTests` 55/55 通过（含新增反馈生命周期、重复打开、窗口隔离和保存失败测试）。本轮未运行 Xcode UI 测试或新增截图；临时构建/测试日志已清理。
+
+## 2026-09-11 原生 UI 与外观优化
+
+本轮在当前 Swift UI 分支实现“精致原生专业工具”方案，保持 macOS 15、
+1440×900 默认主窗口与 960×600 最小窗口。UI 层不更改业务、持久化、
+文件格式或发布主线。
+
+- 工作台使用大预览、300 pt 可收起配置面板；900 pt 为内容区内联/覆盖切换点。
+  保留三个工作页，元数据扫描移到 Resolve CSV，结果支持独立翻页的原稿对照。
+- 任务栏与辅助面板通过几何/可见性变化保持列表和结果编辑器身份；
+  WorkspaceEditorBoundary 先拒绝中文组合输入，再调用现有 workspace.flush。
+- SlateSyncTheme / SlateSyncDensity 统一深浅色、状态、间距与 30/24 pt 表格行高；
+  密度更新不 reloadData，编辑期间延迟到完成后应用。
+- SlateStatusBar、SlateEmptyState、SlatePanelHeading、SlateSearchField 统一跨页表现；
+  设置窗口改为默认 780×620、最小 700×540。DESIGN.md 与 UX-CONTRACT.md 同步维护。
+- 验证使用临时项目库和确定性场记图像，不读取用户项目或真实凭据。
+  新增原生表格密度/组合输入回归与 UI 外观、密度、尺寸、对照截图矩阵。
+- 最小尺寸按原生窗口外框计算；窗口探针测量标题栏，避免 600 pt 内容区
+  实际撑高为 652 pt。设置使用原生分段分类和可滚动表单，保留系统设置窗口，
+  避开 macOS 15 特殊 TabView 宿主的固定尺寸。探针测量标题栏并补齐设置窗口
+  缺少的原生 resizable 标志，不改变窗口位置、恢复或 SwiftUI 尺寸约束。
+- 工作台统一持有素材、CSV 与目录选择面板，避免同一宿主的多个 fileImporter
+  相互覆盖；CSV 解码、导出字节契约和安全作用域读取仍走原有模型。
+
+验证结果记录于 `docs/ui-refresh-validation.md`：严格告警构建通过；Swift 全量
+322 项、1 跳过、0 失败；完整 11 项 UI 测试通过，补充双页 PDF 与最终矩阵 2 项通过。
+40 张窗口截图及万行表格复用、编辑、前台滚动指标已归档。960×600 外框实测通过；
+1440×900 宽图受当前屏幕工作区限制，实际约 883–885 pt 高，未冒充全尺寸验收。
+
+
 ## 未来目标与分支治理（当前有效）
 
 ### 架构职责
@@ -2154,3 +2251,94 @@ Worker 边界、验收证据和最终治理交接。
   缩放比约 1.983。最新证据目录为
   `.codex/gate-results/SM-05/20260904T194114Z-523fd49790a3`；dirty 模式按设计记录
   `PASS/approvable=false`，该本地证据不得提交，也不替代 clean review commit 与 Owner 批准。
+
+## 2026-09-11 本地凭据兼容与项目加密
+
+- `SecurityKeychainBackend` 默认改为 macOS 登录钥匙串，API Key 仍由系统加密保存；
+  无 Apple Developer Team / provisioning profile 的临时签名构建不再默认调用
+  Data Protection Keychain。保留显式 Data Protection 参数供具备授权的调用者使用。
+- 正常启动由 `ProjectLibraryStartupService` 在打开任何项目存储前解锁本地 AES-256-GCM
+  密钥并迁移项目库。测试/降级根不访问真实钥匙串；加密专项测试注入内存后端。
+- 每个项目库的 `.slatesync-encryption` 仅保存随机密钥标识；32 字节密钥只在登录钥匙串
+  与进程内存中。CryptoKit 随机 nonce、认证标签及版本化头保护 SQLite 和 JSON 内容。
+  找不到既有密钥或认证失败时停止，不生成替代密钥、不覆盖失败的文件。
+- 内部 SQLite 使用内存连接；每次操作在跨进程锁内重新读取加密快照，写操作完成后原子
+  替换加密文件。SQLite 临时存储在内存中，不产生新的明文 WAL。此方案每次操作处理整个
+  数据库，内存/IO 成本随数据库大小增长，适合当前项目元数据，不用于媒体大文件。
+- 旧 SQLite 通过 online backup 读取已提交 WAL 页，再校验加密结果并原子替换；旧 JSON
+  快照逐文件迁移，可中断后重试。迁移不会擦除历史系统备份/APFS 快照/SSD 已释放块。
+  升级迁移期间应关闭其他旧版 SlateSync，旧版不理解新的加密格式。
+- 标准项目包、项目库导出通过解密读与 SQLite backup 生成通用 v1 文件，不包含密钥或加密
+  标识；导入到加密库时重新加密。激活新的本地项目库时继承加密策略。
+- 范围：项目库索引、项目设置/记录、任务、诊断与场记 Profile，以及对应 JSON 快照。
+  原始媒体、媒体缓存、导出的 CSV/项目包、机器级非敏感配置和日志不在此范围。
+- 加密库依赖本机钥匙串。跨机迁移应使用应用内导出；丢失钥匙串后只能从可用导出恢复，
+  不能仅凭复制的加密目录恢复。不要将内部加密目录当作通用项目包交给旧版本。
+- 验证：SwiftPM 持久化回归与新增加密测试；Xcode 随机 service/account 的真实钥匙串
+  create/read/conditional-delete 测试通过，构建签名为 ad-hoc 且无 Team ID。
+- 最终验证结果：177 项 SwiftPM 持久化/工作流测试全部通过（含 4 项加密专项：旧库与
+  快照迁移、标准导出/重新导入、并发连接/篡改、WAL/只读保护、缺失密钥保护）；
+  1 项 Xcode 真实钥匙串测试通过。`script/build_and_run.sh --verify` 构建和启动通过。
+  启动后只检查文件头，确认现有库 96 个 SQLite/JSON 文件全部加密；原项目列表正常，
+  OpenRouter 凭据弹窗不再出现 -34018。未读取或填写用户 API Key。
+
+## 2026-09-11 启动钥匙串授权优化
+
+- App Debug/Release 使用 `Configuration/Signing.xcconfig`，引用被 Git 忽略的
+  `LocalSigning.xcconfig` 中的本机证书指纹。`script/setup_local_signing.py` 幂等创建/复用
+  自签名代码签名身份，私钥仅保留在登录钥匙串；用户级信任仅限 codeSign。
+  `build_and_run.sh` 启动前检查身份、构建后核对实际证书，缺失身份不得退回 ad-hoc；
+  显式 `SLATESYNC_TEST_ROOT` 或测试命令 `CODE_SIGN_IDENTITY=-` 保留隔离测试路径。
+- KeychainBackend.status 仅查询属性，并设置禁止认证 UI；configured/missing/
+  authorizationRequired/unavailable 分别投影为已配置/缺失/需要授权/读取失败。
+  全局设置只取一次属性状态快照供 ProviderRegistry 和设置状态共同使用。
+- KeychainCredentialStore 合并同 Provider 的在途秘密读取，成功后只在进程内缓存。
+  保存/删除按 Provider 排队，读写版本防止旧读取覆盖新值；失败写入不发布新缓存。
+  授权取消或拒绝会锁住自动读取，新的用户模型刷新/探测/识别动作才允许重试。
+- 项目密钥按 ID 合并解锁，已解锁时不重复读取钥匙串；新的项目库使用进程内稳定候选 ID，
+  避免首次取消后不断生成新 ID 绕过错误缓存。显式项目库“重试”清除解锁失败状态。
+  既有密钥 ID/钥匙串条目/加密格式不变；已加密文件启动校验不再为迁移重复加密。
+- 启动发现 legacy provider-keys.json 仅报告 awaitingAuthorization，用户在设置中点击
+  “迁移旧凭据”才执行会读取秘密的旧凭据迁移；已迁移用户没有新增操作。
+- 真实回归脚本 `script/verify_local_keychain.py` 仅使用临时独立钥匙串和固定签名测试 App：
+  三次独立进程读、重新编译后的相同 designated requirement、拒绝不同签名访问、
+  属性查询不弹窗、锁定失败与解锁恢复。不会修改登录钥匙串现有凭据或放宽其 ACL。
+- 首次换成固定签名，已有项目密钥/API Key 可能分别要求用户选择“始终允许”；系统弹窗
+  由用户本人操作。以后钥匙串锁定、证书更换或授权撤销仍可要求重新授权。
+- 验证结果：269 项持久化/工作流/UI 回归中 268 通过、1 项原有显示器时序测试跳过；
+  后续启动迁移/解锁/所有权 66 项全部通过。UI strict audit 零 findings。
+  本地签名探针完整通过；真实 App 构建、最终证书核对及脚本启动通过，原项目列表与
+  Provider 设置正常加载。未填写或打印用户 API Key，首次系统授权由用户自行处理。
+
+## 2026-09-11 未提交改动审查修复
+
+- 项目库校验在目录与符号链接检查通过后，先解锁目标库的既有密钥，再读取加密清单。
+  此路径不创建密钥、安装标识或执行迁移；解锁失败保留 `PROJECT_UNLOCK_REQUIRED`
+  和可重试状态。用户重新选择导入库时允许重新授权，后台校验仍保留拒绝缓存。
+- 新增回归覆盖：重启后仅解锁 B 时重新校验 A、缺失密钥后的显式重试，以及校验便携库
+  不改变其明文格式；既有加密库校验前后的数据库与清单字节保持一致。
+- CI 与发布候选共用的 Gate 显式传递 `CODE_SIGN_IDENTITY=-`，覆盖 Debug、Release、
+  Archive、XCTest 和打包验收测试宿主。正常开发构建继续使用本机稳定签名；无需在
+  GitHub runner 安装个人证书。Gate 命令夹具新增签名参数断言。
+- 验证：18 项加密/钥匙串/项目库转移 SwiftPM 测试通过；126 项 Gate helper 自测通过；
+  Xcode 实际 Debug 构建设置确认为 `CODE_SIGN_IDENTITY = -`、Manual；脚本语法和
+  `git diff --check` 通过。本轮未运行完整 SM-09 Gate、UI 测试或发布构建，未提交。
+
+
+## 项目打开与居中进度修复
+
+- 项目列表通过 SwiftUI `contextMenu(forSelectionType:primaryAction:)` 处理原生双击/键盘打开，避免行手势与 List 选择冲突；归档行不触发打开。
+- `AppRootView` 的项目打开进度覆盖整个 split view，面板最大宽 360 点、24 点内边距，复用 12 点面板圆角；阶段变化不挤压列表，错误和成功沿用会话状态清理。
+- 已加密 SQLite 在打开连接时只认证读取，不重新加密写回；新库与明文迁移仍先持久化。密钥 ID、加密格式与后续写入锁保持不变。
+
+验证记录：`LocalProjectEncryptionTests|SM08OwnershipTests` 共 63 项通过；Debug 构建及稳定签名验证通过。隔离副本实际双击进入工作台、返回项目库后再次双击均成功。Xcode UI runner 因 enabling automation mode 超时未执行测试断言；真实库复测等待用户完成系统钥匙串授权。
+
+## 2026-09-12 内建 Provider 配置与帮助导航优化
+
+- 内建 Provider 列表统一使用“配置…”入口，保留凭据状态、模型刷新/配置能力与发现结果；配置面板改为可滚动内容加固定底部操作栏，展示服务说明、官网/密钥文档、Base URL、协议、模型发现状态及 Provider 支持的高级字段。
+- API Key 使用 SecureField，仅允许用户输入或明确删除；空输入保留原凭据，外层空白会被裁剪，纯空白输入会被拒绝。普通配置保存与连接验证分离，支持普通配置已保存但凭据保存失败的部分成功状态，并在保存后清理模型发现缓存。
+- OpenRouter 默认地址为 `https://openrouter.ai/api/v1`，站点地址与应用名称分别映射为 `HTTP-Referer` 与 `X-OpenRouter-Title`，应用名称默认 SlateSync；Base URL 不会自动拼接 `/chat/completions`。
+- 帮助中心扩展为快速开始、项目与任务、识别与复核、Provider 配置、OCR 配置、Resolve CSV/元数据、日志与恢复七章，支持双语结构化步骤/提示/FAQ/动作/外链。新增类型化设置导航请求，使帮助动作打开设置后能定位、滚动并高亮目标区域，同时保留设置草稿；当前任务的 Resolve CSV 动作使用一次性工作台入口直接选中 CSV 分区。
+- 增加 Provider URL 指引、OpenRouter 标题及帮助结构化内容的回归测试；未修改数据格式、识别算法、OCR 算法、SDK 依赖或 Provider 协议范围。
+- 验证：SwiftPM 全量 342 项测试通过；新增 URL、OpenRouter Header、帮助结构化搜索与类型化设置导航的定向测试通过；Xcode Debug 构建通过。`-warnings-as-errors` 仍会报告既有 `KeychainCredentialStore.swift:96` 的弃用 API 警告，未在本轮扩大范围修复。
+- 本轮编辑的 SwiftUI/工作流/域模型新增了状态、导航、保存边界和协议映射注释；OpenRouter Header 依据官方 Quickstart 文档实现。

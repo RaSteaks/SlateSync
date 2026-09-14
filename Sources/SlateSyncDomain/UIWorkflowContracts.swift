@@ -21,6 +21,7 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
     public let providers: [ProviderSummary]
     public let models: [ModelData]
     public let configuredCredentialProviderIDs: Set<String>
+    public let credentialStatuses: [String: CredentialStatus]
     public let visionAvailable: Bool
     public let paddleAvailable: Bool
     public let runtime: GlobalRuntimeProjection
@@ -38,7 +39,8 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
         visionAvailable: Bool,
         paddleAvailable: Bool,
         runtime: GlobalRuntimeProjection,
-        restartRequired: Bool = false
+        restartRequired: Bool = false,
+        credentialStatuses: [String: CredentialStatus] = [:]
     ) {
         self.values = values
         self.customProviders = customProviders
@@ -49,11 +51,13 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
         self.paddleAvailable = paddleAvailable
         self.runtime = runtime
         self.restartRequired = restartRequired
+        self.credentialStatuses = credentialStatuses
     }
 }
 
 public enum LegacyCredentialMigrationStatus: String, Codable, Hashable, Sendable {
     case notRun
+    case awaitingAuthorization
     case sourceMissing
     case noCredentials
     case migrated
@@ -133,6 +137,7 @@ public struct ProductLogEntry: Identifiable, Codable, Hashable, Sendable {
 }
 
 public protocol ProjectLibraryWorkflowServing: Sendable {
+    func retryProjectLibraryUnlock() async
     func projectLibrary() async throws -> ProjectLibraryProjection
     func project(id: String) async throws -> ProjectData
     func createProject(name: String, description: String) async throws -> ProjectData
@@ -228,4 +233,9 @@ public extension LogWorkflowServing {
 
 public protocol ProductLifecycleServing: Sendable {
     func drain() async throws
+}
+
+// Existing service doubles do not own a platform keychain.
+public extension ProjectLibraryWorkflowServing {
+    func retryProjectLibraryUnlock() async {}
 }

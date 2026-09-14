@@ -32,6 +32,8 @@ public final class WorkspaceModel {
     private var autosaveObservation: Task<Void, Never>?
     private var editRevision = 0
     private var isClosed = false
+    // Stage text follows real suspension points, not estimated percentages.
+    public private(set) var activationStage: String?
     public private(set) var isTransitioning = false
     public var prepareSelectionChange: (@MainActor () async throws -> Void)?
     public var flushEditor: (@MainActor () throws -> Void)?
@@ -72,7 +74,7 @@ public final class WorkspaceModel {
     public func activate(projectID newProjectID: String) async throws {
         guard !isTransitioning, permitsNewOperation?() != false else { throw transitionError }
         isTransitioning = true
-        defer { isTransitioning = false }
+        defer { isTransitioning = false; activationStage = nil }
         let oldProjectID = projectID
         try acquireProject?(newProjectID)
         var didActivate = false
@@ -81,21 +83,28 @@ public final class WorkspaceModel {
         }
         // Even reopening the same project must flush before refreshing its
         // persisted projection. Otherwise its unsaved editor is overwritten.
+        activationStage = "正在保存当前草稿…"
         try await flush()
+        activationStage = "正在等待当前操作结束…"
         try await prepareSelectionChange?()
         // A completing operation may have staged data while the first flush
         // was suspended. Drain first, then persist its final state.
+        activationStage = "正在保存最终修改…"
         try await flush()
+        activationStage = "正在读取任务列表…"
         let loaded = try await service.listTasks(projectID: newProjectID)
         let candidate = loaded.compactMap(\.id).first
+        activationStage = "正在恢复任务…"
         let task: TaskData?
         if let candidate { task = try await service.loadTask(projectID: newProjectID, taskID: candidate) }
         else { task = nil }
+        activationStage = "正在读取项目配置…"
         let settings: ProjectSettings
         if let library = service as? any ProjectLibraryWorkflowServing {
             settings = try await library.project(id: newProjectID).settings
         } else { settings = task?.projectSettingsSnapshot ?? .init() }
         let availableScenarios = try await (service as? any LocalSlateWorkflowServing)?.listScenarios(projectID: newProjectID) ?? []
+        activationStage = "正在完成项目切换…"
         if let projectID, projectID != newProjectID {
             try await closeRuntimeProject(projectID)
         }

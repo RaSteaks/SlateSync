@@ -2,6 +2,7 @@ import SlateSyncDomain
 import SwiftUI
 
 public struct LogsView: View {
+    @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: LogsModel
     private let recognition: RecognitionModel
     private let opener: any WorkspaceOpening
@@ -20,12 +21,13 @@ public struct LogsView: View {
                         Toggle(severity.title, isOn: severityBinding(severity))
                     }
                 }
-                TextField("分类", text: $model.category).frame(maxWidth: 180)
+                SlateSearchField(title: "筛选分类", text: $model.category, identifier: "logs.category").frame(maxWidth: 180)
                 Button("刷新", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
                 Button("打开日志文件夹", systemImage: "folder") {
                     Task { opener.openDirectory(await model.directory()) }
                 }
                 Spacer()
+                if model.isRefreshing { ProgressView().controlSize(.small).accessibilityLabel("正在读取日志") }
                 if recognition.operation.isRunning {
                     Label("识别进行中", systemImage: "viewfinder")
                         .foregroundStyle(SlateSyncTheme.accent)
@@ -45,15 +47,18 @@ public struct LogsView: View {
                             Text(entry.message)
                             Text(entry.event).font(.caption.monospaced()).foregroundStyle(.secondary)
                         }
-                    }.accessibilityElement(children: .combine)
+                    }
+                    .padding(.vertical, density.rowPadding)
+                    .accessibilityElement(children: .combine)
                 }.accessibilityIdentifier(AccessibilityID.logsList)
             }
         }
         .navigationTitle("运行日志")
         .safeAreaInset(edge: .bottom) {
             if model.degraded {
-                Label("部分日志无法读取，已保留可用记录。可刷新重试。", systemImage: "exclamationmark.triangle")
-                    .padding(10)
+                SlateStatusBar(message: "部分日志无法读取，已保留可用记录。", tone: .warning) {
+                    Button("重试") { Task { await model.refresh() } }
+                }
             }
         }
         .onAppear { model.startPolling() }
@@ -76,5 +81,6 @@ public struct LogsView: View {
 private extension ProductLogSeverity {
     var title: String { switch self { case .debug: "调试"; case .info: "信息"; case .warning: "警告"; case .error: "错误" } }
     var symbol: String { switch self { case .debug: "ladybug"; case .info: "info.circle"; case .warning: "exclamationmark.triangle"; case .error: "xmark.octagon" } }
-    var color: Color { switch self { case .debug: .secondary; case .info: .blue; case .warning: .orange; case .error: .red } }
+    // Severity uses the same adaptive semantic colors as feature feedback.
+    var color: Color { switch self { case .debug: .secondary; case .info: SlateSyncTheme.accent; case .warning: SlateSyncTheme.warning; case .error: SlateSyncTheme.danger } }
 }

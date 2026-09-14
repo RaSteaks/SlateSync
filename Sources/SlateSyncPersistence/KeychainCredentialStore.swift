@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 import SlateSyncDomain
 
@@ -6,6 +7,7 @@ import SlateSyncDomain
 /// depends on this protocol so tests never need to touch the user's real
 /// login keychain.
 public protocol KeychainBackend: Sendable {
+    func status(service: String, account: String) async -> CredentialStatus
     func read(service: String, account: String) async throws -> Data?
     func write(_ data: Data, service: String, account: String) async throws
     func createIfAbsent(
@@ -36,6 +38,9 @@ public enum KeychainConditionalDeleteResult: String, Codable, Hashable, Sendable
 }
 
 public extension KeychainBackend {
+    /// Unknown backends must not implement status by reading secret bytes.
+    func status(service: String, account: String) async -> CredentialStatus { .unavailable }
+
     /// Keep the original test/caller shape for a plain value comparison. A
     /// migration passes the ownership marker explicitly when compensating.
     func deleteIfMatching(
@@ -61,9 +66,12 @@ public struct SecurityKeychainBackend: KeychainBackend, Sendable {
     /// Keychain operations are coordinated in Application Support so every
     /// SlateSync process uses the same namespace across launches. Tests pass a
     /// private directory and therefore never contend with production locks.
+    /// The login keychain encrypts credentials without requiring a developer
+    /// provisioning profile. Data Protection remains an explicit opt-in for
+    /// callers whose signed application has the necessary entitlements.
     public init(
         coordinationDirectory: URL? = nil,
-        usesDataProtectionKeychain: Bool = true
+        usesDataProtectionKeychain: Bool = false
     ) {
         self.usesDataProtectionKeychain = usesDataProtectionKeychain
         if let coordinationDirectory {
@@ -77,6 +85,25 @@ public struct SecurityKeychainBackend: KeychainBackend, Sendable {
             // writable, the operation fails closed instead of racing.
             self.coordinationDirectory = FileManager.default.homeDirectoryForCurrentUser
                 .appending(path: "Library/Application Support/SlateSync/.locks", directoryHint: .isDirectory)
+        }
+    }
+
+    public func status(service: String, account: String) async -> CredentialStatus {
+        // Attribute-only queries never request the password. A non-interactive
+        // LAContext prevents rendering Provider settings from opening an
+        // authorization sheet while still reporting a protected item.
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        var query = baseQuery(service: service, account: account)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecUseAuthenticationContext as String] = context
+        var result: CFTypeRef?
+        switch SecItemCopyMatching(query as CFDictionary, &result) {
+        case errSecSuccess: return .configured
+        case errSecItemNotFound: return .missing
+        case errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled: return .authorizationRequired
+        default: return .unavailable
         }
     }
 
@@ -261,6 +288,11 @@ public struct SecurityKeychainBackend: KeychainBackend, Sendable {
     private func securityError(_ status: OSStatus) -> SlateSyncError {
         // Security.framework supplies an OS status, never the secret value;
         // keep the user-facing error similarly free of credential material.
+        if [errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled].contains(status) {
+            // Non-retryable at the transport layer: only a new user action may
+            // request authorization again, never an automatic HTTP retry.
+            return SlateSyncError(code: "KEYCHAIN_AUTHORIZATION", message: "钥匙串访问未获授权，请解锁钥匙串后重新执行操作 (OSStatus \(status))")
+        }
         let detail = SecCopyErrorMessageString(status, nil) as String? ?? "Keychain 操作失败"
         // Retain the numeric OSStatus for diagnostics while avoiding any
         // Security.framework text that could contain credential material.
@@ -441,6 +473,11 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
 
     private let backend: any KeychainBackend
     private let service: String
+    private var cached: [String: String] = [:]
+    private var mutations: [String: (id: UUID, task: Task<Void, any Error>)] = [:]
+    private var reads: [String: (id: UUID, task: Task<String?, any Error>)] = [:]
+    private var revisions: [String: Int] = [:]
+    private var blocked: [String: SlateSyncError] = [:]
 
     public init(
         backend: any KeychainBackend = SecurityKeychainBackend(),
@@ -452,11 +489,57 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
 
     public func value(providerID: String) async throws -> String? {
         try Self.validateProviderID(providerID)
-        guard let data = try await backend.read(service: service, account: providerID) else { return nil }
-        guard let value = String(data: data, encoding: .utf8) else {
-            throw SlateSyncError(code: "KEYCHAIN", message: "Keychain 凭据格式无效")
+        if let mutation = mutations[providerID] {
+            try await mutation.task.value
+            if mutations[providerID]?.id == mutation.id { mutations[providerID] = nil }
+            else if mutations[providerID] != nil { return try await self.value(providerID: providerID) }
         }
-        return value
+        if let value = cached[providerID] { return value }
+        if let error = blocked[providerID] { throw error }
+        let revision = revisions[providerID, default: 0]
+        let pending: (id: UUID, task: Task<String?, any Error>)
+        if let existing = reads[providerID] { pending = existing }
+        else {
+            let backend = backend, service = service
+            pending = (UUID(), Task {
+                guard let data = try await backend.read(service: service, account: providerID) else { return nil }
+                guard let value = String(data: data, encoding: .utf8) else {
+                    throw SlateSyncError(code: "KEYCHAIN", message: "Keychain 凭据格式无效")
+                }
+                return value
+            })
+            reads[providerID] = pending
+        }
+        do {
+            let value = try await pending.task.value
+            if reads[providerID]?.id == pending.id { reads[providerID] = nil }
+            // A late read must not undo a newer save/delete or serve its old key.
+            guard revisions[providerID, default: 0] == revision else { return try await self.value(providerID: providerID) }
+            cached[providerID] = value
+            return value
+        } catch {
+            if reads[providerID]?.id == pending.id { reads[providerID] = nil }
+            if revisions[providerID, default: 0] == revision {
+                if let failure = error as? SlateSyncError, failure.code == "KEYCHAIN_AUTHORIZATION" {
+                    blocked[providerID] = failure
+                } else if error is CancellationError {
+                    blocked[providerID] = SlateSyncError(code: "KEYCHAIN_AUTHORIZATION", message: "已取消钥匙串授权，请重新执行操作")
+                }
+            }
+            throw error
+        }
+    }
+
+    /// Explicit model refresh/recognition actions may retry a previous refusal.
+    public func beginUserOperation(providerID: String? = nil) {
+        if let providerID { blocked[providerID] = nil }
+        else { blocked.removeAll() }
+    }
+
+    public func status(providerID: String) async -> CredentialStatus {
+        guard (try? Self.validateProviderID(providerID)) != nil else { return .unavailable }
+        if blocked[providerID] != nil { return .authorizationRequired }
+        return await backend.status(service: service, account: providerID)
     }
 
     /// SM-07's transport-facing name makes the secret boundary explicit while
@@ -468,17 +551,33 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
     /// Configuration checks expose only a Boolean; the raw credential remains
     /// inside this actor and is never copied into provider/model summaries.
     public func isCredentialConfigured(for providerID: String) async throws -> Bool {
-        guard let value = try await value(providerID: providerID) else { return false }
-        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        await status(providerID: providerID) == .configured
     }
 
     public func setValue(_ value: String?, providerID: String) async throws {
         try Self.validateProviderID(providerID)
-        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            try await backend.delete(service: service, account: providerID)
-            return
+        let previousWrite = mutations[providerID]?.task
+        let previousRead = reads[providerID]?.task
+        revisions[providerID, default: 0] += 1
+        let revision = revisions[providerID, default: 0]
+        cached[providerID] = nil
+        reads[providerID] = nil
+        blocked[providerID] = nil
+        let backend = backend, service = service
+        let normalized = value.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        // Serialize provider mutations, and do not let a read during a pending
+        // write cache the old secret. An ambiguous failure invalidates the cache.
+        let token = UUID()
+        let task = Task<Void, any Error> {
+            _ = try? await previousWrite?.value
+            _ = try? await previousRead?.value
+            if let normalized { try await backend.write(Data(normalized.utf8), service: service, account: providerID) }
+            else { try await backend.delete(service: service, account: providerID) }
         }
-        try await backend.write(Data(value.utf8), service: service, account: providerID)
+        mutations[providerID] = (token, task)
+        defer { if mutations[providerID]?.id == token { mutations[providerID] = nil } }
+        try await task.value
+        if revisions[providerID, default: 0] == revision { cached[providerID] = normalized }
     }
 
     /// Migrates the Electron `provider-keys.json` shape without exposing key

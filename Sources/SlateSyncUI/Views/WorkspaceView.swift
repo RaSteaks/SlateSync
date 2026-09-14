@@ -2,21 +2,50 @@ import SlateSyncDomain
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// A route hint for Help shortcuts. The workspace keeps ownership of its
+/// segmented selection; the hint only chooses the initial section after a
+/// cross-route navigation and never changes task data.
+public enum WorkspaceEntryPoint: String, Hashable, Sendable {
+    case input
+    case resolveCSV
+}
+
 public struct WorkspaceView: View {
     @Bindable private var workspace: WorkspaceModel
     @Bindable private var recognition: RecognitionModel
     @Bindable private var csv: ResolveCSVModel
     @Bindable private var metadata: MetadataScanModel
     @Bindable private var media: MediaInputModel
-    @State private var importsMedia = false
-    @State private var importsMetadataDirectory = false
-    @State private var importsSlateCSV = false
-    @State private var section = WorkspaceSection.input
+    @Environment(\.slateSyncDensity) private var density
+    @State private var showsTasks = true
+    @State private var showsConfiguration: Bool?
+    @State private var availableWidth: CGFloat = 0
+    @State private var editorBoundary = WorkspaceEditorBoundary()
+    @State private var showsOriginal = false
+    @State private var showsAdvanced = false
+    @State private var layoutError: String?
+    @State private var changingLayout = false
+    @State private var importsFile = false
+    @State private var importKind = ImportKind.media
+
+    private enum ImportKind {
+        case media, metadata, slateCSV, resolveCSV
+        var types: [UTType] {
+            switch self {
+            case .media: [.pdf, .image]
+            case .metadata: [.folder]
+            case .slateCSV, .resolveCSV: [.commaSeparatedText, .plainText]
+            }
+        }
+    }
+    @State private var section: WorkspaceSection
     @State private var providerID = ""
     @State private var modelID = ""
     @State private var scenarioID = ""
     @State private var accuracy = ProjectSettings.AccuracyMode.high
     private let settingsRevision: Int
+    private let entryPoint: WorkspaceEntryPoint
+    private let onEntryPointConsumed: () -> Void
 
     private enum WorkspaceSection: String, CaseIterable, Identifiable {
         case input = "输入"
@@ -31,7 +60,9 @@ public struct WorkspaceView: View {
         csv: ResolveCSVModel,
         metadata: MetadataScanModel,
         media: MediaInputModel,
-        settingsRevision: Int = 0
+        settingsRevision: Int = 0,
+        entryPoint: WorkspaceEntryPoint = .input,
+        onEntryPointConsumed: @escaping () -> Void = {}
     ) {
         self.workspace = workspace
         self.recognition = recognition
@@ -39,26 +70,44 @@ public struct WorkspaceView: View {
         self.metadata = metadata
         self.media = media
         self.settingsRevision = settingsRevision
+        self.entryPoint = entryPoint
+        self.onEntryPointConsumed = onEntryPointConsumed
+        _section = State(initialValue: entryPoint == .resolveCSV ? .csv : .input)
     }
 
     public var body: some View {
-        HSplitView {
-            TaskRailView(model: workspace).frame(minWidth: 190, idealWidth: 230, maxWidth: 300)
+        HStack(spacing: 0) {
+            // Width/visibility change without removing the list or editor tree.
+            TaskRailView(model: workspace)
+                .frame(width: showsTasks ? 210 : 0)
+                .clipped().opacity(showsTasks ? 1 : 0)
+                .allowsHitTesting(showsTasks).accessibilityHidden(!showsTasks)
+            if showsTasks { Divider() }
             VStack(spacing: 0) {
-                Picker("工作区", selection: sectionBinding) {
-                    ForEach(WorkspaceSection.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding()
+                workspaceHeader
                 Divider()
                 detail
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .background(WorkspaceEditorProbe(boundary: editorBoundary).frame(width: 0, height: 0))
         .navigationTitle("工作台")
-        .accessibilityIdentifier(AccessibilityID.workspaceHeading)
-        .safeAreaInset(edge: .bottom) { autosaveBanner }
+        .safeAreaInset(edge: .bottom) {
+            autosaveBanner
+            if let layoutError {
+                SlateStatusBar(message: layoutError, tone: .warning) {
+                    Button("关闭") { self.layoutError = nil }
+                }
+            }
+        }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(showsTasks ? "隐藏任务列表" : "显示任务列表", systemImage: "sidebar.left") {
+                    changeLayout { showsTasks.toggle() }
+                }
+                .help("显示或隐藏当前项目的任务")
+                .accessibilityIdentifier("workspace.tasks.toggle")
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("保存", systemImage: "square.and.arrow.down") {
                     Task { try? await workspace.flush() }
@@ -66,6 +115,9 @@ public struct WorkspaceView: View {
                 // The File menu owns the single ⌘S registration; this toolbar
                 // button invokes the same workspace owner without competing.
                 Button("开始识别", systemImage: "viewfinder") { startRecognition() }
+                    .buttonStyle(.borderedProminent)
+                    .labelStyle(.titleAndIcon)
+                    .help(recognitionUnavailableReason ?? "识别当前场记单")
                     .disabled(!canRecognize || recognition.operation.isRunning)
                     .accessibilityIdentifier(AccessibilityID.recognize)
                 if recognition.operation.isRunning {
@@ -74,10 +126,39 @@ public struct WorkspaceView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $importsMedia, allowedContentTypes: [.pdf, .image]) { result in
-            switch result {
-            case .success(let url): chooseMedia(url)
-            case .failure(let error): media.report(error)
+        // A single importer owns the workspace presentation. Multiple
+        // fileImporter modifiers on the same native host can mask each other.
+        .fileImporter(isPresented: $importsFile, allowedContentTypes: importKind.types) { result in
+            switch importKind {
+            case .media:
+                switch result {
+                case .success(let url): chooseMedia(url)
+                case .failure(let error): media.report(error)
+                }
+            case .metadata:
+                switch result {
+                case .success(let url): scanMetadata(url)
+                case .failure(let error): metadata.report(error)
+                }
+            case .resolveCSV:
+                Task {
+                    do {
+                        let url = try result.get()
+                        let data = try await SecurityScopedFileReader.read(url)
+                        await csv.importData(data, filename: url.lastPathComponent)
+                    } catch { csv.report(error) }
+                }
+            case .slateCSV:
+                Task {
+                    do {
+                        let url = try result.get()
+                        let data = try await SecurityScopedFileReader.read(url)
+                        guard let projectID = workspace.projectID else { return }
+                        recognition.importSlateCSV(data, filename: url.lastPathComponent, projectID: projectID) {
+                            try await workspace.flush()
+                        }
+                    } catch { recognition.report(error) }
+                }
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -85,28 +166,20 @@ public struct WorkspaceView: View {
             chooseMedia(url)
             return true
         }
-        .fileImporter(isPresented: $importsMetadataDirectory, allowedContentTypes: [.folder]) { result in
-            switch result {
-            case .success(let url): scanMetadata(url)
-            case .failure(let error): metadata.report(error)
-            }
-        }
-        .fileImporter(isPresented: $importsSlateCSV, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
-            Task {
-                do {
-                    let url = try result.get()
-                    let data = try await SecurityScopedFileReader.read(url)
-                    guard let projectID = workspace.projectID else { return }
-                    recognition.importSlateCSV(data, filename: url.lastPathComponent, projectID: projectID) { try await workspace.flush() }
-                } catch { recognition.report(error) }
-            }
-        }
         .task {
             await recognition.loadOptions()
             adoptTaskRecognitionOptions()
         }
         .onChange(of: workspace.selectedTaskID) {
             adoptTaskRecognitionOptions()
+        }
+        .onAppear {
+            // Consume the Help shortcut once the workspace is mounted so a
+            // later sidebar visit does not unexpectedly reopen the CSV tab.
+            if entryPoint == .resolveCSV {
+                section = .csv
+                onEntryPointConsumed()
+            }
         }
         .onChange(of: settingsRevision) {
             // Settings is a separate scene and does not remount this view.
@@ -119,93 +192,241 @@ public struct WorkspaceView: View {
         }
     }
 
+    private func presentImport(_ kind: ImportKind) {
+        importKind = kind
+        importsFile = true
+    }
+
+    private var workspaceHeader: some View {
+        VStack(alignment: .leading, spacing: density.sectionSpacing) {
+            // A stronger task heading anchors all three work pages without
+            // replacing their native segmented navigation or editor identity.
+            SlatePageHeading(
+                title: workspace.selectedTask?.filename ?? "当前任务",
+                subtitle: workspace.selectedTaskID == nil ? "新建任务或导入场记单以开始" : "导入场记 · 校对结果 · 整理 Resolve CSV",
+                symbol: "doc.viewfinder"
+            )
+            // A container identifier propagates to every HStack child on
+            // macOS; scope the heading identifier to the actual heading.
+            .accessibilityIdentifier(AccessibilityID.workspaceHeading)
+            HStack(spacing: 12) {
+                Picker("工作区", selection: sectionBinding) {
+                    ForEach(WorkspaceSection.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .frame(maxWidth: 360)
+                Spacer(minLength: 0)
+                if section == .input {
+                    Button("识别配置", systemImage: "slider.horizontal.3") {
+                        changeLayout { showsConfiguration = !(showsConfiguration ?? (availableWidth >= 900)) }
+                    }.accessibilityIdentifier("workspace.configuration.toggle")
+                } else if section == .result {
+                    Toggle("原稿对照", isOn: originalBinding)
+                        .toggleStyle(.button)
+                        .disabled(media.document == nil)
+                        .accessibilityIdentifier("workspace.original.toggle")
+                }
+            }
+        }
+        .padding(density.panelPadding)
+        .background(SlateSyncTheme.evidenceSurface)
+    }
+
     @ViewBuilder private var detail: some View {
         switch section {
         case .input: inputView
-        case .result: RecognitionResultView(model: recognition, workspace: workspace)
-        case .csv: ResolveCSVView(model: csv, recognition: recognition, workspace: workspace)
+        case .result: resultView
+        case .csv:
+            VStack(spacing: 0) {
+                ResolveCSVView(
+                    model: csv, recognition: recognition, workspace: workspace,
+                    onImport: { presentImport(.resolveCSV) })
+                Divider()
+                metadataPanel
+            }
         }
     }
 
     private var inputView: some View {
-        Form {
-            Section("场记单") {
-                LabeledContent("输入文件", value: media.document?.filename ?? "未选择")
-                Button("选择 PDF 或图像…") { importsMedia = true }
-                if media.operation.isRunning {
-                    ProgressView("正在准备场记单…")
-                    Button("取消准备", role: .cancel) { media.cancel() }
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 900
+            let visible = showsConfiguration ?? wide
+            ZStack(alignment: .trailing) {
+                VStack(spacing: 0) {
+                    HStack {
+                        SlatePanelHeading(
+                            title: "场记单", subtitle: media.document?.filename ?? "支持 PDF 和图像，也可拖入文件")
+                        Button("选择 PDF 或图像…") { presentImport(.media) }
+                            .disabled(!media.canAcceptInput || workspace.projectID == nil)
+                    }.padding(density.panelPadding)
+                    if media.operation.isRunning {
+                        SlateStatusBar(message: "正在准备场记单…", busy: true) {
+                            Button("取消准备", role: .cancel) { media.cancel() }
+                        }
+                    }
+                    if case .failed(let error) = media.operation {
+                        SlateStatusBar(message: error.message, tone: .error) {
+                            Button("重新选择…") { presentImport(.media) }
+                        }
+                    }
+                    Group {
+                        if let document = media.document {
+                            MediaPreviewView(document: document, pageIndex: $media.pageIndex)
+                        } else {
+                            SlateEmptyState(
+                                title: "导入场记单", symbol: "doc.viewfinder",
+                                message: "选择或拖入 PDF、图像，然后配置识别。"
+                            ) {
+                                Button("选择 PDF 或图像…") { presentImport(.media) }
+                                    .disabled(!media.canAcceptInput || workspace.projectID == nil)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(SlateSyncTheme.canvas)
+                    localCSVPanel
+                    if let reason = recognitionUnavailableReason {
+                        SlateStatusBar(reason)
+                    }
                 }
-                if case .failed(let error) = media.operation { Text(error.message).foregroundStyle(.red) }
-                if let document = media.document {
-                    MediaPreviewView(document: document, pageIndex: $media.pageIndex)
-                }
+                .padding(.trailing, wide && visible ? 300 : 0)
+                // The same form stays mounted as the window crosses 900 pt;
+                // only its placement changes, preserving native IME drafts.
+                configurationPanel
+                    .frame(width: 300)
+                    .frame(maxHeight: .infinity)
+                    .background(.regularMaterial)
+                    // Overlay layout has no HStack axis; use an explicit
+                    // vertical rule instead of Divider's horizontal default.
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
+                    }
+                    .opacity(visible ? 1 : 0)
+                    .allowsHitTesting(visible)
+                    .accessibilityHidden(!visible)
             }
-            Section("本地场记 CSV") {
-                Button("载入场记 CSV…") { importsSlateCSV = true }
-                    .disabled(workspace.selectedTaskID == nil)
-                if !recognition.slateCSVRecords.isEmpty {
-                    LabeledContent(recognition.slateCSVFilename ?? "场记 CSV", value: "\(recognition.slateCSVRecords.count) 条")
-                    Button("从场记 CSV 生成结果") {
-                        recognition.generateLocalRecords(flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords)
+        }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            availableWidth = $0
+        }
+        .disabled(recognition.operation.isRunning)
+    }
+
+    private var configurationPanel: some View {
+        VStack(spacing: 0) {
+            HStack {
+                SlatePanelHeading(title: "识别配置")
+                Button("收起", systemImage: "chevron.right") {
+                    changeLayout { showsConfiguration = false }
+                }.help("收起识别配置，扩大预览区域")
+                    .accessibilityIdentifier("workspace.configuration.close")
+            }.padding(density.panelPadding)
+            Form {
+                Section {
+                    Picker("服务商", selection: providerSelection) {
+                        Text("请选择").tag("")
+                        if unavailableProvider {
+                            Text("不可用：\(providerID)").tag(providerID)
+                        }
+                        ForEach(recognition.providers, id: \.id) { Text($0.label).tag($0.id) }
                     }
-                }
-            }
-            Section("识别") {
-                Picker("Provider", selection: providerSelection) {
-                    Text("请选择").tag("")
-                    if unavailableProvider {
-                        Text("不可用：\(providerID)").tag(providerID)
+                    Picker("模型", selection: modelSelection) {
+                        Text("请选择").tag("")
+                        if unavailableModel {
+                            Text("不可用：\(modelID)").tag(modelID)
+                        }
+                        ForEach(recognition.availableModels(providerID: providerID), id: \.id) {
+                            Text($0.label).tag($0.id)
+                        }
                     }
-                    ForEach(recognition.providers, id: \.id) { Text($0.label).tag($0.id) }
-                }
-                Picker("模型", selection: modelSelection) {
-                    Text("请选择").tag("")
-                    if unavailableModel {
-                        Text("不可用：\(modelID)").tag(modelID)
-                    }
-                    ForEach(recognition.availableModels(providerID: providerID), id: \.id) {
-                        Text($0.label).tag($0.id)
-                    }
-                }
-                if unavailableProvider || unavailableModel {
-                    LabeledContent("已保存的识别选项不可用") {
-                        HStack {
-                            Text("请选择可用项或先完成 Provider 配置")
+                    if unavailableProvider || unavailableModel || providerID.isEmpty || modelID.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("请选择可用项，或先配置服务商。")
+                                .font(.caption).foregroundStyle(.secondary)
                             SettingsLink { Text("打开全局设置") }
                         }
                     }
-                }
-                if case .failed(let error) = recognition.optionsOperation {
-                    LabeledContent("选项读取失败") {
-                        HStack { Text(error.message); Button("重试") { Task { await recognition.loadOptions() } } }
+                    if case .failed(let error) = recognition.optionsOperation {
+                        LabeledContent("选项读取失败") {
+                            HStack {
+                                Text(error.message)
+                                Button("重试") { Task { await recognition.loadOptions() } }
+                            }
+                        }
                     }
-                }
-                Picker("精度", selection: accuracySelection) {
-                    Text("标准").tag(ProjectSettings.AccuracyMode.standard)
-                    Text("高精度").tag(ProjectSettings.AccuracyMode.high)
-                }
-                Picker("场记版式（Scenario）", selection: scenarioSelection) {
-                    Text("自动匹配").tag("")
-                    ForEach(workspace.scenarios, id: \.id) { Text($0.label).tag($0.id) }
-                }
-                TextField("自定义提示词", text: $workspace.customPrompt, axis: .vertical)
-                    .lineLimit(3...8)
-                    // A vertical TextField in a macOS Form otherwise exposes
-                    // its title as a separate static element, leaving the
-                    // editable control unnamed to VoiceOver.
-                    .accessibilityLabel("自定义提示词")
-                    .accessibilityIdentifier(AccessibilityID.workspaceCustomPrompt)
-                if let progress = recognition.progress {
-                    ProgressView(value: Double(progress.completed), total: Double(max(1, progress.total))) {
-                        Text(progress.message)
+                    Picker("精度", selection: accuracySelection) {
+                        Text("标准").tag(ProjectSettings.AccuracyMode.standard)
+                        Text("高精度").tag(ProjectSettings.AccuracyMode.high)
+                    }
+                    Picker("场记版式（Scenario）", selection: scenarioSelection) {
+                        Text("自动匹配").tag("")
+                        ForEach(workspace.scenarios, id: \.id) { Text($0.label).tag($0.id) }
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        // Own the full heading hit target while keeping the
+                        // same flush barrier before the prompt is collapsed.
+                        Button {
+                            changeLayout { showsAdvanced.toggle() }
+                        } label: {
+                            HStack {
+                                Image(systemName: showsAdvanced ? "chevron.down" : "chevron.right")
+                                    .font(.caption).accessibilityHidden(true)
+                                Text("高级设置")
+                                Spacer()
+                            }.contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("高级设置")
+                        .accessibilityValue(showsAdvanced ? "已展开" : "已收起")
+                        .accessibilityIdentifier("workspace.advanced.toggle")
+                        if showsAdvanced {
+                            TextField("自定义提示词", text: $workspace.customPrompt, axis: .vertical)
+                                .lineLimit(3...8)
+                                .accessibilityLabel("自定义提示词")
+                                .accessibilityIdentifier(AccessibilityID.workspaceCustomPrompt)
+                        }
                     }
                 }
             }
-            Section("场记元数据") {
-                Button("选择目录并扫描…") { importsMetadataDirectory = true }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
+    private var localCSVPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack {
+                SlatePanelHeading(
+                    title: "本地场记 CSV",
+                    subtitle: recognition.slateCSVRecords.isEmpty
+                        ? "已有结构化场记时，可直接生成结果"
+                        : "\(recognition.slateCSVFilename ?? "场记 CSV") · \(recognition.slateCSVRecords.count) 条"
+                )
+                Menu("CSV 操作", systemImage: "tablecells") {
+                    Button("载入场记 CSV…") { presentImport(.slateCSV) }
+                        .disabled(workspace.selectedTaskID == nil)
+                    if !recognition.slateCSVRecords.isEmpty {
+                        Button("从场记 CSV 生成结果") {
+                            recognition.generateLocalRecords(
+                                flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords)
+                        }
+                    }
+                }.fixedSize()
+            }.padding(.horizontal, density.panelPadding).padding(.bottom, 12)
+        }
+    }
+
+    private var metadataPanel: some View {
+        VStack(alignment: .leading) {
+            DisclosureGroup(metadata.operation.isRunning ? "场记元数据 · 扫描中…" : "场记元数据 · 扫描与回填") {
+                Button("选择目录并扫描…") { presentImport(.metadata) }
                     .disabled(workspace.selectedTaskID == nil || csv.table == nil)
-                if case .failed(let error) = metadata.operation { Text(error.message).foregroundStyle(.red) }
+                if case .failed(let error) = metadata.operation {
+                    Text(error.message).foregroundStyle(SlateSyncTheme.danger)
+                }
                 if metadata.operation.isRunning {
                     Button("取消扫描", role: .cancel) { metadata.cancel() }
                 }
@@ -222,25 +443,85 @@ public struct WorkspaceView: View {
                 }
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
+        .padding(density.panelPadding)
         .disabled(recognition.operation.isRunning)
     }
 
-    private var sectionBinding: Binding<WorkspaceSection> {
-        Binding(get: { section }, set: { destination in
-            Task {
-                // Changing editor tabs uses the same pre-unmount barrier as
-                // route navigation; an IME composition keeps its tab mounted.
-                do { try await workspace.flush(); section = destination }
-                catch { /* Workspace exposes the retained draft error banner. */ }
+    private var resultView: some View {
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 900
+            let previewWidth = wide ? min(420, geometry.size.width * 0.4) : min(420, geometry.size.width)
+            ZStack(alignment: .leading) {
+                // Never switch the result table between separate layout branches:
+                // padding changes preserve its field editor, selection and scroll.
+                RecognitionResultView(
+                    model: recognition, workspace: workspace,
+                    onInput: { changeLayout { section = .input } }
+                )
+                .padding(.leading, wide && showsOriginal ? previewWidth : 0)
+                if let document = media.document {
+                    VStack(spacing: 0) {
+                        HStack {
+                            SlatePanelHeading(title: "原稿对照", subtitle: "翻页仅切换原稿，不改变结果选择")
+                            Button("关闭", systemImage: "xmark") { changeLayout { showsOriginal = false } }
+                                .accessibilityIdentifier("workspace.original.close")
+                        }.padding(density.panelPadding)
+                        MediaPreviewView(document: document, pageIndex: $media.pageIndex)
+                    }
+                    .frame(width: previewWidth).frame(maxHeight: .infinity)
+                    .background(SlateSyncTheme.canvas)
+                    .overlay(alignment: .trailing) {
+                        Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
+                    }
+                    .opacity(showsOriginal ? 1 : 0).allowsHitTesting(showsOriginal)
+                    .accessibilityHidden(!showsOriginal)
+                }
             }
-        })
+        }
+    }
+
+    private var recognitionUnavailableReason: String? {
+        if workspace.projectID == nil { return "请先从项目库打开项目。" }
+        if workspace.selectedTaskID == nil { return "请选择任务，或导入场记单自动创建任务。" }
+        if media.operation.isRunning { return "场记单准备完成后即可识别。" }
+        if media.document == nil { return "请先导入 PDF 或图像；本地 CSV 可直接生成结果。" }
+        if providerID.isEmpty || modelID.isEmpty { return "请在识别配置中选择服务商和模型。" }
+        if !recognition.canRecognize(providerID: providerID, modelID: modelID) {
+            return "识别配置不可用，请选择可用模型或打开全局设置配置服务商。"
+        }
+        return nil
+    }
+
+    private var originalBinding: Binding<Bool> {
+        Binding(get: { showsOriginal }, set: { value in changeLayout { showsOriginal = value } })
+    }
+
+    private func changeLayout(_ update: @escaping @MainActor () -> Void) {
+        guard !changingLayout else { return }
+        changingLayout = true
+        Task {
+            defer { changingLayout = false }
+            do {
+                try editorBoundary.prepare()
+                try await workspace.flush()
+                layoutError = nil
+                update()
+            } catch { layoutError = "请完成当前编辑并重试：\(error.localizedDescription)" }
+        }
+    }
+
+    private var sectionBinding: Binding<WorkspaceSection> {
+        Binding(
+            get: { section },
+            set: { destination in
+                changeLayout { section = destination }
+            })
     }
 
     private var canRecognize: Bool {
-        workspace.projectID != nil && workspace.selectedTaskID != nil && media.document != nil && !media.operation.isRunning &&
-            recognition.canRecognize(providerID: providerID, modelID: modelID)
+        workspace.projectID != nil && workspace.selectedTaskID != nil && media.document != nil
+            && !media.operation.isRunning
+            && recognition.canRecognize(providerID: providerID, modelID: modelID)
     }
 
     private var unavailableProvider: Bool {
@@ -248,23 +529,22 @@ public struct WorkspaceView: View {
     }
 
     private var unavailableModel: Bool {
-        !modelID.isEmpty && !recognition.availableModels(providerID: providerID).contains(where: { $0.id == modelID })
+        !modelID.isEmpty
+            && !recognition.availableModels(providerID: providerID).contains(where: { $0.id == modelID })
     }
 
     @ViewBuilder private var autosaveBanner: some View {
         if let error = workspace.autosaveError {
-            HStack {
-                Label("自动保存失败：\(error.message)", systemImage: "exclamationmark.triangle")
-                Spacer()
+            SlateStatusBar(message: "自动保存失败：\(error.message)", tone: .error) {
                 Button("重试") { Task { await workspace.retryAutosave() } }
             }
-            .padding(10).background(.bar)
         }
     }
 
     private func startRecognition() {
         guard let projectID = workspace.projectID, let document = media.document,
-              let firstImage = document.pages.first?.views.first?.image else { return }
+            let firstImage = document.pages.first?.views.first?.image
+        else { return }
         var settings = workspace.projectSettings
         workspace.stageRecognitionOptions(
             providerID: providerID,
@@ -325,39 +605,47 @@ public struct WorkspaceView: View {
     }
 
     private var providerSelection: Binding<String> {
-        Binding(get: { providerID }, set: { value in
-            // Only an explicit Picker change may clear an incompatible model;
-            // restoring a task preserves stale IDs for visible recovery.
-            let selection = RecognitionOptionSelection.selectingProvider(
-                value,
-                currentModelID: modelID,
-                availableModels: recognition.availableModels(providerID: value)
-            )
-            providerID = selection.providerID
-            modelID = selection.modelID
-            persistRecognitionOptions()
-        })
+        Binding(
+            get: { providerID },
+            set: { value in
+                // Only an explicit Picker change may clear an incompatible model;
+                // restoring a task preserves stale IDs for visible recovery.
+                let selection = RecognitionOptionSelection.selectingProvider(
+                    value,
+                    currentModelID: modelID,
+                    availableModels: recognition.availableModels(providerID: value)
+                )
+                providerID = selection.providerID
+                modelID = selection.modelID
+                persistRecognitionOptions()
+            })
     }
 
     private var modelSelection: Binding<String> {
-        Binding(get: { modelID }, set: { value in
-            modelID = value
-            persistRecognitionOptions()
-        })
+        Binding(
+            get: { modelID },
+            set: { value in
+                modelID = value
+                persistRecognitionOptions()
+            })
     }
 
     private var accuracySelection: Binding<ProjectSettings.AccuracyMode> {
-        Binding(get: { accuracy }, set: { value in
-            accuracy = value
-            persistRecognitionOptions()
-        })
+        Binding(
+            get: { accuracy },
+            set: { value in
+                accuracy = value
+                persistRecognitionOptions()
+            })
     }
 
     private var scenarioSelection: Binding<String> {
-        Binding(get: { scenarioID }, set: { value in
-            scenarioID = value
-            persistRecognitionOptions()
-        })
+        Binding(
+            get: { scenarioID },
+            set: { value in
+                scenarioID = value
+                persistRecognitionOptions()
+            })
     }
 
     private func persistRecognitionOptions() {
@@ -384,19 +672,30 @@ public struct WorkspaceView: View {
 private struct RecognitionResultView: View {
     @Bindable var model: RecognitionModel
     let workspace: WorkspaceModel
+    let onInput: () -> Void
 
     var body: some View {
         if !model.editableRecords.isEmpty {
-            EditableCSVTableRepresentable(tableID: model.resultTableID, table: model.resultTable, revision: 0,
+            EditableCSVTableRepresentable(
+                tableID: model.resultTableID, table: model.resultTable, revision: 0,
                 accessibilityLabel: "可编辑识别结果",
                 onCommit: { model.receiveResult($0, commit: workspace.stageEditedRecords) },
-                editorRegistration: { model.flushEditor = $0 })
-                .disabled(model.operation.isRunning)
+                editorRegistration: { model.flushEditor = $0 }
+            )
+            .disabled(model.operation.isRunning)
 
         } else if case .failed(let error) = model.operation {
-            ContentUnavailableView("识别失败", systemImage: "exclamationmark.triangle", description: Text(error.message))
+            SlateEmptyState(title: "识别失败", symbol: "exclamationmark.triangle", message: error.message) {
+                Button("返回输入检查配置", action: onInput)
+            }
         } else {
-            ContentUnavailableView("暂无识别结果", systemImage: "text.viewfinder", description: Text("请先在输入页选择场记单并开始识别。"))
+            // Empty results return through the same guarded tab transition.
+            SlateEmptyState(
+                title: "暂无识别结果", symbol: "text.viewfinder",
+                message: "请先在输入页选择场记单并开始识别。"
+            ) {
+                Button("前往输入", action: onInput)
+            }
         }
     }
 

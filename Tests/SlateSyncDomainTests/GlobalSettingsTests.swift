@@ -123,4 +123,27 @@ final class GlobalSettingsTests: XCTestCase {
             "https://example.com/v1//"
         )
     }
+
+    func testProviderBaseURLGuidanceDetectsCompleteEndpointsWithoutRewriting() {
+        XCTAssertEqual(
+            ProviderURLGuidance.endpointSuffix(
+                in: "https://openrouter.ai/api/v1/chat/completions",
+                transport: .chatCompletions
+            ),
+            "/chat/completions"
+        )
+        XCTAssertEqual(
+            ProviderURLGuidance.baseURLWarning(
+                in: "https://api.openai.com/v1/responses",
+                transport: .responses
+            ),
+            "请填写 API 基础地址（Base URL），不要包含 /responses 接口路径。"
+        )
+        XCTAssertNil(
+            ProviderURLGuidance.baseURLWarning(
+                in: "https://openrouter.ai/api/v1",
+                transport: .chatCompletions
+            )
+        )
+    }
 }
