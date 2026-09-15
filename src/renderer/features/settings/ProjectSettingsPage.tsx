@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowLeft, Check, Import, PackageOpen, RotateCcw, Save, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_EXPORT_OPTIONS, type ExportOptions, type ProjectSettings } from "../../../shared/contracts/index.js";
+import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_EXPORT_OPTIONS, type ProjectSettings } from "../../../shared/contracts/index.js";
 import { Button, Dialog, Field, InlineError, Input, Select, Separator, Stack, Surface, Text, Textarea } from "../../design-system";
 import { appErrorFromUnknown, getSlateSync, unwrap } from "../../services/api";
 import { useProjectStore, useRecognitionStore, useSettingsStore, useTaskStore, useUiStore } from "../../state";
@@ -11,8 +11,7 @@ import { ModelSelect } from "../recognition/ModelSelect";
 import { groupModelOptions } from "../recognition/model-options";
 import styles from "../../app/app.module.css";
 import { validateProjectName } from "../../validation/input-validation";
-import { getCsvWorkerService } from "../../services/csv-worker-service";
-import { ExportOptionsPanel } from "../export/ExportOptionsPanel";
+import { ExportTemplateWorkbench } from "../export/ExportTemplateWorkbench";
 
 // @ts-expect-error Shared browser module intentionally has no generated declarations.
 import { normalizeExportOptions } from "../../../../public/export-options.js";
@@ -74,16 +73,9 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
   const name = currentDraft?.name ?? project?.name ?? "";
   const description = currentDraft?.description ?? project?.description ?? "";
   const settings = currentDraft?.settings ?? project?.settings ?? settingsDefaults(config);
+  // Persisted export config the unsaved-selection dirty state compares against.
+  const baselineSettings = useSettingsStore((state) => state.projectId === project?.id ? state.baseline : null);
   const { models } = useProviderModels(settings.providerId || "");
-  const templateInput = useRef<HTMLInputElement>(null);
-  const templateImportGeneration = useRef(0);
-  const [templateImporting, setTemplateImporting] = useState(false);
-  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
-  const [templateError, setTemplateError] = useState<string | null>(null);
-  useEffect(() => {
-    setTemplateImporting(false); setTemplateMessage(null); setTemplateError(null);
-    return () => { templateImportGeneration.current++; };
-  }, [project?.id]);
   const [deleting, setDeleting] = useState(false);
   const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -151,8 +143,14 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
     }
   };
   const resetOutput = () => updateSettings({ resolve: settingsDefaults(config).resolve });
-  const updateExport = (exportOptions: ProjectSettings["export"]) =>
-    updateSettings({ export: normalizeExportOptions(exportOptions) });
+  // 模板工作台的所有操作都走这里：build 拿到的永远是 store 里最新的草稿，
+  // 异步导入或其他面板的修改不会被当前渲染的旧快照覆盖。
+  const applySettingsPatch = (build: (latest: ProjectSettings) => Partial<ProjectSettings>) => {
+    const state = useSettingsStore.getState();
+    if (!state.draft || state.projectId !== project.id) return;
+    const latestSettings = settingsForDraft(state.draft.settings, config);
+    patchProject({ settings: { ...latestSettings, ...build(latestSettings), version: 2 } });
+  };
   const closeDeleteDialogs = () => {
     if (deleting) return;
     setDeleteStep(0);
@@ -177,30 +175,8 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
     }
   };
   const readOnly = Boolean(project.archivedAt);
-  const packageBusy = Boolean(transferBusy) || saving || deleting || templateImporting;
+  const packageBusy = Boolean(transferBusy) || saving || deleting;
   const settingsDisabled = readOnly || packageBusy;
-  const importTemplate = async (file: File) => {
-    if (settingsDisabled || isWorkspaceBusy()) return;
-    const generation = ++templateImportGeneration.current;
-    const projectId = project.id;
-    setTemplateImporting(true); setTemplateError(null); setTemplateMessage(null);
-    try {
-      if (!/\.csv$/i.test(file.name)) throw new Error("请选择 CSV 模板文件。");
-      if (file.size > 5 * 1024 * 1024) throw new Error("CSV 模板不能超过 5 MB。");
-      const data = await file.arrayBuffer();
-      const result = await getCsvWorkerService().request<{ options: ExportOptions; sourceEncoding: string }>({ type: "import-export-template", data, filename: file.name }, [data]);
-      // A late decode must never patch another project's draft or resurrect an unmounted page.
-      if (generation !== templateImportGeneration.current || useSettingsStore.getState().projectId !== projectId) return;
-      const latest = useSettingsStore.getState().draft;
-      if (!latest) return;
-      patchProject({ settings: { ...latest.settings, export: normalizeExportOptions(result.options) } });
-      setTemplateMessage(`已导入 ${file.name}（${result.options.columns.length} 列）。保存项目设置后，该项目后续任务默认使用此模板。${result.sourceEncoding.startsWith("gb") ? "源模板为 GBK/GB18030，输出采用 UTF-8。" : ""}`);
-    } catch (cause) {
-      if (generation === templateImportGeneration.current) setTemplateError(appErrorFromUnknown(cause).message);
-    } finally {
-      if (generation === templateImportGeneration.current) setTemplateImporting(false);
-    }
-  };
   const transferProject = async (operation: "import" | "export") => {
     if (packageBusy || transferBusy) return;
     if (isWorkspaceBusy()) {
@@ -265,14 +241,16 @@ export function ProjectSettingsPage({ onBack, onDeleted, onPrepareTransfer, onPr
       <Surface className={styles.panel}><div className={styles.sectionHeader}><div><p className={styles.kicker}>Resolve 输出</p><h2 className={styles.sectionTitle}>字段格式与条次标记</h2></div><Button type="button" variant="ghost" size="sm" onClick={resetOutput} disabled={settingsDisabled} startIcon={<RotateCcw size={14} />}>恢复默认</Button></div><Text tone="muted" size="sm">X 表示最小位数，更多位数会保留。</Text><Separator style={{ margin: "16px 0" }} /><div className={styles.formGrid}><Field label="Scene"><Input value={settings.resolve.fieldFormats.scene} onChange={(event) => updateResolveField("scene", event.target.value)} disabled={settingsDisabled} /></Field><Field label="Shot"><Input value={settings.resolve.fieldFormats.shot} onChange={(event) => updateResolveField("shot", event.target.value)} disabled={settingsDisabled} /></Field><Field label="Take"><Input value={settings.resolve.fieldFormats.take} onChange={(event) => updateResolveField("take", event.target.value)} disabled={settingsDisabled} /></Field><Field label="过条标记"><Input value={settings.resolve.comments.goodTake} onChange={(event) => updateResolveComment("goodTake", event.target.value)} disabled={settingsDisabled} /></Field><Field label="保条标记"><Input value={settings.resolve.comments.holdTake} onChange={(event) => updateResolveComment("holdTake", event.target.value)} disabled={settingsDisabled} /></Field></div></Surface>
       {/* Project Settings owns export configuration and its existing save/dirty guard. */}
       <Surface className={styles.panel}>
-        <Stack direction="row" gap={2} align="center" wrap>
-          <Button type="button" variant="secondary" startIcon={<Import size={15} />} loading={templateImporting} disabled={settingsDisabled || workspaceBusy} onClick={() => templateInput.current?.click()}>导入 CSV 模板</Button>
-          <Text size="sm" tone="muted">支持 CSV（最多 5 MB），仅导入列结构和格式。默认使用 Resolve 内置模板。</Text>
-        </Stack>
-        <input ref={templateInput} type="file" accept=".csv,text/csv" aria-label="导入 CSV 模板文件" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importTemplate(file); }} />
-        {templateError && <InlineError message={templateError} />}
-        {templateMessage && <p role="status">{templateMessage}</p>}
-        <ExportOptionsPanel options={settings.export} onChange={updateExport} disabled={settingsDisabled} title="导出配置" description="设置项目默认的导出文件名、编码和列格式，保存项目设置后生效。" sourceLabel="项目默认" /></Surface>
+        <div className={styles.sectionHeader}><div><p className={styles.kicker}>CSV 导出</p><h2 className={styles.sectionTitle}>导出模板</h2></div><Text tone="muted" size="sm">模板只保存在当前项目；点击“保存项目设置”后生效。</Text></div>
+        <ExportTemplateWorkbench
+          key={project.id}
+          projectId={project.id}
+          settings={settingsForDraft(settings, config)}
+          baselineExport={baselineSettings?.settings?.export ?? null}
+          disabled={settingsDisabled}
+          importDisabled={workspaceBusy}
+          applyPatch={applySettingsPatch}
+        /></Surface>
       <div className={styles.formActions}><Button type="submit" disabled={settingsDisabled} loading={saving} startIcon={<Check size={16} />}>保存项目设置</Button></div>
     </form>
     <Surface className={styles.panel} style={{ marginTop: 20 }}>

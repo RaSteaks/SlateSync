@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CUSTOM_EXPORT_OPTIONS,
   DEFAULT_EXPORT_OPTIONS,
   normalizeExportOptions,
   resolveEffectiveExportOptions,
   resolveExportFilename,
 } from "../public/export-options.js";
+import { RESOLVE_METADATA_FIELDS } from "../public/resolve-export-template.js";
 
 test("export options use session, project, then system precedence", () => {
   const project = normalizeExportOptions({ filenameTemplate: "project.csv" });
@@ -32,6 +34,18 @@ test("normalization drops unknown columns and guarantees one enabled column", ()
   assert.equal(options.format.delimiter, ",");
 });
 
+test("custom export exposes every documented Resolve metadata field", () => {
+  const options = normalizeExportOptions({
+    templateId: "custom",
+    columns: [{ key: "scene", header: "Scene", enabled: true }],
+  });
+  const keys = new Set(options.columns.map((column) => column.key));
+  for (const field of RESOLVE_METADATA_FIELDS) assert.equal(keys.has(field.key), true, field.key);
+  assert.equal(options.columns.length, CUSTOM_EXPORT_OPTIONS.columns.length);
+  assert.equal(options.columns.find((column) => column.key === "fileName")?.enabled, false);
+  assert.equal(options.columns.find((column) => column.key === "audioNotes")?.header, "Audio Notes");
+});
+
 test("filename expansion is deterministic and remains a basename", () => {
   const clock = new Date(2026, 8, 12, 3, 4, 5);
   assert.equal(
@@ -42,4 +56,24 @@ test("filename expansion is deterministic and remains a basename", () => {
     "片名_.._危险_A001C001.mov_20260912_030405.csv",
   );
   assert.equal(resolveExportFilename("{missing}", { source: "slate" }, clock), "slate_Resolve元数据.csv");
+});
+
+test("template links ride through normalization and never leak into worker defaults", () => {
+  const options = normalizeExportOptions({
+    templateId: "custom",
+    savedTemplateId: "tpl-1",
+    columns: [{ key: "scene", header: "Scene", enabled: true }],
+  });
+  assert.equal(options.savedTemplateId, "tpl-1");
+  // An absent link stays absent instead of inheriting a stale one.
+  const unlinked = normalizeExportOptions({ templateId: "custom", savedTemplateId: undefined });
+  assert.equal(unlinked.savedTemplateId, undefined);
+  assert.equal(DEFAULT_EXPORT_OPTIONS.savedTemplateId, undefined);
+});
+
+// Old invalid delimiters must not reach the encoder.
+test("unsupported delimiters migrate to an encodable default", () => {
+  for (const delimiter of [";;", '"', "\u0000", "\n"]) {
+    assert.equal(normalizeExportOptions({ templateId: "custom", format: { delimiter } }).format.delimiter, ",");
+  }
 });

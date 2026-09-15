@@ -55,6 +55,42 @@ test("semantic standalone supports default, eight, optional-only and empty recor
   assert.equal(normalized.filter((column) => column.enabled).length, 2);
 });
 
+test("custom export can select every Resolve metadata field without losing source values", () => {
+  const sourceTable = {
+    headers: [
+      "File Name", "Start TC", "End TC", "Reel Name", "Clip Directory",
+      "Description", "Keywords", "Camera #", "Shoot Day", "Camera Type",
+      "Audio Notes", "Scene", "Shot", "Take", "Comments",
+    ],
+    rows: [[
+      "A001C001.mov", "01:00:00:00", "01:00:10:00", "REEL-1", "/media/day-1",
+      "原始描述", "day-one;wide", "A", "01", "ALEXA", "原始声音备注",
+      "1", "2", "3", "原始备注",
+    ]],
+    format: { encoding: "utf-8", bom: false, delimiter: ",", lineEnding: "\n", finalNewline: true },
+  };
+  const columns = [
+    ["fileName", "File Name"], ["startTimecode", "Start TC"], ["endTimecode", "End TC"],
+    ["reelName", "Reel Name"], ["clipDirectory", "Clip Directory"], ["description", "Description"],
+    ["keywords", "Keywords"], ["camera", "Camera #"], ["shootDay", "Shoot Day"],
+    ["cameraType", "Camera Type"], ["audioNotes", "Audio Notes"], ["scene", "Scene"],
+    ["shot", "Shot"], ["take", "Take"], ["comments", "Comments"],
+  ].map(([key, header]) => ({ key, header, enabled: true }));
+  const built = buildSemanticExportTable({
+    mode: "resolve",
+    sourceTable,
+    records: [{ cardNumber: "A001", videoCode: "C001", scene: "1", shot: "2", take: "3" }],
+    options: { columns },
+  });
+  const values = Object.fromEntries(built.table.headers.map((header, index) => [header, built.table.rows[0][index]]));
+  for (const [header, value] of [
+    ["File Name", "A001C001.mov"], ["Start TC", "01:00:00:00"], ["End TC", "01:00:10:00"],
+    ["Reel Name", "REEL-1"], ["Clip Directory", "/media/day-1"], ["Description", "原始描述"],
+    ["Keywords", "day-one;wide"], ["Camera #", "A"], ["Shoot Day", "01"],
+    ["Camera Type", "ALEXA"], ["Audio Notes", "原始声音备注"],
+  ]) assert.equal(values[header], value, header);
+});
+
 test("duplicate custom headers survive JSON task restoration by key/index", () => {
   const columns = allColumns.map((column) => ({ ...column, header: "同名" }));
   const built = buildSemanticExportTable({ mode: "resolve", sourceTable: source(), records, options: { columns } });
@@ -153,3 +189,15 @@ for (const [name, columns, headers, row] of [
     assert.deepEqual(buildSemanticExportTable(input).table, preview);
   });
 }
+
+// Disabled metadata is passed through, including its original source alias.
+test("disabled Reel keeps its source header and multi-letter cards match", () => {
+  const sourceTable = decodeResolveCsv(new TextEncoder().encode("File Name,Reel,Scene\nAB001C001.mov,original,\n"));
+  const built = buildSemanticExportTable({
+    mode: "resolve", sourceTable, records: [{ ...records[0], cardNumber: "AB001" }],
+    options: { columns: [{ key: "reelName", header: "Reel Name", enabled: false }, { key: "scene", header: "Scene", enabled: true }] },
+  });
+  assert.equal(built.matchedRecordCount, 1);
+  assert.equal(built.table.headers[1], "Reel");
+  assert.equal(built.table.rows[0][1], "original");
+});

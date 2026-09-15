@@ -1472,3 +1472,85 @@ Worker 边界、验收证据和最终治理交接。
   Dock/窗口直接使用该文件。
 - macOS 打包仍使用 `build/slatesync.icon`，因为 electron-builder 的 macOS 配置要求
   `.icon`/`.icns` 容器；其中的 `Assets/icon.png` 与 v5 文件保持字节一致，不代表另一套图标。
+
+## 2026-09-14 自定义 CSV 的 Resolve 字段选项
+
+- “自定义 CSV”继续保留原有场记字段和默认输出顺序，同时在 Modern/Legacy 设置界面
+  提供 Resolve 内置模板定义的 15 个文本元数据字段；新增字段默认关闭，避免改变
+  历史项目的默认导出列和编码字节。
+- 导出 Worker 接受这些字段的官方英文表头及已登记别名；自定义 Resolve 清单模式中，
+  识别记录缺少字段时保留源 CSV 原值，单独生成模式则输出空单元格供人工填写。
+- “导入 CSV 模板”仍以用户样表的列集合和顺序为契约，不因自定义字段选项扩展而强行
+  追加列；模板样表的结构持久化与既有导入行为保持不变。
+- 定向回归覆盖自定义字段清单、Resolve 元数据源值保留、Modern 字段选择器；完整
+  Node 483 项、Modern 202 项、`check` 和 `typecheck` 均通过。
+
+## 2026-09-15 项目级自定义 CSV 模板库与交互重构
+
+- 单一 CSV 导出配置升级为「项目级模板库 + 当前模板编辑器」。`SavedExportTemplate`
+  （`id/name/templateId/columns/format/filenameTemplate`）加入 `ProjectSettings.exportTemplates`
+  （可选），`ExportOptions.savedTemplateId` 标记库内链接；模板名称只是库内显示名，
+  与导出文件名规则完全分离。不新增 IPC、数据库表或 Worker 协议变更。
+- 模板解析与操作语义集中在新的 `public/export-templates.js`（clean/validate/unique/
+  copy 名称、createExportTemplate、exportOptionsFromTemplate/ForBuiltin、
+  applyEditorContentToTemplate、sameTemplateContent、templateAfterDelete、
+  canonicalTemplateSource），Modern（`ExportTemplateWorkbench.tsx`）与 Legacy
+  （`renderProjectTemplateWorkbench`）共用同一模块，行为一致。
+- 选择模型纯派生自 `settings.export`：`savedTemplateId` 指向库内模板；`templateId`
+  为 `resolve-21.1-csv-v1` 时是只读内置（提供「复制为自定义」）；否则是未保存配置
+  「当前配置（未保存）」。历史项目无模板库，不自动迁移，界面只显示当前配置。
+- 模板操作只暂存页面草稿，顶部/底部「保存项目设置」仍是唯一持久化入口。新建复制
+  当前配置（首个命名「自定义 CSV」），另存为命名「当前名称 · 副本」；导入 CSV 样表
+  保持列顺序，建议名称取自文件名去扩展名并弹出命名对话框（GBK/GB18030 提示 UTF-8
+  输出）。保存/另存为时校验名称（去控制字符、80 字符上限）并在重名时拒绝；删除
+  当前模板自动切换（后一个 → 前一个 → 内置）；带未保存修改切换时弹出
+  保存并切换/放弃并切换/取消。内置与导入模板的内置匹配列只读约束不变。
+- `lib/project-settings.mjs` 归一化模板库（清洗名称、丢弃无名/未知类型/重复 id、
+  保留首个重名），清理失效 `savedTemplateId` 同时保留有效导出配置，内置模板从不被
+  `savedTemplateId` 引用；归一化幂等且不写入空库到历史项目。任务快照
+  `projectSettingsTaskSnapshot` 剥离模板库与链接，仅保留生效导出配置，Worker 与
+  任务持久化不见模板库。模板只存 schema，不含样表数据行。
+- Legacy 使用可访问 HTML 对话框（`#template-dialog`，焦点圈定、Escape 关闭）而非
+  `prompt()`；新增 `--danger/--danger-soft` 色板与窄窗口单列布局（≤900/920px 双端）。
+  项目设置页在识别/传输等忙碌期间暂停导入入口，编辑器保持可用。
+- 验证：`npm run check`、`npm run typecheck`、`npm run test:node`（498 项）、
+  `npm run test:modern`（33 个文件 / 207 项）与 `git diff --check` 均通过。新增
+  `test/export-templates.test.mjs`（名称/去重/回环/内置副本无幻影漂移/导入列序/
+  删除切换）与 `test/refactor/export-template-workbench.test.tsx`（Modern 全交互）；
+  Legacy 交互经共享模块 Node 测试与既有 slice 抽取测试覆盖（无独立 Legacy DOM
+  测试装置）。`npm test` 不在本次运行（依赖 Electron 原生 ABI 重建）。
+
+## 2026-09-15 模板库评审筛选与修复
+
+- 合并两份评审可见条目并按当前代码复核；保留原有未提交模板库工作，不提交、回退或
+  改写 Git 基线。第一份摘要隐藏的两条评论没有正文，不单独声称已核实。
+- 修复报告 1/2：Main 的 save-task 创建和更新统一剥离模板库与链接；load-task 使用
+  去模板元数据的 fallback，返回快照同样剥离。快照剥离先于归一化，不改变历史任务
+  文件，保留任务自己的导出列与格式；不访问用户项目库。
+- 修复报告 3/4/5/6/7：Legacy 补回字段编辑/移动事件；双端区分“未保存配置”与
+  “内置”选择；Legacy 在文件读取、Worker 返回、命名确认与错误提示处校验项目身份；
+  共享脏比较统一使用编辑器归一化投影，但 Main 不扩张历史持久化列；裸控制字符改为
+  等价 Unicode 转义。另修复 Legacy 导入按钮漏接文件选择器。
+- 修复第一份评审的内置只读问题，并同步 Legacy：项目模板编辑器所有字段禁用，
+  “复制为自定义”仍可用；任务会话选项的既有编辑语义不变。
+- 报告 8 已确认并修复：多字母卡号在规范化、合法性判断和 CSV key 拆解使用完整
+  前缀；保留 `A O 1` 的既有 OCR 纠错语义，增加 AB001 真实合并路径回归。
+- 报告 9 已确认并修复：公共与 Main 归一化只接受编码器支持的单字符分隔符，历史
+  非法分隔符回退到有效 fallback 或逗号，双端输入长度一致；不放宽 CSV 编码器。
+- 报告 10 按设计关闭：Phase 01 明确要求对高于 v2 的设置以稳定错误码拒绝，保留
+  现有测试和行为，避免降级写回未来版本数据。
+- 报告 11 在 Legacy 表单端修复：未水化的空下拉保留已保存 provider/model；切换
+  provider 后没有模型时阻止保存并提示，防止错误继承旧模型；接口显式 null 清空不变。
+- 报告 12 已确认并修复：禁用字段保留源表头与源值，只有启用字段应用输出表头。
+  standalone Comments 与模板归一化去重两项继续按既有设计关闭。
+- 四项简化线索不作为缺陷修复：仅脏比较修正已验证的归一化分歧，不合并 Main 与
+  Renderer 持久化语义；Workspace 镜像状态与 ai-client 重构留待独立工作，避免扩大范围。
+- 新增 Main create/update/load 快照边界、Modern 未保存切内置与全字段只读、Legacy
+  DOM 编辑/移动/导入按钮/只读与三阶段跨项目竞态、空模型选择、历史假脏、分隔符与
+  多字母卡号 CSV 合并回归；按仓库约定不启动前台 Electron/真实项目库。
+- 验证结果：Node 完整套件 503/503；Modern 34 文件、213/213；`npm run check`、
+  `npm run typecheck`、`npm run build:modern`、`git diff --check` 与 premium UI strict
+  静态审计通过（0 findings）。最终补强“快照缺省 export 保留原默认值”后，设置/IPC
+  定向 58/58 再次通过。Node 直接运行既有 gateway，没有重建或切换原生 ABI。
+  构建仍提示既有大 chunk，jsdom 提示 scrollTo 未实现及既有 act 警告；未运行 GUI/
+  视觉/真实 Resolve 往返验证，不把静态或 DOM 检查当作这类认证。

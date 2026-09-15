@@ -3483,3 +3483,144 @@ body {
     display: none;
   }
 }
+
+/* ---------- 项目导出模板工作台（模板库 + 当前模板编辑器） ---------- */
+
+.template-workbench {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.template-library {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-slab);
+  background: var(--surface);
+}
+
+.template-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-list {
+  display: grid;
+  gap: 6px;
+}
+
+.template-entry {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  transition: 150ms ease;
+}
+
+.template-entry:hover:not(:disabled) {
+  border-color: var(--tape);
+  color: var(--ink);
+}
+
+.template-entry[data-active="true"] {
+  border-color: var(--tape);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--tape) 12%, var(--paper));
+}
+
+.template-entry:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.template-entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-entry-meta {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.template-entry-badge {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.template-editor {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.template-editor-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.template-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-name-error,
+.template-dialog-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
+/* 危险操作按钮：删除模板等，沿用 --danger 校准红。 */
+.danger-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--danger);
+  border-radius: var(--r-ctl);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+  transition: 150ms ease;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.danger-button:disabled {
+  opacity: 0.55;
+}
+
+/* 窄窗口时模板库与编辑器纵向堆叠。 */
+@media (max-width: 900px) {
+  .template-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

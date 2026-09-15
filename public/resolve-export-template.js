@@ -10,6 +10,8 @@ export const isMetadataTemplate = (options) => [RESOLVE_TEMPLATE_ID, IMPORTED_TE
 // template projection resolve the same localized or punctuation-variant names.
 export const HEADER_ALIASES = Object.freeze({
   fileName: ["File Name", "Filename", "文件名"],
+  startTimecode: ["Start TC", "Start Timecode", "起始时码", "起始時間碼"],
+  endTimecode: ["End TC", "End Timecode", "结束时码", "結束時碼"],
   clipDirectory: ["Clip Directory", "片段目录", "素材目录"],
   reelName: ["Reel Name", "Reel", "卷名"],
   clipName: ["Clip Name", "条名", "片段名", "片段名称"],
@@ -21,8 +23,12 @@ export const HEADER_ALIASES = Object.freeze({
   cardNumber: ["Card Number"],
   videoCode: ["Video Code"],
   sourcePage: ["Source Page"],
+  description: ["Description", "描述", "内容描述", "內容描述"],
+  keywords: ["Keywords", "关键词", "關鍵詞", "关键字", "關鍵字"],
   cameraFps: ["Camera FPS", "CameraFPS", "摄影机帧率", "攝影機幀率"],
   shootDay: ["Shoot Day", "ShootDay", "拍摄日期", "拍攝日期"],
+  cameraType: ["Camera Type", "摄影机类型", "攝影機類型"],
+  audioNotes: ["Audio Notes", "声音备注", "聲音備註", "音频备注", "音訊備註"],
   // Resolve reads only its canonical "Camera #" header; localized variants
   // are not emitted and are not treated as the camera column.
   camera: ["Camera #"],

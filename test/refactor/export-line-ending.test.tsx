@@ -32,13 +32,15 @@ it("modern line ending choices survive change and controlled rerender", () => {
 
 it("legacy HTML preserves all line endings through rendering and form readback", () => {
   // Exercise the actual legacy functions without booting Electron or app startup.
+  // 项目设置页的 project 作用域渲染模板工作台，任务页的 session 作用域
+  // 保留单一编辑器；这里验证的是字段编辑器的读写回路。
   const source = readFileSync("public/app.js", "utf8");
   const functions = source.slice(source.indexOf("function renderLegacyExportOptions("), source.indexOf("function bindLegacyExportOptionEvents("));
-  const { renderLegacyExportOptions, readLegacyExportOptions } = new Function("normalizeExportOptions", "DEFAULT_EXPORT_OPTIONS", "escapeHtml", "LEGACY_EXPORT_COLUMN_LABELS", "bindLegacyExportOptionEvents", "RESOLVE_TEMPLATE_ID", "RESOLVE_METADATA_FIELDS", `${functions}; return { renderLegacyExportOptions, readLegacyExportOptions };`)(normalizeExportOptions, DEFAULT_EXPORT_OPTIONS, (value: string) => value, {}, () => {}, RESOLVE_TEMPLATE_ID, RESOLVE_METADATA_FIELDS);
+  const { renderLegacyExportOptions, readLegacyExportOptions } = new Function("normalizeExportOptions", "DEFAULT_EXPORT_OPTIONS", "escapeHtml", "LEGACY_EXPORT_COLUMN_LABELS", "bindLegacyExportOptionEvents", "RESOLVE_TEMPLATE_ID", "RESOLVE_METADATA_FIELDS", "isProjectReadOnly", "state", `${functions}; return { renderLegacyExportOptions, readLegacyExportOptions };`)(normalizeExportOptions, DEFAULT_EXPORT_OPTIONS, (value: string) => value, {}, () => {}, RESOLVE_TEMPLATE_ID, RESOLVE_METADATA_FIELDS, () => false, { recognizing: false, exporting: false });
   const host = document.createElement("div");
   for (const ending of ["\r\n", "\n", "\r"]) {
     const options = normalizeExportOptions({ format: { lineEnding: ending } });
-    renderLegacyExportOptions(host, options, "project");
+    renderLegacyExportOptions(host, options, "session");
     expect(readLegacyExportOptions(host, options).format.lineEnding).toBe(ending);
     const select = host.querySelector('[data-export-field="lineEnding"]') as HTMLSelectElement;
     for (const [token, bytes] of [["crlf", "\r\n"], ["lf", "\n"], ["cr", "\r"]]) {
@@ -66,6 +68,23 @@ it("built-in selection locks identity fields, preserves optional choices and use
     act(() => description.click());
     expect(options.columns.find((column) => column.key === "description")?.enabled).toBe(true);
     expect(options.columns.find((column) => column.key === "description")?.header).toBe("Description");
+  } finally { act(() => root.unmount()); host.remove(); }
+});
+
+it("custom selection exposes all documented Resolve metadata choices", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  let options: ExportOptions = DEFAULT_EXPORT_OPTIONS;
+  const render = () => root.render(<ExportOptionsPanel options={options} onChange={(next) => { options = next; render(); }} />);
+  try {
+    act(render);
+    const select = host.querySelector("select")!;
+    act(() => { select.value = "custom"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(options.templateId).toBe("custom");
+    for (const field of RESOLVE_METADATA_FIELDS) expect(host.textContent).toContain(field.label);
+    expect(options.columns.filter((column) => column.enabled).map((column) => column.key).slice(0, 4)).toEqual(["scene", "shot", "take", "comments"]);
+    expect(options.columns.find((column) => column.key === "fileName")?.enabled).toBe(false);
   } finally { act(() => root.unmount()); host.remove(); }
 });
 

@@ -1,9 +1,16 @@
 // Shared export-options boundary for Modern Renderer, legacy Renderer, and
 // Worker payloads. Keeping precedence, normalization, and filename expansion
 // here prevents a preview and a saved CSV from drifting apart.
-import { RESOLVE_TEMPLATE_ID, normalizeResolveTemplateColumns, createResolveExportOptions, IMPORTED_TEMPLATE_ID, normalizeImportedColumns } from "./resolve-export-template.js";
+import {
+  IMPORTED_TEMPLATE_ID,
+  normalizeImportedColumns,
+  RESOLVE_METADATA_FIELDS,
+  RESOLVE_TEMPLATE_ID,
+  normalizeResolveTemplateColumns,
+  createResolveExportOptions,
+} from "./resolve-export-template.js";
 
-export const EXPORT_COLUMN_DEFINITIONS = Object.freeze([
+const LEGACY_EXPORT_COLUMN_DEFINITIONS = Object.freeze([
   Object.freeze({ key: "scene", header: "Scene", enabled: true, label: "场次" }),
   Object.freeze({ key: "shot", header: "Shot", enabled: true, label: "镜号" }),
   Object.freeze({ key: "take", header: "Take", enabled: true, label: "条次" }),
@@ -12,6 +19,19 @@ export const EXPORT_COLUMN_DEFINITIONS = Object.freeze([
   Object.freeze({ key: "cardNumber", header: "Card Number", enabled: false, label: "卡号" }),
   Object.freeze({ key: "videoCode", header: "Video Code", enabled: false, label: "视频码" }),
   Object.freeze({ key: "sourcePage", header: "Source Page", enabled: false, label: "来源页" }),
+]);
+
+const LEGACY_EXPORT_COLUMN_KEYS = new Set(LEGACY_EXPORT_COLUMN_DEFINITIONS.map((column) => column.key));
+
+// The custom adapter keeps its historical four enabled columns, while exposing
+// every documented Resolve text field as an opt-in choice in both renderers.
+const RESOLVE_CUSTOM_COLUMN_DEFINITIONS = RESOLVE_METADATA_FIELDS
+  .filter((field) => !LEGACY_EXPORT_COLUMN_KEYS.has(field.key))
+  .map(({ key, header, label }) => Object.freeze({ key, header, enabled: false, label }));
+
+export const EXPORT_COLUMN_DEFINITIONS = Object.freeze([
+  ...LEGACY_EXPORT_COLUMN_DEFINITIONS,
+  ...RESOLVE_CUSTOM_COLUMN_DEFINITIONS,
 ]);
 
 export const CUSTOM_EXPORT_OPTIONS = Object.freeze({
@@ -52,7 +72,10 @@ export function normalizeExportOptions(value, fallback = DEFAULT_EXPORT_OPTIONS)
       return true;
     });
   const normalizedColumns = columns.length ? columns : CUSTOM_EXPORT_OPTIONS.columns.map((column) => ({ ...column }));
-  if (!normalizedColumns.some((column) => column.enabled)) normalizedColumns[0].enabled = true;
+  const customColumns = source.templateId === "custom"
+    ? appendMissingCustomColumns(normalizedColumns)
+    : normalizedColumns;
+  if (!customColumns.some((column) => column.enabled)) customColumns[0].enabled = true;
 
   const rawFormat = isRecord(source.format) ? source.format : {};
   const baseFormat = isRecord(base.format) ? base.format : DEFAULT_EXPORT_OPTIONS.format;
@@ -69,7 +92,7 @@ export function normalizeExportOptions(value, fallback = DEFAULT_EXPORT_OPTIONS)
     ...source,
     // Built-in adapters own their field names and mandatory identity columns.
     columns: (source.templateId ?? base.templateId) === IMPORTED_TEMPLATE_ID ? normalizeImportedColumns(rawColumns) : source.templateId === RESOLVE_TEMPLATE_ID || (!Object.hasOwn(source, "templateId") && base.templateId === RESOLVE_TEMPLATE_ID)
-      ? normalizeResolveTemplateColumns(rawColumns) : normalizedColumns,
+      ? normalizeResolveTemplateColumns(rawColumns) : customColumns,
     format: {
       ...baseFormat,
       ...rawFormat,
@@ -154,9 +177,20 @@ function normalizeColumn(value, index, fallbackColumns) {
   };
 }
 
+function appendMissingCustomColumns(columns) {
+  const keys = new Set(columns.map((column) => column.key));
+  return [
+    ...columns,
+    ...CUSTOM_EXPORT_OPTIONS.columns
+      .filter((column) => !keys.has(column.key))
+      .map((column) => ({ ...column })),
+  ];
+}
+
 function safeDelimiter(value) {
   const delimiter = String(value ?? "");
-  return delimiter && delimiter.length <= 4 && !/[\r\n\u0000]/.test(delimiter) ? delimiter : ",";
+  // Persist only delimiters accepted by the CSV encoder.
+  return delimiter.length === 1 && !/["\r\n\u0000]/.test(delimiter) ? delimiter : ",";
 }
 
 function safeTemplate(value) {

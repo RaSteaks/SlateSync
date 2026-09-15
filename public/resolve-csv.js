@@ -23,6 +23,7 @@ import {
   buildResolveTemplateTable,
   findHeaderIndexes,
   isMetadataTemplate,
+  RESOLVE_METADATA_FIELDS,
 } from "./resolve-export-template.js";
 
 export {
@@ -835,6 +836,14 @@ export function resolveColumnIndexes(headers, semanticColumns = []) {
   return indexes;
 }
 
+// Identity and non-target metadata fields may have multiple source matches;
+// export bindings use the first resolved column while merge identity keeps its
+// existing duplicate-column validation rules.
+function firstColumnIndex(value) {
+  if (Array.isArray(value)) return Number.isInteger(value[0]) ? value[0] : -1;
+  return Number.isInteger(value) ? value : -1;
+}
+
 export function collectResolveMaterialKeys(table) {
   if (!table?.headers || !Array.isArray(table.rows)) {
     throw new Error("尚未载入有效的 Resolve CSV");
@@ -849,10 +858,10 @@ export function collectResolveMaterialKeys(table) {
 }
 
 export function canonicalMaterialKey(cardNumber, videoCode) {
-  const card = canonicalRecognitionValue("cardNumber", cardNumber);
+  const card = parseCardNumber(cardNumber);
   const video = canonicalRecognitionValue("videoCode", videoCode);
   if (!card || !video) return "";
-  return `${card.charAt(0)}:${Number(card.slice(1))}:${Number(video.slice(1))}`;
+  return `${card.camera}:${card.reel}:${Number(video.slice(1))}`;
 }
 
 export function materialPrefix(cardNumber, videoCode) {
@@ -1054,11 +1063,32 @@ function matchTemplateRecords(sourceTable, records) {
   return { statuses, warnings, matchedRecordCount, changes: [] };
 }
 
-const SEMANTIC_DEFAULTS = [
+const LEGACY_SEMANTIC_DEFAULTS = [
   ["scene", "Scene"], ["shot", "Shot"], ["take", "Take"], ["comments", "Comments"],
   ["takeStatus", "Take Status"], ["cardNumber", "Card Number"],
   ["videoCode", "Video Code"], ["sourcePage", "Source Page"],
 ];
+
+// Custom CSV may opt into the same documented Resolve metadata fields as the
+// built-in adapter; legacy defaults stay eight columns so old exports retain
+// their established shape and bytes.
+const LEGACY_SEMANTIC_KEYS = new Set(LEGACY_SEMANTIC_DEFAULTS.map(([key]) => key));
+const SEMANTIC_DEFAULTS = [
+  ...LEGACY_SEMANTIC_DEFAULTS,
+  ...RESOLVE_METADATA_FIELDS
+    .filter(({ key }) => !LEGACY_SEMANTIC_KEYS.has(key))
+    .map(({ key, header }) => [key, header]),
+];
+const EXTENDED_SEMANTIC_KEYS = new Set(
+  RESOLVE_METADATA_FIELDS
+    .map(({ key }) => key)
+    .filter((key) => !LEGACY_SEMANTIC_KEYS.has(key)),
+);
+const PRESERVE_SOURCE_EMPTY_FIELDS = new Set(
+  RESOLVE_METADATA_FIELDS
+    .map(({ key }) => key)
+    .filter((key) => !["scene", "shot", "take", "comments"].includes(key)),
+);
 
 // One normalizer governs all export entry points; only recognized keys survive.
 export function normalizeSemanticColumns(columns) {
@@ -1066,7 +1096,10 @@ export function normalizeSemanticColumns(columns) {
     ? columns.filter((column) => SEMANTIC_DEFAULTS.some(([key]) => column?.key === key))
     : [];
   const supplied = validColumns.length > 0;
-  const normalized = SEMANTIC_DEFAULTS.map(([key, header], index) => {
+  const definitions = validColumns.some((column) => EXTENDED_SEMANTIC_KEYS.has(column.key))
+    ? SEMANTIC_DEFAULTS
+    : LEGACY_SEMANTIC_DEFAULTS;
+  const normalized = definitions.map(([key, header], index) => {
     const value = supplied ? validColumns.find((column) => column.key === key) : null;
     const label = String(value?.header ?? header).trim().slice(0, 80);
     return { key, header: label && !/[\u0000-\u001f\u007f]/.test(label) ? label : header,
@@ -1076,7 +1109,8 @@ export function normalizeSemanticColumns(columns) {
   // an entirely disabled selection enables its first supplied valid column.
   // This prevents successful exports containing rows with no cells.
   if (!normalized.some((column) => column.enabled)) {
-    normalized.find((column) => column.key === validColumns[0].key).enabled = true;
+    const first = normalized.find((column) => column.key === validColumns[0]?.key) || normalized[0];
+    if (first) first.enabled = true;
   }
   return normalized;
 }
@@ -1118,13 +1152,14 @@ export function buildSemanticExportTable(input = {}) {
     output = mergeResolveSource(source, records, slateMetadata, { fieldFormats, comments, columns: options ? definitions : undefined });
     const indexes = resolveColumnIndexes(output.table.headers, source?.semanticColumns);
     bindings = definitions.map((column) => {
-      let index = indexes[column.key] ?? -1;
+      let index = firstColumnIndex(indexes[column.key]);
       if (index < 0 && column.enabled) {
         index = output.table.headers.length;
         output.table.headers.push(column.header);
         output.table.rows.forEach((row) => row.push(""));
       }
-      if (index >= 0 && options) output.table.headers[index] = column.header;
+      // Disabled fields retain their original source header and value.
+      if (index >= 0 && options && column.enabled) output.table.headers[index] = column.header;
       return { ...column, header: index >= 0 ? output.table.headers[index] : column.header, index };
     });
     for (const status of output.statuses) {
@@ -1134,6 +1169,9 @@ export function buildSemanticExportTable(input = {}) {
         if (column.index >= 0 && column.enabled && !["scene", "shot", "take", "comments"].includes(column.key)) {
           const previous = output.table.rows[rowIndex][column.index];
           const next = stringValue(values[column.key]);
+          // Recognition records do not carry most Resolve metadata fields;
+          // leave their source cells intact until a real value is available.
+          if (PRESERVE_SOURCE_EMPTY_FIELDS.has(column.key) && !next.trim()) continue;
           if (previous !== next) output.changes.push({ rowIndex, field: column.key, header: column.header, previous, next });
           output.table.rows[rowIndex][column.index] = next;
         }
@@ -1395,7 +1433,9 @@ function extractLooseClipOrdinal(value) {
 function parseCardNumber(value) {
   const normalized = canonicalRecognitionValue("cardNumber", value);
   if (!normalized) return null;
-  return { camera: normalized.charAt(0), reel: Number(normalized.slice(1)) };
+  // Keep the full camera prefix, matching combined filename identities.
+  const [, camera, reel] = /^([A-Z]+)(\d+)$/.exec(normalized);
+  return { camera, reel: Number(reel) };
 }
 
 function rowDisplayName(row, columns) {

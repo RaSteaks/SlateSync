@@ -66,6 +66,9 @@ test("Chinese numeral parser rejects ambiguous grammar and preserves numeric con
     assert.equal(parseChineseNumber(value), null, value);
   }
   assert.equal(canonicalRecognitionValue("cardNumber", "B001"), "B001");
+  // Multi-letter camera IDs remain valid CSV match keys.
+  assert.equal(canonicalRecognitionValue("cardNumber", "AB001"), "AB001");
+  assert.equal(canonicalRecognitionValue("cardNumber", "ARRI12"), "ARRI012");
   assert.equal(canonicalRecognitionValue("cardNumber", "A1B"), null);
   assert.equal(canonicalRecognitionValue("videoCode", "C115"), null);
   assert.equal(canonicalRecognitionValue("videoCode", "C1234"), null);

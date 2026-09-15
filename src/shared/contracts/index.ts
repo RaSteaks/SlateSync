@@ -226,6 +226,22 @@ export interface ExportOptions {
   readonly columns: readonly ExportColumnConfig[];
   readonly format: ResolveCsvFormat;
   readonly filenameTemplate: string;
+  /** Link to the project template this config was loaded from; absent when unsaved. */
+  readonly savedTemplateId?: string;
+}
+
+/**
+ * One named preset inside a project's template library. Only the read-only
+ * Resolve built-in lives outside this list; ids are stable and names are
+ * unique per project. Templates carry schema only, never sample rows.
+ */
+export interface SavedExportTemplate {
+  readonly id: string;
+  readonly name: string;
+  readonly templateId: "custom" | "imported-csv-v1";
+  readonly columns: readonly ExportColumnConfig[];
+  readonly format: ResolveCsvFormat;
+  readonly filenameTemplate: string;
 }
 
 export interface ProjectSettings {
@@ -240,6 +256,8 @@ export interface ProjectSettings {
     readonly comments: ResolveComments;
   };
   readonly export: ExportOptions;
+  /** Project template library in creation order; absent on historical projects. */
+  readonly exportTemplates?: readonly SavedExportTemplate[];
 }
 
 export interface RecognitionDefaults {

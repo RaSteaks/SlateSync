@@ -41,6 +41,7 @@ import {
 import {
   normalizeProjectSettings,
   projectSettingsFromWorkflow,
+  projectSettingsTaskSnapshot,
 } from "../lib/project-settings.mjs";
 import { throwIfRecognitionCanceled } from "../lib/ocr/cancellation.mjs";
 
@@ -765,10 +766,13 @@ export function registerIpcHandlers(ipcMain, context) {
         projectContext.project?.settings || projectSettingsFromWorkflow(workflow),
         projectSettingsFromWorkflow(workflow),
       );
+      // Tasks replay the export config that was in effect; the template
+      // library itself stays project-owned and is never copied per task.
+      const taskSettingsSnapshot = projectSettingsTaskSnapshot(projectSettings);
       const input = recognitionInput(body, workflow, projectSettings);
       if (projectContext.project) {
         capture.session.projectId = projectContext.project.id;
-        capture.session.projectSettingsSnapshot = projectSettings;
+        capture.session.projectSettingsSnapshot = taskSettingsSnapshot;
       }
       // The local log mirrors the full run (start, every progress event,
       // outcome) so any recognition can be audited after the fact. Logging is
@@ -810,7 +814,7 @@ export function registerIpcHandlers(ipcMain, context) {
       throwIfRecognitionCanceled(controller.signal);
       const completedTask = {
         projectId: projectContext.project?.id || body?.projectId || null,
-        projectSettingsSnapshot: projectSettings,
+        projectSettingsSnapshot: taskSettingsSnapshot,
         status: "completed",
         filename: input.filename,
         pageCount: result.pageCount,
@@ -858,7 +862,7 @@ export function registerIpcHandlers(ipcMain, context) {
         // The renderer formats the immediate result with this exact snapshot,
         // rather than whichever project happens to be selected when it returns.
         projectId: projectContext.project?.id || null,
-        projectSettingsSnapshot: projectContext.project ? projectSettings : null,
+        projectSettingsSnapshot: projectContext.project ? taskSettingsSnapshot : null,
         lastRecognitionDefaults: projectContext.project
           ? {
               providerId: result.provider,
@@ -964,10 +968,10 @@ export function registerIpcHandlers(ipcMain, context) {
         || projectSettingsFromWorkflow(workflow);
       return {
         ...task,
-        projectSettingsSnapshot: normalizeProjectSettings(
+        projectSettingsSnapshot: projectSettingsTaskSnapshot(normalizeProjectSettings(
           task.projectSettingsSnapshot,
-          fallback,
-        ),
+          projectSettingsTaskSnapshot(fallback),
+        )),
       };
     });
   });
@@ -980,6 +984,10 @@ export function registerIpcHandlers(ipcMain, context) {
       if (!context.taskStore) throw new Error("任务存储不可用");
       const resolvedProjectId = context.project?.id || projectId;
       const safeTask = { ...task };
+      // Both explicit saves and autosaves cross this project/task boundary.
+      if (safeTask.projectSettingsSnapshot) {
+        safeTask.projectSettingsSnapshot = projectSettingsTaskSnapshot(safeTask.projectSettingsSnapshot);
+      }
       if (context.project || projectId || task?.projectId) {
         safeTask.projectId = resolvedProjectId || task.projectId;
       }

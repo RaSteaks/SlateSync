@@ -10,6 +10,12 @@ import { CUSTOM_EXPORT_OPTIONS, mergeExportOptions, normalizeExportOptions } fro
 import { RESOLVE_METADATA_FIELDS, RESOLVE_TEMPLATE_ID, createResolveExportOptions } from "../../../../public/resolve-export-template.js";
 
 const columnLabels: Record<string, string> = {
+  // Keep the custom and built-in pickers on the same official Resolve labels.
+  fileName: "素材文件名",
+  startTimecode: "素材起始时码",
+  endTimecode: "素材结束时码",
+  reelName: "卷名",
+  clipDirectory: "源文件目录",
   scene: "场次",
   shot: "镜号",
   take: "条次",
@@ -18,6 +24,12 @@ const columnLabels: Record<string, string> = {
   cardNumber: "卡号",
   videoCode: "视频码",
   sourcePage: "来源页",
+  description: "内容描述",
+  keywords: "关键词",
+  camera: "机位",
+  shootDay: "拍摄日",
+  cameraType: "摄影机类型",
+  audioNotes: "声音备注",
 };
 
 export interface ExportOptionsPanelProps {
@@ -27,6 +39,9 @@ export interface ExportOptionsPanelProps {
   readonly title?: string;
   readonly description?: string;
   readonly sourceLabel?: string;
+  /** Template-library hosts own selection and headings; the bare editor remains. */
+  readonly hideHeader?: boolean;
+  readonly hideTemplateSelect?: boolean;
   readonly onSaveProjectDefault?: (() => void) | undefined;
   readonly onClearOverride?: (() => void) | undefined;
 }
@@ -42,6 +57,8 @@ export function ExportOptionsPanel({
   title = "CSV 导出选项",
   description = "预览与最终保存共用同一组字段、编码和文件名规则。",
   sourceLabel,
+  hideHeader = false,
+  hideTemplateSelect = false,
   onSaveProjectDefault,
   onClearOverride,
 }: ExportOptionsPanelProps) {
@@ -51,7 +68,7 @@ export function ExportOptionsPanel({
   const builtin = normalized.templateId === RESOLVE_TEMPLATE_ID;
   const imported = normalized.templateId === "imported-csv-v1";
   const metadataFields = RESOLVE_METADATA_FIELDS as readonly { key: string; label: string; required?: boolean }[];
-  const labelFor = (key: string) => builtin ? metadataFields.find((field) => field.key === key)?.label || key : columnLabels[key] || normalized.columns.find((column) => column.key === key)?.header || key;
+  const labelFor = (key: string) => metadataFields.find((field) => field.key === key)?.label || columnLabels[key] || normalized.columns.find((column) => column.key === key)?.header || key;
   const patch = (value: Partial<ExportOptions>) => onChange(normalizeExportOptions(mergeExportOptions(normalized, value)));
   const updateFormat = (value: Partial<ExportOptions["format"]>) =>
     patch({ format: { ...normalized.format, ...value } });
@@ -67,7 +84,7 @@ export function ExportOptionsPanel({
   };
 
   return <div className={styles.exportOptionsPanel} data-export-options-source={sourceLabel || undefined}>
-    <div className={styles.sectionHeader}>
+    {!hideHeader && <div className={styles.sectionHeader}>
       <div>
         <p className={styles.kicker}>{sourceLabel ? `${sourceLabel} · 导出` : "CSV 导出"}</p>
         <h2 className={styles.sectionTitle}>{title}</h2>
@@ -76,17 +93,17 @@ export function ExportOptionsPanel({
         {onClearOverride && <Button type="button" variant="ghost" size="sm" onClick={onClearOverride} disabled={disabled}>恢复项目默认</Button>}
         {onSaveProjectDefault && <Button type="button" variant="ghost" size="sm" onClick={onSaveProjectDefault} disabled={disabled} startIcon={<Save size={14} />}>保存为项目默认</Button>}
       </Stack>
-    </div>
-    <Text tone="muted" size="sm">{description}</Text>
-    <Field label="导出模板" hint="没有后期样表时，可选择内置模板。切换会载入模板默认配置，保存项目设置后生效。">
+    </div>}
+    {!hideHeader && <Text tone="muted" size="sm">{description}</Text>}
+    {!hideTemplateSelect && <Field label="导出模板" hint="没有后期样表时，可选择内置模板。切换会载入模板默认配置，保存项目设置后生效。">
       <Select aria-label="导出模板" value={normalized.templateId || "custom"} disabled={disabled} onChange={(event) => onChange(event.target.value === RESOLVE_TEMPLATE_ID ? createResolveExportOptions() : { ...CUSTOM_EXPORT_OPTIONS, templateId: "custom" })}>
         {imported && <option value="imported-csv-v1">{normalized.templateName || "导入的 CSV 模板"}</option>}
         <option value="custom">自定义 CSV</option>
         <option value={RESOLVE_TEMPLATE_ID}>DaVinci Resolve 21.1 · 内置 CSV</option>
       </Select>
-    </Field>
-    {imported && <Text size="sm" tone="muted">已导入 {normalized.templateName}，共 {normalized.columns.length} 列。保留样表列名和顺序，不复用样表数据；同名素材列直接带入，已知元数据自动对应，其他列可在预览中填写。</Text>}
-    {builtin && <Text size="sm" tone="muted">依据 Resolve 21.1 官方手册第 18 章（406–412、421–423 页）。始终包含文件名、起止时码、卷名和源文件目录；目录与文件名共同定位源文件。缺失值可在回填预览中补齐。场镜次和备注保留文本，不应用上方补位与标记规则；表头与逗号分隔符固定。</Text>}
+    </Field>}
+    {!hideTemplateSelect && imported && <Text size="sm" tone="muted">已导入 {normalized.templateName}，共 {normalized.columns.length} 列。保留样表列名和顺序，不复用样表数据；同名素材列直接带入，已知元数据自动对应，其他列可在预览中填写。</Text>}
+    {!hideTemplateSelect && builtin && <Text size="sm" tone="muted">依据 Resolve 21.1 官方手册第 18 章（406–412、421–423 页）。始终包含文件名、起止时码、卷名和源文件目录；目录与文件名共同定位源文件。缺失值可在回填预览中补齐。场镜次和备注保留文本，不应用上方补位与标记规则；表头与逗号分隔符固定。</Text>}
     <div className={styles.exportOptionsGrid}>
       <Field label="文件名模板" hint="支持 {project}、{source}、{date}、{time}。">
         <Input value={normalized.filenameTemplate} onChange={(event) => patch({ filenameTemplate: event.target.value })} disabled={disabled} />
@@ -99,7 +116,8 @@ export function ExportOptionsPanel({
         </Select>
       </Field>
       <Field label="分隔符">
-        <Input value={normalized.format.delimiter} maxLength={4} onChange={(event) => updateFormat({ delimiter: event.target.value })} disabled={disabled || builtin} />
+        {/* The encoder accepts one delimiter character. */}
+        <Input value={normalized.format.delimiter} maxLength={1} onChange={(event) => updateFormat({ delimiter: event.target.value })} disabled={disabled || builtin} />
       </Field>
       <Field label="换行">
         <Select value={lineEnding} onChange={(event) => updateFormat({ lineEnding: event.target.value as NonNullable<ExportOptions["format"]["lineEnding"]> })} disabled={disabled}>
@@ -115,7 +133,7 @@ export function ExportOptionsPanel({
       <Checkbox label="末尾追加换行" checked={normalized.format.finalNewline} onChange={(event) => updateFormat({ finalNewline: event.target.checked })} disabled={disabled} />
     </Stack>
     <div className={styles.exportColumnList} aria-label="导出列顺序">
-      <Text size="xs" tone="subtle">{builtin ? "素材匹配字段始终导出；勾选其他元数据并用箭头调整顺序。" : "勾选列并用箭头调整顺序"}</Text>
+      <Text size="xs" tone="subtle">{builtin ? "素材匹配字段始终导出；勾选其他元数据并用箭头调整顺序。" : "可从场记字段和 Resolve 元数据中勾选列，并用箭头调整顺序。"}</Text>
       {normalized.columns.map((column, index) => <div className={styles.exportColumnRow} key={column.key}>
         {/* Adapter identity fields are fixed so optional selections cannot break matching. */}
         <Checkbox label={labelFor(column.key)} checked={column.enabled} onChange={(event) => patch({ columns: normalized.columns.map((item) => item.key === column.key ? { ...item, enabled: event.target.checked } : item) })} disabled={disabled || (builtin && Boolean(metadataFields.find((field) => field.key === column.key)?.required))} />

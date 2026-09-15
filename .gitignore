@@ -43,6 +43,6 @@ session-*.md
 SlateSync.code-workspace
 .vscode/
 DESIGN.md
-premium-ui.json
+premium-*.json
 .gitignore
 UX-CONTRACT.md
