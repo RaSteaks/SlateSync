@@ -7,7 +7,7 @@ import XCTest
 struct FakePaddleRuntime: Sendable {
     let root: URL
     let paths: OCRRuntimePaths
-    init(bundle: Bool = false) throws {
+    init(bundle: Bool = false, closeBeforeExit: Bool = false) throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("SM06 中文 \(UUID().uuidString)")
         let resources = root.appendingPathComponent("资源 Root"), work = root.appendingPathComponent("work"), cache = root.appendingPathComponent("models"), home = root.appendingPathComponent("home")
         for url in [resources,work,cache,home] { try FileManager.default.createDirectory(at:url,withIntermediateDirectories:true) }
@@ -17,7 +17,17 @@ struct FakePaddleRuntime: Sendable {
             ? resources
             : resources.appendingPathComponent("SlateSyncApp/Resources/PaddleOCR")
         try FileManager.default.createDirectory(at:paddleResources,withIntermediateDirectories:true)
-        try mediaFixture("sm06-fake-runner.py").write(to:paddleResources.appendingPathComponent("paddleocr_runner.py"))
+        var runner = try mediaFixture("sm06-fake-runner.py")
+        if closeBeforeExit {
+            // Keep the migration's frozen fixture byte-exact. Inject this new
+            // fault only into the disposable runtime copied for this test.
+            let source = String(decoding: runner, as: UTF8.self)
+            runner = Data(source.replacingOccurrences(
+                of: "        if mode==\"die-after-warmup\": os._exit(0)",
+                with: "        if mode==\"close-before-exit\":\n            os.close(0)\n            os.close(1)\n            time.sleep(0.6)\n            os._exit(0)"
+            ).utf8)
+        }
+        try runner.write(to:paddleResources.appendingPathComponent("paddleocr_runner.py"))
         paths = try .init(resources:bundle ? .bundle(resources) : .development(resources),python:URL(fileURLWithPath:"/usr/bin/python3"),workingDirectory:work,modelCache:cache,environment:["HOME":home.path,"TMPDIR":work.path,"PATH":"/usr/bin:/bin","OPENAI_API_KEY":"fake-provider-secret","PIP_INDEX_URL":"fake-mirror-secret","LANG":"en_US.UTF-8"])
         if bundle { try FileManager.default.setAttributes([.posixPermissions:0o555],ofItemAtPath:resources.path) }
     }
@@ -157,6 +167,20 @@ struct FakePaddleRuntime: Sendable {
         XCTAssertEqual(snapshot.launches,2)
         await supervisor.close(); assertExited(runtime)
     }
+    func testClosedPipesBeforeDelayedExitRecoversOnce() async throws {
+        let runtime = try FakePaddleRuntime(closeBeforeExit: true); defer { runtime.cleanup() }
+        // The child closes both transport ends, then stays alive for 600ms.
+        // This deterministically exceeds the former synchronous 200ms wait.
+        let doc = try await document()
+        let supervisor = OCRProcessSupervisor(paths: runtime.paths)
+        let result = try await supervisor.execute(configuration: config("close-before-exit"), document: doc, operation: .init())
+        try OCRProcessSupervisor.requireSuccess(try XCTUnwrap(result))
+        let snapshot = await supervisor.snapshot()
+        XCTAssertEqual(snapshot.launches, 2)
+        await supervisor.close()
+        assertExited(runtime)
+    }
+
     func testQueuedCancellationAndDeadlineDoNotKillActiveWorker() async throws {
         let runtime = try FakePaddleRuntime(); defer { runtime.cleanup() }
         let clock = ManualOCRClock(), supervisor = OCRProcessSupervisor(paths:runtime.paths,clock:clock)

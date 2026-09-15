@@ -36,22 +36,19 @@ public actor ManagedOCRProcess: OCRProcessTransport {
                     }
                     if written > 0 { sent += written }
                     else if written < 0, ![EAGAIN,EWOULDBLOCK,EINTR].contains(errno) {
-                        // 请求可达数十 MB，而单次写入仅 64KB：子进程在读取中途
-                        // 死亡时大概率先命中 EPIPE 而不是退出检测。这里按子进程
-                        // 是否已退出分类，让监督者的 one-shot 恢复白名单能接管
-                        // 进程退出故障，而不是把它当作不可恢复的协议错误。
-                        throw classifyPipeFailure()
+                        // Capture errno before awaiting; no request bytes enter diagnostics.
+                        throw try await classifyPipeFailure(errorNumber: errno, sent: sent, total: request.count, eof: false, deadline: deadline, operation: operation)
                     }
                 }
                 if oneShot, sent == request.count, !inputClosed { try input.fileHandleForWriting.close(); inputClosed = true }
                 // Bound each drain batch as well as retained data. A noisy child
                 // cannot starve deadline/cancellation checks or the other stream.
-                let stdout = try drain(output.fileHandleForReading.fileDescriptor)
+                let stdout = try await drain(output.fileHandleForReading.fileDescriptor, sent: sent, total: request.count, deadline: deadline, operation: operation)
                 eof = eof || stdout.eof
                 stdoutBytes += stdout.bytes.count
                 guard stdoutBytes <= 32 * 1024 * 1024 else { throw MediaFailure.protocolError }
                 remainder.append(stdout.bytes)
-                let stderr = try drain(errorOutput.fileHandleForReading.fileDescriptor)
+                let stderr = try await drain(errorOutput.fileHandleForReading.fileDescriptor, sent: sent, total: request.count, deadline: deadline, operation: operation)
                 stderrTail.append(stderr.bytes)
                 if stderrTail.count > 128 * 1024 { stderrTail = Data(stderrTail.suffix(128 * 1024)) }
                 while let end = remainder.firstIndex(of: 10) {
@@ -79,7 +76,7 @@ public actor ManagedOCRProcess: OCRProcessTransport {
                     try deadline.check(clock: clock, operation: operation)
                     return final
                 }
-                if eof { throw MediaFailure.protocolError }
+                if eof { throw try await classifyPipeFailure(errorNumber: 0, sent: sent, total: request.count, eof: true, deadline: deadline, operation: operation) }
                 try await clock.sleep(milliseconds: 5)
             }
         } catch {
@@ -106,33 +103,37 @@ public actor ManagedOCRProcess: OCRProcessTransport {
         _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         try? input.fileHandleForReading.close(); try? output.fileHandleForWriting.close(); try? errors.fileHandleForWriting.close()
     }
-    private func drain(_ fd: Int32) throws -> (bytes: Data, eof: Bool) {
+    private func drain(_ fd: Int32, sent: Int, total: Int, deadline: OCRDeadline, operation: MediaOperation) async throws -> (bytes: Data, eof: Bool) {
         var bytes = Data(), buffer = [UInt8](repeating: 0, count: 64 * 1024)
         for _ in 0..<16 {
             let count = Darwin.read(fd, &buffer, buffer.count)
             if count > 0 { bytes.append(contentsOf: buffer.prefix(count)) }
             else if count == 0 { return (bytes, true) }
             else if [EAGAIN,EWOULDBLOCK,EINTR].contains(errno) { return (bytes, false) }
-            else { throw classifyPipeFailure() }
+            else { throw try await classifyPipeFailure(errorNumber: errno, sent: sent, total: total, eof: false, deadline: deadline, operation: operation) }
         }
         return (bytes, false)
     }
 
-    /// 将管道读写故障分类为可恢复的进程退出或真正的协议错误。子进程死亡
-    /// 时的 EPIPE/EIO 退出状态由 Foundation 异步收割，这里给一个有界窗口
-    /// 等待 isRunning 翻转；命中退出则映射为 OCR_PROCESS_EXIT（监督者恢复
-    /// 白名单成员），子进程仍存活时的错误保持协议错误，不触发恢复。
-    private func classifyPipeFailure() -> SlateSyncError {
-        if let child {
-            let deadline = ProcessInfo.processInfo.systemUptime + 0.2
-            while child.isRunning, ProcessInfo.processInfo.systemUptime < deadline {
-                usleep(5_000)
-            }
-            if !child.isRunning {
-                return SlateSyncError(code: "OCR_PROCESS_EXIT", message: "本地 OCR 进程异常退出" + stderrDiagnostic(), retryable: true)
-            }
+    /// Coordinate pipe closure with Foundation's asynchronous exit observation.
+    /// The wait yields the actor, is bounded, and retains the original deadline
+    /// and cancellation. EPIPE/EIO/EOF prove interruption even without exit;
+    /// malformed sentinel data never enters this recovery classification.
+    private func classifyPipeFailure(errorNumber: Int32, sent: Int, total: Int, eof: Bool, deadline: OCRDeadline, operation: MediaOperation) async throws -> SlateSyncError {
+        let until = ContinuousClock.now.advanced(by: .seconds(1))
+        while let child, child.isRunning, ContinuousClock.now < until {
+            try deadline.check(clock: clock, operation: operation)
+            guard !closing else { throw MediaFailure.closed }
+            try await Task.sleep(for: .milliseconds(5))
         }
-        return MediaFailure.protocolError
+        try deadline.check(clock: clock, operation: operation)
+        // close() can finish while the actor yields during exit coordination.
+        guard !closing else { throw MediaFailure.closed }
+        let exited = child.map { !$0.isRunning } ?? false
+        let interrupted = eof || errorNumber == EPIPE || errorNumber == EIO
+        let code = exited ? "OCR_PROCESS_EXIT" : (interrupted ? "OCR_TRANSPORT_INTERRUPTED" : "OCR_PROTOCOL")
+        let diagnostic = "errno=\(errorNumber) sent=\(sent)/\(total) eof=\(eof) exited=\(exited) classification=\(code)"
+        return SlateSyncError(code: code, message: "本地 OCR 管道中断；" + diagnostic + stderrDiagnostic(), retryable: true)
     }
 
     /// 提取子进程 stderr 尾部的有界诊断摘录。先限长、再脱敏、再截断，

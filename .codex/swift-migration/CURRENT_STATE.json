@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-10",
+  "updatedAt": "2026-09-16",
   "phase": "SM-09",
-  "lifecycleState": "COMPLETE",
+  "lifecycleState": "REVIEW_READY",
   "platform": {
     "minimumMacOS": "15.0",
     "architectures": [
@@ -26,37 +26,24 @@
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
-    "conclusion": "PASS",
-    "reviewCommit": "c4b864c284e2d4c4c6aac8da2464516e115f0e48",
-    "owner": "RaSteaks (Repository Owner)",
-    "approvedAt": "2026-09-10T15:39:02Z",
+    "conclusion": "PENDING",
+    "reviewCommit": null,
+    "owner": null,
+    "approvedAt": null,
     "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
-    "approvable": true,
+    "approvable": false,
     "blockers": [],
-    "approvalStatement": "Owner 明确批准当前 Swift 基线修复提交 c4b864c，授权在治理-only 提交中将 SM-09 从 PASS 收束为 COMPLETE；保持 main 为 Electron、swift-rewrite 为 Swift 开发基线，远端 native CI 待推送验证。",
-    "scope": "local ad-hoc native candidate; GitHub source push and native CI validation pending; no public distribution"
+    "approvalStatement": null,
+    "scope": "Dedicated CI repair candidate awaiting a clean exact-commit Gate and new Owner approval; no release authorization."
   },
   "verification": {
-    "swiftBuild": "passed",
-    "swiftTest": "320 executed, 318 passed, 2 skipped, 0 failed",
-    "xcodeDebugBuild": "passed",
-    "xcodeTestPlan": "11 passed, 0 failed, 0 skipped",
-    "packagedUI": "9 passed, 0 failed, 0 skipped",
-    "gateSelfTests": "119 passed",
-    "releaseBuild": "passed-arm64-x86_64",
-    "archive": "passed-arm64-x86_64",
-    "packageArtifacts": "audited ZIP and DMG from identical app",
-    "signing": "local ad-hoc; not Developer ID or notarized distribution",
-    "nativeContract": "239 removal sources, 49 frozen fixtures, 45 native acceptance evidence entries validated",
-    "manualDockReopen": "Owner observed PASS; candidate process verified",
-    "manualSpotlightReopen": "Owner observed PASS; candidate process and restored window verified",
-    "independentReview": "sm09_independent_review: no unresolved technical P0/P1",
-    "durableEvidenceHashes": "45 verified before admission",
-    "lastFormalGate": {
+    "status": "PENDING_EXACT_COMMIT_GATE",
+    "lastDiagnosticGate": {
       "result": "PASS",
-      "approvable": true,
-      "reviewCommit": "18e18228cf70ffc096f061f8bdea7bb80e2bd1e1",
-      "evidence": ".codex/gate-results/SM-09/20260910T154958Z-18e18228cf70/result.json"
+      "approvable": false,
+      "baseCommit": "82a664c4f0253fbaef4c290be7262768dcf7d70c",
+      "evidence": "/tmp/slatesync-ci-fix-gate/SM-09/20260915T155558Z-82a664c4f025/result.json",
+      "scope": "Uncommitted CI repair diagnostic; not formal approval."
     },
     "previousPhaseEvidence": ".codex/swift-migration/reviews/SM-08.md"
   },
@@ -65,9 +52,51 @@
       "id": "remote-native-ci-validation",
       "status": "PENDING_REMOTE_RUN",
       "owner": "RaSteaks (Repository Owner)",
-      "reason": "GitHub branch protection is configured; the native workflow now targets swift-rewrite, but no remote run has been triggered from this local workspace.",
+      "reason": "Prior native CI run 34500064568 failed; the repaired candidate needs a new remote run. Historical Owner approval is not reused.",
       "requiredBefore": "remote integration or public release",
       "validation": "Push swift-rewrite, confirm native CI passes, and verify the protected branch requires the native checks before remote integration; not locally verifiable until that run."
+    }
+  ],
+  "history": [
+    {
+      "recordedAt": "2026-09-16",
+      "reason": "Reopen SM-09 for CI repair; prior approval applies only to the historical candidate.",
+      "lifecycleState": "COMPLETE",
+      "gate": {
+        "conclusion": "PASS",
+        "reviewCommit": "c4b864c284e2d4c4c6aac8da2464516e115f0e48",
+        "owner": "RaSteaks (Repository Owner)",
+        "approvedAt": "2026-09-10T15:39:02Z",
+        "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
+        "approvable": true,
+        "blockers": [],
+        "approvalStatement": "Owner 明确批准当前 Swift 基线修复提交 c4b864c，授权在治理-only 提交中将 SM-09 从 PASS 收束为 COMPLETE；保持 main 为 Electron、swift-rewrite 为 Swift 开发基线，远端 native CI 待推送验证。",
+        "scope": "local ad-hoc native candidate; GitHub source push and native CI validation pending; no public distribution"
+      },
+      "verification": {
+        "swiftBuild": "passed",
+        "swiftTest": "320 executed, 318 passed, 2 skipped, 0 failed",
+        "xcodeDebugBuild": "passed",
+        "xcodeTestPlan": "11 passed, 0 failed, 0 skipped",
+        "packagedUI": "9 passed, 0 failed, 0 skipped",
+        "gateSelfTests": "119 passed",
+        "releaseBuild": "passed-arm64-x86_64",
+        "archive": "passed-arm64-x86_64",
+        "packageArtifacts": "audited ZIP and DMG from identical app",
+        "signing": "local ad-hoc; not Developer ID or notarized distribution",
+        "nativeContract": "239 removal sources, 49 frozen fixtures, 45 native acceptance evidence entries validated",
+        "manualDockReopen": "Owner observed PASS; candidate process verified",
+        "manualSpotlightReopen": "Owner observed PASS; candidate process and restored window verified",
+        "independentReview": "sm09_independent_review: no unresolved technical P0/P1",
+        "durableEvidenceHashes": "45 verified before admission",
+        "lastFormalGate": {
+          "result": "PASS",
+          "approvable": true,
+          "reviewCommit": "18e18228cf70ffc096f061f8bdea7bb80e2bd1e1",
+          "evidence": ".codex/gate-results/SM-09/20260910T154958Z-18e18228cf70/result.json"
+        },
+        "previousPhaseEvidence": ".codex/swift-migration/reviews/SM-08.md"
+      }
     }
   ]
 }

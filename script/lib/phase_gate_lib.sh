@@ -360,11 +360,9 @@ with open(state_path, encoding="utf-8") as handle:
 state_phase = state.get("phase")
 state_match = phase_pattern.fullmatch(state_phase or "")
 lifecycle_state = state.get("lifecycleState")
-# lifecycleState 合法取值：COMPLETE（已批准）与 PASS（Gate 已通过该精确
-# 提交、Owner 批准尚未落盘的合法中间态，见 PHASE_GATES.md 生命周期）。
-# 中间态存在前，批准窗口内任何 Gate 重跑/CI 都会失败，治理被迫把
-# "记录 PASS"与"记录批准"压缩进单一 COMPLETE 提交（CARRY-09）。
-if state_match is None or lifecycle_state not in {"COMPLETE", "PASS"}:
+# REVIEW_READY runs the candidate's Gate before any PASS/Owner approval exists.
+# It is valid only for this same phase; it cannot admit a successor phase.
+if state_match is None or lifecycle_state not in {"COMPLETE", "PASS", "REVIEW_READY"}:
     raise SystemExit(1)
 
 requested_number = int(requested_match.group(1))
@@ -375,7 +373,7 @@ if state_number not in {requested_number - 1, requested_number}:
 # PASS 中间态只对"状态阶段 == 请求阶段"的批准窗口重跑可接受；预准入
 # （状态阶段 = 请求阶段 - 1）仍严格要求 COMPLETE——下一阶段开工的
 # IN_PROGRESS 前置条件不变，不得因中间态而提前放行。
-if lifecycle_state == "PASS" and state_number != requested_number:
+if lifecycle_state in {"PASS", "REVIEW_READY"} and state_number != requested_number:
     raise SystemExit(1)
 
 expected_active = f".codex/swift-migration/packages/{state_phase}.md"

@@ -35,6 +35,14 @@ jobs:
           swift --version
           sw_vers
 
+      - name: Install Gate dependencies
+        # Gate scripts require ripgrep for source and log validation.
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            brew install ripgrep
+          fi
+          rg --version
+
       - name: Run strict Swift build
         run: swift build -Xswiftc -warnings-as-errors
 
@@ -53,6 +61,7 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/*-manifest.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
           if-no-files-found: ignore
@@ -68,5 +77,6 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
           if-no-files-found: ignore
           retention-days: 14

@@ -207,9 +207,16 @@ final class ResolveCSVMergerTests: XCTestCase {
         func run(_ input: Workload) async throws -> (Double, Data, ResolveMergeResult) {
             let start = clock.now
             let decoded = try await engine.decode(input.source)
+            let decodedAt = clock.now
             let result = try await merger.merge(source: decoded, records: input.records, metadata: input.metadata, edits: input.edits)
+            let mergedAt = clock.now
             let output = try await engine.encode(result.table)
-            return (Self.seconds(start.duration(to: clock.now)), output, result)
+            let finishedAt = clock.now
+            // Stage evidence identifies actual hotspots without changing budgets.
+            if ProcessInfo.processInfo.environment["SM05_PERFORMANCE_GATE"] == "1" {
+                print("SM05 STAGES rows=\(decoded.rows.count) decode=\(Self.seconds(start.duration(to: decodedAt))) merge=\(Self.seconds(decodedAt.duration(to: mergedAt))) encode=\(Self.seconds(mergedAt.duration(to: finishedAt)))")
+            }
+            return (Self.seconds(start.duration(to: finishedAt)), output, result)
         }
 
         // Normal test runs retain a deterministic 10k semantic check. The
