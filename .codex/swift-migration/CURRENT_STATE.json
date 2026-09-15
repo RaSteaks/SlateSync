@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "updatedAt": "2026-09-16",
   "phase": "SM-09",
-  "lifecycleState": "REVIEW_READY",
+  "lifecycleState": "PASS",
   "platform": {
     "minimumMacOS": "15.0",
     "architectures": [
@@ -26,18 +26,18 @@
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
-    "conclusion": "PENDING",
-    "reviewCommit": null,
+    "conclusion": "PASS",
+    "reviewCommit": "4c5b16a42a4a7d382e18999bb63448084fb93499",
     "owner": null,
     "approvedAt": null,
     "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
-    "approvable": false,
+    "approvable": true,
     "blockers": [],
     "approvalStatement": null,
-    "scope": "Dedicated CI repair candidate awaiting a clean exact-commit Gate and new Owner approval; no release authorization."
+    "scope": "Clean exact-commit local SM-09 Gate passed; pending new Owner approval and remote CI; no release authorization."
   },
   "verification": {
-    "status": "PENDING_EXACT_COMMIT_GATE",
+    "status": "LOCAL_EXACT_COMMIT_PASS_PENDING_OWNER_AND_REMOTE_CI",
     "lastDiagnosticGate": {
       "result": "PASS",
       "approvable": false,
@@ -45,7 +45,23 @@
       "evidence": "/tmp/slatesync-ci-fix-gate/SM-09/20260915T155558Z-82a664c4f025/result.json",
       "scope": "Uncommitted CI repair diagnostic; not formal approval."
     },
-    "previousPhaseEvidence": ".codex/swift-migration/reviews/SM-08.md"
+    "previousPhaseEvidence": ".codex/swift-migration/reviews/SM-08.md",
+    "lastFormalGate": {
+      "result": "PASS",
+      "approvable": true,
+      "reviewCommit": "4c5b16a42a4a7d382e18999bb63448084fb93499",
+      "evidence": "/tmp/slatesync-review-ready-gate/SM-09/20260915T161302Z-4c5b16a42a4a/result.json",
+      "evidenceSHA256": "a318f2c55e216f48415dd497326d04e029447ace5996b24e7bba385480913525",
+      "generatedAt": "2026-09-15T16:23:11Z",
+      "checks": {
+        "passed": 26,
+        "notApplicable": 1,
+        "failed": 0
+      },
+      "xcodeTestPlan": "11 passed, 0 failed, 0 skipped",
+      "packagedUI": "9 passed, cleanup passed",
+      "gateSelfTests": "129 passed"
+    }
   },
   "deferredWork": [
     {
