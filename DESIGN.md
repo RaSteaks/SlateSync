@@ -131,6 +131,27 @@ Prefer native materials and separators. Static panels are mostly flat; shadows
 are reserved for temporary overlays and raised evidence previews. Avoid opaque
 custom fills over a native sidebar.
 
+## Liquid Glass adaptation (2026-09-15)
+
+`SlateGlass.swift` owns the shared Liquid Glass presentation layer. Feature
+views choose semantic roles (`panel`, `control`, `prominent`, or `status`) rather
+than selecting materials independently. macOS 26 uses the system `glassEffect`
+renderer and grouped `GlassEffectContainer`; macOS 15–25 use `regularMaterial`
+or `thinMaterial` with the same Slate semantic fills and separator edges.
+
+Native `NavigationSplitView`, sidebar, toolbar, Settings scenes, sheets and
+lists remain system-owned. Custom glass is reserved for bounded floating
+surfaces such as workspace configuration/progress panels, page summaries,
+search/filter strips and Provider status panels. The CSV `NSTableView`, Light
+Table evidence canvas, media canvas and dense log rows remain opaque/high
+contrast. Glass is never applied per row in a large scrolling collection.
+
+The helper keeps the macOS 15 deployment target through availability checks.
+Reduced Transparency uses an opaque semantic fill; macOS contrast and
+Differentiate Without Color settings strengthen borders; Reduced Motion avoids
+interactive glass motion. Accent, success, warning and danger tints are
+semantic only and are not used to decorate every control.
+
 ## Shapes
 
 Controls use 8px visual rounding when the native control does not own geometry;
@@ -217,3 +238,11 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
   识别进行中才显示 LeaderProgress，项目身份只保留低调斜纹边缘。
 - 识别完成不自动抢占当前工作页：状态栏给出“识别完成 · n 条结果”与“查看识别结果”动作，
   结果 tab 点亮圆点（含 VoiceOver 文案），用户访问后熄灭。
+
+### Liquid Glass review corrections (2026-09-15)
+
+- Informational surfaces remain neutral, matching their foreground semantics.
+- Increase Contrast updates mounted surfaces through workspace accessibility notifications.
+- Credential badges retain capsule geometry; custom outlines appear only for accessibility modes.
+- Search owns its focus/separator outline; the configuration panel owns its full-opacity leading rule, avoiding duplicate helper borders.
+- The library summary uses a canvas-backed fallback, including reduced transparency, distinct from the evidence-surface list.

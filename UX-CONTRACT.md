@@ -73,6 +73,24 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Chinese IME composition must not trigger Enter shortcuts, autosave commits,
   search dispatch or table cell completion prematurely.
 
+## Liquid Glass presentation contract
+
+- `SlateGlass.swift` is the only shared implementation point for custom glass;
+  feature views select semantic roles and do not construct independent blur or
+  opaque chrome.
+- macOS 26 uses native `glassEffect`, `GlassEffectContainer`, and glass button
+  styles. macOS 15–25 retain the same layout and behavior through material and
+  semantic-color fallbacks; the package deployment target remains macOS 15.
+- Native sidebar, toolbar, Settings, Sheet, `List`, and `NSTableView` behavior
+  remains platform-owned. Custom glass is limited to bounded application
+  surfaces and is never applied per row in dense or 10,000-row collections.
+- Adjacent custom surfaces share one glass container. No first-pass glass
+  morphing IDs or new transitions may bypass the existing editor/save barrier.
+- Reduced Transparency switches custom surfaces to opaque Slate fills;
+  increased-contrast system settings and Differentiate Without Color strengthen
+  edges; Reduced Motion disables interactive glass motion. Existing labels,
+  identifiers, focus behavior, IME rules and status text remain canonical.
+
 ## Native UI refresh (2026-09-11)
 
 - `SlateSearchField` owns clearable task/help/category input; clearing preserves
@@ -93,3 +111,11 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Native List primary action owns double-click/keyboard opening of active project rows; archived rows retain restore actions.
 - AppSessionModel owns the single pending open. The app-wide centered rounded progress panel shows the project and real loading stage without moving list geometry or estimating percentages.
 - Success enters the workspace; failure removes the panel and retains the previous project. Duplicate opens remain blocked throughout the save/load barrier.
+
+### Liquid Glass review corrections (2026-09-15)
+
+- Informational surfaces remain neutral, matching their foreground semantics.
+- Increase Contrast updates mounted surfaces through workspace accessibility notifications.
+- Credential badges retain capsule geometry; custom outlines appear only for accessibility modes.
+- Search owns its focus/separator outline; the configuration panel owns its full-opacity leading rule, avoiding duplicate helper borders.
+- The library summary uses a canvas-backed fallback, including reduced transparency, distinct from the evidence-surface list.

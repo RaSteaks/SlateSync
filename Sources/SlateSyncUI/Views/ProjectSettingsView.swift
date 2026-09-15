@@ -97,7 +97,7 @@ public struct ProjectSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("保存", systemImage: "square.and.arrow.down") { Task { await model.save() } }
-                    .buttonStyle(.borderedProminent)
+                    .slatePrimaryActionStyle()
                     .disabled(model.project == nil || model.operation.isRunning)
             }
         }

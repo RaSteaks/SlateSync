@@ -140,7 +140,7 @@ public struct WorkspaceView: View {
                 // The File menu owns the single ⌘S registration; this toolbar
                 // button invokes the same workspace owner without competing.
                 Button("开始识别", systemImage: "viewfinder") { startRecognition() }
-                    .buttonStyle(.borderedProminent)
+                    .slatePrimaryActionStyle()
                     .labelStyle(.titleAndIcon)
                     .help(recognitionUnavailableReason ?? "识别当前场记单")
                     .disabled(!canRecognize || recognition.operation.isRunning)
@@ -297,7 +297,9 @@ public struct WorkspaceView: View {
             }
         }
         .padding(density.panelPadding)
-        .background(SlateSyncTheme.evidenceSurface)
+        // The heading and section controls form one shared floating surface;
+        // the workbench canvas below remains an opaque evidence surface.
+        .slateGlassSurface(.panel, shape: .rectangle)
     }
 
     @ViewBuilder private var detail: some View {
@@ -363,11 +365,14 @@ public struct WorkspaceView: View {
                 configurationPanel
                     .frame(width: 300)
                     .frame(maxHeight: .infinity)
-                    .background(.regularMaterial)
-                    // Overlay layout has no HStack axis; use an explicit
-                    // vertical rule instead of Divider's horizontal default.
+                    // This panel contains live controls, so the shared surface
+                    // opts into interaction while keeping the editor mounted.
+                    .slateGlassSurface(.panel, shape: .rectangle, interactive: true, border: .none)
+                    // Overlay layout needs an explicit vertical rule; retain full
+                    // separator opacity between the controls and evidence canvas.
                     .overlay(alignment: .leading) {
                         Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
+                            .allowsHitTesting(false)
                     }
                     .opacity(visible ? 1 : 0)
                     .allowsHitTesting(visible)
@@ -409,13 +414,9 @@ public struct WorkspaceView: View {
         }
         .padding(16)
         .frame(maxWidth: 360, alignment: .leading)
-        .background(
-            SlateSyncTheme.evidenceSurface,
-            in: RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius, style: .continuous)
-                .strokeBorder(SlateSyncTheme.separator, lineWidth: 0.5)
-        }
+        // Progress is a floating application-specific panel, so it uses one
+        // shared glass surface while the evidence canvas remains opaque.
+        .slateGlassSurface(.panel)
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
         .accessibilityElement(children: .combine)
     }

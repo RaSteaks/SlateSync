@@ -61,7 +61,7 @@ public struct ProjectLibraryView: View {
                 SlateEmptyState(title: "还没有项目", symbol: "film.stack",
                                 message: "创建项目后即可导入场记单并开始识别。") {
                     Button("新建项目") { model.showsCreateSheet = true }
-                        .buttonStyle(.borderedProminent)
+                        .slatePrimaryActionStyle()
                 }
             }
         }
@@ -82,8 +82,10 @@ public struct ProjectLibraryView: View {
                 }
             }
             .padding(density.panelPadding)
-            .background(SlateSyncTheme.canvas)
-            .overlay(alignment: .bottom) { Divider() }
+            // The fixed library summary is a single surface; the scrolling
+            // project list below stays native. The canvas-backed summary retains
+            // its hierarchy even when transparency is disabled.
+            .slateGlassSurface(.librarySummary, shape: .rectangle)
         }
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom) { errorBanner }
@@ -159,7 +161,7 @@ public struct ProjectLibraryView: View {
                 Button("重命名项目库…") { showsRename = true }
             }
             Button("新建项目", systemImage: "plus") { model.showsCreateSheet = true }
-                .buttonStyle(.borderedProminent)
+                .slatePrimaryActionStyle()
                 .accessibilityIdentifier(AccessibilityID.projectCreate)
         }
     }

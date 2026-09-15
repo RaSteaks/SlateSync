@@ -41,8 +41,9 @@ struct SlateStatusBar<Actions: View>: View {
         // Feedback follows panel density without reducing semantic type sizes.
         .padding(.horizontal, density.panelPadding).padding(.vertical, density.rowPadding + 3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
-        .overlay(alignment: .top) { Rectangle().fill(SlateSyncTheme.separator).frame(height: 0.5) }
+        // The full-width status surface uses the shared material fallback on
+        // older systems and the native Liquid Glass renderer on macOS 26+.
+        .slateGlassSurface(.status(tone.slateGlassTone), shape: .rectangle)
     }
 }
 
@@ -151,7 +152,10 @@ struct SlateSearchField: View {
             .accessibilityHidden(text.isEmpty)
         }
         .padding(7)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
+        // Search is a real interactive control, so it opts into the shared
+        // glass surface instead of painting a bespoke blur per feature view.
+        // The existing focus/separator outline is the sole custom border.
+        .slateGlassSurface(.control, interactive: true, border: .none)
         .overlay {
             RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius).strokeBorder(
                 focused ? SlateSyncTheme.accent : SlateSyncTheme.separator, lineWidth: focused ? 2 : 0.5)

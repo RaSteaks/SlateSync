@@ -15,24 +15,30 @@ public struct LogsView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Menu("级别", systemImage: "line.3.horizontal.decrease.circle") {
-                    ForEach(ProductLogSeverity.allCases, id: \.self) { severity in
-                        Toggle(severity.title, isOn: severityBinding(severity))
+            // The filter/action strip is one interactive glass surface; log
+            // rows below remain native list content for dense scrolling.
+            SlateGlassContainer {
+                HStack {
+                    Menu("级别", systemImage: "line.3.horizontal.decrease.circle") {
+                        ForEach(ProductLogSeverity.allCases, id: \.self) { severity in
+                            Toggle(severity.title, isOn: severityBinding(severity))
+                        }
+                    }
+                    SlateSearchField(title: "筛选分类", text: $model.category, identifier: "logs.category").frame(maxWidth: 180)
+                    Button("刷新", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
+                    Button("打开日志文件夹", systemImage: "folder") {
+                        Task { opener.openDirectory(await model.directory()) }
+                    }
+                    Spacer()
+                    if model.isRefreshing { ProgressView().controlSize(.small).accessibilityLabel("正在读取日志") }
+                    if recognition.operation.isRunning {
+                        Label("识别进行中", systemImage: "viewfinder")
+                            .foregroundStyle(SlateSyncTheme.accent)
                     }
                 }
-                SlateSearchField(title: "筛选分类", text: $model.category, identifier: "logs.category").frame(maxWidth: 180)
-                Button("刷新", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
-                Button("打开日志文件夹", systemImage: "folder") {
-                    Task { opener.openDirectory(await model.directory()) }
-                }
-                Spacer()
-                if model.isRefreshing { ProgressView().controlSize(.small).accessibilityLabel("正在读取日志") }
-                if recognition.operation.isRunning {
-                    Label("识别进行中", systemImage: "viewfinder")
-                        .foregroundStyle(SlateSyncTheme.accent)
-                }
-            }.padding(10)
+                .padding(10)
+                .slateGlassSurface(.control, shape: .rectangle, interactive: true)
+            }
             Divider()
             if model.entries.isEmpty, !model.isRefreshing {
                 ContentUnavailableView("暂无日志", systemImage: "doc.text.magnifyingglass", description: Text("日志仅保留脱敏的产品事件。"))

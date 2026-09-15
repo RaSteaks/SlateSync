@@ -276,12 +276,9 @@ struct ProjectOpeningProgressPanel: View {
         }
         .padding(24)
         .frame(maxWidth: 360, alignment: .leading)
-        .background(SlateSyncTheme.evidenceSurface,
-                    in: .rect(cornerRadius: SlateSyncTheme.panelRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius)
-                .strokeBorder(SlateSyncTheme.separator, lineWidth: 1)
-        }
+        // Opening feedback is a transient floating panel; keep the dimming
+        // scrim separate so the panel itself can sample the window content.
+        .slateGlassSurface(.panel)
         .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("project.opening.progress")

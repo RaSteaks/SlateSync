@@ -38,13 +38,20 @@ public struct HelpView: View {
     public var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                Picker("语言 / Language", selection: $model.english) {
-                    Text("简体中文").tag(false)
-                    Text("English").tag(true)
+                // Search and language controls share one sampling group while
+                // the help List remains a native navigation surface.
+                SlateGlassContainer(spacing: density.rowPadding) {
+                    VStack(spacing: density.rowPadding) {
+                        Picker("语言 / Language", selection: $model.english) {
+                            Text("简体中文").tag(false)
+                            Text("English").tag(true)
+                        }
+                        .padding(4)
+                        .slateGlassSurface(.control, interactive: true)
+                        SlateSearchField(title: "搜索帮助", text: $model.query, identifier: AccessibilityID.helpSearch)
+                    }
+                    .padding(10)
                 }
-                .padding(10)
-                SlateSearchField(title: "搜索帮助", text: $model.query, identifier: AccessibilityID.helpSearch)
-                    .padding(.horizontal, 12).padding(.bottom, 12)
                 Divider()
                 List(model.results, selection: $model.selection) { section in
                     Label(model.title(section), systemImage: section.symbol)

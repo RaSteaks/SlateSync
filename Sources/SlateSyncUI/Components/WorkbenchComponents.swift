@@ -328,6 +328,15 @@ public struct CredentialChip: View {
         }
     }
 
+    private var glassTone: SlateGlassTone {
+        switch state {
+        case .configured: .success
+        case .missing: .info
+        case .needsAuthorization: .warning
+        case .readFailed: .error
+        }
+    }
+
     public var body: some View {
         HStack(spacing: 4) {
             Image(systemName: symbol).imageScale(.small)
@@ -337,7 +346,8 @@ public struct CredentialChip: View {
         .foregroundStyle(color)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(color.opacity(0.14), in: Capsule())
+        // Preserve pill geometry; reserve the extra outline for accessibility.
+        .slateGlassSurface(.status(glassTone), shape: .capsule, border: .accessibilityOnly)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("凭据状态 \(title)")
     }

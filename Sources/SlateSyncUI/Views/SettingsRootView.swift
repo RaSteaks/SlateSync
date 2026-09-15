@@ -31,10 +31,14 @@ public struct SettingsRootView: View {
         // inside one flexible content host. macOS 15's special Settings TabView
         // host otherwise forces its ideal size into fixed window constraints.
         VStack(spacing: 0) {
-            Picker("设置分类", selection: $category) {
-                ForEach(SettingsCategory.allCases) { Text($0.title).tag($0) }
+            SlateGlassContainer {
+                Picker("设置分类", selection: $category) {
+                    ForEach(SettingsCategory.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .padding(4)
+                .slateGlassSurface(.control, interactive: true)
             }
-            .pickerStyle(.segmented).labelsHidden()
             .accessibilityIdentifier("settings.category")
             .padding(density == "compact" ? 12 : 20)
             Divider()
@@ -259,6 +263,7 @@ public struct SettingsRootView: View {
             HStack {
                 Spacer()
                 Button("保存 Provider 设置") { Task { await settings.save() } }
+                    .slatePrimaryActionStyle()
                     .disabled(settings.operation.isRunning)
             }.padding(10)
         }
@@ -275,7 +280,9 @@ public struct SettingsRootView: View {
             Section("模型") {
                 LabeledContent("可用模型", value: "\(settings.live?.models.count ?? 0)")
             }
-            Button("保存") { Task { await settings.save() } }.disabled(settings.operation.isRunning)
+            Button("保存") { Task { await settings.save() } }
+                .slatePrimaryActionStyle()
+                .disabled(settings.operation.isRunning)
         }.formStyle(.grouped)
     }
 
@@ -313,7 +320,9 @@ public struct SettingsRootView: View {
                     }
                 }
                 .id(SettingsSubregion.paddleOCR.rawValue)
-                Button("保存") { Task { await settings.save() } }.disabled(settings.operation.isRunning)
+                Button("保存") { Task { await settings.save() } }
+                    .slatePrimaryActionStyle()
+                    .disabled(settings.operation.isRunning)
             }
             .formStyle(.grouped)
             .onAppear {
@@ -385,7 +394,9 @@ public struct SettingsRootView: View {
                     }
                 }
             }
-            Button("保存") { Task { await settings.save() } }.disabled(settings.operation.isRunning)
+            Button("保存") { Task { await settings.save() } }
+                .slatePrimaryActionStyle()
+                .disabled(settings.operation.isRunning)
         }.formStyle(.grouped)
     }
 
@@ -540,6 +551,7 @@ private struct BuiltinProviderConfigurationSheet: View {
                 .help(isDirty ? "请先保存未保存的配置" : "使用已保存配置刷新模型列表")
                 Button("保存配置") { save() }
                     .keyboardShortcut(.defaultAction)
+                    .slatePrimaryActionStyle()
                     .disabled(isSaving)
             }
             .padding(.horizontal, density.panelPadding)
@@ -766,7 +778,9 @@ private struct BuiltinProviderConfigurationSheet: View {
             }
         }
         .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
+        // Discovery results are a bounded custom panel, not a list row; one
+        // shared surface keeps the model status readable in both appearances.
+        .slateGlassSurface(.panel)
     }
 
     private func modelRow(_ model: ModelData) -> some View {
@@ -939,7 +953,9 @@ private struct CredentialSheet: View {
                 Button("清除凭据", role: .destructive) { submit(nil) }
                 Spacer()
                 Button("取消", role: .cancel) { dismiss() }
-                Button("保存") { submit(credential) }.disabled(credential.isEmpty)
+                Button("保存") { submit(credential) }
+                    .slatePrimaryActionStyle()
+                    .disabled(credential.isEmpty)
             }
         }
         .padding(24).frame(width: 460)
@@ -1034,6 +1050,7 @@ private struct CustomProviderSheet: View {
                         }
                     }
                 }
+                .slatePrimaryActionStyle()
             }
         }.padding(24).frame(width: 500)
     }

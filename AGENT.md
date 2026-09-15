@@ -1,5 +1,30 @@
 # SlateSync 当前项目方案
 
+## 2026-09-15 Liquid Glass review 修复
+
+- 两份 review 去重为 6 项：修复中性状态色、增强对比度动态刷新、配置面板竖向分隔、凭据胶囊形状与冗余描边、项目库摘要底色层级及搜索框重复描边。
+- 共享适配层通过 NSWorkspace 的 accessibilityDisplayOptionsDidChangeNotification 更新视图状态；边框支持默认、仅辅助功能及调用方拥有三种策略。
+- 凭据徽章保持胶囊，默认不添加自定义描边；搜索框与配置面板分别保留自身焦点边框和全不透明分隔线。librarySummary 使用 canvas 回退，与 evidenceSurface 列表保持区别。
+- review 中“减弱透明度时仍为 0.34 边框”不符合源码（实际为 0.72 / 1pt），但同色层级问题成立；徽章问题是圆角不足，并非直角矩形。
+- 本轮验证：arm64 与 x86_64 严格构建通过；`swift test --quiet` 347 项、2 项跳过、0 失败；`git diff --check HEAD` 通过。当前运行系统为 macOS 15.7.3，未进行系统辅助功能开关的人工交互验收或 macOS 26 原生玻璃视觉验收。
+
+## 2026-09-15 Liquid Glass 全界面适配
+
+- 新增 `Sources/SlateSyncUI/Components/SlateGlass.swift`，以 `SlateGlassRole`、
+  `SlateGlassContainer`、`slateGlassSurface` 和 `slatePrimaryActionStyle` 统一
+  macOS 26 Liquid Glass 与 macOS 15–25 material/语义色回退。
+- 项目库摘要、工作台页首/配置面板/识别进度、状态条、帮助/日志控制区、全局设置分类器、
+  Provider 状态面板和主操作按钮已接入；原生侧栏、工具栏、Settings、Sheet、CSV
+  `NSTableView` 与灯箱证据区域继续由系统或高对比表面拥有。
+- 适配只改变视觉层，不改变业务、数据格式、导航、保存屏障或项目库错误处理；自定义玻璃
+  遵循单容器采样规则，禁止对大型列表逐行添加玻璃。
+- Reduced Transparency 使用不透明 Slate 表面；Increase Contrast/Differentiate Without Color
+  加强边界；Reduced Motion 不启用交互玻璃动态。macOS 26 原生玻璃需要在 macOS 26 环境补充截图验收，
+  当前 macOS 15 已通过严格 Swift 构建、347 个测试（2 个既有环境测试跳过）、Xcode Debug 构建启动，
+  并冒烟检查项目库、帮助、日志和全局设置回退路径。
+- 本轮代码注释、`DESIGN.md` 与 `UX-CONTRACT.md` 同步记录该视觉契约；此前隔离启动的
+  `file is not a database` 保持为独立问题，不在本轮处理。
+
 ## 2026-09-14 Slate Workbench 实施落码（第一轮）
 
 - 新共享组件落 `SlateSyncUI/Components/WorkbenchComponents.swift`：`SlateBadge`（场记板斜纹身份左缘）、
