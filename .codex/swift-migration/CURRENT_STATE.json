@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "updatedAt": "2026-09-16",
   "phase": "SM-09",
-  "lifecycleState": "PASS",
+  "lifecycleState": "REVIEW_READY",
   "platform": {
     "minimumMacOS": "15.0",
     "architectures": [
@@ -26,18 +26,18 @@
   "protectedHistoricalEvidence": ".codex/refactor",
   "blockingDecisions": [],
   "gate": {
-    "conclusion": "PASS",
-    "reviewCommit": "4c5b16a42a4a7d382e18999bb63448084fb93499",
+    "conclusion": "PENDING",
+    "reviewCommit": null,
     "owner": null,
     "approvedAt": null,
     "evidenceReport": ".codex/swift-migration/reviews/SM-09.md",
-    "approvable": true,
+    "approvable": false,
     "blockers": [],
     "approvalStatement": null,
-    "scope": "Clean exact-commit local SM-09 Gate passed; pending new Owner approval and remote CI; no release authorization."
+    "scope": "Documentation/archive candidate awaiting its own Gate; prior clean code Gate remains recorded under verification; no Owner approval or release authorization."
   },
   "verification": {
-    "status": "LOCAL_EXACT_COMMIT_PASS_PENDING_OWNER_AND_REMOTE_CI",
+    "status": "PENDING_DOCUMENTATION_CANDIDATE_GATE",
     "lastDiagnosticGate": {
       "result": "PASS",
       "approvable": false,

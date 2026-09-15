@@ -1,0 +1,1770 @@
+<!-- Historical design prototype; not shipped by the native application.
+     Demo data and browser-local preferences only; optional Google Fonts requires network. -->
+<title>SlateSync 工作台重设计</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet">
+<style>
+/* ============ Tokens:配色按 DESIGN.md / SlateSyncTheme 现行语义色对;布局组件为新方案方向 ============ */
+:root{
+  color-scheme:dark;
+  /* 锚点:DESIGN.md colors — canvas #151D29 · evidence #1C2735 · accent #8C9CFF(dark) */
+  --canvas:#151D29; --panel:#1C2735; --raised:#1F2B3C; --inset:#111A27;
+  --line:#2B3A4E; --line-strong:#3C4E66;
+  --text:#E9EDF4; --text-2:#A3B1C6; --text-3:#71829C;
+  --accent:#8C9CFF; --accent-ink:#101B36; --accent-dim:rgba(140,156,255,.15); --accent-line:rgba(140,156,255,.5);
+  --ok:#79D5A5; --ok-dim:rgba(121,213,165,.14);
+  --warn:#EBC572; --warn-dim:rgba(235,197,114,.14);
+  --danger:#FF9A91; --danger-dim:rgba(255,154,145,.14);
+  --scrim:rgba(6,10,18,.62);
+  --shadow:0 18px 48px rgba(0,0,0,.5);
+  --font-body:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-disp:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;
+  --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --font-hand:"Caveat",cursive; /* 仅用于纸面证据 mock 的手写笔迹(内容,非 UI 字体) */
+  --pad-panel:20px; --gap-sec:16px; --row-h:32px; --trow-h:30px;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  /* 锚点:DESIGN.md colors — canvas #F1F4F7 · evidence #FFFFFF · accent #3F50BA(light) */
+  --canvas:#F1F4F7; --panel:#FFFFFF; --raised:#F7F9FC; --inset:#E7ECF3;
+  --line:#DBE2EC; --line-strong:#C5CFDE;
+  --text:#1D2531; --text-2:#5C6B82; --text-3:#8D9AAE;
+  --accent:#3F50BA; --accent-ink:#FFFFFF; --accent-dim:rgba(63,80,186,.10); --accent-line:rgba(63,80,186,.4);
+  --ok:#18794E; --ok-dim:rgba(24,121,78,.10);
+  --warn:#865B0A; --warn-dim:rgba(134,91,10,.10);
+  --danger:#B33A32; --danger-dim:rgba(179,58,50,.10);
+  --scrim:rgba(30,40,55,.38);
+  --shadow:0 18px 48px rgba(23,32,44,.18);
+}
+:root[data-density="compact"]{ --pad-panel:12px; --gap-sec:12px; --row-h:26px; --trow-h:24px; }
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--canvas); color:var(--text);
+  font:13px/1.5 var(--font-body);
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+button{font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer}
+input,select,textarea{font:inherit; color:var(--text)}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+::selection{background:var(--accent-dim)}
+svg{display:block}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums}
+.spacer{flex:1}
+h1,h2,h3{margin:0; text-wrap:balance}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:5px; border:2px solid transparent; background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ============ 壳:导航 + 主区 ============ */
+#app{display:flex; height:100vh; min-height:520px}
+#nav{
+  width:208px; flex:none; display:flex; flex-direction:column; gap:2px;
+  background:var(--panel); border-right:1px solid var(--line); padding:14px 10px 12px;
+}
+.brand{display:flex; gap:10px; align-items:center; padding:2px 8px 14px}
+.brand .bname{font-family:var(--font-disp); font-weight:600; font-size:19px; letter-spacing:.02em; line-height:1}
+.brand .bsub{font-size:11px; color:var(--text-3); margin-top:3px}
+.nav-group{display:flex; flex-direction:column; gap:2px}
+.navitem{
+  display:flex; align-items:center; gap:10px; width:100%;
+  height:32px; padding:0 10px; border-radius:8px; color:var(--text-2); text-align:left;
+  position:relative;
+}
+.navitem:hover{background:var(--raised); color:var(--text)}
+.navitem.on{background:var(--accent-dim); color:var(--accent)}
+.navitem .ic{flex:none}
+.nav-foot{margin-top:auto; display:flex; flex-direction:column; gap:2px; border-top:1px solid var(--line); padding-top:8px}
+.nav-foot .row{display:flex; gap:2px; align-items:center}
+.iconbtn{
+  width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:6px; color:var(--text-2); border:1px solid transparent;
+}
+.iconbtn:hover{background:var(--raised); color:var(--text); border-color:var(--line)}
+.iconbtn[aria-pressed="true"]{color:var(--accent); border-color:var(--accent-line); background:var(--accent-dim)}
+
+main{flex:1; min-width:0; display:flex; flex-direction:column}
+.view{flex:1; min-height:0; display:none; flex-direction:column}
+.view.active{display:flex}
+
+/* ============ 通用元件 ============ */
+.eyebrow{
+  font-family:var(--font-disp); font-weight:600; font-size:11px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--text-3);
+}
+.eyebrow b{color:var(--accent); font-weight:600}
+.btn{
+  display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px;
+  border-radius:8px; border:1px solid var(--line-strong); background:var(--raised);
+  color:var(--text); font-weight:500; white-space:nowrap;
+}
+.btn:hover{border-color:var(--accent-line)}
+.btn.primary{background:var(--accent); border-color:transparent; color:var(--accent-ink); font-weight:600}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.big{height:34px; justify-content:center}
+.btn.danger{color:var(--danger); border-color:var(--danger)}
+.btn.danger:hover{background:var(--danger-dim)}
+.btn:disabled{opacity:.45; pointer-events:none}
+.btn.subtle{border-color:transparent; background:transparent; color:var(--text-2)}
+.btn.subtle:hover{color:var(--text); background:var(--raised)}
+.chip{
+  display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 9px;
+  border-radius:99px; font-size:11px; font-weight:500; white-space:nowrap;
+  border:1px solid var(--line); color:var(--text-2); background:var(--raised);
+}
+.chip.ok{color:var(--ok); border-color:transparent; background:var(--ok-dim)}
+.chip.warn{color:var(--warn); border-color:transparent; background:var(--warn-dim)}
+.chip.danger{color:var(--danger); border-color:transparent; background:var(--danger-dim)}
+.chip.accent{color:var(--accent); border-color:transparent; background:var(--accent-dim)}
+.chip.clickable{cursor:pointer}
+.chip.clickable:hover{border-color:var(--line-strong)}
+.chip .ic{opacity:.9}
+.stripe-edge{ /* 场记板斜纹:项目身份专用 */
+  width:3px; align-self:stretch; border-radius:2px; flex:none;
+  background:repeating-linear-gradient(-45deg,
+    var(--text) 0 4px, var(--canvas) 4px 8px);
+  opacity:.75;
+}
+.mini-stripe{
+  width:14px; height:14px; border-radius:4px; flex:none;
+  background:
+    repeating-linear-gradient(-45deg, var(--text) 0 3px, transparent 3px 7px) top / 100% 6px no-repeat,
+    var(--panel);
+  border:1px solid var(--line-strong);
+}
+.ic{width:16px; height:16px}
+.ic svg{width:100%; height:100%}
+
+/* 分段控制器 */
+.segmented{display:inline-flex; background:var(--inset); border:1px solid var(--line); border-radius:8px; padding:2px; gap:2px}
+.segmented button{padding:3px 12px; border-radius:6px; color:var(--text-2); font-size:12px}
+.segmented button.on{background:var(--panel); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.3)}
+
+/* 表格 */
+.table-scroll{overflow:auto; flex:1; min-height:0}
+table.grid{width:100%; border-collapse:collapse; font-size:12px}
+table.grid th{
+  position:sticky; top:0; z-index:2; background:var(--raised); color:var(--text-2);
+  font:500 11px/1.3 var(--font-body); letter-spacing:.04em; text-align:left;
+  padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap;
+}
+table.grid td{
+  padding:5px 10px; border-bottom:1px solid var(--line); height:var(--trow-h); white-space:nowrap;
+}
+table.grid tr:hover td{background:var(--raised)}
+table.grid td.mono{font-family:var(--font-mono); font-size:12px}
+tr.row-warn td{background:var(--warn-dim); box-shadow:inset 3px 0 0 var(--warn)}
+tr.row-warn:hover td{background:var(--warn-dim)}
+tr.row-danger td{background:var(--danger-dim); box-shadow:inset 3px 0 0 var(--danger)}
+tr.row-ok td:last-child{color:var(--ok)}
+td input{width:100%; background:transparent; border:1px solid transparent; border-radius:4px; padding:2px 4px}
+td input:hover{border-color:var(--line)}
+td input:focus{border-color:var(--accent-line); background:var(--inset)}
+
+/* 空态 */
+.empty{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:6px; text-align:center; padding:40px 20px;
+}
+.empty .glyph{
+  width:34px; height:34px; border-radius:8px; margin-bottom:8px;
+  background:repeating-linear-gradient(-45deg, var(--text-3) 0 4px, transparent 4px 9px) top/100% 11px no-repeat,
+    var(--raised);
+  border:1px solid var(--line-strong);
+}
+.empty .t{font-weight:600; font-size:14px}
+.empty .d{color:var(--text-3); max-width:380px}
+.empty .btn{margin-top:10px}
+
+/* 状态徽章(可点击循环) */
+.status-badge{
+  display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px;
+  border-radius:99px; font-size:11px; cursor:pointer; user-select:none;
+  border:1px solid var(--line); color:var(--text-2);
+}
+.status-badge:hover{border-color:var(--line-strong)}
+.status-badge.good{color:var(--ok); background:var(--ok-dim); border-color:transparent}
+.status-badge.keep{color:var(--accent); background:var(--accent-dim); border-color:transparent}
+.status-badge.ng{color:var(--danger); background:var(--danger-dim); border-color:transparent}
+</style>
+<style>
+/* ============ 视图:项目库 ============ */
+#view-library{overflow:auto}
+.page-head{
+  display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;
+  padding:26px var(--pad-panel) 6px; max-width:1060px; width:100%; margin:0 auto;
+}
+.page-head h1{font-size:22px; font-weight:600; margin-top:4px}
+.head-actions{display:flex; gap:8px; margin-left:auto}
+.page-inner{max-width:1060px; width:100%; margin:0 auto; padding:0 var(--pad-panel) 32px}
+.stats{display:flex; gap:0; border:1px solid var(--line); border-radius:12px; background:var(--panel); margin:18px 0 22px; overflow:hidden; flex-wrap:wrap}
+.stat{flex:1; min-width:130px; padding:14px 18px 12px; border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat .n{font-family:var(--font-disp); font-weight:600; font-size:30px; line-height:1.1; letter-spacing:.01em}
+.stat .n em{font-style:normal; font-size:14px; color:var(--text-3); font-family:var(--font-body); margin-left:3px}
+.stat .l{font-size:11px; color:var(--text-3); margin-top:2px; letter-spacing:.05em}
+.lib-sec{margin-bottom:22px}
+.lib-sec>h2{font-size:13px; font-weight:600; color:var(--text-2); margin-bottom:8px; display:flex; gap:8px; align-items:baseline}
+.lib-sec>h2 .mono{font-size:11px; color:var(--text-3)}
+.proj-row{
+  display:flex; align-items:center; gap:14px; min-height:58px;
+  background:transparent; border:0; border-bottom:1px solid var(--line); border-radius:0;
+  padding:10px 14px 10px 12px; margin-bottom:0;
+}
+.proj-row:hover{background:var(--raised)}
+.proj-row .proj-ico{
+  width:36px; height:36px; flex:none; border-radius:8px; display:flex; align-items:center; justify-content:center;
+  background:var(--raised); border:1px solid var(--line); color:var(--text-2);
+}
+.proj-main b{font-size:14px; font-weight:600; display:block}
+.proj-main span{font-size:12px; color:var(--text-3)}
+.proj-meta{color:var(--text-2); font-size:12px; white-space:nowrap}
+.proj-time{color:var(--text-3); font-size:11px; white-space:nowrap; min-width:72px; text-align:right}
+.proj-actions{display:flex; gap:6px; align-items:center}
+.proj-row.archived{opacity:.72}
+
+/* ============ 视图:工作台 ============ */
+#ws-empty{flex:1; display:flex}
+#ws-main{flex:1; min-height:0; display:flex; flex-direction:column}
+.toolbar{
+  height:52px; flex:none; display:flex; align-items:center; gap:10px;
+  padding:0 14px; background:var(--panel); border-bottom:1px solid var(--line);
+}
+.ws-id{display:flex; align-items:center; gap:8px; min-width:0}
+.ws-id b{font-size:14px; font-weight:600; white-space:nowrap}
+.ws-id .crumb{color:var(--text-3)}
+.ws-id .taskname{color:var(--text-2); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ws-body{flex:1; display:flex; min-height:0}
+.rail{
+  width:224px; flex:none; display:flex; flex-direction:column;
+  border-right:1px solid var(--line); background:var(--panel); min-height:0;
+}
+.rail.hidden{display:none}
+.rail-head{padding:12px 12px 8px; display:flex; flex-direction:column; gap:8px}
+.rail-title{font-size:12px; font-weight:600; color:var(--text-2); display:flex; align-items:baseline; gap:6px}
+.rail-title .mono{color:var(--text-3); font-size:11px}
+.searchbox{
+  display:flex; align-items:center; gap:6px; height:28px; padding:0 8px;
+  background:var(--inset); border:1px solid var(--line); border-radius:8px; color:var(--text-3);
+}
+.searchbox input{flex:1; min-width:0; border:0; background:transparent; font-size:12px}
+.searchbox input::placeholder{color:var(--text-3)}
+.rail-list{flex:1; overflow:auto; padding:4px 8px 8px; display:flex; flex-direction:column; gap:2px}
+.task-row{
+  display:flex; align-items:center; gap:8px; min-height:var(--row-h);
+  padding:4px 8px; border-radius:8px; text-align:left; width:100%;
+}
+.task-row:hover{background:var(--raised)}
+.task-row.on{background:var(--accent-dim)}
+.task-row.on .tname{color:var(--accent)}
+.task-row .tmain{min-width:0; flex:1}
+.task-row .tname{font-size:13px; font-weight:500; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.task-row .tmeta{font-size:11px; color:var(--text-3); font-family:var(--font-mono)}
+.work{flex:1; min-width:0; display:flex; flex-direction:column}
+.tabstrip{
+  height:44px; flex:none; display:flex; align-items:stretch; gap:2px;
+  padding:0 var(--pad-panel); background:var(--raised); border-bottom:1px solid var(--line);
+}
+.wtab{
+  position:relative; display:flex; align-items:center; gap:7px; padding:0 14px;
+  color:var(--text-2); font-weight:500; font-size:13px;
+}
+.wtab:hover{color:var(--text)}
+.wtab.on{color:var(--text)}
+.wtab.on::after{content:""; position:absolute; left:10px; right:10px; bottom:-1px; height:2px; background:var(--accent); border-radius:2px}
+.wtab .dot{width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:0; transition:opacity .15s}
+.wtab .dot.show{opacity:1}
+.tab-actions{display:flex; gap:8px; align-items:center; padding-bottom:6px}
+.workpanels{flex:1; position:relative; min-height:0}
+.wpanel{position:absolute; inset:0; display:none; flex-direction:column; min-height:0}
+.wpanel.active{display:flex}
+
+/* 状态栏 */
+.statusbar{
+  height:30px; flex:none; display:flex; align-items:center; gap:8px;
+  padding:0 12px; border-top:1px solid var(--line); background:var(--panel);
+  font-size:12px; color:var(--text-2);
+}
+.statusbar .sb-ic{color:var(--text-3); display:flex}
+.status-action{height:22px; padding:0 7px; border:1px solid var(--accent-line); border-radius:6px; color:var(--accent); background:var(--accent-dim); font-size:11px; white-space:nowrap}
+.status-action:hover{background:var(--raised)}
+.statusbar.busy .sb-ic{color:var(--accent)}
+.statusbar.busy #sb-op{color:var(--text)}
+.sb-right{display:flex; gap:6px; align-items:center}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============ 灯箱 ============ */
+.lighttable{
+  flex:1; min-height:0; display:flex; flex-direction:column; background:var(--inset);
+  background-image:radial-gradient(ellipse at 50% 42%, rgba(126,140,158,.10), rgba(0,0,0,0) 62%);
+  position:relative;
+}
+:root[data-theme="light"] .lighttable{background-image:radial-gradient(ellipse at 50% 42%, rgba(255,255,255,.7), rgba(0,0,0,0) 62%)}
+.lt-top{position:absolute; top:10px; left:14px; right:14px; display:flex; align-items:center; gap:12px; z-index:3; pointer-events:none}
+.lt-top .eyebrow{color:var(--text-2); background:color-mix(in srgb, var(--inset) 80%, transparent); padding:3px 8px; border-radius:5px}
+.paper-stage{flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:44px 24px 16px; overflow:auto}
+.paper{width:min(340px,80%); flex:none; transform:rotate(-.7deg); filter:drop-shadow(0 10px 24px rgba(0,0,0,.45))}
+.lighttable.small .paper{width:min(250px,84%)}
+.paper svg{width:100%; height:auto; border-radius:3px}
+.lt-pager{
+  flex:none; display:flex; align-items:center; gap:8px; padding:8px 14px;
+  background:var(--panel); border-top:1px solid var(--line);
+}
+.lt-pager .mono{font-size:12px; color:var(--text-2); min-width:52px; text-align:center}
+
+/* 识别进度 LeaderProgress：仅表示真实任务进度，不做倒计时 */
+.leader{width:64px; height:64px; position:relative; flex:none; pointer-events:auto}
+.leader .ring{
+  position:absolute; inset:0; border-radius:50%;
+  background:conic-gradient(var(--accent) calc(var(--p,0)*1deg), var(--line-strong) 0);
+  -webkit-mask:radial-gradient(circle, transparent 61%, #000 62%);
+  mask:radial-gradient(circle, transparent 61%, #000 62%);
+}
+.leader .cross::before,.leader .cross::after{
+  content:""; position:absolute; background:var(--line-strong);
+}
+.leader .cross::before{left:50%; top:6px; bottom:6px; width:1px}
+.leader .cross::after{top:50%; left:6px; right:6px; height:1px}
+.leader .num{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-disp); font-weight:600; font-size:22px; color:var(--accent);
+  background:color-mix(in srgb, var(--inset) 72%, transparent); border-radius:50%;
+}
+
+/* ============ 原稿页 ============ */
+.input-wrap{flex:1; display:flex; min-height:0}
+.input-wrap .lighttable{border-right:1px solid var(--line)}
+.config{
+  width:300px; flex:none; display:flex; flex-direction:column; gap:12px;
+  padding:14px 16px; background:var(--panel); overflow:auto;
+}
+.field{display:flex; flex-direction:column; gap:5px}
+.field>span{font-size:12px; font-weight:500; color:var(--text-2)}
+.field select{
+  height:30px; padding:0 8px; border-radius:6px; border:1px solid var(--line-strong);
+  background:var(--inset); font-size:13px;
+}
+.field-hint{font-size:11px; color:var(--warn); margin:0}
+.check{display:flex; gap:7px; align-items:center; font-size:12.5px; color:var(--text-2)}
+.check input{accent-color:var(--accent)}
+.disc{border:1px solid var(--line); border-radius:8px; padding:0}
+.disc summary{padding:8px 10px; font-size:12.5px; color:var(--text-2); cursor:pointer; list-style:none; display:flex; align-items:center; gap:6px}
+.disc summary::before{content:"›"; transition:transform .15s; color:var(--text-3)}
+.disc[open] summary::before{transform:rotate(90deg)}
+.disc summary:hover{color:var(--text)}
+.disc textarea{
+  width:100%; border:0; border-top:1px solid var(--line); background:var(--inset);
+  padding:8px 10px; font-size:12px; resize:vertical; border-radius:0 0 8px 8px;
+}
+.config .recog-actions{display:flex; flex-direction:column; gap:8px; margin-top:2px}
+
+/* ============ 识别结果页 ============ */
+.res-wrap{flex:1; display:flex; min-height:0}
+.res-main{flex:1; min-width:0; display:flex; flex-direction:column}
+.res-head{display:flex; align-items:center; gap:12px; padding:12px var(--pad-panel) 10px; flex-wrap:wrap}
+.res-head h2{font-size:15px; font-weight:600; margin-top:2px}
+.legend{display:flex; gap:6px; margin-left:auto; flex-wrap:wrap}
+.evidence{
+  width:400px; max-width:40%; flex:none; display:flex; flex-direction:column; gap:8px;
+  border-left:1px solid var(--line); background:var(--panel); padding:12px; min-height:0;
+}
+.evidence .lighttable{border:1px solid var(--line); border-radius:12px; overflow:hidden; flex:1}
+.ev-caption{font-size:11px; color:var(--text-3); text-align:center}
+.takemark{width:26px; height:18px; overflow:visible}
+.takemark ellipse{
+  fill:none; stroke:var(--text-2); stroke-width:1.4; stroke-linecap:round;
+  stroke-dasharray:60; stroke-dashoffset:60; transform:rotate(-6deg); transform-origin:center;
+}
+.takemark.idle ellipse{stroke-dashoffset:0}
+.takemark.draw ellipse{animation:draw .24s cubic-bezier(.4,0,.2,1) forwards}
+.takemark.ng line{stroke:var(--danger); stroke-width:1.6; stroke-linecap:round}
+@keyframes draw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
+
+/* ============ Resolve CSV 页 ============ */
+.csv-wrap{flex:1; display:flex; flex-direction:column; min-height:0}
+.csv-top{display:flex; align-items:center; gap:8px; padding:10px var(--pad-panel); flex-wrap:wrap; border-bottom:1px solid var(--line)}
+.warnchips{display:flex; gap:6px; flex-wrap:wrap}
+.csv-foot{display:flex; align-items:center; gap:10px; padding:7px var(--pad-panel); border-top:1px solid var(--line); font-size:11.5px; color:var(--text-3)}
+
+/* ============ 弹层 ============ */
+.scrim{
+  position:fixed; inset:0; background:var(--scrim); z-index:40;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.scrim[hidden]{display:none}
+.modal{
+  background:var(--panel); border:1px solid var(--line-strong); border-radius:12px;
+  box-shadow:var(--shadow); display:flex; flex-direction:column;
+  max-height:92vh; max-width:94vw; min-width:0;
+}
+.modal-head{display:flex; align-items:center; gap:10px; padding:14px 18px 0}
+.modal-head h2{font-size:15px; font-weight:600}
+.modal-body{padding:14px 18px; overflow:auto; display:flex; flex-direction:column; gap:12px}
+.modal-foot{display:flex; gap:8px; justify-content:flex-end; padding:0 18px 16px}
+.modal .note{font-size:12px; color:var(--text-2)}
+.modal .note b{color:var(--text)}
+#dialog-unsaved .modal,#dialog-confirm .modal,#dialog-delete .modal,#dialog-export .modal{width:430px}
+#scrim-open .panel{
+  width:360px; background:var(--panel); border:1px solid var(--line-strong); border-radius:12px;
+  box-shadow:var(--shadow); padding:24px; display:flex; flex-direction:column; gap:14px; align-items:center; text-align:center;
+}
+#open-name{font-size:16px; font-weight:600}
+#open-stage{font-size:12px; color:var(--text-2); min-height:18px}
+.ibar{width:100%; height:4px; background:var(--inset); border-radius:2px; overflow:hidden}
+.ibar i{display:block; height:100%; width:34%; background:var(--accent); border-radius:2px; animation:indet 1.15s ease-in-out infinite}
+@keyframes indet{0%{transform:translateX(-110%)}100%{transform:translateX(420%)}}
+.open-fail{font-size:11px; color:var(--text-3)}
+
+/* 设置 sheet */
+#modal-settings{width:780px; height:620px}
+.set-seg{padding:12px 18px 0; display:flex}
+.set-body{flex:1; overflow:auto; padding:16px 18px; border-top:1px solid var(--line); margin-top:12px}
+.set-pane{display:none; flex-direction:column; gap:14px}
+.set-pane.on{display:flex}
+.set-row{display:flex; gap:16px; align-items:flex-start}
+.set-row>label{width:150px; flex:none; font-size:13px; font-weight:500; padding-top:5px}
+.set-row>div{flex:1; min-width:0}
+.set-help{font-size:11.5px; color:var(--text-3); margin:4px 0 0}
+.set-group{border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:12px}
+.set-group>h3{font-size:12px; color:var(--text-2); font-weight:600}
+input[type=text],input[type=url]{
+  height:30px; padding:0 10px; border-radius:6px; border:1px solid var(--line-strong); background:var(--inset); width:100%;
+}
+textarea.tainput{border-radius:6px; border:1px solid var(--line-strong); background:var(--inset); padding:8px 10px; width:100%}
+
+/* Popover(校对菜单) */
+#popover{
+  position:fixed; z-index:60; background:var(--panel); border:1px solid var(--line-strong);
+  border-radius:12px; box-shadow:var(--shadow); padding:6px; min-width:190px; display:flex; flex-direction:column;
+}
+#popover[hidden]{display:none}
+#popover button{display:flex; gap:8px; align-items:center; padding:7px 10px; border-radius:6px; text-align:left; font-size:12.5px}
+#popover button:hover{background:var(--raised)}
+#popover .pop-title{font-size:11px; color:var(--text-3); padding:4px 10px 6px}
+#popover button.danger{color:var(--danger)}
+
+/* 灯箱放大 */
+#lightbox .paper{width:min(520px,86vw); max-height:80vh; overflow:auto}
+
+/* 帮助 / 日志 */
+.help-wrap{overflow:auto; padding:24px var(--pad-panel) 40px}
+.help-wrap .page-inner{padding:0}
+.flow{display:flex; gap:0; align-items:stretch; flex-wrap:wrap; margin:16px 0 26px}
+.flow-step{
+  flex:1; min-width:170px; border:1px solid var(--line); background:var(--panel);
+  border-radius:12px; padding:14px 14px 12px; position:relative;
+}
+.flow-step .fn{font-family:var(--font-disp); font-weight:600; color:var(--accent); font-size:13px; letter-spacing:.08em}
+.flow-step b{display:block; font-size:13.5px; margin:5px 0 3px}
+.flow-step p{margin:0; font-size:11.5px; color:var(--text-3); line-height:1.5}
+.flow-arrow{align-self:center; color:var(--text-3); padding:0 6px; flex:none}
+.kv-table{width:100%; border-collapse:collapse; font-size:12.5px}
+.kv-table td{padding:8px 10px; border-bottom:1px solid var(--line)}
+.kv-table td:first-child{color:var(--text-2); width:190px}
+.kv-table td.mono{font-size:12px}
+.help-sec{margin-bottom:24px}
+.help-sec h2{font-size:14px; font-weight:600; margin-bottom:4px}
+.help-sec .sub{font-size:12px; color:var(--text-3); margin:0 0 10px}
+kbd{
+  font:500 11px/1 var(--font-mono); border:1px solid var(--line-strong); border-bottom-width:2px;
+  border-radius:5px; padding:3px 6px; background:var(--raised); color:var(--text-2);
+}
+.log-table{width:100%; border-collapse:collapse; font-size:12px}
+.log-table th{text-align:left; font-weight:500; color:var(--text-3); font-size:11px; padding:6px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel)}
+.log-table td{padding:5px 10px; border-bottom:1px solid var(--line); font-family:var(--font-mono); font-size:11.5px; white-space:nowrap}
+.log-table td.msg{white-space:normal; font-family:var(--font-body)}
+.lv{font-size:11px; padding:1px 7px; border-radius:99px}
+.lv-i{color:var(--text-2); background:var(--raised)}
+.lv-ok{color:var(--ok); background:var(--ok-dim)}
+.lv-w{color:var(--warn); background:var(--warn-dim)}
+.lv-e{color:var(--danger); background:var(--danger-dim)}
+
+/* ============ 响应式 ============ */
+@media (max-width:1180px){
+  #nav{width:60px; padding:14px 8px 12px}
+  .brand .btxt,.navitem .txt,.nav-foot .txt{display:none}
+  #nav-ws-chip{display:none}
+  .navitem{justify-content:center; padding:0}
+  .brand{justify-content:center; padding-left:0; padding-right:0}
+  .nav-foot .row{justify-content:center}
+  .evidence{width:300px}
+}
+@media (max-width:960px){
+  .rail{position:absolute; z-index:10; height:100%; box-shadow:var(--shadow); display:none}
+  .rail.hidden{display:none}
+  .rail.open{display:flex}
+  .ws-body{position:relative}
+  .input-wrap{flex-direction:column}
+  .input-wrap .lighttable{min-height:280px; border-right:0; border-bottom:1px solid var(--line)}
+  .config{width:auto; flex:1}
+  .res-wrap{flex-direction:column}
+  .evidence{width:auto; max-width:none; border-left:0; border-top:1px solid var(--line); min-height:300px}
+  .stat{min-width:40%}
+  .head-actions{margin-left:0; width:100%}
+}
+
+/* ============ 动效克制 ============ */
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition:none !important}
+  .ibar i{width:100%; animation:none}
+}
+</style>
+<div id="app">
+  <nav id="nav" aria-label="主导航">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <rect x="1" y="1" width="24" height="24" rx="6" fill="var(--raised)" stroke="var(--line-strong)"/>
+        <path d="M2 9 L24 9" stroke="var(--line-strong)" stroke-width="1"/>
+        <path d="M4 9 L8 2.5 M9.5 9 L13.5 2.5 M15 9 L19 2.5 M20.5 9 L24.5 2.5" stroke="var(--text)" stroke-width="1.6" clip-path="inset(1px 1px 8px 1px round 6px)"/>
+        <circle cx="13" cy="17.5" r="3.4" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+      </svg>
+      <span class="btxt"><span class="bname">SlateSync</span><div class="bsub">场记整理工作台</div></span>
+    </div>
+    <div class="nav-group">
+      <button class="navitem on" data-nav="library"><span class="ic" data-ic="clapper"></span><span class="txt">项目库</span></button>
+      <button class="navitem" data-nav="workspace"><span class="ic" data-ic="bench"></span><span class="txt">工作台</span><span class="chip accent" id="nav-ws-chip" hidden>进行中</span></button>
+      <button class="navitem" data-nav="logs"><span class="ic" data-ic="list"></span><span class="txt">日志</span></button>
+      <button class="navitem" data-nav="help"><span class="ic" data-ic="book"></span><span class="txt">帮助</span></button>
+    </div>
+    <div class="nav-foot">
+      <div class="row">
+        <button class="iconbtn" id="btn-theme" title="切换外观"><span class="ic" data-ic="moon"></span></button>
+        <button class="iconbtn" id="btn-density" title="切换密度(舒适/紧凑)"><span class="ic" data-ic="rows"></span></button>
+        <button class="iconbtn" id="btn-gsettings" title="全局设置 (⌘,)"><span class="ic" data-ic="sliders"></span></button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- ═══════════ 项目库 ═══════════ -->
+    <section class="view active" id="view-library">
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">Project Library · <b>ROLL A → CSV</b></div>
+          <h1>项目库</h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="btn-import-project"><span class="ic" data-ic="import"></span>导入项目包…</button>
+          <button class="btn primary" id="btn-new-project"><span class="ic" data-ic="plus"></span>新建项目</button>
+        </div>
+      </header>
+      <div class="page-inner">
+        <div class="stats" id="lib-stats"></div>
+        <div class="lib-sec"><h2>活跃项目 <span class="mono" id="cnt-active"></span></h2><div id="lib-list"></div></div>
+        <div class="lib-sec"><h2>已归档 <span class="mono" id="cnt-arch"></span></h2><div id="lib-arch"></div></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ 工作台 ═══════════ -->
+    <section class="view" id="view-workspace">
+      <div id="ws-empty">
+        <div class="empty">
+          <div class="glyph"></div>
+          <div class="t">请先从项目库打开一个活跃项目</div>
+          <div class="d">工作台按「项目 → 任务 → 场记单」组织。打开项目后,左侧为任务栏,右侧依次完成 原稿识别 → 结果校对 → Resolve CSV 回填。</div>
+          <button class="btn primary" id="btn-empty-to-lib">前往项目库</button>
+        </div>
+      </div>
+      <div id="ws-main" hidden>
+        <div class="toolbar">
+          <button class="iconbtn" id="btn-rail" title="显示/隐藏任务栏" aria-pressed="false"><span class="ic" data-ic="sidebar"></span></button>
+          <div class="ws-id">
+            <span class="mini-stripe"></span>
+            <b id="ws-proj">《雾河》</b><span class="crumb">/</span><span class="taskname" id="ws-task">—</span>
+          </div>
+          <span class="chip" id="ws-save">已保存</span>
+          <div class="spacer"></div>
+          <button class="btn subtle" id="btn-goto-input"><span class="ic" data-ic="viewfinder"></span>识别设置</button>
+          <button class="btn" id="btn-import-media"><span class="ic" data-ic="import"></span>导入场记单…</button>
+          <button class="iconbtn" id="btn-close-proj" title="关闭项目,返回项目库"><span class="ic" data-ic="x"></span></button>
+        </div>
+        <div class="ws-body">
+          <aside class="rail" id="rail">
+            <div class="rail-head">
+              <div class="rail-title">项目任务 <span class="mono" id="rail-count"></span></div>
+              <div class="searchbox"><span class="ic" data-ic="search"></span><input id="rail-search" placeholder="搜索任务" aria-label="搜索任务"></div>
+            </div>
+            <div class="rail-list" id="rail-list"></div>
+          </aside>
+          <div class="work">
+            <div class="tabstrip" role="tablist" aria-label="工作区">
+              <button class="wtab on" role="tab" aria-selected="true" aria-controls="panel-input" id="tab-input" data-tab="input">原稿<span class="dot"></span></button>
+              <button class="wtab" role="tab" aria-selected="false" aria-controls="panel-results" id="tab-results" data-tab="results">识别结果<span class="dot"></span></button>
+              <button class="wtab" role="tab" aria-selected="false" aria-controls="panel-csv" id="tab-csv" data-tab="csv">Resolve CSV<span class="dot"></span></button>
+              <div class="spacer"></div>
+              <div class="tab-actions" id="tab-actions"></div>
+            </div>
+            <div class="workpanels">
+              <!-- 原稿 -->
+              <div class="wpanel active" id="panel-input" role="tabpanel" aria-labelledby="tab-input">
+                <div class="input-wrap">
+                  <div class="lighttable">
+                    <div class="lt-top">
+                      <div class="eyebrow" id="lt-caption">场记单</div>
+                      <div class="spacer"></div>
+                      <div class="leader" id="leader" hidden><div class="cross"></div><div class="ring"></div><div class="num" id="leader-num">1</div></div>
+                    </div>
+                    <div class="paper-stage"><div class="paper" id="lt-paper"></div></div>
+                    <div class="lt-pager">
+                      <button class="iconbtn" id="lt-prev" title="上一页"><span class="ic" data-ic="chevL"></span></button>
+                      <span class="mono" id="lt-page">– / –</span>
+                      <button class="iconbtn" id="lt-next" title="下一页"><span class="ic" data-ic="chevR"></span></button>
+                      <div class="spacer"></div>
+                      <button class="btn subtle" id="btn-zoom"><span class="ic" data-ic="zoom"></span>放大场记单预览</button>
+                    </div>
+                  </div>
+                  <aside class="config">
+                    <div class="eyebrow">识别配置 · Recognition</div>
+                    <label class="field"><span>服务商 Provider</span>
+                      <select id="sel-provider"></select>
+                    </label>
+                    <label class="field"><span>模型 Model</span>
+                      <select id="sel-model"></select>
+                      <p class="set-help">模型能力会单独验证;不可用项会在列表中标注。</p>
+                    </label>
+                    <div class="field"><span>识别质量</span>
+                      <div class="segmented" id="quality-seg">
+                        <button class="on">高精度</button><button>标准</button><button>快</button>
+                      </div>
+                    </div>
+                    <label class="check"><input type="checkbox" id="chk-json" checked> JSON 模式(JSON Schema)</label>
+                    <details class="disc">
+                      <summary>自定义提示词</summary>
+                      <textarea rows="3" placeholder="追加到识别提示词末尾,留空使用默认…"></textarea>
+                    </details>
+                    <div class="spacer"></div>
+                    <p class="field-hint" id="recog-hint" hidden></p>
+                    <div class="recog-actions">
+                      <button class="btn primary big" id="btn-recognize"><span class="ic" data-ic="play"></span>开始识别</button>
+                      <button class="btn subtle" id="btn-local-csv"><span class="ic" data-ic="doc"></span>从场记 CSV 生成结果</button>
+                    </div>
+                  </aside>
+                </div>
+              </div>
+              <!-- 识别结果 -->
+              <div class="wpanel" id="panel-results" role="tabpanel" aria-labelledby="tab-results" aria-hidden="true">
+                <div class="res-wrap">
+                  <div class="res-main">
+                    <div class="res-head">
+                      <div>
+                        <div class="eyebrow">可编辑识别结果 · Confirmed Slates</div>
+                        <h2 id="res-title">识别结果</h2>
+                      </div>
+                      <div class="legend">
+                        <span class="chip ok">好条 = 铅笔圈</span>
+                        <span class="chip danger">作废 = 划线</span>
+                        <span class="chip">点击状态循环切换</span>
+                      </div>
+                    </div>
+                    <div class="table-scroll" id="res-scroll">
+                      <table class="grid" id="res-table" hidden>
+                        <thead><tr><th>条 Slate</th><th>场</th><th>镜</th><th>次</th><th>机</th><th>状态</th><th>置信度</th><th>备注</th></tr></thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <aside class="evidence">
+                    <div class="eyebrow">原稿对照 · Evidence</div>
+                    <div class="lighttable small"><div class="paper-stage" style="padding:20px 14px"><div class="paper" id="ev-paper"></div></div></div>
+                    <div class="ev-caption mono" id="ev-caption">—</div>
+                  </aside>
+                </div>
+              </div>
+              <!-- Resolve CSV -->
+              <div class="wpanel" id="panel-csv" role="tabpanel" aria-labelledby="tab-csv" aria-hidden="true">
+                <div class="csv-wrap">
+                  <div class="csv-top">
+                    <div class="warnchips" id="csv-warns"></div>
+                    <div class="spacer"></div>
+                    <button class="btn" id="btn-scan"><span class="ic" data-ic="viewfinder"></span>场记元数据 · 扫描与回填</button>
+                  </div>
+                  <div class="table-scroll">
+                    <table class="grid" id="csv-table" hidden>
+                      <thead><tr><th>素材 Clip</th><th>场 Scene</th><th>镜 Shot</th><th>次 Take</th><th>备注 Comments</th><th>Camera FPS</th><th>Shoot Day</th><th>状态</th><th></th></tr></thead>
+                      <tbody></tbody>
+                    </table>
+                    <div class="empty" id="csv-empty" hidden>
+                      <div class="glyph"></div>
+                      <div class="t">尚未载入 Resolve CSV</div>
+                      <div class="d">载入后按条号对账、检查场镜次序,识别结果合并进来后再导出。原始编码、换行与未匹配字段都会保留。</div>
+                      <button class="btn primary" id="btn-import-resolve"><span class="ic" data-ic="import"></span>导入 Resolve CSV…</button>
+                    </div>
+                  </div>
+                  <div class="csv-foot"><span class="mono" id="csv-count"></span><div class="spacer"></div><span id="csv-note"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="statusbar" id="statusbar">
+          <span class="sb-ic" id="sb-ic"></span>
+          <span id="sb-op">就绪</span>
+          <button class="status-action" id="sb-action" hidden>查看识别结果</button>
+          <div class="spacer"></div>
+          <span id="sb-mid" class="mono"></span>
+          <div class="spacer"></div>
+          <div class="sb-right" id="sb-right"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ 日志 ═══════════ -->
+    <section class="view" id="view-logs">
+      <header class="page-head">
+        <div><div class="eyebrow">Diagnostics · 诊断日志</div><h1>日志</h1></div>
+        <div class="head-actions">
+          <div class="warnchips" id="log-filters">
+            <span class="chip clickable on" data-lv="all">全部</span>
+            <span class="chip clickable" data-lv="ok">完成</span>
+            <span class="chip clickable" data-lv="warn">告警</span>
+            <span class="chip clickable" data-lv="err">错误</span>
+          </div>
+        </div>
+      </header>
+      <div class="page-inner" style="flex:1; display:flex; flex-direction:column; min-height:0">
+        <div class="table-scroll" style="border:1px solid var(--line); border-radius:12px; background:var(--panel); flex:1">
+          <table class="log-table"><thead><tr><th style="width:150px">时间</th><th style="width:70px">级别</th><th style="width:110px">来源</th><th>消息</th></tr></thead><tbody id="log-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ 帮助 ═══════════ -->
+    <section class="view" id="view-help">
+      <div class="help-wrap">
+        <div class="page-inner">
+          <div class="eyebrow">Workflow · 工作流总览</div>
+          <h1 style="font-size:22px; font-weight:600; margin-top:4px">从场记单到 Resolve CSV</h1>
+          <div class="flow">
+            <div class="flow-step"><div class="fn">01 导入</div><b>导入场记单</b><p>PDF / 图片,本地逐页栅格化;或直接从场记 CSV 生成结果。</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><div class="fn">02 识别</div><b>场记识别</b><p>Vision / PaddleOCR 提供证据,视觉模型抽取场、镜、次与条次状态。</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><div class="fn">03 校对</div><b>人工确认</b><p>原稿对照逐条校对;无法确认的字段不会被强行写入。</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><div class="fn">04 对账</div><b>Resolve CSV 对账</b><p>条号对账、场镜次序检查、完整性告警;可扫描 slate.txt 补充元数据。</p></div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step"><div class="fn">05 导出</div><b>回填导出</b><p>仅更新匹配字段,保留原 CSV 的编码、换行与其他内容。</p></div>
+          </div>
+          <div class="help-sec">
+            <h2>识别方式</h2>
+            <p class="sub">按任务选择;OCR 引擎状态见全局设置。</p>
+            <div class="set-group" style="padding:0; overflow:hidden">
+              <table class="kv-table">
+                <tr><td>macOS Vision</td><td class="mono">本机 · 无需安装</td><td>基础文字与坐标识别</td></tr>
+                <tr><td>PaddleOCR(可选)</td><td class="mono">本机 · 需安装</td><td>额外引擎或本地处理能力</td></tr>
+                <tr><td>视觉模型</td><td class="mono">按 Provider 配置</td><td>复杂版式、中文或手写内容</td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="help-sec">
+            <h2>键盘</h2>
+            <div class="set-group" style="padding:0; overflow:hidden">
+              <table class="kv-table">
+                <tr><td><kbd>⌘</kbd> <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd></td><td>切换 原稿 / 识别结果 / Resolve CSV</td></tr>
+                <tr><td><kbd>⌘</kbd> <kbd>,</kbd></td><td>打开全局设置</td></tr>
+                <tr><td><kbd>⌘</kbd> <kbd>S</kbd></td><td>保存当前任务修改</td></tr>
+                <tr><td><kbd>/</kbd></td><td>聚焦任务搜索</td></tr>
+                <tr><td><kbd>Esc</kbd></td><td>关闭最上层弹层</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<!-- ═══════════ 弹层 ═══════════ -->
+<div class="scrim" id="scrim-open" hidden>
+  <div class="panel" role="dialog" aria-label="打开项目">
+    <span class="mini-stripe" style="width:22px;height:22px"></span>
+    <div id="open-name">《雾河》</div>
+    <div class="ibar"><i></i></div>
+    <div id="open-stage">正在读取项目索引…</div>
+    <button class="open-fail" id="btn-open-fail">演示:模拟打开失败</button>
+  </div>
+</div>
+
+<div class="scrim" id="modal-settings" hidden>
+  <div class="modal" role="dialog" aria-label="全局设置">
+    <div class="modal-head"><h2>全局设置</h2><div class="spacer"></div><button class="iconbtn" id="btn-set-close" title="关闭 (Esc)"><span class="ic" data-ic="x"></span></button></div>
+    <div class="set-seg segmented" id="set-seg">
+      <button class="on" data-set="general">通用</button>
+      <button data-set="provider">Provider</button>
+      <button data-set="recog">识别</button>
+      <button data-set="ocr">OCR</button>
+      <button data-set="adv">高级</button>
+    </div>
+    <div class="set-body">
+      <div class="set-pane on" data-pane="general">
+        <div class="set-row"><label>外观</label><div class="segmented" id="set-appearance"><button class="on">深色</button><button>浅色</button><button>跟随系统</button></div></div>
+        <div class="set-row"><label>密度</label><div class="segmented" id="set-density"><button class="on">舒适</button><button>紧凑</button></div><p class="set-help">紧凑模式:面板内边距 12pt、表格行高 24pt,与现有 density 偏好对应。</p></div>
+        <div class="set-row"><label>启动时</label><div><label class="check"><input type="checkbox" checked> 打开项目库并恢复上次窗口</label></div></div>
+        <div class="set-row"><label>本地项目加密</label><div><span class="chip ok">已启用 · AES-256-GCM</span><p class="set-help">密钥保存在本机登录钥匙串;认证失败时停止并保留原文件。</p></div></div>
+      </div>
+      <div class="set-pane" data-pane="provider">
+        <div class="set-group">
+          <h3>已配置的服务商</h3>
+          <table class="kv-table">
+            <thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th>API Key</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>OpenAI 兼容 · 主力</td><td class="mono">api.openai.com/v1</td><td class="mono">gpt-4o</td><td><span class="chip ok">已配置</span></td><td><button class="btn subtle">编辑…</button></td></tr>
+              <tr><td>本地 vLLM</td><td class="mono">127.0.0.1:8000/v1</td><td class="mono">qwen2.5-vl-72b</td><td><span class="chip warn">需要授权</span></td><td><button class="btn subtle">编辑…</button></td></tr>
+              <tr><td>备用线路</td><td class="mono">—</td><td class="mono">—</td><td><span class="chip">缺失</span></td><td><button class="btn subtle">编辑…</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="set-row"><label></label><div style="display:flex; gap:8px"><button class="btn">新增自定义 Provider</button><button class="btn">验证模型能力</button></div></div>
+        <p class="set-help">API Key 由 macOS Keychain 保存,不写入项目包、项目库或 Git。状态区分「已配置 / 缺失 / 需要授权 / 读取失败」;取消授权不会显示为缺失。</p>
+      </div>
+      <div class="set-pane" data-pane="recog">
+        <div class="set-row"><label>全局识别并发数</label><div style="display:flex; gap:10px; align-items:center"><input type="text" value="2" style="width:64px; text-align:center" class="mono"><span class="set-help">1–4;页级并发,过高可能触发限流。</span></div></div>
+        <div class="set-row"><label>默认识别质量</label><div class="segmented"><button class="on">高精度</button><button>标准</button><button>快</button></div></div>
+        <div class="set-row"><label>结构化输出</label><div><label class="check"><input type="checkbox" checked> JSON Schema</label><label class="check" style="margin-top:6px"><input type="checkbox"> JSON Object(兼容不支持 Schema 的接口)</label></div></div>
+        <div class="set-row"><label>自定义提示词</label><div><textarea class="tainput" rows="3" placeholder="对所有识别任务追加的提示词…"></textarea></div></div>
+      </div>
+      <div class="set-pane" data-pane="ocr">
+        <div class="set-group">
+          <h3>macOS Vision</h3>
+          <div class="set-row"><label>状态</label><div><span class="chip ok">已就绪</span><p class="set-help">本机引擎,提供文字、置信度与坐标 evidence。</p></div></div>
+        </div>
+        <div class="set-group">
+          <h3>PaddleOCR(可选)</h3>
+          <div class="set-row"><label>状态</label><div style="display:flex; gap:8px; align-items:center"><span class="chip">未安装</span><button class="btn">安装 PaddleOCR…</button></div></div>
+          <div class="set-row"><label>Python 可执行文件</label><div><input type="text" placeholder="/usr/bin/python3 或虚拟环境路径"></div></div>
+          <div class="set-row"><label>模型缓存路径</label><div><input type="text" placeholder="~/.paddlex"></div></div>
+          <div class="set-row"><label>OCR 不可用时</label><div class="segmented"><button class="on">降级为页面图片识别</button><button>停止并报告错误</button></div></div>
+        </div>
+      </div>
+      <div class="set-pane" data-pane="adv">
+        <div class="set-row"><label>项目库位置</label><div style="display:flex; gap:8px"><input type="text" value="~/Library/Application Support/Local SlateSync Library" readonly><button class="btn">切换项目库…</button></div></div>
+        <div class="set-row"><label>日志</label><div style="display:flex; gap:8px"><button class="btn">打开日志文件夹</button><span class="chip">详细级别:标准</span></div></div>
+        <div class="set-row"><label>旧凭据</label><div><button class="btn">迁移旧凭据…</button><p class="set-help">仅在主动点击时读取钥匙串;启动时不执行秘密读取。</p></div></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="btn-set-cancel">取消</button><button class="btn primary" id="btn-set-save">保存配置</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="dialog-unsaved" hidden>
+  <div class="modal" role="alertdialog" aria-label="未保存的修改">
+    <div class="modal-head"><h2>未保存的修改</h2></div>
+    <div class="modal-body"><p class="note" id="unsaved-text">当前任务有未保存的修改。</p></div>
+    <div class="modal-foot">
+      <button class="btn" data-unsaved="cancel">取消</button>
+      <button class="btn" data-unsaved="discard">放弃修改</button>
+      <button class="btn primary" data-unsaved="save">保存并切换</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="dialog-confirm" hidden>
+  <div class="modal" role="alertdialog" aria-label="确认操作">
+    <div class="modal-head"><h2 id="confirm-title">确认</h2></div>
+    <div class="modal-body"><p class="note" id="confirm-text"></p></div>
+    <div class="modal-foot"><button class="btn" data-confirm="cancel">取消</button><button class="btn danger" id="btn-confirm-go" data-confirm="go">确认</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="dialog-delete" hidden>
+  <div class="modal" role="alertdialog" aria-label="永久删除项目">
+    <div class="modal-head"><h2>永久删除项目</h2></div>
+    <div class="modal-body">
+      <p class="note" id="delete-text">此操作不可撤销。请输入 <b>《项目名》</b> 以确认。</p>
+      <input type="text" id="delete-input" placeholder="输入项目名以确认" autocomplete="off">
+    </div>
+    <div class="modal-foot"><button class="btn" data-del="cancel">取消</button><button class="btn danger" id="btn-del-go" disabled>永久删除</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="dialog-export" hidden>
+  <div class="modal" role="alertdialog" aria-label="导出确认">
+    <div class="modal-head"><h2>导出 CSV…</h2></div>
+    <div class="modal-body">
+      <p class="note" id="export-text">将回填 <b>12</b> 个匹配字段,保留原 CSV 的编码、换行与未匹配内容。</p>
+      <div class="set-group" id="export-warns" hidden><h3>未处理告警</h3><p class="note" id="export-warn-list"></p></div>
+      <p class="set-help">无法确认的字段不会被强行写入,导出时留空。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-export="cancel">返回校对</button>
+      <button class="btn primary" data-export="go">仍要导出(留空未确认)</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="lightbox" hidden>
+  <div class="paper" id="lightbox-paper"></div>
+</div>
+
+<div id="popover" hidden></div>
+
+<script>
+/* ═══════════════ 图标 ═══════════════ */
+const ICONS = {
+  clapper:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="6" width="12" height="7.5" rx="1.5"/><path d="M2 6l1.6-3h2.2L4.2 6M5.8 3h2.2L6.4 6M8.6 3h2.2L9.2 6M11.4 3h2.2l-1.4 3"/></svg>',
+  bench:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6.2 2.5v11M10 2.5v11"/></svg>',
+  list:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><path d="M2.5 4h.01M2.5 8h.01M2.5 12h.01" stroke-width="2"/></svg>',
+  book:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.5C7 2.6 5.4 2.5 3.5 2.7c-.6.1-1 .5-1 1v8.6c0 .6.5 1 1.1 1 1.7-.1 3.2 0 4.4.8 1.2-.8 2.7-.9 4.4-.8.6 0 1.1-.4 1.1-1V3.7c0-.5-.4-.9-1-1-1.9-.2-3.5-.1-4.5.8z"/><path d="M8 3.5v10.6"/></svg>',
+  sliders:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4.5h7M12 4.5h1.5M2.5 11.5h3M8 11.5h5.5"/><circle cx="10.7" cy="4.5" r="1.7"/><circle cx="6.3" cy="11.5" r="1.7"/></svg>',
+  moon:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M13.2 9.6A5.6 5.6 0 1 1 6.4 2.8a4.6 4.6 0 0 0 6.8 6.8z"/></svg>',
+  sun:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></svg>',
+  rows:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>',
+  search:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.6 13.6"/></svg>',
+  x:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  plus:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
+  import:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5.2 6.7 8 9.5l2.8-2.8"/><path d="M2.5 11.5v1a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1"/></svg>',
+  viewfinder:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 5V3.5a1 1 0 0 1 1-1H5M11 2.5h1.5a1 1 0 0 1 1 1V5M13.5 11v1.5a1 1 0 0 1-1 1H11M5 13.5H3.5a1 1 0 0 1-1-1V11"/><circle cx="8" cy="8" r="2.2"/></svg>',
+  play:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9a.6.6 0 0 0 .9.5l7-4.5a.6.6 0 0 0 0-1l-7-4.5A.6.6 0 0 0 5 3.5z"/></svg>',
+  stop:'<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="4" width="8" height="8" rx="1.2"/></svg>',
+  doc:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 2.5h5l3 3v8a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5z"/><path d="M9 2.5v3h3"/></svg>',
+  chevL:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
+  chevR:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>',
+  zoom:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.6 13.6M5.2 7h3.6M7 5.2v3.6"/></svg>',
+  check:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4.5"/></svg>',
+  warn:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.1 2.9 2.3 11a1.2 1.2 0 0 0 1 1.8h9.4a1.2 1.2 0 0 0 1-1.8L8.9 2.9a1.1 1.1 0 0 0-1.8 0z"/><path d="M8 6v3M8 11h.01"/></svg>',
+  sidebar:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/></svg>',
+  dots:'<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>',
+  retry:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 1 1 11 3.8"/><path d="M11.2 1.6l.3 2.5-2.5.3"/></svg>',
+  folder:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 4.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>',
+  cam:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4.5" width="8.5" height="7" rx="1.2"/><path d="M10.5 8l3.5-2v4z"/></svg>',
+  clock:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.2l2.2 1.3"/></svg>'
+};
+function ic(name, cls){ return '<span class="ic '+(cls||'')+'" aria-hidden="true">'+(ICONS[name]||'')+'</span>'; }
+document.querySelectorAll('[data-ic]').forEach(el=>{ el.innerHTML = ICONS[el.dataset.ic]||''; });
+
+/* ═══════════════ 纸面证据:场记单 SVG ═══════════════ */
+const PAPER = { bg:'#F2EEE3', ink:'#4B463A', line:'#B9B19B', hand:'#45403A', blue:'#3A4A8C', red:'#BF3B2E' };
+function paperSVG(page, total, seed){
+  const s = seed || {prod:'雾河', roll:'A03', scene:14, shot:3, take:2, day:'2026.3.14', ie:'内', dn:'夜',
+    takes:[[1,'7s','','ok'],[2,'12s','焦点虚',''],[3,'9s','OK','ok'],[4,'15s','NG·穿帮','ng'],[5,'—','','']]};
+  const L = PAPER.line, ink = PAPER.ink, H = PAPER.hand;
+  const tw = 46, tx = [24, 24+tw, 24+tw*2, 24+tw*3]; // takes table cols
+  let takeRows = '';
+  s.takes.forEach((t,i)=>{
+    const y = 402 + i*30;
+    const circ = t[3]==='ok' ? `<ellipse cx="${tx[3]+34}" cy="${y+11}" rx="34" ry="11" fill="none" stroke="${PAPER.hand}" stroke-width="1.3" transform="rotate(-5 ${tx[3]+34} ${y+11})"/>` : '';
+    const strike = t[3]==='ng' ? `<path d="M${tx[3]+6} ${y+12} L${tx[3]+66} ${y+7}" stroke="${PAPER.red}" stroke-width="1.6" stroke-linecap="round"/>` : '';
+    takeRows += `<g>
+      <path d="M24 ${y+24} H380" stroke="${L}" stroke-width=".7"/>
+      <text x="${tx[0]+8}" y="${y+16}" font-family="Menlo, monospace" font-size="11" fill="${ink}">T${t[0]}</text>
+      <text x="${tx[1]+8}" y="${y+16}" font-family="Caveat, cursive" font-size="15" fill="${H}">${t[1]}</text>
+      <text x="${tx[2]+8}" y="${y+17}" font-family="Caveat, cursive" font-size="16" fill="${t[3]==='ng'?PAPER.red:H}">${t[2]}</text>
+      ${circ}${strike}</g>`;
+  });
+  const box = (x,y,w,h,label,sub,val,hand)=>`
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${L}" stroke-width=".8"/>
+    <text x="${x+7}" y="${y+13}" font-family="Menlo, monospace" font-size="6.5" letter-spacing="1" fill="${ink}" opacity=".75">${label}</text>
+    <text x="${x+7}" y="${y+h-8}" font-family="${hand?'Caveat, cursive':'Menlo, monospace'}" font-size="${hand?19:12}" fill="${hand?H:ink}">${val}</text>
+    ${sub?`<text x="${x+w-6}" y="${y+13}" text-anchor="end" font-family="Menlo, monospace" font-size="6" fill="${ink}" opacity=".5">${sub}</text>`:''}`;
+  return `<svg viewBox="0 0 420 594" role="img" aria-label="场记单第 ${page} 页">
+    <rect width="420" height="594" rx="3" fill="${PAPER.bg}"/>
+    <rect x="12" y="12" width="396" height="570" fill="none" stroke="${L}" stroke-width=".8"/>
+    <text x="24" y="46" font-family="Caveat, cursive" font-size="27" fill="${PAPER.blue}">《${s.prod}》</text>
+    <text x="396" y="34" text-anchor="end" font-family="Menlo, monospace" font-size="9" letter-spacing="2" fill="${ink}">场记单 · SLATE LOG</text>
+    <text x="396" y="48" text-anchor="end" font-family="Menlo, monospace" font-size="7.5" fill="${ink}" opacity=".6">ROLL ${s.roll} · DAY ${String(page).padStart(2,'0')} · 页 ${page}/${total}</text>
+    <path d="M24 58 H396" stroke="${L}" stroke-width=".8"/>
+    ${box(24,72,108,46,'場 SCENE','SCENE',String(s.scene),true)}
+    ${box(132,72,84,46,'鏡 SHOT','SHOT',String(s.shot),true)}
+    ${box(216,72,84,46,'次 TAKE','TAKE',String(s.take),true)}
+    ${box(300,72,96,46,'條 SLATE','NO.','S'+s.scene+'·T'+s.take,false)}
+    ${box(24,118,108,40,'日期 DATE','DATE',s.day,true)}
+    ${box(132,118,84,40,'內/外','I/E',s.ie,true)}
+    ${box(216,118,84,40,'晝/夜','D/N',s.dn,true)}
+    ${box(300,118,96,40,'頁 PAGE','PG',page+' / '+total,false)}
+    <text x="24" y="190" font-family="Menlo, monospace" font-size="7.5" letter-spacing="1.5" fill="${ink}" opacity=".7">備註 NOTES</text>
+    <rect x="24" y="198" width="372" height="86" fill="none" stroke="${L}" stroke-width=".8"/>
+    <text x="34" y="222" font-family="Caveat, cursive" font-size="16" fill="${H}">12镜 灯塔信号灯特写,待道具组确认</text>
+    <text x="34" y="246" font-family="Caveat, cursive" font-size="16" fill="${H}">15场转场镜头,请剪辑注意时码</text>
+    <text x="34" y="270" font-family="Caveat, cursive" font-size="16" fill="${PAPER.red}">④ 条穿帮,作废重拍</text>
+    <text x="24" y="318" font-family="Menlo, monospace" font-size="7.5" letter-spacing="1.5" fill="${ink}" opacity=".7">條次 TAKES</text>
+    <rect x="24" y="326" width="356" height="26" fill="none" stroke="${L}" stroke-width=".8"/>
+    <text x="${tx[0]+8}" y="343" font-family="Menlo, monospace" font-size="8" fill="${ink}" opacity=".7">條</text>
+    <text x="${tx[1]+8}" y="343" font-family="Menlo, monospace" font-size="8" fill="${ink}" opacity=".7">鏡長</text>
+    <text x="${tx[2]+8}" y="343" font-family="Menlo, monospace" font-size="8" fill="${ink}" opacity=".7">備註</text>
+    ${takeRows}
+    <text x="24" y="572" font-family="Menlo, monospace" font-size="6.5" fill="${ink}" opacity=".45">SlateSync 界面演示 · 纸面证据 mock</text>
+  </svg>`;
+}
+
+/* ═══════════════ 数据 ═══════════════ */
+const PROVIDERS = [
+  {id:'openai', name:'OpenAI 兼容 · 主力', models:[['gpt-4o','可用'],['gpt-4o-mini','可用'],['o3','可用']]},
+  {id:'vllm', name:'本地 vLLM', models:[['qwen2.5-vl-72b','可用'],['internvl2-26b','未验证']]},
+  {id:'none', name:'请选择可用项', models:[]}
+];
+const STATUS_ORDER = ['tbd','good','keep','ng'];
+const STATUS_META = {
+  tbd:{label:'待定', cls:''},
+  good:{label:'好条', cls:'good'},
+  keep:{label:'保条', cls:'keep'},
+  ng:{label:'作废', cls:'ng'}
+};
+const D02_RESULTS = [
+  {id:1, slate:'S14·T1·A', scene:14, shot:1, take:1, cam:'A', status:'good', conf:.97, note:'', page:1},
+  {id:2, slate:'S14·T2·A', scene:14, shot:2, take:2, cam:'A', status:'ng', conf:.96, note:'焦点虚', page:1},
+  {id:3, slate:'S14·T3·A', scene:14, shot:3, take:3, cam:'A', status:'keep', conf:.98, note:'OK', page:2},
+  {id:4, slate:'S14·T4·A', scene:14, shot:4, take:4, cam:'A', status:'ng', conf:.95, note:'穿帮', page:2},
+  {id:5, slate:'S14·T5·B', scene:14, shot:4, take:5, cam:'B', status:'tbd', conf:.62, note:'手写不清', page:3},
+  {id:6, slate:'S15·T1·B', scene:15, shot:1, take:1, cam:'B', status:'good', conf:.97, note:'', page:4},
+  {id:7, slate:'S15·T2·A', scene:15, shot:2, take:2, cam:'A', status:'keep', conf:.94, note:'保', page:4},
+  {id:8, slate:'S16·T1·B', scene:16, shot:1, take:1, cam:'B', status:'good', conf:.96, note:'', page:5},
+  {id:9, slate:'S16·T2·A', scene:16, shot:2, take:2, cam:'A', status:'tbd', conf:.71, note:'待导演确认', page:5},
+  {id:10, slate:'S16·T3·A', scene:16, shot:3, take:3, cam:'A', status:'good', conf:.98, note:'', page:6},
+  {id:11, slate:'S17·T1·A', scene:17, shot:1, take:1, cam:'A', status:'keep', conf:.93, note:'', page:7},
+  {id:12, slate:'S17·T2·B', scene:17, shot:2, take:2, cam:'B', status:'tbd', conf:.55, note:'时码存疑', page:7}
+];
+function baseCSV(){
+  return [
+    {clip:'A003C011_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'A003C012_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'A003C013_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'A003C014_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:'order'},
+    {clip:'B003C004_260314_R2B', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'A003C015_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'B003C006_260314_R2B', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'A003C016_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'A003C017_260314_R1A', scene:null, shot:null, take:null, comments:'', issue:null},
+    {clip:'B003C007_260314_R2B', scene:null, shot:null, take:null, comments:'', issue:'nomatch'}
+  ];
+}
+function makeProjects(){
+  return [
+    {id:'wuhe', name:'雾河', kind:'电影 · 长片', updated:'今天 14:32', archived:false, opened:false,
+      tasks:[
+        {id:'d01', name:'第1拍摄日 · 0313', records:18, st:'done', media:true, pages:7, page:1,
+          results:D01_RESULTS(), csv:D01_CSV(), fps:'23.976', day:'2026-03-13', exported:true, dirty:false},
+        {id:'d02', name:'第2拍摄日 · 0314', records:12, st:'active', media:true, pages:7, page:1,
+          results:null, csv:null, fps:null, day:'2026-03-14', exported:false, dirty:false, pendingMerge:false, curated:true},
+        {id:'d03', name:'第3拍摄日 · 0315', records:0, st:'draft', media:false, pages:0, page:1,
+          results:null, csv:null, fps:null, day:'2026-03-15', exported:false, dirty:false}
+      ]},
+    {id:'shenhai', name:'深海旅馆', kind:'短片', updated:'昨天 21:07', archived:false, opened:false,
+      tasks:[{id:'s01', name:'第1拍摄日 · 0308', records:12, st:'active', media:true, pages:5, page:1, results:null, csv:null, fps:null, day:'2026-03-08', exported:false, dirty:false}]},
+    {id:'b23', name:'北纬二十三度', kind:'纪录片', updated:'3 月 2 日', archived:false, opened:false,
+      tasks:[
+        {id:'b01', name:'调研 · 广州站', records:24, st:'done', media:true, pages:6, page:1, results:null, csv:null, fps:null, day:'2026-03-01', exported:false, dirty:false},
+        {id:'b02', name:'调研 · 湛江站', records:31, st:'active', media:false, pages:0, page:1, results:null, csv:null, fps:null, day:null, exported:false, dirty:false}
+      ]},
+    {id:'test312', name:'试镜测试 0312', kind:'测试素材', updated:'3 月 12 日', archived:true, opened:false,
+      tasks:[]}
+  ];
+}
+function D01_RESULTS(){
+  return D02_RESULTS.map(r=>({...r, status: r.conf>.9?'good':(r.id===5?'ng':'keep'), conf:Math.min(.99,r.conf+.01)}));
+}
+function D01_CSV(){
+  return baseCSV().map((r,i)=>{
+    const m = D02_RESULTS[i] || null;
+    return {...r, scene:m?m.scene:11, shot:m?m.shot:1, take:m?m.take:i+1,
+      comments:i===4?'保条':(i===2?'好条':''), fps:'23.976', day:'2026-03-13', issue:null, filled:true};
+  });
+}
+</script>
+<script>
+/* ═══════════════ 状态与工具 ═══════════════ */
+const $ = s=>document.querySelector(s), $$ = s=>[...document.querySelectorAll(s)];
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const S = {
+  view:'library', projects:makeProjects(), proj:null, task:null, tab:'input',
+  recognizing:false, recogTimer:null, provider:'none', logFilter:'all',
+  popCtx:null, delCtx:null, confirmCtx:null, unsavedCb:null
+};
+function store(k,v){ try{ v===undefined ? localStorage.removeItem(k) : localStorage.setItem(k,v); }catch(e){} }
+function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+const t=(theme,persist=true)=>{ document.documentElement.dataset.theme = theme; $('#btn-theme').innerHTML = ic(theme==='dark'?'moon':'sun');
+  $$('#set-appearance button').forEach(b=>b.classList.toggle('on', (b.textContent==='深色')===(theme==='dark'))); if(persist) store('ui-theme',theme); };
+const dens=(d)=>{ document.documentElement.dataset.density=d; $('#btn-density').setAttribute('aria-pressed', d==='compact');
+  $$('#set-density button').forEach((b,i)=>b.classList.toggle('on', (i===1)===(d==='compact'))); store('ui-density',d); };
+
+function setStatus(text, o={}){
+  $('#sb-op').textContent = text;
+  $('#statusbar').classList.toggle('busy', !!o.busy);
+  $('#sb-ic').innerHTML = o.busy ? '<span class="spin">'+ICONS.retry+'</span>' : ic(o.icon || (o.busy?'clock':'check'));
+  const action = $('#sb-action');
+  action.hidden = typeof o.action !== 'function';
+  action.onclick = typeof o.action === 'function' ? o.action : null;
+}
+function setSBMid(){ const tk=S.task;
+  $('#sb-mid').textContent = tk && S.proj ? `${S.proj.name} · ${tk.name} · ${tk.records||0} 条` : '未打开项目';
+}
+function setSBRight(){ const r=$('#sb-right'); if(!S.proj){ r.innerHTML=''; return; }
+  const p = PROVIDERS.find(x=>x.id===S.provider);
+  r.innerHTML = `<span class="chip">${ic('cam')} ${p&&p.id!=='none'?p.name.split(' · ')[0]:'未配置'}${p&&p.id!=='none'?' · '+p.models[0][0]:''}</span><span class="chip">Vision OCR</span>`;
+}
+function dirtyUI(){ if(!S.task) return;
+  $('#ws-save').textContent = S.task.dirty ? '未保存更改' : '已保存';
+  $('#ws-save').className = 'chip' + (S.task.dirty ? ' warn' : '');
+}
+function markDirty(){ if(S.task){ S.task.dirty = true; dirtyUI(); } }
+
+/* ═══════════════ 导航 ═══════════════ */
+function setView(name){
+  S.view = name;
+  $$('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+name));
+  $$('.navitem').forEach(b=>b.classList.toggle('on', b.dataset.nav===name));
+  if(name==='workspace'){
+    const has = !!S.proj;
+    $('#ws-empty').style.display = has?'none':'flex';
+    $('#ws-main').hidden = !has;
+    if(has){ setSBMid(); setSBRight(); dirtyUI(); }
+  }
+}
+$$('.navitem').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.nav)));
+$('#btn-empty-to-lib').addEventListener('click',()=>setView('library'));
+$('#nav-ws-chip').hidden = true;
+
+/* ═══════════════ 项目库 ═══════════════ */
+function projRow(p){
+  const stats = p.tasks.length ? `${p.tasks.length} 任务 · ${p.tasks.reduce((a,t)=>a+(t.records||0),0)} 条` : '无任务';
+  return `<article class="proj-row${p.archived?' archived':''}" data-proj="${p.id}">
+    <span class="stripe-edge"></span>
+    <div class="proj-ico">${ic('clapper')}</div>
+    <div class="proj-main" style="flex:1;min-width:0"><b>《${p.name}》</b><span>${p.kind}</span></div>
+    <div class="proj-meta mono">${stats}</div>
+    <div class="proj-time mono">${p.updated}</div>
+    <div class="proj-actions">
+      <button class="btn" data-act="${p.archived?'restore':'open'}">${p.archived?'恢复':'打开'}</button>
+      <button class="iconbtn" data-act="menu" title="更多操作" aria-label="更多操作">${ic('dots')}</button>
+    </div>
+  </article>`;
+}
+function renderLibrary(){
+  const act = S.projects.filter(p=>!p.archived), arc = S.projects.filter(p=>p.archived);
+  const totalTasks = S.projects.reduce((a,p)=>a+p.tasks.length,0);
+  const totalRecs = S.projects.reduce((a,p)=>a+p.tasks.reduce((x,t)=>x+(t.records||0),0),0);
+  $('#lib-stats').innerHTML = `
+    <div class="stat"><div class="n">${act.length}<em>个</em></div><div class="l">活跃项目</div></div>
+    <div class="stat"><div class="n">${arc.length}<em>个</em></div><div class="l">已归档项目</div></div>
+    <div class="stat"><div class="n">${totalTasks}<em>个</em></div><div class="l">任务</div></div>
+    <div class="stat"><div class="n">${totalRecs}<em>条</em></div><div class="l">场记条目</div></div>`;
+  $('#cnt-active').textContent = String(act.length).padStart(2,'0');
+  $('#cnt-arch').textContent = String(arc.length).padStart(2,'0');
+  $('#lib-list').innerHTML = act.map(projRow).join('') || `<div class="empty"><div class="glyph"></div><div class="t">还没有项目</div><div class="d">创建项目后即可导入场记单并开始识别。</div></div>`;
+  $('#lib-arch').innerHTML = arc.map(projRow).join('');
+}
+$('#lib-list').addEventListener('click', e=>libRowClick(e));
+$('#lib-arch').addEventListener('click', e=>libRowClick(e));
+function libRowClick(e){
+  const row = e.target.closest('.proj-row'); if(!row) return;
+  const p = S.projects.find(x=>x.id===row.dataset.proj);
+  const act = e.target.closest('[data-act]'); if(!act) { if(e.detail===2 && !p.archived) openProject(p); return; }
+  if(act.dataset.act==='open') openProject(p);
+  if(act.dataset.act==='restore'){ p.archived=false; renderLibrary(); setStatus(`已恢复《${p.name}》`,{icon:'check'}); }
+  else projMenu(e.currentTarget, p, act);
+}
+$('#btn-new-project').addEventListener('click', ()=>{
+  const n = S.projects.filter(p=>p.name.startsWith('未命名项目')).length;
+  const p = {id:'p'+Date.now(), name:'未命名项目'+(n?' '+n:''), kind:'电影 · 长片', updated:'刚刚', archived:false, opened:false,
+    tasks:[{id:'n01', name:'第1拍摄日', records:0, st:'draft', media:false, pages:0, page:1, results:null, csv:null, fps:null, day:null, exported:false, dirty:false}]};
+  S.projects.unshift(p); renderLibrary();
+  setStatus(`已创建《${p.name}》`, {icon:'plus'});
+});
+$('#btn-import-project').addEventListener('click', ()=>setStatus('项目包导入会创建新项目 ID,不会覆盖原项目。', {icon:'import'}));
+
+/* ═══════════════ 打开项目 ═══════════════ */
+let openTimers = [];
+function openProject(p){
+  if(S.recognizing) cancelRecognize(true);
+  const scrim = $('#scrim-open'); $('#open-name').textContent = `《${p.name}》`;
+  $('#open-stage').textContent = '正在读取项目索引…'; scrim.hidden = false;
+  openTimers.forEach(clearTimeout); openTimers = [];
+  const stages = ['正在读取项目索引…','正在校验任务数据…','正在恢复任务摘要…'];
+  stages.forEach((s,i)=>openTimers.push(setTimeout(()=>{ $('#open-stage').textContent = s; }, 420*(i+1))));
+  openTimers.push(setTimeout(()=>{
+    scrim.hidden = true;
+    S.proj = p; p.opened = true;
+    S.task = p.tasks.find(t=>t.st==='active') || p.tasks[0] || null;
+    $('#nav-ws-chip').hidden = false;
+    $('#ws-proj').textContent = `《${p.name}》`;
+    setView('workspace'); renderRail(); selectTask(); renderLibrary();
+    setStatus(`已打开《${p.name}》`, {icon:'check'});
+  }, 1500));
+}
+$('#btn-open-fail').addEventListener('click', ()=>{
+  openTimers.forEach(clearTimeout); $('#scrim-open').hidden = true;
+  setStatus('打开失败:项目数据校验未通过。可在项目行选择「重试」。', {icon:'warn'});
+});
+$('#btn-close-proj').addEventListener('click', ()=>{
+  const go = ()=>{ S.proj.opened=false; S.proj=null; S.task=null; $('#nav-ws-chip').hidden = true; setView('library'); renderLibrary(); setStatus('已关闭项目,回到项目库',{icon:'check'}); };
+  if(S.task && S.task.dirty) askUnsaved('关闭项目「'+S.proj.name+'」前需要处理当前任务的未保存修改。', go); else go();
+});
+
+/* ═══════════════ 任务栏 ═══════════════ */
+function renderRail(){
+  if(!S.proj) return;
+  const q = ($('#rail-search').value||'').trim();
+  const list = S.proj.tasks.filter(t=>!q || t.name.includes(q));
+  $('#rail-count').textContent = `${S.proj.tasks.length} 个`;
+  $('#rail-list').innerHTML = list.map(t=>{
+    const icon = t.st==='done' ? `<span class="chip ok" style="padding:0 6px">${ic('check')}</span>`
+      : t.st==='active' ? `<span class="chip accent" style="padding:0 6px">${ic('cam')}</span>`
+      : `<span class="chip" style="padding:0 6px">${ic('doc')}</span>`;
+    return `<button class="task-row${S.task&&S.task.id===t.id?' on':''}" data-task="${t.id}">
+      ${icon}<span class="tmain"><span class="tname">${t.name}</span><span class="tmeta">${t.records||0} 条 · ${t.st==='done'?'已完成':t.st==='active'?'处理中':'草稿'}</span></span>
+    </button>`;
+  }).join('') || `<div class="empty" style="padding:20px 8px"><div class="d">没有匹配「${q}」的任务</div></div>`;
+}
+$('#rail-search').addEventListener('input', renderRail);
+$('#rail-list').addEventListener('click', e=>{
+  const b = e.target.closest('.task-row'); if(!b) return;
+  const t = S.proj.tasks.find(x=>x.id===b.dataset.task);
+  if(S.task === t) return;
+  const go = ()=>{ S.task = t; selectTask(); setStatus(`已切换到「${t.name}」`, {icon:'check'}); };
+  if(S.task && S.task.dirty) askUnsaved(`切换到「${t.name}」前需要处理当前任务的未保存修改。`, go); else go();
+});
+$('#btn-rail').addEventListener('click', ()=>{
+  const r = $('#rail'); r.classList.toggle('hidden'); r.classList.toggle('open');
+  $('#btn-rail').setAttribute('aria-pressed', String(!r.classList.contains('hidden')));
+});
+function selectTask(){
+  const tk = S.task;
+  $('#ws-task').textContent = tk ? tk.name : '—';
+  $('#btn-import-media').hidden = !tk;
+  updateMediaBtn();
+  renderRail(); renderTabs(); renderInput(); renderResults(); renderCSV(); dirtyUI(); setSBMid(); setSBRight();
+}
+function updateMediaBtn(){ $('#btn-import-media').disabled = !!(S.task && S.task.media); }
+
+/* ═══════════════ 工作页 Tabs ═══════════════ */
+function renderTabs(){
+  $$('.wtab').forEach(b=>{
+    const tab = b.dataset.tab, dot = b.querySelector('.dot');
+    b.classList.toggle('on', S.tab===tab);
+    b.setAttribute('aria-selected', String(S.tab===tab));
+    const fresh = S.task && ((tab==='results' && S.task.results && S.task.flagResults) || (tab==='csv' && S.task.csv && S.task.flagCsv));
+    dot.classList.toggle('show', !!fresh);
+  });
+  renderTabActions();
+  $$('.wpanel').forEach(p=>{
+    const active = p.id==='panel-'+S.tab;
+    p.classList.toggle('active', active);
+    p.setAttribute('aria-hidden', String(!active));
+  });
+}
+$$('.wtab').forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+function switchTab(tab){ S.tab = tab;
+  if(S.task){ if(tab==='results') S.task.flagResults=false; if(tab==='csv') S.task.flagCsv=false; }
+  renderTabs();
+}
+function renderTabActions(){
+  const el = $('#tab-actions'), tk = S.task; el.innerHTML='';
+  if(!tk) return;
+  if(S.tab==='results' && tk.results && !tk.exported)
+    el.innerHTML = `<button class="btn primary" id="btn-merge">${ic('check')}合并识别结果</button>`;
+  if(S.tab==='csv' && tk.csv && !tk.exported)
+    el.innerHTML = `<button class="btn primary" id="btn-export">${ic('import')}导出 CSV…</button>`;
+  if(S.tab==='csv' && tk.exported)
+    el.innerHTML = `<span class="chip ok">${ic('check')}已导出 · 保留原格式</span>`;
+  const m = $('#btn-merge'); if(m) m.addEventListener('click', mergeResults);
+  const x = $('#btn-export'); if(x) x.addEventListener('click', exportFlow);
+}
+$('#btn-goto-input').addEventListener('click', ()=>switchTab('input'));
+
+/* ═══════════════ 原稿页 ═══════════════ */
+function seedFor(tk, page){
+  if(tk.curated){
+    const map = {1:{scene:14,shot:1,take:1},2:{scene:14,shot:2,take:3},3:{scene:14,shot:4,take:5},
+      4:{scene:15,shot:2,take:2},5:{scene:16,shot:1,take:2},6:{scene:16,shot:3,take:3},7:{scene:17,shot:2,take:2}};
+    const m = map[page]||map[1];
+    return {prod:S.proj.name, roll:'A03', scene:m.scene, shot:m.shot, take:m.take, day:tk.day||'2026.3.14', ie:'内', dn: m.scene===15?'昼':'夜',
+      takes:[[1,'7s','','ok'],[2,'12s','焦点虚',''],[3,'9s','OK','ok'],[4,'15s','NG·穿帮','ng'],[5,'—','','']]};
+  }
+  return {prod:S.proj.name, roll:'B01', scene:10+page, shot:1, take:page, day:tk.day||'2026.03.15', ie:'外', dn:'日',
+    takes:[[1,'6s','','ok'],[2,'8s','',''],[3,'11s','OK','ok'],[4,'—','',''],[5,'—','','']]};
+}
+function renderInput(){
+  const tk = S.task; if(!tk) return;
+  const stage = $('#lt-paper').parentElement;
+  if(!tk.media){
+    $('#lt-paper').innerHTML = '';
+    $('#lt-caption').textContent = '场记单';
+    $('#lt-page').textContent = '– / –';
+    $('#lt-prev').disabled = $('#lt-next').disabled = true;
+    $('#btn-zoom').disabled = true;
+    if(!$('#lt-empty')){
+      const d = document.createElement('div'); d.className='empty'; d.id='lt-empty';
+      d.innerHTML = `<div class="glyph"></div><div class="t">尚未导入场记单</div><div class="d">支持 PDF、JPEG、PNG、WebP;导入后在本地逐页栅格化。也可以从场记 CSV 直接生成结果。</div><button class="btn primary" id="btn-lt-import">${ic('import')}导入场记单…</button>`;
+      stage.appendChild(d);
+      $('#btn-lt-import').addEventListener('click', importMedia);
+    }
+    $('#lt-empty').hidden = false;
+  } else {
+    if($('#lt-empty')) $('#lt-empty').hidden = true;
+    $('#lt-prev').disabled = $('#lt-next').disabled = false;
+    $('#btn-zoom').disabled = false;
+    showPage(tk.page);
+  }
+  renderProviderUI();
+  updateRecogButton();
+}
+function showPage(n){
+  const tk = S.task; if(!tk||!tk.media) return;
+  tk.page = Math.min(Math.max(1,n), tk.pages);
+  $('#lt-paper').innerHTML = paperSVG(tk.page, tk.pages, seedFor(tk, tk.page));
+  $('#lt-page').textContent = `${tk.page} / ${tk.pages}`;
+  $('#lt-caption').textContent = `场记单第 ${tk.page} 页,共 ${tk.pages} 页`;
+  $('#lt-prev').disabled = tk.page<=1; $('#lt-next').disabled = tk.page>=tk.pages;
+}
+$('#lt-prev').addEventListener('click', ()=>showPage((S.task?.page||1)-1));
+$('#lt-next').addEventListener('click', ()=>showPage((S.task?.page||1)+1));
+$('#btn-zoom').addEventListener('click', ()=>{
+  if(!S.task||!S.task.media) return;
+  $('#lightbox-paper').innerHTML = paperSVG(S.task.page, S.task.pages, seedFor(S.task, S.task.page));
+  $('#lightbox').hidden = false;
+});
+$('#lightbox').addEventListener('click', ()=>{ $('#lightbox').hidden = true; });
+
+function importMedia(){
+  const tk = S.task; if(!tk||tk.media) return;
+  setStatus('正在导入场记单…', {busy:true});
+  setTimeout(()=>{
+    tk.media = true; tk.pages = tk.pages || 5; tk.page = 1;
+    renderInput(); updateRecogButton(); updateMediaBtn();
+    setStatus(`已导入 场记单_${(tk.day||'').replace(/-/g,'')||'0315'}.pdf · ${tk.pages} 页`, {icon:'check'});
+  }, 800);
+}
+$('#btn-import-media').addEventListener('click', importMedia);
+
+function renderProviderUI(){
+  const sel = $('#sel-provider');
+  sel.innerHTML = PROVIDERS.map(p=>`<option value="${p.id}" ${S.provider===p.id?'selected':''}>${p.name}</option>`).join('');
+  renderModels();
+}
+function renderModels(){
+  const p = PROVIDERS.find(x=>x.id===S.provider), sel = $('#sel-model');
+  if(!p || !p.models.length){ sel.innerHTML = '<option>请先配置服务商</option>'; sel.disabled = true; }
+  else { sel.disabled = false; sel.innerHTML = p.models.map(m=>`<option ${m[1]!=='可用'?'disabled':''}>${m[0]}${m[1]!=='可用'?' · '+m[1]:''}</option>`).join(''); }
+}
+$('#sel-provider').addEventListener('change', e=>{ S.provider = e.target.value; renderModels(); setSBRight(); });
+
+function updateRecogButton(){
+  const tk = S.task, b = $('#btn-recognize');
+  if(!tk){ b.disabled = true; return; }
+  b.disabled = false;
+  b.innerHTML = S.recognizing ? `${ic('stop')}取消识别` : `${ic('play')}开始识别`;
+}
+function recogValidate(){
+  const tk = S.task, hint = $('#recog-hint');
+  if(!tk) return false;
+  if(!tk.media){ hint.textContent = '请先导入 PDF 或图像;本地 CSV 可直接生成结果。'; hint.hidden = false; return false; }
+  if(S.provider==='none'){ hint.textContent = '请在识别配置中选择服务商和模型。'; hint.hidden = false; return false; }
+  hint.hidden = true; return true;
+}
+$('#btn-recognize').addEventListener('click', ()=>{ S.recognizing ? cancelRecognize() : startRecognize(); });
+function startRecognize(){
+  if(!recogValidate()) return;
+  const tk = S.task, hint = $('#recog-hint');
+  hint.hidden = true;
+  S.recognizing = true; updateRecogButton();
+  $('#leader').hidden = REDUCED;
+  tk.page = 1;
+  const step = ()=>{
+    const p = tk.page;
+    if(!REDUCED){ $('#leader').style.setProperty('--p', Math.round(p/tk.pages*360)); $('#leader-num').textContent = p; }
+    showPage(p);
+    setStatus(`识别中 · 第 ${p}/${tk.pages} 页…`, {busy:true});
+    if(p >= tk.pages){ finishRecognize(); return; }
+    tk.page++;
+  };
+  step();
+  S.recogTimer = setInterval(step, 430);
+}
+function finishRecognize(){
+  clearInterval(S.recogTimer); S.recognizing = false;
+  const tk = S.task;
+  $('#leader').hidden = true; updateRecogButton();
+  tk.results = tk.curated ? D02_RESULTS.map(r=>({...r})) : synthResults(tk.pages);
+  tk.records = tk.results.length; tk.flagResults = true;
+  setStatus(`识别完成 · ${tk.results.length} 条结果,请人工校对`, {
+    icon:'check',
+    action:()=>{ switchTab('results'); renderResults(); renderTabs(); setStatus('已打开识别结果',{icon:'check'}); }
+  });
+  renderResults(); renderTabs();
+}
+function cancelRecognize(silent){
+  clearInterval(S.recogTimer); S.recognizing = false;
+  $('#leader').hidden = true; updateRecogButton();
+  if(!silent) setStatus(`已取消识别 · 已识别 ${S.task ? S.task.page : 0} 页,可重新开始`, {icon:'check'});
+}
+$('#btn-local-csv').addEventListener('click', ()=>{
+  const tk = S.task;
+  tk.results = synthResults(4); tk.records = tk.results.length; tk.flagResults = true;
+  setStatus(`已从场记 CSV 生成 ${tk.results.length} 条结果`, {
+    icon:'check',
+    action:()=>{ switchTab('results'); renderResults(); renderTabs(); setStatus('已打开识别结果',{icon:'check'}); }
+  });
+  renderResults(); renderTabs();
+});
+function synthResults(pages){
+  const out = [];
+  for(let i=1;i<=pages;i++) out.push({id:i, slate:`S${10+i}·T1·A`, scene:10+i, shot:1, take:1, cam:'A',
+    status:i%3===0?'keep':(i%3===1?'good':'tbd'), conf:.93, note:'', page:i});
+  return out;
+}
+
+/* ═══════════════ 识别结果页 ═══════════════ */
+function markSVG(status, draw){
+  if(status==='good'||status==='keep')
+    return `<svg class="takemark ${draw?'draw':'idle'}" viewBox="0 0 26 18" aria-hidden="true"><ellipse cx="13" cy="9" rx="11.5" ry="6.5"/></svg>`;
+  if(status==='ng')
+    return `<svg class="takemark ng" viewBox="0 0 26 18" aria-hidden="true"><line x1="3" y1="13" x2="23" y2="5"/></svg>`;
+  return '';
+}
+function renderResults(){
+  const tk = S.task, scroll = $('#res-scroll'), table = $('#res-table');
+  if(!tk || !tk.results){
+    table.hidden = true;
+    let d = $('#res-empty');
+    if(!d){ d = document.createElement('div'); d.className='empty'; d.id='res-empty';
+      d.innerHTML = `<div class="glyph"></div><div class="t">请先在输入页选择场记单并开始识别</div><div class="d">识别完成后,这里给出可编辑的场、镜、次与条次状态;点击行可在右侧对照原稿。</div><button class="btn primary" id="btn-res-goto">去原稿页开始识别</button>`;
+      scroll.appendChild(d);
+      $('#btn-res-goto').addEventListener('click', ()=>switchTab('input'));
+    }
+    d.hidden = false; $('#res-title').textContent = '识别结果'; return;
+  }
+  if($('#res-empty')) $('#res-empty').hidden = true;
+  table.hidden = false;
+  const nGood = tk.results.filter(r=>r.status==='good').length, nKeep = tk.results.filter(r=>r.status==='keep').length;
+  $('#res-title').textContent = `识别结果 · ${tk.results.length} 条 · 好条 ${nGood} · 保条 ${nKeep}`;
+  table.tBodies[0].innerHTML = tk.results.map(r=>{
+    const m = STATUS_META[r.status];
+    return `<tr data-rid="${r.id}">
+      <td class="mono">${r.slate} ${markSVG(r.status)}</td>
+      <td class="mono">${r.scene}</td><td class="mono">${r.shot}</td><td class="mono">${r.take}</td><td class="mono">${r.cam}</td>
+      <td><button class="status-badge ${m.cls}" data-cycle="${r.id}" title="点击切换状态">${m.label}</button></td>
+      <td class="mono" style="color:var(--text-3)">${Math.round(r.conf*100)}%</td>
+      <td><input value="${r.note}" data-note="${r.id}" placeholder="—"></td>
+    </tr>`;
+  }).join('');
+  const sel = tk.results.find(r=>r.page===(tk.page||1)) || tk.results[0];
+  syncEvidence(sel);
+}
+function syncEvidence(r){
+  if(!S.task||!r) return;
+  $('#ev-paper').innerHTML = paperSVG(r.page, S.task.pages, seedFor(S.task, r.page));
+  $('#ev-caption').textContent = `${r.slate} · 场记单第 ${r.page} 页`;
+}
+$('#res-table').addEventListener('click', e=>{
+  const cyc = e.target.closest('[data-cycle]');
+  const tr = e.target.closest('tr'); if(!tr||!S.task) return;
+  const r = S.task.results.find(x=>x.id==tr.dataset.rid);
+  if(cyc){
+    const next = STATUS_ORDER[(STATUS_ORDER.indexOf(r.status)+1)%4];
+    r.status = next; markDirty();
+    renderResults();
+    const row = $(`#res-table tr[data-rid="${r.id}"] .takemark`);
+    if(row && (next==='good'||next==='keep') && !REDUCED){ row.classList.add('draw'); }
+    setStatus(`${r.slate} → ${STATUS_META[next].label}`, {icon:'check'});
+    return;
+  }
+  if(e.target.tagName!=='INPUT') syncEvidence(r);
+});
+$('#res-table').addEventListener('input', e=>{
+  const n = e.target.dataset.note; if(!n) return;
+  const r = S.task.results.find(x=>x.id==n); r.note = e.target.value; markDirty();
+});
+
+function mergeResults(){
+  const tk = S.task; if(!tk||!tk.results) return;
+  if(!tk.csv){ tk.pendingMerge = true; tk.flagCsv = true;
+    setStatus(`已合并 ${tk.results.length} 条 · 等待载入 Resolve CSV`, {icon:'check'});
+    renderTabs(); return; }
+  applyMerge();
+}
+function applyMerge(){
+  const tk = S.task;
+  const rows = baseCSV(); const matched = tk.results.filter(r=>!(r.scene===14&&r.take===5));
+  let ci = 0;
+  rows.forEach(row=>{
+    const m = matched[ci];
+    if(row.issue==='nomatch') return;
+    if(m){ row.scene=m.scene; row.shot=m.shot; row.take=m.take; row.filled=true; row.res=m;
+      row.comments = m.status==='good'?'好条':(m.status==='keep'?'保条':(m.status==='ng'?'NG':'')); ci++; }
+  });
+  const miss = tk.results.find(r=>r.scene===14&&r.take===5);
+  if(miss) rows.push({clip:'—(缺少素材)', scene:miss.scene, shot:miss.shot, take:miss.take, comments:'', issue:'missing', filled:false, res:miss});
+  rows.sort((a,b)=>(a.scene||99)-(b.scene||99));
+  tk.csv = rows; tk.pendingMerge = false; tk.flagCsv = true;
+  setStatus(`已合并 ${matched.length} 条 · 待处理告警 ${countWarns(tk)} 处`, {icon:'check'});
+  renderTabs(); renderCSV();
+}
+function countWarns(tk){ return tk.csv ? tk.csv.filter(r=>r.issue).length : 0; }
+
+/* ═══════════════ Resolve CSV 页 ═══════════════ */
+function renderCSV(){
+  const tk = S.task, table = $('#csv-table'), empty = $('#csv-empty');
+  if(!tk){ table.hidden = true; empty.hidden = false; $('#btn-scan').disabled = true; renderWarns(0); return; }
+  $('#btn-scan').disabled = !tk.csv;
+  if(!tk.csv){ table.hidden = true; empty.hidden = false; $('#csv-count').textContent=''; $('#csv-note').textContent=''; renderWarns(0); return; }
+  empty.hidden = true; table.hidden = false;
+  table.tBodies[0].innerHTML = tk.csv.map((row,i)=>{
+    const chip = row.issue==='nomatch' ? '<span class="chip danger">未匹配</span>'
+      : row.issue==='missing' ? '<span class="chip warn">缺失条号</span>'
+      : row.issue==='order' ? '<span class="chip warn">次序异常</span>'
+      : row.filled ? '<span class="chip ok">已回填</span>'
+      : row.void ? '<span class="chip">作废</span>'
+      : row.left ? '<span class="chip">留空</span>' : '<span class="chip">待回填</span>';
+    return `<tr class="${row.issue==='nomatch'?'row-danger':(row.issue?'row-warn':'')}" data-crow="${i}">
+      <td class="mono">${row.clip}</td>
+      <td class="mono">${row.scene??''}</td><td class="mono">${row.shot??''}</td><td class="mono">${row.take??''}</td>
+      <td><input value="${row.comments||''}" data-ccomment="${i}" placeholder="—"></td>
+      <td class="mono" style="color:var(--text-3)">${tk.fps||''}</td>
+      <td class="mono" style="color:var(--text-3)">${tk.day||''}</td>
+      <td>${chip}</td>
+      <td>${row.issue?`<button class="btn subtle" data-fix="${i}">校对</button>`:''}</td>
+    </tr>`;
+  }).join('');
+  $('#csv-count').textContent = `${tk.csv.length} 行 · 7 列`;
+  $('#csv-note').textContent = tk.exported ? '已导出 · 原始编码与换行保留' : (tk.fps ? '已扫描 slate.txt 元数据' : 'Camera FPS / Shoot Day 可从素材目录 slate.txt 扫描回填');
+  renderWarns(countWarns(tk));
+}
+function renderWarns(n){
+  const tk = S.task, el = $('#csv-warns');
+  const c = tk&&tk.csv ? {
+    nomatch: tk.csv.filter(r=>r.issue==='nomatch').length,
+    missing: tk.csv.filter(r=>r.issue==='missing').length,
+    order: tk.csv.filter(r=>r.issue==='order').length } : {nomatch:0,missing:0,order:0};
+  el.innerHTML = (c.nomatch+c.missing+c.order) ? [
+    c.nomatch?`<span class="chip danger clickable" data-filter="nomatch">${ic('warn')}未匹配素材 × ${c.nomatch}</span>`:'',
+    c.missing?`<span class="chip warn clickable" data-filter="missing">${ic('warn')}条号缺失 × ${c.missing}</span>`:'',
+    c.order?`<span class="chip warn clickable" data-filter="order">${ic('warn')}场镜次序异常 × ${c.order}</span>`:''
+  ].join('') : `<span class="chip ok">${ic('check')}对账通过 · 无告警</span>`;
+  n; // (filter chips highlight handled below)
+}
+$('#csv-table').addEventListener('input', e=>{
+  const i = e.target.dataset.ccomment; if(i===undefined) return;
+  S.task.csv[i].comments = e.target.value; markDirty();
+});
+$('#csv-table').addEventListener('click', e=>{
+  const f = e.target.closest('[data-fix]');
+  if(f){ showFixPopover(S.task.csv[+f.dataset.fix], f); return; }
+  const tr = e.target.closest('tr[data-crow]');
+  if(tr && e.target.tagName!=='INPUT' && !S.task.csv[+tr.dataset.crow].res) return;
+  if(tr && S.task.csv[+tr.dataset.crow].res) syncEvidence(S.task.csv[+tr.dataset.crow].res);
+});
+$('#btn-import-resolve').addEventListener('click', ()=>{
+  const tk = S.task; if(!tk) return;
+  setStatus('正在载入 Resolve.csv…', {busy:true});
+  setTimeout(()=>{ tk.csv = baseCSV();
+    if(tk.pendingMerge) applyMerge();
+    else { setStatus('已载入 Resolve.csv · 10 行', {icon:'check'}); renderCSV(); renderTabs(); }
+  }, 700);
+});
+$('#btn-scan').addEventListener('click', ()=>{
+  const tk = S.task; if(!tk||!tk.csv) { setStatus('请先载入 Resolve CSV,再扫描素材目录元数据。',{icon:'warn'}); return; }
+  setStatus('场记元数据 · 扫描中…', {busy:true});
+  $('#btn-scan').disabled = true;
+  setTimeout(()=>{ tk.fps = '23.976'; tk.day = tk.day || '2026-03-14';
+    $('#btn-scan').disabled = false;
+    setStatus(`已扫描 ${tk.csv.length} 个素材目录 · 回填 Camera FPS / Shoot Day`, {icon:'check'});
+    renderCSV();
+  }, 1400);
+});
+
+/* 校对 popover */
+function showFixPopover(row, anchor){
+  const pop = $('#popover'); S.popCtx = row;
+  const r = row.res;
+  let items = '';
+  if(row.issue==='nomatch') items = r
+    ? `<button data-fixopt="assign">${ic('check')}指定到场记 ${r.slate}</button>
+       <button data-fixopt="void">${ic('x')}标记为作废素材</button>
+       <button data-fixopt="leave">留空导出(不写入)</button>`
+    : `<button data-fixopt="leave">留空导出(不写入)</button>`;
+  else if(row.issue==='missing') items =
+    `<button data-fixopt="remove">${ic('x')}从 CSV 中移除该条</button>
+     <button data-fixopt="leave">留空导出(不写入)</button>`;
+  else if(row.issue==='order') items =
+    `<button data-fixopt="okorder">${ic('check')}已知安排,忽略此告警</button>`;
+  pop.innerHTML = `<div class="pop-title">${row.clip} · ${({nomatch:'未匹配素材',missing:'条号缺失',order:'场镜次序异常'})[row.issue]}</div>${items}`;
+  pop.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const w = 230, h = pop.offsetHeight || 130;
+  pop.style.left = Math.max(12, Math.min(rect.left, innerWidth-w-12))+'px';
+  pop.style.top = Math.max(12, Math.min(rect.bottom+6, innerHeight-h-12))+'px';
+  pop.querySelector('button')?.focus();
+}
+$('#popover').addEventListener('click', e=>{
+  const b = e.target.closest('[data-fixopt]'); if(!b||!S.popCtx) return;
+  const row = S.popCtx, tk = S.task; $('#popover').hidden = true;
+  const opt = b.dataset.fixopt;
+  if(opt==='assign'){ row.filled = true; row.issue=null; row.comments='好条'; }
+  if(opt==='void'){ row.void = true; row.issue=null; }
+  if(opt==='leave'){ row.left = true; row.issue=null; }
+  if(opt==='remove'){ tk.csv = tk.csv.filter(r=>r!==row); }
+  if(opt==='okorder'){ row.issue=null; }
+  markDirty();
+  setStatus(`已处理告警 · 剩余 ${countWarns(tk)} 处`, {icon:'check'});
+  renderCSV();
+});
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#popover') && !e.target.closest('[data-fix]')) $('#popover').hidden = true;
+});
+
+/* ═══════════════ 导出 ═══════════════ */
+function exportFlow(){
+  const tk = S.task; if(!tk||!tk.csv) return;
+  const n = countWarns(tk);
+  const filled = tk.csv.filter(r=>r.filled).length;
+  $('#export-text').innerHTML = `将回填 <b>${filled}</b> 个匹配字段,保留原 CSV 的编码、换行与未匹配内容。`;
+  if(n){ $('#export-warns').hidden = false;
+    $('#export-warn-list').textContent = `仍有 ${n} 处告警未处理:未确认的字段将留空导出,不会强行写入。`; }
+  else $('#export-warns').hidden = true;
+  $('#dialog-export').hidden = false;
+}
+$$('#dialog-export [data-export]').forEach(b=>b.addEventListener('click', e=>{
+  $('#dialog-export').hidden = true;
+  if(e.currentTarget.dataset.export!=='go') return;
+  const tk = S.task;
+  setStatus('正在导出 Resolve.csv…', {busy:true});
+  setTimeout(()=>{
+    tk.exported = true;
+    tk.csv.forEach(r=>{ if(!r.issue && !r.void) r.filled = true; });
+    renderCSV(); renderTabs(); markDirty2Save();
+    setStatus(`已导出 Resolve.csv(${tk.name})· ${tk.csv.length} 行 · 原格式保留`, {icon:'check'});
+  }, 900);
+}));
+function markDirty2Save(){ if(S.task){ S.task.dirty=false; dirtyUI(); } }
+
+/* ═══════════════ 保存屏障 ═══════════════ */
+function askUnsaved(text, cb){
+  $('#unsaved-text').textContent = text; S.unsavedCb = cb;
+  $('#dialog-unsaved').hidden = false;
+}
+$$('#dialog-unsaved [data-unsaved]').forEach(b=>b.addEventListener('click', e=>{
+  const a = e.currentTarget.dataset.unsaved;
+  $('#dialog-unsaved').hidden = true;
+  const cb = S.unsavedCb; S.unsavedCb = null;
+  if(a==='cancel'||!cb) return;
+  if(a==='save'){ if(S.task){ S.task.dirty=false; dirtyUI(); setStatus('已保存',{icon:'check'}); } }
+  if(a==='discard'){ if(S.task){ S.task.dirty=false; dirtyUI(); } }
+  cb();
+}));
+
+/* ═══════════════ 项目行菜单 / 归档 / 删除 ═══════════════ */
+function projMenu(container, p, anchor){
+  const pop = $('#popover'); S.popCtx = {proj:p};
+  pop.innerHTML = `<div class="pop-title">《${p.name}》</div>
+    ${p.archived
+      ? `<button data-pact="restore">${ic('check')}恢复项目</button>`
+      : `<button data-pact="open2">${ic('clapper')}打开</button><button data-pact="archive">${ic('folder')}归档项目…</button>`}
+    <button data-pact="export">${ic('import')}导出项目包…</button>
+    <button data-pact="delete" class="danger">${ic('x')}永久删除…</button>`;
+  pop.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  pop.style.left = Math.max(12, Math.min(rect.left-160, innerWidth-242))+'px';
+  pop.style.top = Math.max(12, rect.bottom+6)+'px';
+}
+$('#popover').addEventListener('click', e=>{
+  const b = e.target.closest('[data-pact]'); if(!b) return;
+  const p = S.popCtx && S.popCtx.proj; if(!p) return;
+  $('#popover').hidden = true;
+  const act = b.dataset.pact;
+  if(act==='open2'||act==='restore'){ if(act==='restore'){ p.archived=false; renderLibrary(); setStatus(`已恢复《${p.name}》`,{icon:'check'}); } else openProject(p); }
+  if(act==='export'){ setStatus(`已导出 ${p.name}.slatesync-project/(演示)`, {icon:'check'}); }
+  if(act==='archive') confirmDialog('归档项目?',`「${p.name}」将被归档,可以从项目库恢复。任务与识别结果不受影响。`, ()=>{ p.archived=true; renderLibrary(); setStatus(`已归档《${p.name}》`,{icon:'check'}); });
+  if(act==='delete'){ S.delCtx = p;
+    $('#delete-text').innerHTML = `此操作不可撤销。将删除《${p.name}》的全部任务、场记单与校对结果。请输入 <b>${p.name}</b> 以确认。`;
+    $('#delete-input').value=''; $('#btn-del-go').disabled = true;
+    $('#dialog-delete').hidden = false; setTimeout(()=>$('#delete-input').focus(),50);
+  }
+});
+$('#delete-input').addEventListener('input', e=>{
+  $('#btn-del-go').disabled = !(S.delCtx && e.target.value.trim()===S.delCtx.name);
+});
+$('#btn-del-go').addEventListener('click', ()=>{
+  const p = S.delCtx; $('#dialog-delete').hidden = true;
+  if(S.proj===p){ S.proj=null; S.task=null; $('#nav-ws-chip').hidden=true; setView('library'); }
+  S.projects = S.projects.filter(x=>x!==p); renderLibrary();
+  setStatus(`已永久删除《${p.name}》`, {icon:'warn'});
+});
+$$('#dialog-delete [data-del]').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.del==='cancel') $('#dialog-delete').hidden = true; }));
+
+function confirmDialog(title, text, go){
+  $('#confirm-title').textContent = title; $('#confirm-text').textContent = text;
+  $('#btn-confirm-go').onclick = ()=>{ $('#dialog-confirm').hidden = true; go(); };
+  $('#dialog-confirm').hidden = false;
+}
+$$('#dialog-confirm [data-confirm]').forEach(b=>b.addEventListener('click', e=>{
+  if(e.currentTarget.dataset.confirm==='cancel') $('#dialog-confirm').hidden = true;
+}));
+
+/* ═══════════════ 全局设置 ═══════════════ */
+function openSettings(){ $('#modal-settings').hidden = false; }
+$('#btn-gsettings').addEventListener('click', openSettings);
+$('#btn-set-close').addEventListener('click', ()=>{ $('#modal-settings').hidden = true; });
+$('#btn-set-cancel').addEventListener('click', ()=>{ $('#modal-settings').hidden = true; });
+$('#btn-set-save').addEventListener('click', ()=>{ $('#modal-settings').hidden = true; setStatus('已保存全局设置',{icon:'check'}); });
+$$('#set-seg button').forEach(b=>b.addEventListener('click', ()=>{
+  $$('#set-seg button').forEach(x=>x.classList.toggle('on', x===b));
+  $$('.set-pane').forEach(p=>p.classList.toggle('on', p.dataset.pane===b.dataset.set));
+}));
+$$('#set-appearance button').forEach(b=>b.addEventListener('click', ()=>{
+  if(b.textContent==='深色') t('dark'); else if(b.textContent==='浅色') t('light');
+  else t(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+}));
+$$('#set-density button').forEach(b=>b.addEventListener('click', ()=>dens(b.textContent==='紧凑'?'compact':'comfortable')));
+$('#btn-theme').addEventListener('click', ()=>t(document.documentElement.dataset.theme==='dark'?'light':'dark'));
+$('#btn-density').addEventListener('click', ()=>dens(document.documentElement.dataset.density==='compact'?'comfortable':'compact'));
+
+/* ═══════════════ 日志 ═══════════════ */
+const LOGS = [
+  {t:'14:32:08', lv:'ok', src:'workspace', msg:'已导出 Resolve.csv(第1拍摄日)· 18 行 · 原格式保留'},
+  {t:'14:31:52', lv:'i', src:'csv', msg:'对账完成:18 匹配 · 0 告警'},
+  {t:'14:29:11', lv:'ok', src:'recognition', msg:'识别完成 · 18 条结果 · 版式 Profile 已复用(A03-roll)'},
+  {t:'14:28:40', lv:'i', src:'ocr', msg:'Vision OCR:7 页 evidence 就绪(本机)'},
+  {t:'14:28:02', lv:'w', src:'recognition', msg:'S14·T5 置信度 0.62 低于阈值,已标记为待定'},
+  {t:'14:27:55', lv:'i', src:'recognition', msg:'请求 3/7 页 · gpt-4o · JSON Schema'},
+  {t:'14:26:48', lv:'i', src:'workspace', msg:'已导入 场记单_0314.pdf · 7 页 · 本地栅格化完成'},
+  {t:'14:25:33', lv:'ok', src:'library', msg:'项目「雾河」校验通过 · SQLite v1 · 3 任务'},
+  {t:'11:02:19', lv:'w', src:'provider', msg:'本地 vLLM 凭据需要授权,已在钥匙串提示中等待确认'},
+  {t:'11:01:47', lv:'e', src:'ocr', msg:'PaddleOCR 未安装:已按设置降级为页面图片识别'}
+];
+function renderLogs(){
+  const f = S.logFilter;
+  const rows = LOGS.filter(l=> f==='all' ? true : f==='ok' ? l.lv==='ok' : f==='warn' ? l.lv==='w' : l.lv==='e');
+  $('#log-body').innerHTML = rows.map(l=>{
+    const lv = l.lv==='ok'?'<span class="lv lv-ok">完成</span>':l.lv==='w'?'<span class="lv lv-w">告警</span>':l.lv==='e'?'<span class="lv lv-e">错误</span>':'<span class="lv lv-i">信息</span>';
+    return `<tr><td>${l.t}</td><td>${lv}</td><td>${l.src}</td><td class="msg">${l.msg}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" style="color:var(--text-3); padding:18px">该级别暂无日志。</td></tr>';
+}
+$$('#log-filters .chip').forEach(c=>c.addEventListener('click', ()=>{
+  $$('#log-filters .chip').forEach(x=>x.classList.toggle('on', x===c));
+  S.logFilter = c.dataset.lv; renderLogs();
+}));
+
+/* ═══════════════ 键盘 / 启动 ═══════════════ */
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){
+    for(const id of ['#popover','#lightbox','#dialog-export','#dialog-delete','#dialog-confirm','#dialog-unsaved','#modal-settings','#scrim-open']){
+      const el = $(id); if(el && !el.hidden){ el.hidden = true; return; }
+    }
+    return;
+  }
+  const meta = e.metaKey||e.ctrlKey;
+  if(meta && e.key===','){ e.preventDefault(); openSettings(); }
+  if(meta && e.key==='s'){ e.preventDefault(); if(S.task&&S.task.dirty){ S.task.dirty=false; dirtyUI(); setStatus('已保存',{icon:'check'}); } }
+  if(meta && ['1','2','3'].includes(e.key) && S.proj){ e.preventDefault(); switchTab(['input','results','csv'][+e.key-1]); }
+  if(e.key==='/' && S.proj && !/input|textarea|select/i.test(document.activeElement.tagName)){ e.preventDefault(); $('#rail-search').focus(); }
+});
+(function boot(){
+  t(load('ui-theme')||'dark');
+  dens(load('ui-density')||'comfortable');
+  renderLibrary(); renderLogs();
+  const h = new URLSearchParams(location.hash.slice(1));
+  if(h.get('theme')==='light'||h.get('theme')==='dark') t(h.get('theme'), false);
+  if(h.get('w')==='workspace'){
+    const p = S.projects.find(x=>x.id===h.get('p')) || S.projects[0];
+    S.proj = p; $('#nav-ws-chip').hidden = false; $('#ws-proj').textContent = `《${p.name}》`;
+    S.task = p.tasks.find(x=>x.id===h.get('t')) || p.tasks[0];
+    setView('workspace'); renderRail(); selectTask();
+    if(h.get('tab')) switchTab(h.get('tab'));
+  }
+  setStatus('就绪');
+})();
+</script>

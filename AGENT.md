@@ -1,5 +1,11 @@
 # SlateSync 当前项目方案
 
+## 2026-09-16 未跟踪资料归档
+
+- 将历史 UI HTML 原型归入 docs/ui-redesign-assets，保留两份 UI 工作记录和测试项目库截图；增加历史证据范围说明，不将未随仓库保留的日志当作当前验证。
+- 本机签名设置 Configuration/LocalSigning.xcconfig 与生成报告 premium-audit.json 添加精确忽略规则，保留本地文件。
+- 本次只归档资料和调整忽略规则；验证文件内容、截图、原型脚本语法、忽略规则与 staged diff，不重跑不受影响的 Swift 构建。新提交重新进入 REVIEW_READY，历史 Gate 证据继续保留。
+
 ## 2026-09-16 CI 修复重新进入待验收
 
 - 按 Owner 请求将本次修复冻结为独立候选提交，SM-09 当前状态为 REVIEW_READY；旧 COMPLETE 批准及验证完整保留在 CURRENT_STATE.json.history，当前批准字段清空，不伪造新提交 PASS。

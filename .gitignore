@@ -67,3 +67,7 @@ xcuserdata/
 
 # Phase Gate raw logs, DerivedData, Archives, and JSON runs are local/CI evidence.
 /.codex/gate-results/
+
+# Machine-specific signing settings and reproducible design audit output.
+/Configuration/LocalSigning.xcconfig
+/premium-audit.json
