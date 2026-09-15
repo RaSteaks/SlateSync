@@ -352,7 +352,11 @@ function normalizeOrdinalField(field, originalValue, text, width, confidence, ch
 
 function normalizeCardField(field, originalValue, text, confidence, chineseConverted) {
   const compact = text.replace(/[\s_-]+/g, "");
-  const match = /^([A-Z])(.+)$/.exec(compact);
+  // Exact multi-letter prefixes share the CSV matching contract; retain
+  // the single-letter OCR-confusable fallback for ambiguous numeric tokens.
+  // Read a contiguous prefix before removing separators, so "A O 1" keeps
+  // its established OCR correction to A001 instead of inventing camera AO.
+  const match = /^([A-Z]+)[\s_-]*([0-9]+)$/.exec(text) || /^([A-Z])(.+)$/.exec(compact);
   if (!match) return makeFailure(field, originalValue, confidence, "ambiguous-numeric-token");
   const parsed = numericToken(match[2], { compactSpaces: true });
   if (!parsed.ok) return makeFailure(field, originalValue, confidence, parsed.code);
@@ -428,7 +432,8 @@ export function isCanonicalRecognitionValue(field, value) {
     return Number.isSafeInteger(number) && number >= 0 && number < FIELD_NUMBER_LIMIT;
   };
   if (field === "cardNumber") {
-    const match = /^([A-Z])(\d{3,6})$/.exec(text);
+    // Validate the same multi-letter prefix accepted by normalization.
+    const match = /^([A-Z]+)(\d{3,6})$/.exec(text);
     return Boolean(match && safeNumber(match[2]));
   }
   if (field === "videoCode") return /^C0\d{2}$/.test(text) && safeNumber(text.slice(1));

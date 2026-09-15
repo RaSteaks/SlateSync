@@ -735,6 +735,30 @@
       </form>
     </div>
 
+    <!-- 项目模板工作台的命名 / 切换 / 删除对话框（可访问 HTML 对话框） -->
+    <div id="template-dialog" class="project-dialog-overlay" hidden>
+      <div class="project-dialog" role="dialog" aria-modal="true" aria-labelledby="template-dialog-title" aria-describedby="template-dialog-description">
+        <div class="settings-card-heading">
+          <div>
+            <span class="preview-kicker">EXPORT TEMPLATE</span>
+            <h2 id="template-dialog-title">模板</h2>
+          </div>
+          <button id="template-dialog-close" class="icon-button" type="button" aria-label="关闭">×</button>
+        </div>
+        <p id="template-dialog-description" class="settings-help"></p>
+        <p id="template-dialog-error" class="template-dialog-error" role="alert" hidden></p>
+        <label id="template-dialog-name-field" class="field" hidden>
+          <span>模板名称</span>
+          <input id="template-dialog-name" type="text" maxlength="80" />
+        </label>
+        <div class="settings-actions">
+          <button id="template-dialog-cancel" class="secondary-button" type="button">取消</button>
+          <button id="template-dialog-secondary" class="secondary-button" type="button" hidden>放弃并切换</button>
+          <button id="template-dialog-primary" class="primary-button compact" type="button">确认</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="./app.js"></script>
   </body>
 </html>

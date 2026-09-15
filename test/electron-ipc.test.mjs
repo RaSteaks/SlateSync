@@ -246,6 +246,36 @@ describe("electron IPC handlers", () => {
     assert.equal(storedTask.projectSettingsSnapshot.export, undefined);
   });
 
+  it("strips project template metadata from task creates, updates and restored snapshots", async () => {
+    const projectId = "template-boundary";
+    const template = { id: "preset", name: "Preset", templateId: "custom", columns: [{ key: "scene", header: "Scene", enabled: true }] };
+    const settings = { version: 2, exportTemplates: [template], export: { templateId: "custom", savedTemplateId: "preset", columns: template.columns, filenameTemplate: "task.csv" } };
+    let persisted;
+    const taskStore = {
+      saveTask: async (task) => { persisted = structuredClone(task); return "task"; },
+      updateTask: async (_id, task) => { persisted = structuredClone(task); return "task"; },
+      loadTask: async () => persisted,
+    };
+    const ipcMain = createMockIpcMain();
+    registerIpcHandlers(ipcMain, createMockContext({ projectRuntime: {
+      get: async () => ({ project: { id: projectId, settings }, taskStore }),
+    } }));
+    for (const id of [undefined, "task"]) {
+      await ipcMain.invoke("save-task", { projectId, task: { id, projectSettingsSnapshot: settings } });
+      assert.equal(persisted.projectSettingsSnapshot.exportTemplates, undefined);
+      assert.equal(persisted.projectSettingsSnapshot.export.savedTemplateId, undefined);
+      assert.equal(persisted.projectSettingsSnapshot.export.filenameTemplate, "task.csv");
+    }
+    // A historical task must not acquire the current project's library/link.
+    persisted.projectSettingsSnapshot = { version: 1, export: { templateId: "custom", columns: template.columns, filenameTemplate: "old.csv" } };
+    const loaded = await ipcMain.invoke("load-task", { projectId, id: "task" });
+    assert.equal(loaded.projectSettingsSnapshot.exportTemplates, undefined);
+    assert.equal(loaded.projectSettingsSnapshot.export.savedTemplateId, undefined);
+    assert.equal(loaded.projectSettingsSnapshot.export.filenameTemplate, "old.csv");
+    assert.equal(persisted.projectSettingsSnapshot.version, 1);
+    assert.equal(settings.export.savedTemplateId, "preset");
+  });
+
   it("get-config returns public config with upload limits", async () => {
     const ipcMain = createMockIpcMain();
     registerIpcHandlers(ipcMain, createMockContext());
@@ -1416,6 +1446,14 @@ describe("electron IPC handlers", () => {
           fieldFormats: { scene: "XXX", shot: "XX", take: "XX" },
           comments: { goodTake: "_OK", holdTake: "_KP" },
         },
+        exportTemplates: [{
+          id: "tpl-library",
+          name: "后期模板",
+          templateId: "custom",
+          columns: [{ key: "scene", header: "Scene", enabled: true }],
+          format: { encoding: "utf-8", bom: true, delimiter: ",", lineEnding: "\r\n", finalNewline: true },
+          filenameTemplate: "{source}_场记识别.csv",
+        }],
       },
     };
     const projectLibrary = {
@@ -1473,6 +1511,10 @@ describe("electron IPC handlers", () => {
     const result = await recognition;
     assert.equal(result.projectId, project.id);
     assert.deepEqual(result.projectSettingsSnapshot.resolve, project.settings.resolve);
+    // 任务快照只保留生效导出配置：模板库与模板链接必须被剥离。
+    assert.equal(result.projectSettingsSnapshot.exportTemplates, undefined);
+    assert.equal(result.projectSettingsSnapshot.export.savedTemplateId, undefined);
+    assert.ok(result.projectSettingsSnapshot.export.columns.length > 0);
 
     await ipcMain.invoke("archive-project", { id: project.id });
     assert.deepEqual(archived, [project.id]);

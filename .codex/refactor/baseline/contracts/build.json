@@ -6,7 +6,9 @@
     "private": true,
     "type": "module",
     "main": "electron/main.mjs",
-    "engines": { "node": ">=20.19" },
+    "engines": {
+      "node": ">=20.19"
+    },
     "scripts": {
       "start": "npm run electron:dev",
       "dev": "npm run electron:dev",
@@ -39,16 +41,45 @@
     "configFile": "electron-builder.yml",
     "appId": "com.slatesync.app",
     "productName": "SlateSync",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["electron/**/*", "lib/**/*", "public/**/*", "package.json"],
-    "extraResources": [
-      { "from": "scripts/", "to": "app/scripts/" },
-      { "from": "requirements-ocr.txt", "to": "app/requirements-ocr.txt" },
-      { "from": "bin/", "to": "app/bin/" },
-      { "from": "slatesync.config.json", "to": "app/slatesync.config.json" }
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "lib/**/*",
+      "public/**/*",
+      "package.json"
     ],
-    "asarUnpack": ["scripts/**/*", "bin/**/*", "node_modules/better-sqlite3/build/Release/**/*"],
-    "macTargets": ["dmg:arm64", "dmg:x64", "zip:arm64", "zip:x64"],
+    "extraResources": [
+      {
+        "from": "scripts/",
+        "to": "app/scripts/"
+      },
+      {
+        "from": "requirements-ocr.txt",
+        "to": "app/requirements-ocr.txt"
+      },
+      {
+        "from": "bin/",
+        "to": "app/bin/"
+      },
+      {
+        "from": "slatesync.config.json",
+        "to": "app/slatesync.config.json"
+      }
+    ],
+    "asarUnpack": [
+      "scripts/**/*",
+      "bin/**/*",
+      "node_modules/better-sqlite3/build/Release/**/*"
+    ],
+    "macTargets": [
+      "dmg:arm64",
+      "dmg:x64",
+      "zip:arm64",
+      "zip:x64"
+    ],
     "icon": "build/slatesync.icon",
     "entitlements": "build/entitlements.mac.plist"
   },
@@ -60,12 +91,19 @@
   "ci": {
     "node": "22",
     "install": "npm ci",
-    "validation": ["npm run check", "npm test"],
-    "releaseValidation": ["npm run check", "npm test", "electron-builder --mac --<arch> --publish never"]
+    "validation": [
+      "npm run check",
+      "npm test"
+    ],
+    "releaseValidation": [
+      "npm run check",
+      "npm test",
+      "electron-builder --mac --<arch> --publish never"
+    ]
   },
   "transition": {
     "scripts": {
-      "check": "node --check scripts/electron-build-host.mjs && node --check scripts/build-vision-ocr.mjs && node --check lib/ai-client.mjs && node --check lib/app-logger.mjs && node --check lib/http-timeout.mjs && node --check lib/model-capabilities.mjs && node --check lib/custom-provider.mjs && node --check lib/provider-registry.mjs && node --check lib/config.mjs && node --check lib/model-catalog.mjs && node --check lib/model-discovery.mjs && node --check lib/ocr/child-environment.mjs && node --check lib/ocr/paddleocr.mjs && node --check lib/ocr/selection.mjs && node --check lib/ocr/vision.mjs && node --check electron/ocr-environment.mjs && node --check electron/main.mjs && node --check electron/paddleocr-installer.mjs && node --check electron/ipc-handlers.mjs && node --check electron/env-loader.mjs && node --check electron/file-dialogs.mjs && node --check electron/slate-scanner.mjs && node --check electron/quicktime-meta-reader.mjs && node --check electron/key-store.mjs && node --check electron/settings-store.mjs && node --check electron/global-settings.mjs && node --check electron/global-config-store.mjs && node --check lib/diagnostics.mjs && node --check lib/task-store.mjs && node --check lib/sqlite-store.mjs && node --check lib/project-library.mjs && node --check lib/project-library-transfer.mjs && node --check lib/project-runtime.mjs && node --check lib/project-settings.mjs && node --check lib/scenario/profile.mjs && node --check lib/scenario/store.mjs && node --check public/app.js && node --check public/custom-provider-state.js && node --check public/csv-background-tasks.js && node --check public/csv-worker.js && node --check public/csv-worker-client.js && node --check public/electron-bridge.js && node --check public/operation-token.js && node --check public/task-autosave.js && node --check public/slate-csv-parser.js && node --check public/image-preprocess.js && node --check public/recognition-request.js && node --check public/resolve-csv.js && node --check public/metadata-common.js && node --check public/metadata-structure.js && node --check public/metadata-sources/index.js && node --check public/metadata-sources/arri-common.js && node --check public/metadata-sources/arri-xml.js && node --check public/metadata-sources/arri-quicktime.js && node --check public/metadata-sources/arri-ale.js && node --check public/metadata-sources/kinefinity.js && node --check public/metadata-sources/quicktime.js && node --check public/task-persistence.js && node --check public/workflow-state.js && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('scripts/paddleocr_runner.py').read_text())\"",
+      "check": "node --check scripts/electron-build-host.mjs && node --check scripts/build-vision-ocr.mjs && node --check lib/ai-client.mjs && node --check lib/app-logger.mjs && node --check lib/http-timeout.mjs && node --check lib/model-capabilities.mjs && node --check lib/custom-provider.mjs && node --check lib/provider-registry.mjs && node --check lib/config.mjs && node --check lib/model-catalog.mjs && node --check lib/model-discovery.mjs && node --check lib/ocr/child-environment.mjs && node --check lib/ocr/paddleocr.mjs && node --check lib/ocr/selection.mjs && node --check lib/ocr/vision.mjs && node --check electron/ocr-environment.mjs && node --check electron/main.mjs && node --check electron/paddleocr-installer.mjs && node --check electron/ipc-handlers.mjs && node --check electron/env-loader.mjs && node --check electron/file-dialogs.mjs && node --check electron/slate-scanner.mjs && node --check electron/quicktime-meta-reader.mjs && node --check electron/key-store.mjs && node --check electron/settings-store.mjs && node --check electron/global-settings.mjs && node --check electron/global-config-store.mjs && node --check lib/diagnostics.mjs && node --check lib/task-store.mjs && node --check lib/sqlite-store.mjs && node --check lib/project-library.mjs && node --check lib/project-library-transfer.mjs && node --check lib/project-runtime.mjs && node --check lib/project-settings.mjs && node --check lib/scenario/profile.mjs && node --check lib/scenario/store.mjs && node --check public/app.js && node --check public/custom-provider-state.js && node --check public/csv-background-tasks.js && node --check public/csv-worker.js && node --check public/csv-worker-client.js && node --check public/electron-bridge.js && node --check public/operation-token.js && node --check public/task-autosave.js && node --check public/slate-csv-parser.js && node --check public/image-preprocess.js && node --check public/recognition-request.js && node --check public/resolve-csv.js && node --check public/metadata-common.js && node --check public/metadata-structure.js && node --check public/metadata-sources/index.js && node --check public/metadata-sources/arri-common.js && node --check public/metadata-sources/arri-xml.js && node --check public/metadata-sources/arri-quicktime.js && node --check public/metadata-sources/arri-ale.js && node --check public/metadata-sources/kinefinity.js && node --check public/metadata-sources/quicktime.js && node --check public/task-persistence.js && node --check public/workflow-state.js && node --check public/export-templates.js && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('scripts/paddleocr_runner.py').read_text())\"",
       "dev:renderer": "vite --config vite.renderer.config.ts",
       "test": "npm run test:node && npm run test:modern",
       "rebuild:native:electron": "electron-rebuild --force --which-module better-sqlite3",
@@ -108,8 +146,15 @@
       "vite": "8.0.13",
       "vitest": "4.1.11"
     },
-    "builderFiles": ["out/**/*"],
-    "ciValidation": ["npm run validate:modern"],
-    "releaseValidation": ["npm run typecheck", "npm run build:modern"]
+    "builderFiles": [
+      "out/**/*"
+    ],
+    "ciValidation": [
+      "npm run validate:modern"
+    ],
+    "releaseValidation": [
+      "npm run typecheck",
+      "npm run build:modern"
+    ]
   }
 }

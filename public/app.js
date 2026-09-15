@@ -39,6 +39,26 @@ import {
   resolveExportFilename,
 } from "./export-options.js";
 import { RESOLVE_TEMPLATE_ID, RESOLVE_METADATA_FIELDS, createResolveExportOptions, remapTemplateEdits } from "./resolve-export-template.js";
+// 项目模板库语义与 Modern 工作台共用同一模块，两个 UI 不允许在
+// “保存模板”的含义上发生分歧。
+import {
+  BUILTIN_TEMPLATE_LABEL,
+  DEFAULT_TEMPLATE_NAME,
+  UNSAVED_TEMPLATE_LABEL,
+  applyEditorContentToTemplate,
+  canonicalTemplateSource,
+  cleanTemplateName,
+  copyTemplateName,
+  createExportTemplate,
+  defaultTemplateIdForOptions,
+  exportOptionsForBuiltinTemplate,
+  exportOptionsFromTemplate,
+  findExportTemplate,
+  sameTemplateContent,
+  templateAfterDelete,
+  uniqueTemplateName,
+  validateTemplateName,
+} from "./export-templates.js";
 import {
   calculateCoreColumnWidth,
   calculateDetailSegments,
@@ -176,6 +196,13 @@ const state = {
   currentProject: null,
   projectSettingsDirty: false,
   projectSettingsSaving: false,
+  // 项目模板库草稿：null 表示仍与 project.settings.exportTemplates 一致；
+  // 模板操作只改草稿，保存项目设置才持久化。
+  projectExportTemplatesDraft: null,
+  // 模板名称输入草稿：跨工作台局部重渲染保留正在输入的名称。
+  templateNameDraft: null,
+  templateDialog: null,
+  templateDialogOpener: null,
   projects: [],
   libraryInfo: null,
   route: "projects",
@@ -351,6 +378,16 @@ const elements = {
   projectDialogForm: document.querySelector("#project-dialog-form"),
   projectDialogClose: document.querySelector("#project-dialog-close"),
   projectDialogCancel: document.querySelector("#project-dialog-cancel"),
+  templateDialog: document.querySelector("#template-dialog"),
+  templateDialogTitle: document.querySelector("#template-dialog-title"),
+  templateDialogDescription: document.querySelector("#template-dialog-description"),
+  templateDialogNameField: document.querySelector("#template-dialog-name-field"),
+  templateDialogName: document.querySelector("#template-dialog-name"),
+  templateDialogError: document.querySelector("#template-dialog-error"),
+  templateDialogClose: document.querySelector("#template-dialog-close"),
+  templateDialogCancel: document.querySelector("#template-dialog-cancel"),
+  templateDialogSecondary: document.querySelector("#template-dialog-secondary"),
+  templateDialogPrimary: document.querySelector("#template-dialog-primary"),
   newProjectName: document.querySelector("#new-project-name"),
   newProjectDescription: document.querySelector("#new-project-description"),
 };
@@ -978,6 +1015,12 @@ function renderProjectPackageActions() {
 }
 
 const LEGACY_EXPORT_COLUMN_LABELS = Object.freeze({
+  // The legacy renderer must expose the same Resolve choices as Modern.
+  fileName: "素材文件名",
+  startTimecode: "素材起始时码",
+  endTimecode: "素材结束时码",
+  reelName: "卷名",
+  clipDirectory: "源文件目录",
   scene: "场次",
   shot: "镜号",
   take: "条次",
@@ -986,6 +1029,12 @@ const LEGACY_EXPORT_COLUMN_LABELS = Object.freeze({
   cardNumber: "卡号",
   videoCode: "视频码",
   sourcePage: "来源页",
+  description: "内容描述",
+  keywords: "关键词",
+  camera: "机位",
+  shootDay: "拍摄日",
+  cameraType: "摄影机类型",
+  audioNotes: "声音备注",
 });
 
 function effectiveLegacyExportOptions() {
@@ -1002,25 +1051,43 @@ function effectiveLegacyExportOptions() {
 function renderLegacyExportOptions(container, value, scope = "session") {
   if (!container) return;
   const options = normalizeExportOptions(value || effectiveLegacyExportOptions());
-  const projectScope = scope === "project";
+  // 项目设置页渲染完整的“模板库 + 编辑器”工作台；会话级（任务页）保持
+  // 原有的单一编辑器。
+  if (scope === "project") {
+    renderProjectTemplateWorkbench(container, options);
+    return;
+  }
   const builtin = options.templateId === RESOLVE_TEMPLATE_ID;
   const imported = options.templateId === "imported-csv-v1";
   // Symbolic option values survive HTML newline normalization unchanged.
   container.dataset.exportScope = scope;
   container.dataset.exportTemplate = options.templateId || "custom";
   container.dataset.exportTemplateName = options.templateName || "";
+  container.dataset.exportSavedTemplateId = options.savedTemplateId || "";
   container.innerHTML = `
     <div class="export-options-heading">
       <p class="settings-help">预览和最终导出使用同一组配置；支持 {project}、{source}、{date}、{time}。</p>
-      ${projectScope ? "" : `<button type="button" class="text-button" data-export-action="clear-session">恢复项目默认</button>`}
+      <button type="button" class="text-button" data-export-action="clear-session">恢复项目默认</button>
     </div>
     <label class="field"><span>导出模板</span><select data-export-template><option value="custom" ${!builtin && !imported ? "selected" : ""}>自定义 CSV</option><option value="${RESOLVE_TEMPLATE_ID}" ${builtin ? "selected" : ""}>DaVinci Resolve 21.1 · 内置 CSV</option>${imported ? `<option value="imported-csv-v1" selected>${escapeHtml(options.templateName || "导入的 CSV 模板")}</option>` : ""}</select></label>
-    ${projectScope ? `<label class="field"><span>导入 CSV 模板（最多 5 MB）</span><input type="file" accept=".csv,text/csv" data-import-export-template /></label><p class="settings-help" data-template-message>只保存列结构和格式；保存项目设置后，该项目后续任务默认使用此模板。</p>` : ""}
     ${builtin ? '<p class="settings-help">依据官方手册第 18 章（406–412、421–423 页）。素材匹配字段始终包含；目录与文件名共同定位源文件。缺失值请在预览中补齐，备注保留文本。</p>' : ""}
+    ${legacyExportFieldsHtml(options, { builtin, imported })}`;
+  if (container.dataset.exportEventsBound !== scope) {
+    bindLegacyExportOptionEvents(container, scope);
+    container.dataset.exportEventsBound = scope;
+  }
+  container.querySelectorAll("input, select, button").forEach((control) => {
+    control.disabled = isProjectReadOnly() || state.recognizing || state.exporting;
+  });
+}
+
+// 任务页与项目模板工作台共用的导出字段编辑器标记。
+function legacyExportFieldsHtml(options, { builtin, imported }) {
+  return `
     <div class="export-options-grid">
       <label class="field"><span>文件名模板</span><input data-export-field="filenameTemplate" value="${escapeHtml(options.filenameTemplate)}" maxlength="160" /></label>
       <label class="field"><span>输出编码</span><select data-export-field="encoding"><option value="utf-8" ${options.format.encoding === "utf-8" ? "selected" : ""}>UTF-8</option><option value="utf-16le" ${options.format.encoding === "utf-16le" ? "selected" : ""}>UTF-16 LE</option><option value="utf-16be" ${options.format.encoding === "utf-16be" ? "selected" : ""}>UTF-16 BE</option></select></label>
-      <label class="field"><span>分隔符</span><input data-export-field="delimiter" value="${escapeHtml(options.format.delimiter)}" maxlength="4" ${builtin ? "readonly" : ""} /></label>
+      <label class="field"><span>分隔符</span><input data-export-field="delimiter" value="${escapeHtml(options.format.delimiter)}" maxlength="1" ${builtin ? "readonly" : ""} /></label>
       <label class="field"><span>换行</span><select data-export-field="lineEnding"><option value="crlf" ${options.format.lineEnding === "\r\n" ? "selected" : ""}>CRLF · Windows</option><option value="lf" ${options.format.lineEnding === "\n" ? "selected" : ""}>LF · Unix</option><option value="cr" ${options.format.lineEnding === "\r" ? "selected" : ""}>CR · Classic Mac</option></select></label>
     </div>
     <div class="export-options-checks"><label><input type="checkbox" data-export-field="bom" ${options.format.bom ? "checked" : ""} /> 写入 BOM</label><label><input type="checkbox" data-export-field="finalNewline" ${options.format.finalNewline ? "checked" : ""} /> 末尾追加换行</label></div>
@@ -1031,15 +1098,6 @@ function renderLegacyExportOptions(container, value, scope = "session") {
         <button type="button" class="icon-button" data-export-move="-1" ${index === 0 ? "disabled" : ""} aria-label="上移">↑</button>
         <button type="button" class="icon-button" data-export-move="1" ${index === options.columns.length - 1 ? "disabled" : ""} aria-label="下移">↓</button>
       </div>`).join("")}</div>`;
-  if (container.dataset.exportEventsBound !== scope) {
-    bindLegacyExportOptionEvents(container, scope);
-    container.dataset.exportEventsBound = scope;
-  }
-  if (!projectScope) {
-    container.querySelectorAll("input, select, button").forEach((control) => {
-      control.disabled = isProjectReadOnly() || state.recognizing || state.exporting;
-    });
-  }
 }
 
 function readLegacyExportOptions(container, fallback = DEFAULT_EXPORT_OPTIONS) {
@@ -1054,6 +1112,9 @@ function readLegacyExportOptions(container, fallback = DEFAULT_EXPORT_OPTIONS) {
     ...current,
     templateId: container.dataset.exportTemplate || "custom",
     ...(container.dataset.exportTemplateName ? { templateName: container.dataset.exportTemplateName } : {}),
+    // dataset 始终反映 DOM 中的链接状态；显式覆盖防止持久化草稿里的
+    // 旧 savedTemplateId 泄漏进读取结果。
+    savedTemplateId: container.dataset.exportSavedTemplateId || undefined,
     filenameTemplate: container.querySelector('[data-export-field="filenameTemplate"]')?.value ?? current.filenameTemplate,
     format: {
       ...current.format,
@@ -1075,6 +1136,8 @@ function bindLegacyExportOptionEvents(container, scope) {
       : effectiveLegacyExportOptions();
     const options = readLegacyExportOptions(container, current);
     if (scope === "project") {
+      // 字段编辑会触发工作台重渲染，先保留正在输入的模板名称。
+      state.templateNameDraft = container.querySelector("[data-template-name]")?.value ?? null;
       markProjectSettingsDirty();
     } else {
       state.exportSessionOptions = options;
@@ -1095,27 +1158,6 @@ function bindLegacyExportOptionEvents(container, scope) {
   });
   container.addEventListener("change", (event) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.matches("[data-import-export-template]")) {
-      const file = target.files?.[0]; target.value = "";
-      if (!file || isProjectReadOnly()) return;
-      const projectId = state.currentProject?.id;
-      const message = container.querySelector("[data-template-message]");
-      target.disabled = true;
-      void (async () => {
-        try {
-          if (!/\.csv$/i.test(file.name) || file.size > 5 * 1024 * 1024) throw new Error("请选择不超过 5 MB 的 CSV 模板。");
-          const data = await file.arrayBuffer();
-          const result = await runCsvBackgroundTask({ type: "import-export-template", data, filename: file.name }, [data]);
-          // Retain only schema in this project's draft; never replace task media.
-          if (state.currentProject?.id !== projectId || !container.isConnected) return;
-          renderLegacyExportOptions(container, result.options, scope);
-          markProjectSettingsDirty();
-          container.querySelector("[data-template-message]").textContent = `已导入 ${file.name}。保存项目设置后，后续任务默认使用此模板。`;
-        } catch (error) { if (message?.isConnected) message.textContent = error.message; }
-        finally { target.disabled = false; }
-      })();
-      return;
-    }
     // Changing adapters is an explicit draft edit, saved by the project form.
     if (target?.matches("[data-export-template]")) {
       const next = target.value === RESOLVE_TEMPLATE_ID ? createResolveExportOptions() : { ...CUSTOM_EXPORT_OPTIONS, templateId: "custom" };
@@ -1152,6 +1194,357 @@ function bindLegacyExportOptionEvents(container, scope) {
   });
 }
 
+/* ---------- 项目导出模板工作台（模板库 + 当前模板编辑器） ---------- */
+
+// 模板库草稿：null 表示与 project.settings.exportTemplates 一致。
+function legacyTemplatesDraft() {
+  if (Array.isArray(state.projectExportTemplatesDraft)) return state.projectExportTemplatesDraft;
+  const templates = state.currentProject?.settings?.exportTemplates;
+  return Array.isArray(templates) ? templates : [];
+}
+
+function renderProjectTemplateWorkbench(container, options) {
+  const templates = legacyTemplatesDraft();
+  const selected = findExportTemplate(templates, options.savedTemplateId);
+  const builtinSelected = !selected && options.templateId === RESOLVE_TEMPLATE_ID;
+  const unsavedSelected = !selected && !builtinSelected;
+  const readOnly = isProjectReadOnly() || state.libraryActionBusy || state.projectSettingsSaving || Boolean(state.projectTransferBusy) || state.recognizing;
+  const activeLabel = selected?.name || (builtinSelected ? BUILTIN_TEMPLATE_LABEL : UNSAVED_TEMPLATE_LABEL);
+  // Symbolic option values survive HTML newline normalization unchanged.
+  container.dataset.exportScope = "project";
+  container.dataset.exportTemplate = options.templateId || "custom";
+  container.dataset.exportTemplateName = options.templateName || "";
+  container.dataset.exportSavedTemplateId = options.savedTemplateId || "";
+  const nameValue = state.templateNameDraft
+    ?? selected?.name
+    ?? uniqueTemplateName(DEFAULT_TEMPLATE_NAME, templates);
+  container.innerHTML = `
+    <div class="template-workbench">
+      <div class="template-library">
+        <div class="template-library-actions">
+          <button type="button" class="secondary-button compact" data-template-action="create" ${readOnly ? "disabled" : ""}>新建自定义模板</button>
+          <button type="button" class="secondary-button compact" data-template-action="import" ${readOnly ? "disabled" : ""}>导入 CSV</button>
+          <input type="file" accept=".csv,text/csv" data-template-import hidden aria-label="导入 CSV 模板文件" />
+        </div>
+        <div class="template-list" role="list">
+          <div role="listitem"><button type="button" class="template-entry" data-template-select="" ${builtinSelected ? 'data-active="true" aria-current="true"' : ""} ${readOnly ? "disabled" : ""}><span class="template-entry-name">${escapeHtml(BUILTIN_TEMPLATE_LABEL)}</span><span class="template-entry-badge">只读</span></button></div>
+          ${unsavedSelected ? `<div role="listitem"><button type="button" class="template-entry" data-active="true" aria-current="true" disabled><span class="template-entry-name">${escapeHtml(UNSAVED_TEMPLATE_LABEL)}</span></button></div>` : ""}
+          ${templates.map((template) => `<div role="listitem"><button type="button" class="template-entry" data-template-select="${escapeHtml(template.id)}" ${selected?.id === template.id ? 'data-active="true" aria-current="true"' : ""} ${readOnly ? "disabled" : ""}><span class="template-entry-name">${escapeHtml(template.name)}</span><span class="template-entry-meta">${template.columns.filter((column) => column.enabled).length}/${template.columns.length} 列</span></button></div>`).join("")}
+        </div>
+        <p class="settings-help" data-template-status role="status"></p>
+      </div>
+      <div class="template-editor">
+        <div class="template-editor-heading"><strong>当前模板 · ${escapeHtml(activeLabel)}</strong>${builtinSelected ? '<span class="template-entry-badge">只读</span>' : ""}</div>
+        ${builtinSelected ? "" : `
+        <label class="field"><span>模板名称</span><input data-template-name value="${escapeHtml(nameValue)}" maxlength="80" ${readOnly ? "disabled" : ""} /></label>
+        <small class="template-name-error" data-template-name-error role="alert"></small>
+        <p class="settings-help">${selected
+          ? "“保存模板”把编辑器当前内容写回该模板；“另存为”创建副本；点击“保存项目设置”后所有修改才真正生效。模板名称与导出文件名规则无关。"
+          : "当前导出配置尚未保存为模板。填写名称后点击“保存为模板”；不保存也不会影响导出行为。"}</p>`}
+        ${legacyExportFieldsHtml(options, { builtin: builtinSelected, imported: options.templateId === "imported-csv-v1" })}
+        <div class="template-editor-actions">
+          ${builtinSelected ? `<button type="button" class="secondary-button compact" data-template-action="copy-builtin" ${readOnly ? "disabled" : ""}>复制为自定义</button>` : ""}
+          ${unsavedSelected ? `<button type="button" class="primary-button compact" data-template-action="save-new" ${readOnly ? "disabled" : ""}>保存为模板</button>` : ""}
+          ${selected ? `
+            <button type="button" class="primary-button compact" data-template-action="save" ${readOnly ? "disabled" : ""}>保存模板</button>
+            <button type="button" class="secondary-button compact" data-template-action="save-as" ${readOnly ? "disabled" : ""}>另存为</button>
+            <button type="button" class="danger-button compact" data-template-action="delete" ${readOnly ? "disabled" : ""}>删除模板</button>` : ""}
+        </div>
+      </div>
+    </div>`;
+  // The built-in is a preset, so all editor fields are read-only until copied.
+  container.querySelectorAll("[data-export-field], [data-export-enabled], [data-export-header], [data-export-move]").forEach((control) => {
+    if (builtinSelected || readOnly) control.disabled = true;
+  });
+  if (container.dataset.workbenchEventsBound !== "true") {
+    // Project rendering returns before the session editor binds its handlers.
+    bindLegacyExportOptionEvents(container, "project");
+    bindProjectTemplateWorkbenchEvents(container);
+    container.dataset.workbenchEventsBound = "true";
+  }
+}
+
+function bindProjectTemplateWorkbenchEvents(container) {
+  container.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const selectButton = target?.closest("[data-template-select]");
+    if (selectButton) {
+      requestLegacyTemplateSwitch(container, selectButton.dataset.templateSelect || null);
+      return;
+    }
+    const action = target?.closest("[data-template-action]")?.dataset.templateAction;
+    if (!action) return;
+    if (action === "import") {
+      // Activate the hidden input from the user gesture.
+      container.querySelector("[data-template-import]")?.click();
+    } else if (action === "create") {
+      legacyCreateTemplateFromEditor(container, uniqueTemplateName(DEFAULT_TEMPLATE_NAME, legacyTemplatesDraft()));
+    } else if (action === "save-new") {
+      legacyCreateTemplateFromEditor(container, container.querySelector("[data-template-name]")?.value ?? "");
+    } else if (action === "save") {
+      legacySaveTemplate(container);
+    } else if (action === "save-as") {
+      const templates = legacyTemplatesDraft();
+      openTemplateDialog({
+        title: "另存为模板",
+        description: "以新名称保存当前模板内容，原模板保持不变。",
+        nameField: true,
+        name: copyTemplateName(
+          findExportTemplate(templates, container.dataset.exportSavedTemplateId)?.name
+            || cleanTemplateName(container.querySelector("[data-template-name]")?.value)
+            || DEFAULT_TEMPLATE_NAME,
+          templates,
+        ),
+        primaryLabel: "保存模板",
+        onConfirm: (name) => {
+          const build = buildLegacyTemplateFromEditor(container, name);
+          if (!build.ok) return build.message;
+          state.projectExportTemplatesDraft = [...legacyTemplatesDraft(), build.template];
+          state.templateNameDraft = null;
+          markProjectSettingsDirty();
+          renderLegacyExportOptions(container, exportOptionsFromTemplate(build.template), "project");
+          return null;
+        },
+      });
+    } else if (action === "copy-builtin") {
+      legacyCreateTemplateFromEditor(container, copyTemplateName("Resolve 21.1", legacyTemplatesDraft()));
+    } else if (action === "delete") {
+      const template = findExportTemplate(legacyTemplatesDraft(), container.dataset.exportSavedTemplateId);
+      if (template) legacyRequestDeleteTemplate(container, template);
+    }
+  });
+  container.addEventListener("change", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.matches("[data-template-import]")) return;
+    const file = target.files?.[0];
+    target.value = "";
+    if (file) void legacyImportTemplate(container, file);
+  });
+}
+
+function setLegacyWorkbenchError(container, message) {
+  const node = container.querySelector("[data-template-name-error]");
+  if (node) node.textContent = message || "";
+}
+
+/**
+ * 未保存判定与 Modern 工作台同一语义：链接模板比较内容与名称；未保存
+ * 配置与最近持久化的导出配置比较；内置模板只读、永不脏。
+ */
+function legacyTemplateEditorDirty(container) {
+  const templates = legacyTemplatesDraft();
+  const settings = state.currentProject?.settings || defaultRendererProjectSettings();
+  const options = readLegacyExportOptions(container, settings.export || defaultRendererProjectSettings().export);
+  const selected = findExportTemplate(templates, options.savedTemplateId);
+  const nameDraft = cleanTemplateName(container.querySelector("[data-template-name]")?.value ?? "");
+  if (selected) {
+    return (nameDraft !== null && nameDraft !== selected.name) || !sameTemplateContent(options, selected);
+  }
+  if (options.templateId === RESOLVE_TEMPLATE_ID) return false;
+  return !sameTemplateContent(options, settings.export || defaultRendererProjectSettings().export);
+}
+
+function buildLegacyTemplateFromEditor(container, rawName) {
+  const validation = validateTemplateName(rawName, legacyTemplatesDraft());
+  if (!validation.ok) return validation;
+  const options = readLegacyExportOptions(container, state.currentProject?.settings?.export || defaultRendererProjectSettings().export);
+  return {
+    ok: true,
+    template: createExportTemplate({
+      name: validation.name,
+      // 内置模板的副本先展开成完整自定义列集，避免再次选中时出现假脏。
+      options: canonicalTemplateSource(options),
+      templateId: defaultTemplateIdForOptions(options),
+    }),
+  };
+}
+
+function legacyCreateTemplateFromEditor(container, rawName) {
+  const build = buildLegacyTemplateFromEditor(container, rawName);
+  if (!build.ok) {
+    setLegacyWorkbenchError(container, build.message);
+    return;
+  }
+  state.projectExportTemplatesDraft = [...legacyTemplatesDraft(), build.template];
+  state.templateNameDraft = null;
+  markProjectSettingsDirty();
+  renderLegacyExportOptions(container, exportOptionsFromTemplate(build.template), "project");
+}
+
+function legacySaveTemplate(container) {
+  const templates = legacyTemplatesDraft();
+  const selected = findExportTemplate(templates, container.dataset.exportSavedTemplateId);
+  if (!selected) return;
+  const validation = validateTemplateName(container.querySelector("[data-template-name]")?.value ?? "", templates, selected.id);
+  if (!validation.ok) {
+    setLegacyWorkbenchError(container, validation.message);
+    return;
+  }
+  const options = readLegacyExportOptions(container, state.currentProject?.settings?.export || defaultRendererProjectSettings().export);
+  state.projectExportTemplatesDraft = templates.map((template) => template.id === selected.id
+    ? applyEditorContentToTemplate({ ...template, name: validation.name }, options)
+    : template);
+  state.templateNameDraft = null;
+  markProjectSettingsDirty();
+  renderLegacyExportOptions(container, options, "project");
+}
+
+function requestLegacyTemplateSwitch(container, targetId) {
+  // Unsaved custom and built-in selections both have no library link.
+  if (targetId ? targetId === container.dataset.exportSavedTemplateId : container.dataset.exportTemplate === RESOLVE_TEMPLATE_ID) return;
+  if (legacyTemplateEditorDirty(container)) {
+    openTemplateDialog({
+      title: "切换模板？",
+      description: "当前模板编辑器有未保存的修改。",
+      primaryLabel: "保存并切换",
+      secondaryLabel: "放弃并切换",
+      onSecondary: () => legacyPerformTemplateSwitch(container, targetId),
+      onConfirm: () => {
+        // 保存并切换：先提交当前编辑器，再载入目标模板；两步都只写页面草稿。
+        const templates = legacyTemplatesDraft();
+        const selected = findExportTemplate(templates, container.dataset.exportSavedTemplateId);
+        if (selected) {
+          const validation = validateTemplateName(container.querySelector("[data-template-name]")?.value ?? "", templates, selected.id);
+          if (!validation.ok) return validation.message;
+          const options = readLegacyExportOptions(container, state.currentProject?.settings?.export || defaultRendererProjectSettings().export);
+          state.projectExportTemplatesDraft = templates.map((template) => template.id === selected.id
+            ? applyEditorContentToTemplate({ ...template, name: validation.name }, options)
+            : template);
+        } else {
+          const build = buildLegacyTemplateFromEditor(container, container.querySelector("[data-template-name]")?.value ?? "");
+          if (!build.ok) return build.message;
+          state.projectExportTemplatesDraft = [...legacyTemplatesDraft(), build.template];
+        }
+        legacyPerformTemplateSwitch(container, targetId);
+        return null;
+      },
+    });
+    return;
+  }
+  legacyPerformTemplateSwitch(container, targetId);
+}
+
+function legacyPerformTemplateSwitch(container, targetId) {
+  const templates = legacyTemplatesDraft();
+  const target = targetId ? findExportTemplate(templates, targetId) : null;
+  if (targetId && !target) return;
+  state.templateNameDraft = null;
+  markProjectSettingsDirty();
+  renderLegacyExportOptions(container, target ? exportOptionsFromTemplate(target) : exportOptionsForBuiltinTemplate(), "project");
+}
+
+function legacyRequestDeleteTemplate(container, template) {
+  const isCurrent = (container.dataset.exportSavedTemplateId || null) === template.id;
+  openTemplateDialog({
+    title: "删除模板？",
+    description: isCurrent && legacyTemplateEditorDirty(container)
+      ? `删除「${template.name}」？该模板是当前模板且有未保存的修改，删除后将一并丢弃。`
+      : `删除「${template.name}」？模板将从当前项目的模板库中移除。`,
+    primaryLabel: "删除模板",
+    onConfirm: () => {
+      const templates = legacyTemplatesDraft();
+      const fallback = templateAfterDelete(templates, template.id);
+      state.projectExportTemplatesDraft = templates.filter((entry) => entry.id !== template.id);
+      state.templateNameDraft = null;
+      // 删除当前模板后自动切换：下一个模板，否则上一个，否则内置模板。
+      const next = isCurrent
+        ? (fallback ? exportOptionsFromTemplate(fallback) : exportOptionsForBuiltinTemplate())
+        : null;
+      markProjectSettingsDirty();
+      if (next) renderLegacyExportOptions(container, next, "project");
+      else renderProjectTemplateWorkbench(container, readLegacyExportOptions(container, state.currentProject?.settings?.export || defaultRendererProjectSettings().export));
+      return null;
+    },
+  });
+}
+
+async function legacyImportTemplate(container, file) {
+  if (isProjectReadOnly()) return;
+  // Persistent containers are reused when the active project changes.
+  const projectId = state.currentProjectId;
+  const isCurrent = () => container.isConnected && state.currentProjectId === projectId && !isProjectReadOnly();
+  try {
+    if (!/\.csv$/i.test(file.name) || file.size > 5 * 1024 * 1024) throw new Error("请选择不超过 5 MB 的 CSV 模板。");
+    const data = await file.arrayBuffer();
+    if (!isCurrent()) return;
+    const result = await runCsvBackgroundTask({ type: "import-export-template", data, filename: file.name }, [data]);
+    if (!isCurrent()) return;
+    openTemplateDialog({
+      title: "保存导入的 CSV 模板",
+      description: "只保留样表的列结构、顺序和格式，不保存样表数据行。",
+      nameField: true,
+      name: uniqueTemplateName(file.name.replace(/\.[^.]+$/, ""), legacyTemplatesDraft()),
+      primaryLabel: "保存模板",
+      onConfirm: (name) => {
+        if (!isCurrent()) return null;
+        const validation = validateTemplateName(name, legacyTemplatesDraft());
+        if (!validation.ok) return validation.message;
+        const template = createExportTemplate({ name: validation.name, options: result.options, templateId: "imported-csv-v1" });
+        state.projectExportTemplatesDraft = [...legacyTemplatesDraft(), template];
+        state.templateNameDraft = null;
+        markProjectSettingsDirty();
+        renderLegacyExportOptions(container, exportOptionsFromTemplate(template), "project");
+        const status = container.querySelector("[data-template-status]");
+        if (status) status.textContent = `已导入样表「${validation.name}」（${template.columns.length} 列）。保存项目设置后，该项目后续任务默认使用此模板。${result.sourceEncoding.startsWith("gb") ? "源样表为 GBK/GB18030，输出采用 UTF-8。" : ""}`;
+        return null;
+      },
+    });
+  } catch (error) {
+    if (!isCurrent()) return;
+    const status = container.querySelector("[data-template-status]");
+    if (status?.isConnected) status.textContent = error.message || "导入失败";
+  }
+}
+
+/* ---------- 模板对话框（命名 / 切换确认 / 删除确认） ---------- */
+
+function openTemplateDialog(config) {
+  state.templateDialog = config;
+  state.templateDialogOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  if (elements.templateDialogTitle) elements.templateDialogTitle.textContent = config.title || "模板";
+  if (elements.templateDialogDescription) {
+    elements.templateDialogDescription.textContent = config.description || "";
+    elements.templateDialogDescription.hidden = !config.description;
+  }
+  if (elements.templateDialogError) { elements.templateDialogError.hidden = true; elements.templateDialogError.textContent = ""; }
+  if (elements.templateDialogNameField) elements.templateDialogNameField.hidden = !config.nameField;
+  elements.templateDialogName.value = config.name || "";
+  if (elements.templateDialogSecondary) {
+    elements.templateDialogSecondary.hidden = !config.secondaryLabel;
+    elements.templateDialogSecondary.textContent = config.secondaryLabel || "";
+  }
+  if (elements.templateDialogPrimary) elements.templateDialogPrimary.textContent = config.primaryLabel || "确认";
+  if (elements.templateDialog) elements.templateDialog.hidden = false;
+  (config.nameField ? elements.templateDialogName : elements.templateDialogPrimary)?.focus();
+}
+
+function closeTemplateDialog() {
+  if (elements.templateDialog) elements.templateDialog.hidden = true;
+  state.templateDialog = null;
+  // 焦点还原到触发控件，键盘用户不会被丢到文档顶部。
+  state.templateDialogOpener?.focus?.();
+  state.templateDialogOpener = null;
+}
+
+function showTemplateDialogError(message) {
+  if (!elements.templateDialogError) return;
+  elements.templateDialogError.textContent = message || "";
+  elements.templateDialogError.hidden = !message;
+}
+
+function handleTemplateDialogPrimary() {
+  const config = state.templateDialog;
+  if (!config || !config.onConfirm) return;
+  const error = config.nameField
+    ? config.onConfirm(elements.templateDialogName.value)
+    : config.onConfirm();
+  if (error) {
+    showTemplateDialogError(error);
+    return;
+  }
+  closeTemplateDialog();
+}
+
 function renderProjectSettingsForm() {
   const project = state.currentProject;
   if (!project || !elements.projectSettingsForm) return;
@@ -1159,6 +1552,9 @@ function renderProjectSettingsForm() {
   const preserveDraft = Boolean(state.projectSettingsDirty);
   elements.projectSettingsHeading.textContent = `${project.name} · 项目设置`;
   if (!preserveDraft) {
+    // 新鲜渲染时模板库草稿重新跟随持久化的项目设置。
+    state.projectExportTemplatesDraft = null;
+    state.templateNameDraft = null;
     elements.projectNameInput.value = project.name || "";
     elements.projectDescriptionInput.value = project.description || "";
     renderProjectProviderOptions(settings.providerId);
@@ -1223,13 +1619,20 @@ function buildProjectSettingsFromForm() {
   }
   const current = state.currentProject?.settings || defaultRendererProjectSettings();
   const exportOptions = readLegacyExportOptions(elements.projectExportOptions, current.export);
+  // A newly selected provider cannot inherit a model from the old provider.
+  if (elements.projectProvider.value && elements.projectProvider.value !== current.providerId && !elements.projectModel.value) {
+    throw new Error("当前接口尚未加载可用模型，请选择模型后保存。");
+  }
+  const templatesDraft = legacyTemplatesDraft();
+  const hadTemplates = Array.isArray(state.currentProject?.settings?.exportTemplates);
   // The legacy adapter only owns the visible fields; spreading the current
   // snapshot keeps v2 export preferences and future JSON-safe branches intact.
   return {
     ...current,
     version: 2,
-    providerId: elements.projectProvider.value || null,
-    modelId: elements.projectModel.value || null,
+    // Empty, unhydrated selects must not erase a previously configured model.
+    providerId: elements.projectProvider.value || current.providerId || null,
+    modelId: elements.projectModel.value || current.modelId || null,
     accuracyMode: elements.projectAccuracy.value,
     scenarioId: elements.projectScenario.value || null,
     customPrompt: elements.projectCustomPrompt.value.trim(),
@@ -1238,6 +1641,8 @@ function buildProjectSettingsFromForm() {
       comments: { goodTake, holdTake },
     },
     export: exportOptions,
+    // 模板库随项目设置一起保存；历史项目从未建过模板时不写入空列表。
+    ...((templatesDraft.length || hadTemplates) ? { exportTemplates: templatesDraft } : {}),
   };
 }
 
@@ -1294,6 +1699,7 @@ function resetProjectOutputSettings() {
   elements.projectTakeFormat.value = defaults.fieldFormats.take;
   elements.projectGoodComment.value = defaults.comments.goodTake;
   elements.projectHoldComment.value = defaults.comments.holdTake;
+  state.templateNameDraft = null;
   renderLegacyExportOptions(elements.projectExportOptions, defaultRendererProjectSettings().export, "project");
   markProjectSettingsDirty();
   elements.projectSettingsStatus.textContent = "默认值已填入，保存后生效";
@@ -1530,6 +1936,38 @@ function bindEvents() {
     if (event.target === elements.projectDialog) closeProjectDialog();
   });
   elements.projectDialogForm?.addEventListener("submit", createProjectFromDialog);
+  elements.templateDialogClose?.addEventListener("click", closeTemplateDialog);
+  elements.templateDialogCancel?.addEventListener("click", closeTemplateDialog);
+  elements.templateDialogSecondary?.addEventListener("click", () => {
+    const config = state.templateDialog;
+    closeTemplateDialog();
+    config?.onSecondary?.();
+  });
+  elements.templateDialogPrimary?.addEventListener("click", handleTemplateDialogPrimary);
+  elements.templateDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.templateDialog) closeTemplateDialog();
+  });
+  // Escape 关闭 + Tab 焦点圈定，保证键盘可以完成全部模板操作。
+  elements.templateDialog?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      closeTemplateDialog();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusables = [...elements.templateDialog.querySelectorAll("button, input")]
+      .filter((node) => !node.closest("[hidden]") && !node.disabled);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   elements.projectSettingsBack?.addEventListener("click", () => navigate("workspace"));
   elements.projectSettingsForm?.addEventListener("submit", saveProjectSettings);
   // Keep every text/select edit in the legacy form visible to transfer guards;
