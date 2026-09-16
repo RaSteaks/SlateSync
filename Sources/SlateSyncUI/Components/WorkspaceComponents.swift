@@ -71,6 +71,8 @@ struct SlateEmptyState<Actions: View>: View {
         } actions: {
             actions()
         }
+        // Empty-state art stays neutral like every other static icon.
+        .tint(Color.secondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -97,9 +99,9 @@ struct SlatePageHeading: View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .font(.title2.weight(.medium))
-                .foregroundStyle(SlateSyncTheme.accent)
+                .foregroundStyle(.secondary)
                 .frame(width: 44, height: 44)
-                .background(SlateSyncTheme.accent.opacity(0.08),
+                .background(SlateSyncTheme.secondary.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {

@@ -31,14 +31,13 @@ public struct SettingsRootView: View {
         // inside one flexible content host. macOS 15's special Settings TabView
         // host otherwise forces its ideal size into fixed window constraints.
         VStack(spacing: 0) {
-            SlateGlassContainer {
-                Picker("设置分类", selection: $category) {
-                    ForEach(SettingsCategory.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .padding(4)
-                .slateGlassSurface(.control, interactive: true)
+            // The segmented control carries its own native bezel; an added
+            // glass card doubles the frame and reads as a black border on the
+            // dark canvas, so the classifier sits directly on the background.
+            Picker("设置分类", selection: $category) {
+                ForEach(SettingsCategory.allCases) { Text($0.title).tag($0) }
             }
+            .pickerStyle(.segmented).labelsHidden()
             .accessibilityIdentifier("settings.category")
             .padding(density == "compact" ? 12 : 20)
             Divider()
@@ -55,6 +54,9 @@ public struct SettingsRootView: View {
         }
         .slateWindowMinimumSize(width: 700, height: 540)
         .navigationTitle("设置")
+        // Settings shares the workbench canvas instead of the system window
+        // gray, keeping both windows on one neutral scale in each appearance.
+        .background(SlateSyncTheme.canvas)
         .tint(SlateSyncTheme.accent)
         .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         .controlSize(density == "compact" ? .small : .regular)
@@ -381,7 +383,7 @@ public struct SettingsRootView: View {
                 }
                 if settings.live?.restartRequired == true {
                     Text("工作流配置路径已修改，重启 SlateSync 后生效。")
-                        .font(.caption).foregroundStyle(.yellow)
+                        .font(.caption).foregroundStyle(SlateSyncTheme.warning)
                 }
             }
             if let snapshot = settings.live?.runtime {

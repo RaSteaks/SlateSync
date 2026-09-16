@@ -81,6 +81,9 @@ public struct SidebarView: View {
             .padding(density.panelPadding)
         }
         .navigationTitle("SlateSync")
+        // Navigation icons stay neutral; the amber accent is reserved for the
+        // primary action, focus and live-recognition signals (DESIGN.md).
+        .tint(Color.secondary)
         .accessibilityIdentifier("sidebar")
     }
 

@@ -49,6 +49,7 @@ public struct ResolveCSVView: View {
                     importAction
                     Spacer(minLength: 4)
                     Menu("结果操作", systemImage: "ellipsis.circle") { mergeActions }
+                        .tint(Color.secondary)
                     exportAction
                 }
             }.padding(density.panelPadding)
@@ -305,6 +306,7 @@ public struct ResolveCSVView: View {
             // standalone surfaces retain the original local file importer.
             if let onImport { onImport() } else { importsCSV = true }
         }
+        .tint(Color.secondary)
         .disabled(workspace?.selectedTaskID == nil || model.operation.isRunning)
     }
 
@@ -344,7 +346,9 @@ public struct ResolveCSVView: View {
             // The canonical preflight decides whether unresolved warnings need
             // confirmation; stale diagnostics are never used to bypass it.
             performExport()
-        }.disabled(model.table == nil || model.operation.isRunning)
+        }
+        .tint(Color.secondary)
+        .disabled(model.table == nil || model.operation.isRunning)
     }
 
     @ViewBuilder private var tableSummary: some View {

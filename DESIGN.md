@@ -1,18 +1,18 @@
 ---
 version: alpha
 colors:
-  primary: "#3F50BA"
-  accent-soft: "#8C9CFF"
-  canvas-light: "#F1F4F7"
-  canvas-dark: "#151D29"
+  primary: "#B45309"
+  accent-soft: "#F59E0B"
+  canvas-light: "#F6F7F9"
+  canvas-dark: "#1E2229"
   evidence-light: "#FFFFFF"
-  evidence-dark: "#1C2735"
-  success: "#18794E"
-  warning: "#865B0A"
-  danger: "#B33A32"
-  success-dark: "#79D5A5"
-  warning-dark: "#EBC572"
-  danger-dark: "#FF9A91"
+  evidence-dark: "#2A2F37"
+  success: "#1E7A5A"
+  warning: "#7C6A00"
+  danger: "#B03A2E"
+  success-dark: "#7FC9A9"
+  warning-dark: "#E3C36B"
+  danger-dark: "#E58873"
 typography:
   body:
     fontFamily: ".AppleSystemUIFont, PingFang SC, sans-serif"
@@ -65,8 +65,9 @@ components:
 SlateSync is a professional film-production utility used for long, detail-heavy
 sessions. Its visual North Star is a calibrated post-production workstation:
 native macOS structure, graphite instruments, paper-like evidence surfaces and
-one restrained indigo signal color. The signature is a subtle slate-stripe edge
-on project identity surfaces; decoration elsewhere stays quiet.
+one restrained tungsten-amber signal color. The signature is a subtle
+slate-stripe edge on project identity surfaces; decoration elsewhere stays
+quiet.
 
 The product must never resemble a marketing dashboard, neon gaming UI, generic
 rounded-card SaaS template, or touch-first iOS port. Dense information remains
@@ -76,12 +77,39 @@ than stacked ornament.
 ## Colors
 
 `SlateSyncTheme` owns the native runtime mapping of these semantic roles.
-Accent uses #3F50BA in light appearance and #8C9CFF in dark appearance;
-canvas uses #F1F4F7 / #151D29 and evidence uses #FFFFFF / #1C2735.
-Success, warning and danger have explicit light/dark pairs. Body text and
+Accent uses #B45309 in light appearance and #F59E0B in dark appearance;
+canvas uses #F6F7F9 / #1E2229 and evidence uses #FFFFFF / #2A2F37.
+Success uses pine green (#1E7A5A / #7FC9A9), warning uses brass
+(#7C6A00 / #E3C36B), and danger uses brick red (#B03A2E / #E58873).
+The amber accent is an action cue, never proof of success; status retains its
+label and symbol. Low saturation and cool-gray backgrounds establish the quiet
+visual hierarchy; warning sits about twenty degrees apart in hue from the
+amber accent, so a needs-action row never reads as a selected row. Body text and
 separators use system semantic colors. Feature views never embed RGB literals. Native sidebar and
 window materials remain system-owned. Accent is reserved for current selection,
-focus and the primary safe action. Warning and danger remain distinct.
+focus and the primary safe action. Sidebar, toolbar, page-heading, step, log-info
+and empty-state icons render in neutral secondary gray; amber appears only on
+primary action buttons, focus accents and live signals (recognition progress,
+unread dots, locate capsules). Warning and danger remain distinct.
+
+### 配色调整（2026-09-16）
+
+- 整体方向：冷灰阶梯（微蓝调 slate）与单一钨丝琥珀强调；同日更早的暖石灰/
+  鼠尾草方向在提交前被本方案取代。
+- 浅色用纯白证据面承托原稿，冷灰画布区分工具区域；深色用提亮的石墨灰底
+  （画布 #1E2229）与一级面板灰（#2A2F37），整体脱离纯黑以保证文字对比。
+  原稿像素不染色，避免影响场记单核对。
+- 第三轮（同日）：深色中性阶整体提亮；设置窗口改铺主题画布（原为系统窗底灰）；
+  设置分类分段控件不再包玻璃卡片——原生 bezel 已足够，双重描边在深色下呈黑框。
+- 主操作、焦点、进度和项目身份统一使用琥珀 accent；状态采用松绿、黄铜、砖红。
+  warning 与 accent 拉开约 22° 色相，警告行不会与选中行混淆。
+- 图标一律中性：侧栏、工具栏、页首座标、帮助步骤圆点、日志信息点与空态图标
+  使用次级灰；琥珀仅保留在主操作按钮（`slatePrimaryActionStyle`）、搜索框焦点
+  描边和进行中信号（识别进度、tab 未读点、OCR 定位胶囊）。项目身份仍由
+  黑白斜纹承载，项目/页首图标本身不再着色。
+- 系统文字、原生选区、侧栏材质和表格继续由 macOS 管理，尊重系统强调色及辅助功能。
+- 唯一运行时入口为 `SlateSyncTheme`；AppRootView / SettingsRootView 的 tint 和所有共享
+  组件继承它。现有布局、字体、圆角、玻璃及操作流程保持既有契约。
 
 ## Typography
 

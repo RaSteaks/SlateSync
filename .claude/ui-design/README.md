@@ -40,7 +40,7 @@ prototype.html#w=library&theme=light                 # 项目库 · 浅色外观
 - **主张**:从纸面到数据 —— 界面是 DIT 推车上的校准工作台:碳素仪架 + 灯箱证据 + 把场记单的表单几何映进数字表格。
 - **单一主题**:Slate Workbench 是唯一视觉语言；深色/浅色只改变语义 Token 的明暗映射，不改变层级、形状、组件和交互含义。
 - **签名系统**(按场景单点出现):输入页突出灯箱证据；结果页使用铅笔圈/油笔划线；识别进行中才显示 LeaderProgress；项目身份只保留低调斜纹边缘。
-- **色彩**:沿用现行 `DESIGN.md` / `SlateSyncTheme` 语义色对(靛蓝 accent `#3F50BA/#8C9CFF` · 蓝冷 canvas/evidence · 现行 success/warning/danger),不另立色板；原型里的中性阶梯只作实现参考，不成为第二套主题。
+- **色彩**:沿用现行 `DESIGN.md` / `SlateSyncTheme` 语义色对(钨丝琥珀 accent `#B45309/#F59E0B` · 冷灰 canvas/evidence `#F6F7F9-#FFFFFF / #0F1115-#1A1D23` · 松绿/黄铜/砖红 success/warning/danger),不另立色板；原型里的中性阶梯只作实现参考，不成为第二套主题。
 - **形状**:圆角采用 SwiftUI 连续圆角和现有 Token：small 6pt、control 8pt、panel 12pt、sheet 16pt；视图不得出现自定义 7/9/10pt 圆角。
 - **字体**:系统 SF + 苹方(正文与展示)+ SF Mono(时间码/条号/CSV 数据);`Caveat` 仅用于场记单 mock 的手写笔迹(内容,非 UI 字体)。
 - **交互原则**:guard 用空态说明"缺什么、去哪补";所有异步操作由共享 `SlateStatusBar` 发言,不用 toast;tab 圆点提示"那边有新东西"但不抢焦点;危险操作才用模态(删除需输入项目名)。

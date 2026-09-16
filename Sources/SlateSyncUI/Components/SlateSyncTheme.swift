@@ -2,17 +2,22 @@ import AppKit
 import SwiftUI
 
 /// Semantic roles shared by native scenes. System-owned chrome and selection
-/// remain adaptive; only evidence surfaces and the restrained signal use ink.
+/// remain adaptive. Cool slate-gray surfaces and a single tungsten-amber
+/// signal keep the workbench cohesive in both appearances; status hues remain
+/// distinct from the amber accent.
 public enum SlateSyncTheme {
-    public static let accent = adaptive(light: 0x3F50BA, dark: 0x8C9CFF)
-    public static let evidenceSurface = adaptive(light: 0xFFFFFF, dark: 0x1C2735)
-    public static let canvas = adaptive(light: 0xF1F4F7, dark: 0x151D29)
+    // DESIGN.md palette: amber actions, cool slate canvas, white evidence.
+    // Keep evidence images unmodified; these colors apply only to their
+    // containers.
+    public static let accent = adaptive(light: 0xB45309, dark: 0xF59E0B)
+    public static let evidenceSurface = adaptive(light: 0xFFFFFF, dark: 0x2A2F37)
+    public static let canvas = adaptive(light: 0xF6F7F9, dark: 0x1E2229)
     public static let primary = Color.primary
     public static let secondary = Color.secondary
     public static let separator = Color(nsColor: .separatorColor)
-    public static let success = adaptive(light: 0x18794E, dark: 0x79D5A5)
-    public static let warning = adaptive(light: 0x865B0A, dark: 0xEBC572)
-    public static let danger = adaptive(light: 0xB33A32, dark: 0xFF9A91)
+    public static let success = adaptive(light: 0x1E7A5A, dark: 0x7FC9A9)
+    public static let warning = adaptive(light: 0x7C6A00, dark: 0xE3C36B)
+    public static let danger = adaptive(light: 0xB03A2E, dark: 0xE58873)
     // DESIGN.md `rounded` ladder. Custom containers use `.continuous` corners;
     // feature views must not introduce local 7/9/10 pt radii (single-theme rule).
     public static let smallRadius: CGFloat = 6

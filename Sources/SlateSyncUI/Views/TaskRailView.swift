@@ -28,6 +28,7 @@ public struct TaskRailView: View {
                 SlateSearchField(title: "搜索任务", text: $model.searchText, identifier: "workspace.task.search")
                 Button("新建任务", systemImage: "plus") { Task { await model.createTask() } }
                     .labelStyle(.iconOnly).help("新建任务")
+                    .tint(Color.secondary)
                     .accessibilityIdentifier(AccessibilityID.taskCreate)
             }.padding(density.panelPadding)
             Divider()

@@ -113,9 +113,9 @@ public struct HelpView: View {
                         HStack(alignment: .top, spacing: 10) {
                             Text("\(index + 1)")
                                 .font(.caption.weight(.bold).monospacedDigit())
-                                .foregroundStyle(SlateSyncTheme.accent)
+                                .foregroundStyle(.secondary)
                                 .frame(width: 22, height: 22)
-                                .background(SlateSyncTheme.accent.opacity(0.12), in: .circle)
+                                .background(SlateSyncTheme.secondary.opacity(0.12), in: .circle)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(model.stepTitle(step)).font(.subheadline.weight(.semibold))
                                 Text(model.stepDetail(step))

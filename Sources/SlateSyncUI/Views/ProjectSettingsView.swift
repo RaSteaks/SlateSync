@@ -84,6 +84,7 @@ public struct ProjectSettingsView: View {
                 // avoid flashing the unrelated "no open project" empty state.
                 if case .failed = model.operation {
                     ContentUnavailableView("无法读取项目设置", systemImage: "exclamationmark.triangle")
+                        .tint(Color.secondary)
                 } else {
                     ProgressView("正在读取项目设置…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -91,6 +92,7 @@ public struct ProjectSettingsView: View {
             } else {
                 ContentUnavailableView(
                     "未打开项目", systemImage: "slider.horizontal.3", description: Text("请先从项目库打开一个活跃项目。"))
+                    .tint(Color.secondary)
             }
         }
         .navigationTitle("项目设置")

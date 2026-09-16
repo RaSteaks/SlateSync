@@ -41,17 +41,19 @@ SlateSync 处理的信任链是:**纸质场记单 → 结构化数据 → 已校
 
 > **决定(2026-09-12)**:配色沿用现行 `DESIGN.md` / `SlateSyncTheme` 的语义色对,
 > 本设计**不另立色板**。下表是原型 CSS 变量与现行体系的映射关系。
+> **更新(2026-09-16)**:全局配色调整为冷灰阶梯 + 钨丝琥珀(见 DESIGN.md「配色调整(2026-09-16)」),
+> 下表与中性阶梯已同步。
 
 ### 语义 Token(dark 优先,成对给出 light;唯一来源为 DESIGN.md / SlateSyncTheme)
 
 | Token | Dark | Light | 来源 |
 | --- | --- | --- | --- |
-| `accent` | `#8C9CFF` | `#3F50BA` | DESIGN.md `accent-soft` / `primary` |
-| `canvas` | `#151D29` | `#F1F4F7` | DESIGN.md `canvas-dark` / `canvas-light` |
-| `evidenceSurface`(原 `panel`) | `#1C2735` | `#FFFFFF` | DESIGN.md `evidence-dark` / `evidence-light` |
-| `ok` | `#79D5A5` | `#18794E` | DESIGN.md `success-dark` / `success` |
-| `warn` | `#EBC572` | `#865B0A` | DESIGN.md `warning-dark` / `warning` |
-| `danger` | `#FF9A91` | `#B33A32` | DESIGN.md `danger-dark` / `danger` |
+| `accent` | `#F59E0B` | `#B45309` | DESIGN.md `accent-soft` / `primary` |
+| `canvas` | `#1E2229` | `#F6F7F9` | DESIGN.md `canvas-dark` / `canvas-light` |
+| `evidenceSurface`(原 `panel`) | `#2A2F37` | `#FFFFFF` | DESIGN.md `evidence-dark` / `evidence-light` |
+| `ok` | `#7FC9A9` | `#1E7A5A` | DESIGN.md `success-dark` / `success` |
+| `warn` | `#E3C36B` | `#7C6A00` | DESIGN.md `warning-dark` / `warning` |
+| `danger` | `#E58873` | `#B03A2E` | DESIGN.md `danger-dark` / `danger` |
 | `paper` | `#F2EEE3` | `#F2EEE3` | 证据内容色(只属于纸面内容),不属于主题 |
 
 ### SwiftUI / Figma 映射
@@ -67,7 +69,7 @@ SlateSync 处理的信任链是:**纸质场记单 → 结构化数据 → 已校
 | 成功 / 待人工 / 不可恢复 | `SlateSyncTheme.success / warning / danger` | `Color/semantic/success` / `warning` / `danger` |
 | 正文 / 次级 / 分隔 | `Color.primary / .secondary / SlateSyncTheme.separator` | `Color/text/primary` / `secondary` / `border` |
 
-Figma 变量只镜像这些运行时语义；它不是新的颜色来源。原型中为了表现蓝冷层级而使用的 `raised`、`inset`、
+Figma 变量只镜像这些运行时语义；它不是新的颜色来源。原型中为了表现冷灰层级而使用的 `raised`、`inset`、
 `line-strong`，实现时优先使用 SwiftUI material、系统层级色和现有分隔线，避免复制一套页面专用灰阶。
 
 ### 原型层级参考（不作为第二套主题）
@@ -77,11 +79,11 @@ HTML 原型和 Figma 预览需要显式表现面板/分隔线层级,以下值只
 
 | Token | Dark | Light | 实施时对应 |
 | --- | --- | --- | --- |
-| `raised` | `#1F2B3C` | `#F7F9FC` | 系统材质 / `-.quaternary` 系 |
-| `inset` | `#111A27` | `#E7ECF3` | 下沉区,如灯箱底 |
-| `line` | `#2B3A4E` | `#DBE2EC` | `Color.separator` |
-| `line-strong` | `#3C4E66` | `#C5CFDE` | 强分隔/边框 |
-| `text` / `text-2` / `text-3` | `#E9EDF4` / `#A3B1C6` / `#71829C` | `#1D2531` / `#5C6B82` / `#8D9AAE` | `.primary` / `.secondary` / 系统三级 |
+| `raised` | `#2A2F37` | `#FFFFFF` | 系统材质 / `-.quaternary` 系 |
+| `inset` | `#171B21` | `#EDEFF2` | 下沉区,如灯箱底 |
+| `line` | `#3A4149` | `#DDE1E6` | `Color.separator` |
+| `line-strong` | `#4C545E` | `#C4C9D0` | 强分隔/边框 |
+| `text` / `text-2` / `text-3` | `#E8EAED` / `#A8B0BA` / `#6E7681` | `#16181D` / `#5C6470` / `#8A919B` | `.primary` / `.secondary` / 系统三级 |
 
 实施原则:能映射到系统语义色(`Color.primary`、`.separator` 等)的优先映射;
 确实需要落库的阶梯(如 `inset`、`line-strong`)以**增补 SlateSyncTheme 静态项**的方式进入,
@@ -89,10 +91,12 @@ HTML 原型和 Figma 预览需要显式表现面板/分隔线层级,以下值只
 
 ### 使用规则
 
-1. **靛蓝 accent 是唯一信号色**:选中态、焦点环、主按钮、进度、tab 下划线——
+1. **琥珀 accent 是唯一信号色**:选中态、焦点环、主按钮、进度、tab 下划线——
    一切"当前发生的事"。规则与现行 `DESIGN.md` 一致:accent 只用于当前选择、焦点与主安全操作。
-2. **警告、危险、成功沿用现行语义对**,且始终配图标,不单靠颜色区分。
-3. **中性色只走蓝冷灰阶**,禁止出现纯黑 `#000` 与纯白 `#FFF` 以外的未锚定灰。
+   侧栏、工具栏、页首座标与空态图标一律中性次级灰，不参与 accent(2026-09-16 起)。
+2. **警告、危险、成功沿用现行语义对**,且始终配图标,不单靠颜色区分;warn(黄铜)
+   与 accent(琥珀)保持约 22° 色相差,警告不得读作选中。
+3. **中性色只走冷灰阶(微蓝调 slate)**,禁止出现纯黑 `#000` 与纯白 `#FFF` 以外的未锚定灰。
 4. **灯箱反转**:工作区里最大的一块亮色永远是证据预览(纸面)。整个界面的明暗结构
    模拟"暗房里的灯箱",而不是"黑底荧光字"。
 5. 语义色只能以 `文字 / 图标 / 3px 左缘 / dim 底色` 四种形式出现,禁止大面积色块。
@@ -198,8 +202,8 @@ HTML 原型和 Figma 预览需要显式表现面板/分隔线层级,以下值只
 
 - `DESIGN.md` 仍是唯一设计规范来源,`SlateSyncTheme` 仍是运行时唯一取色来源,
   功能视图禁止内嵌 RGB 字面量的规则继续有效。
-- 语义色对原样沿用(primary/`#3F50BA/#8C9CFF`、canvas、evidence、success/warning/danger),
-  本提案**不新增任何主题色**。
+- 语义色对原样沿用(primary/`#B45309/#F59E0B`、canvas、evidence、success/warning/danger,
+  2026-09-16 冷灰 + 钨丝琥珀方案),本提案**不新增任何主题色**。
 - 原生 macOS 三栏骨架、无渐变装饰、中文动词语汇、状态栏反馈制、密度双档、
   保存屏障、Evidence 对照宽度规则(420pt/40%)全部保留。
 

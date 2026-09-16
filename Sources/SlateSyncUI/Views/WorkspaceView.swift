@@ -130,6 +130,7 @@ public struct WorkspaceView: View {
                 Button(showsTasks ? "隐藏任务列表" : "显示任务列表", systemImage: "sidebar.left") {
                     changeLayout { showsTasks.toggle() }
                 }
+                .tint(Color.secondary)
                 .help("显示或隐藏当前项目的任务")
                 .accessibilityIdentifier("workspace.tasks.toggle")
             }
@@ -137,6 +138,7 @@ public struct WorkspaceView: View {
                 Button("保存", systemImage: "square.and.arrow.down") {
                     Task { try? await workspace.flush() }
                 }
+                .tint(Color.secondary)
                 // The File menu owns the single ⌘S registration; this toolbar
                 // button invokes the same workspace owner without competing.
                 Button("开始识别", systemImage: "viewfinder") { startRecognition() }
@@ -147,6 +149,7 @@ public struct WorkspaceView: View {
                     .accessibilityIdentifier(AccessibilityID.recognize)
                 if recognition.operation.isRunning {
                     Button("取消识别", systemImage: "xmark.circle") { recognition.cancel() }
+                        .tint(Color.secondary)
                         .accessibilityIdentifier(AccessibilityID.recognitionCancel)
                 }
             }
@@ -287,7 +290,9 @@ public struct WorkspaceView: View {
                 if section == .input {
                     Button("识别配置", systemImage: "slider.horizontal.3") {
                         changeLayout { showsConfiguration = !(showsConfiguration ?? (availableWidth >= 900)) }
-                    }.accessibilityIdentifier("workspace.configuration.toggle")
+                    }
+                    .tint(Color.secondary)
+                    .accessibilityIdentifier("workspace.configuration.toggle")
                 } else if section == .result {
                     Toggle("原稿对照", isOn: originalBinding)
                         .toggleStyle(.button)
@@ -432,7 +437,9 @@ public struct WorkspaceView: View {
                 SlatePanelHeading(title: "识别配置")
                 Button("收起", systemImage: "chevron.right") {
                     changeLayout { showsConfiguration = false }
-                }.help("收起识别配置，扩大预览区域")
+                }
+                .tint(Color.secondary)
+                .help("收起识别配置，扩大预览区域")
                     .accessibilityIdentifier("workspace.configuration.close")
             }.padding(density.panelPadding)
             Form {
@@ -527,7 +534,9 @@ public struct WorkspaceView: View {
                                 taskID: workspace.selectedTaskID)
                         }
                     }
-                }.fixedSize()
+                }
+                .tint(Color.secondary)
+                .fixedSize()
             }.padding(.horizontal, density.panelPadding).padding(.bottom, 12)
         }
     }
@@ -621,6 +630,7 @@ public struct WorkspaceView: View {
                         HStack {
                             SlatePanelHeading(title: "原稿对照", subtitle: "翻页仅切换原稿，不改变结果选择")
                             Button("关闭", systemImage: "xmark") { changeLayout { showsOriginal = false } }
+                                .tint(Color.secondary)
                                 .accessibilityIdentifier("workspace.original.close")
                         }.padding(density.panelPadding)
                         MediaPreviewView(document: document, pageIndex: $media.pageIndex)

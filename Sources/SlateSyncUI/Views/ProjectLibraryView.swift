@@ -144,10 +144,12 @@ public struct ProjectLibraryView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             if let project = model.selectedProject, project.archivedAt == nil {
                 Button("打开", systemImage: "arrow.right.circle") { onOpen(project) }
+                    .tint(Color.secondary)
             }
             // Mirror contextual operations for keyboard and toolbar access.
             if let project = model.selectedProject {
                 Menu("项目操作", systemImage: "slider.horizontal.3") { actions(for: project) }
+                    .tint(Color.secondary)
             }
             Menu("项目库操作", systemImage: "ellipsis.circle") {
                 Button("导入项目…") { importsProject = true }
@@ -160,6 +162,7 @@ public struct ProjectLibraryView: View {
                 Button("移动项目库…") { relocatesLibrary = true }
                 Button("重命名项目库…") { showsRename = true }
             }
+            .tint(Color.secondary)
             Button("新建项目", systemImage: "plus") { model.showsCreateSheet = true }
                 .slatePrimaryActionStyle()
                 .accessibilityIdentifier(AccessibilityID.projectCreate)
@@ -212,7 +215,7 @@ private struct ProjectRow: View {
         HStack(spacing: 12) {
             Image(systemName: archived ? "archivebox" : "film.stack")
                 .font(.title3)
-                .foregroundStyle(archived ? .secondary : SlateSyncTheme.accent)
+                .foregroundStyle(.secondary)
                 .frame(width: 40, height: 40)
                 .background(SlateSyncTheme.canvas, in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
                 .accessibilityHidden(true)

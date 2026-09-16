@@ -88,5 +88,6 @@ private extension ProductLogSeverity {
     var title: String { switch self { case .debug: "调试"; case .info: "信息"; case .warning: "警告"; case .error: "错误" } }
     var symbol: String { switch self { case .debug: "ladybug"; case .info: "info.circle"; case .warning: "exclamationmark.triangle"; case .error: "xmark.octagon" } }
     // Severity uses the same adaptive semantic colors as feature feedback.
-    var color: Color { switch self { case .debug: .secondary; case .info: SlateSyncTheme.accent; case .warning: SlateSyncTheme.warning; case .error: SlateSyncTheme.danger } }
+    // Info stays neutral so amber is reserved for live-recognition signals.
+    var color: Color { switch self { case .debug: .secondary; case .info: .secondary; case .warning: SlateSyncTheme.warning; case .error: SlateSyncTheme.danger } }
 }

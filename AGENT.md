@@ -1,5 +1,40 @@
 # SlateSync 当前项目方案
 
+## 2026-09-16 全局配色调整
+
+- 共享 SlateSyncTheme 改为冷灰阶梯（微蓝调 slate）底色与单一钨丝琥珀强调色，覆盖两个外观模式；
+  同日更早的暖石灰 / 鼠尾草方向在提交前被本方案取代，未留下中间提交。
+- accent 亮 / 暗用 #B45309 / #F59E0B；canvas #F6F7F9 / #1E2229；evidenceSurface #FFFFFF / #2A2F37。
+  成功、警告、错误分别采用松绿 #1E7A5A / #7FC9A9、黄铜 #7C6A00 / #E3C36B、砖红 #B03A2E / #E58873；
+  保留文字与图标语义，不以颜色独自表达状态。
+- warning 从赭金系移到黄铜：新 accent 为琥珀（色相约 28°），旧赭金（约 33°）与其明度相近，
+  警告行会与选中行混淆；黄铜（约 50°）拉开约 22° 色相。状态三色整体从暖土系转为冷调系以贴合冷灰底。
+- SettingsRootView「重启生效」提示由系统 .yellow 改为 SlateSyncTheme.warning，消除唯一的
+  游离状态色字面量。SlateBadge 黑白斜纹、TakeMark systemGray 铅笔与黑色阴影 / 遮罩 / 径向渐变
+  为既定豁免（内容性标识，以及任何色板下均为黑色的阴影效果）；PreparedImageEncoder 白底属
+  图像处理非 UI；App 图标（build/slatesync.icon 蓝色渐变）为对外品牌资产，本次不动，留作后续选项。
+- DESIGN.md 与运行时颜色同步；原稿像素、系统原生选区与文字保持原有所有权。
+  `.claude/ui-design/design-system.md` 与其 README 的靛蓝旧色板章节同步到本方案（此前已过期）。
+- 第二轮（同日应用户反馈）图标中性化：琥珀不再用于全体图标。侧栏（含底部全局设置/
+  外观/密度按钮）、工具栏普通按钮与菜单、项目库行座标、`SlatePageHeading` 页首座标、
+  帮助步骤圆点、日志信息点与全部空态图标改为中性次级灰（`.tint(Color.secondary)` 或
+  `.foregroundStyle(.secondary)`）。琥珀仅保留在主操作按钮（`slatePrimaryActionStyle`）、
+  搜索框焦点描边与进行中信号（LeaderProgress、tab 未读点、OCR 定位胶囊）。
+  `SettingsRootView` 表单控件与分段选择器保留 accent tint（焦点/选中语义）。
+- 第三轮（同日应用户反馈）：深色中性阶整体提亮脱离纯黑（canvas #0F1115→#1E2229、
+  evidenceSurface #1A1D23→#2A2F37），改善文字与灰底的对比；设置窗口改铺
+  `SlateSyncTheme.canvas`（原为系统窗底灰，不参与主题）；设置分类分段控件不再包
+  `.control` 玻璃卡片——分段控件自带原生 bezel，双重描边在深色下呈黑框。
+  `.claude/ui-design/design-system.md` 中性阶梯同步提亮。
+- 验证：`swift build -Xswiftc -warnings-as-errors` 通过；`swift test --quiet` 347 项、
+  2 项按环境跳过、0 失败；`git diff --check HEAD` 通过。accent 与三类状态色对画布和证据面
+  共 16 组（token × 外观 × 背景）对比度全部 ≥ 4.68:1，其中 dark accent 图形为 6.27:1–7.43:1。
+  运行中界面已按浅色 / 深色两种外观截图目检（`script/build_and_run.sh --verify` 启动，
+  项目库视图）：冷灰画布、纯白证据面、中性图标与琥珀单点强调符合预期，原生选区仍为系统蓝。
+  目检时登录钥匙串对重建二进制弹出 `com.slatesync.local-project-encryption` 授权框
+  （签名 ACL 失配或钥匙串锁定所致，与配色改动无关，未代为应答）；项目库主数据目检改用
+  `SLATESYNC_TEST_ROOT` 隔离实例完成。macOS 26 原生玻璃合成仍需 macOS 26 环境补充截图验收。
+
 ## 2026-09-15 Liquid Glass review 修复
 
 - 两份 review 去重为 6 项：修复中性状态色、增强对比度动态刷新、配置面板竖向分隔、凭据胶囊形状与冗余描边、项目库摘要底色层级及搜索框重复描边。
