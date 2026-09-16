@@ -129,6 +129,57 @@ describe("modern lifecycle boundaries", () => {
     expect(states.at(-1)).toBe("saved");
   });
 
+  it("retries the newest edit after an older save fails, including repeated failure", async () => {
+    let rejectFirst!: (error: Error) => void;
+    const first = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+    const attempts: string[] = [];
+    const states: string[] = [];
+    const autosave = createTaskAutosave({
+      capture: () => null,
+      delayMs: 60_000,
+      onState: (state) => states.push(state),
+      save: async (task) => {
+        attempts.push(String(task.filename));
+        if (attempts.length === 1) await first;
+        if (attempts.length === 2) throw new Error("still offline");
+      },
+    });
+    try {
+      autosave.markDirty({ filename: "old" });
+      const initial = autosave.flush();
+      autosave.markDirty({ filename: "intermediate" });
+      autosave.markDirty({ filename: "newest" });
+      rejectFirst(new Error("offline"));
+      expect(await initial).toBe(false);
+      expect(await autosave.retry()).toBe(false);
+      expect(states).not.toContain("saved");
+      expect(await autosave.retry()).toBe(true);
+      expect(attempts).toEqual(["old", "newest", "newest"]);
+      expect(autosave.hasPending()).toBe(false);
+      expect(states.at(-1)).toBe("saved");
+    } finally { autosave.reset(); }
+  });
+
+  it("does not restore a failed old scope over a new task", async () => {
+    let rejectOld!: (error: Error) => void;
+    const old = new Promise<void>((_resolve, reject) => { rejectOld = reject; });
+    const saved: string[] = [];
+    const autosave = createTaskAutosave({ capture: () => null, delayMs: 60_000, onState: () => {},
+      save: async (task) => { if (task.filename === "old") await old; saved.push(String(task.filename)); },
+    });
+    try {
+      autosave.markDirty({ filename: "old" });
+      const saving = autosave.flush();
+      autosave.reset();
+      autosave.markDirty({ filename: "new task" });
+      rejectOld(new Error("old failed"));
+      expect(await saving).toBe(false);
+      expect(await autosave.flush()).toBe(true);
+      expect(saved).toEqual(["new task"]);
+      expect(autosave.hasPending()).toBe(false);
+    } finally { autosave.reset(); }
+  });
+
   it("exposes the Main-assigned task ID after an autosave", async () => {
     const autosave = createTaskAutosave({
       capture: () => null,

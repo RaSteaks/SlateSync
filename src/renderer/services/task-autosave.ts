@@ -36,7 +36,10 @@ export function createTaskAutosave({ capture, save, onState, delayMs = 500 }: { 
             savedTaskId = await save(target.task);
           } catch {
             if (target.scope === scope) {
-              pending = target;
+              // An edit queued during the failed write owns the newer version.
+              // Restoring the failed snapshot must never overwrite that edit.
+              const newer = pending as PendingSnapshot | null;
+              if (!newer || newer.version < target.version) pending = target;
               report(target.scope, "error");
             }
             flushRequested = false;
@@ -47,7 +50,7 @@ export function createTaskAutosave({ capture, save, onState, delayMs = 500 }: { 
             // Keep the Main-assigned ID available to a recognition request even
             // when the Workspace route was unmounted during this save.
             lastSavedTaskId = typeof savedTaskId === "string" && savedTaskId ? savedTaskId : target.task.id || null;
-            if (!pending) report(target.scope, "saved");
+            if (!pending && savedVersion === version) report(target.scope, "saved");
           }
           // An await above allows markDirty to enqueue a newer snapshot even
           // though control-flow analysis only sees the earlier null write.

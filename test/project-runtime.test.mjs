@@ -161,3 +161,110 @@ test("runtime close drains every open project context", async () => {
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+// Ownership regressions: concurrency and retention are tested with real temp
+// SQLite handles so a leaked or prematurely closed connection is observable.
+test("concurrent first requests share one owner and close every handle", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-runtime-concurrent-"));
+  const library = createProjectLibrary(join(root, "library"));
+  const runtime = createProjectRuntime(library);
+  try {
+    const project = await library.createProject({ name: "parallel" });
+    const contexts = await Promise.all(Array.from({ length: 8 }, () => runtime.get(project.id)));
+    assert.equal(new Set(contexts).size, 1);
+    await runtime.close();
+    assert.ok(contexts.every((context) => !context.db.open));
+  } finally { await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("close during initialization drains the lease and forbids new acquisition", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-runtime-drain-"));
+  const library = createProjectLibrary(join(root, "library"));
+  let entered;
+  let resume;
+  const started = new Promise((resolve) => { entered = resolve; });
+  const blocked = new Promise((resolve) => { resume = resolve; });
+  const runtime = createProjectRuntime({
+    getProjectRow: (...args) => library.getProjectRow(...args),
+    async summarizeProjectRow(...args) { entered(); await blocked; return library.summarizeProjectRow(...args); },
+  });
+  let lease;
+  try {
+    const project = await library.createProject({ name: "drain" });
+    const opening = runtime.acquire(project.id);
+    await started;
+    let closed = false;
+    const closing = runtime.closeProject(project.id).then(() => { closed = true; });
+    await assert.rejects(runtime.acquire(project.id), { code: "PROJECT_BUSY" });
+    resume();
+    lease = await opening;
+    assert.equal(closed, false);
+    assert.equal(lease.context.db.open, true);
+    await lease.release();
+    await closing;
+    assert.equal(lease.context.db.open, false);
+    assert.equal((await runtime.get(project.id)).db.open, true);
+  } finally { resume(); await lease?.release(); await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("failed initialization closes its handle and allows retry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-runtime-failed-"));
+  const library = createProjectLibrary(join(root, "library"));
+  let failedHandle;
+  const runtime = createProjectRuntime({
+    getProjectRow: (...args) => library.getProjectRow(...args),
+    summarizeProjectRow(row, options) {
+      if (!failedHandle) { failedHandle = options.db; throw new Error("synthetic summary failure"); }
+      return library.summarizeProjectRow(row, options);
+    },
+  });
+  try {
+    const project = await library.createProject({ name: "retry" });
+    await assert.rejects(runtime.get(project.id), /synthetic summary failure/);
+    assert.equal(failedHandle.open, false);
+    assert.equal(runtime.stats().contexts, 0);
+    assert.equal((await runtime.get(project.id)).db.open, true);
+  } finally { await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("idle capacity evicts the oldest context while active leases survive", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-runtime-idle-"));
+  const library = createProjectLibrary(join(root, "library"));
+  const runtime = createProjectRuntime(library, { idleMs: 25 });
+  let active;
+  try {
+    const a = await library.createProject({ name: "active" });
+    const b = await library.createProject({ name: "old idle" });
+    const c = await library.createProject({ name: "new idle" });
+    active = await runtime.acquire(a.id);
+    const old = await runtime.get(b.id);
+    const recent = await runtime.get(c.id);
+    assert.equal(old.db.open, false);
+    assert.equal(recent.db.open, true);
+    assert.equal(active.context.db.open, true);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(recent.db.open, false);
+    assert.equal(active.context.db.open, true);
+    assert.deepEqual(runtime.stats(), { contexts: 1, leases: 1, idle: 0 });
+    await active.release();
+    await active.release(); // Idempotent cleanup cannot underflow lease counts.
+    assert.equal(runtime.stats().leases, 0);
+  } finally { await active?.release(); await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("concurrent archived read and write keep their own access checks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-runtime-access-"));
+  const library = createProjectLibrary(join(root, "library"));
+  const runtime = createProjectRuntime(library);
+  try {
+    const project = await library.createProject({ name: "archived concurrency" });
+    await library.archiveProject(project.id);
+    const [write, read] = await Promise.allSettled([
+      runtime.get(project.id), runtime.get(project.id, { allowArchived: true }),
+    ]);
+    assert.equal(write.status, "rejected");
+    assert.equal(write.reason.code, "PROJECT_ARCHIVED");
+    assert.equal(read.status, "fulfilled");
+    assert.ok(read.value.project.archivedAt);
+  } finally { await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true }); }
+});

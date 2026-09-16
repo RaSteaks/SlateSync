@@ -1902,3 +1902,178 @@ describe("electron IPC handlers", () => {
     assert.equal(runtimeSettings.ocrPythonPath, "");
   });
 });
+
+describe("real storage Worker IPC lifecycle", () => {
+  it("quit drains an accepted save before storage shutdown", async () => {
+    const { createStorageClient } = await import("../lib/storage-client.mjs");
+    const root = await mkdtemp(join(tmpdir(), "slatesync-ipc-worker-save-"));
+    const storage = createStorageClient();
+    let reopened;
+    try {
+      await storage.initialize({ root: join(root, "library") });
+      const project = await storage.projectLibrary.createProject({ name: "drain save" });
+      const ipc = createMockIpcMain();
+      const lifecycle = registerIpcHandlers(ipc, createMockContext({ projectLibrary: storage.projectLibrary, projectRuntime: storage.projectRuntime }));
+      // Invoke then immediately quit: admission happened, but the handler may
+      // still be waiting for its Worker lease and must not lose the save.
+      const saving = ipc.invoke("save-task", { projectId: project.id, task: { filename: "durable.png" } });
+      const shutdown = lifecycle.shutdown();
+      await assert.rejects(ipc.invoke("list-projects"), { code: "APP_CLOSING" });
+      const id = await saving;
+      await shutdown;
+      assert.equal((await storage.stats()).leases, 0);
+      await storage.close();
+      reopened = createStorageClient();
+      await reopened.initialize({ root: join(root, "library") });
+      assert.equal((await (await reopened.projectRuntime.get(project.id)).taskStore.loadTask(id)).filename, "durable.png");
+    } finally { await storage.close(); await reopened?.close(); await rm(root, { recursive: true, force: true }); }
+  });
+
+  for (const action of ["cancel", "quit"]) {
+    it(`${action} retains the recognition lease through diagnostic persistence`, async () => {
+      const { createStorageClient } = await import("../lib/storage-client.mjs");
+      const root = await mkdtemp(join(tmpdir(), "slatesync-ipc-worker-recognition-"));
+      const storage = createStorageClient();
+      let start;
+      let abort;
+      let finish;
+      const started = new Promise((resolve) => { start = resolve; });
+      const aborted = new Promise((resolve) => { abort = resolve; });
+      const gate = new Promise((resolve) => { finish = resolve; });
+      let lifecycle;
+      try {
+        await storage.initialize({ root: join(root, "library"), runtimeOptions: { idleMs: 20 } });
+        const project = await storage.projectLibrary.createProject({ name: action });
+        const ipc = createMockIpcMain();
+        lifecycle = registerIpcHandlers(ipc, createMockContext({
+          projectLibrary: storage.projectLibrary,
+          projectRuntime: storage.projectRuntime,
+          recognize: async (_input, { signal }) => {
+            start();
+            await new Promise((resolve) => {
+              if (signal.aborted) resolve();
+              else signal.addEventListener("abort", resolve, { once: true });
+            });
+            abort();
+            await gate;
+            throw Object.assign(new Error("识别已停止"), { code: "RECOGNITION_CANCELED" });
+          },
+        }));
+        const recognition = ipc.invoke("recognize", { projectId: project.id, provider: "openai", model: "synthetic", filename: "slate.png" });
+        const rejection = assert.rejects(recognition, { code: "RECOGNITION_CANCELED" });
+        await started;
+        const stopping = action === "cancel" ? ipc.invoke("cancel-recognition", { projectId: project.id }) : lifecycle.shutdown();
+        await aborted;
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        assert.equal((await storage.stats()).leases, 1);
+        if (action === "cancel") await assert.rejects(ipc.invoke("delete-project", { id: project.id }), { code: "PROJECT_BUSY" });
+        else await assert.rejects(ipc.invoke("list-projects"), { code: "APP_CLOSING" });
+        finish();
+        await rejection;
+        await stopping;
+        assert.equal((await storage.stats()).leases, 0);
+        const context = await storage.projectRuntime.get(project.id);
+        assert.equal((await context.diagnostics.listSessions()).length, 1);
+        assert.deepEqual(await context.taskStore.listTasks(), []);
+        if (action === "cancel") await ipc.invoke("delete-project", { id: project.id });
+      } finally {
+        finish();
+        await lifecycle?.shutdown();
+        await storage.close();
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+it("late cancellation waits for the asynchronous storage lease release", async () => {
+  let releaseStarted;
+  let finishRelease;
+  const started = new Promise((resolve) => { releaseStarted = resolve; });
+  const gate = new Promise((resolve) => { finishRelease = resolve; });
+  const project = { id: "late-release", settings: {} };
+  const ipc = createMockIpcMain();
+  registerIpcHandlers(ipc, createMockContext({
+    projectRuntime: {
+      acquire: async () => ({ release: async () => { releaseStarted(); await gate; } }),
+      get: async () => ({ project, taskStore: null, scenarioStore: null, diagnostics: null }),
+    },
+    recognize: async () => ({ provider: "synthetic", model: "synthetic", pageCount: 1, durationMs: 1, result: { records: [] } }),
+  }));
+  const recognition = ipc.invoke("recognize", { projectId: project.id, provider: "openai", model: "synthetic", filename: "slate.png" });
+  try {
+    await started;
+    let canceled = false;
+    const cancel = ipc.invoke("cancel-recognition", { projectId: project.id }).then((value) => { canceled = true; return value; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(canceled, false);
+    finishRelease();
+    assert.deepEqual(await cancel, { canceled: true });
+    await recognition;
+  } finally { finishRelease(); await recognition; }
+});
+
+// Shutdown cancels both established probes and handlers admitted in the same tick.
+for (const startedFirst of [false, true]) {
+  it(`shutdown aborts model probes and drains cache persistence (started=${startedFirst})`, async () => {
+    const providerId = "openai-compatible:22222222-2222-4222-8222-222222222222";
+    let start;
+    const started = new Promise((resolve) => { start = resolve; });
+    let signalSeen;
+    let persisted = false;
+    const ipc = createMockIpcMain();
+    const lifecycle = registerIpcHandlers(ipc, createMockContext({
+      runtimeCustomProviders: [{ id: providerId, name: "synthetic", baseUrl: "https://unused.invalid/v1",
+        transport: "chat-completions", jsonMode: "json_schema", imageDetail: "high",
+        manualModelIds: ["synthetic"], revision: 1, capabilityCache: {} }],
+      globalConfigStore: { save: async (payload) => { persisted = true; return payload; } },
+      probeModels: async ({ signal }) => {
+        signalSeen = signal;
+        start();
+        if (!signal.aborted) await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+        return { canceled: true, results: [], completed: 0 };
+      },
+    }));
+    const probing = ipc.invoke("probe-custom-models", { providerId });
+    if (startedFirst) await started;
+    await lifecycle.shutdown();
+    assert.equal(signalSeen.aborted, true);
+    assert.equal((await probing).canceled, true);
+    assert.equal(persisted, true);
+  });
+}
+
+it("a canceled library activation releases the transfer reservation", async () => {
+  const ipc = createMockIpcMain();
+  const lifecycle = registerIpcHandlers(ipc, createMockContext({
+    projectLibrary: { listProjects: async () => [] },
+    libraryActions: { renameLibrary: async () => ({ restartRequired: true }) },
+  }));
+  await ipc.invoke("rename-library", { name: "renamed" });
+  await assert.rejects(ipc.invoke("list-projects"), { code: "LIBRARY_BUSY" });
+  lifecycle.cancelLibraryTransfer();
+  assert.deepEqual(await ipc.invoke("list-projects"), []);
+});
+
+it("snapshot IPC summarizes a draft project only once per request", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-summary-count-"));
+  const library = createProjectLibrary(join(root, "library"));
+  const runtime = createProjectRuntime(library);
+  try {
+    const project = await library.createProject({ name: "draft summary" });
+    let summaries = 0;
+    const summarize = library.summarizeProjectRow.bind(library);
+    library.summarizeProjectRow = (...args) => { summaries++; return summarize(...args); };
+    const ipc = createMockIpcMain();
+    registerIpcHandlers(ipc, createMockContext({ projectLibrary: library, projectRuntime: runtime }));
+    await ipc.invoke("load-project-snapshot", { id: project.id });
+    assert.equal(summaries, 1);
+    const lease = await runtime.acquire(project.id, { refreshProject: false });
+    await lease.context.taskStore.saveTask({ id: "draft", status: "draft", filename: "draft.png", result: { records: [] } });
+    await lease.release();
+    summaries = 0;
+    const snapshot = await ipc.invoke("load-project-snapshot", { id: project.id });
+    assert.equal(snapshot.tasks.length, 1);
+    assert.equal(summaries, 1);
+  } finally { await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true }); }
+});
