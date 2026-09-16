@@ -59,6 +59,7 @@ test("baseline Project Library create/list/open/export preserves manifests and i
   const expectedLibrary = await fixture("library.json");
   const expectedProject = await fixture("project.json");
   const source = createProjectLibrary(sourcePath, { name: expectedLibrary.name });
+  const leases = []; // These assertions keep multiple project contexts alive.
   const runtime = createProjectRuntime(source);
   let exported;
   let exportedRuntime;
@@ -72,8 +73,12 @@ test("baseline Project Library create/list/open/export preserves manifests and i
     assert.deepEqual(new Set(listed.map(({ id }) => id)), new Set([DEFAULT_PROJECT_ID, secondProject.id]));
     assert.equal((await source.getProject(secondProject.id)).directoryPath, secondProject.directoryPath);
 
-    const defaultContext = await runtime.get(DEFAULT_PROJECT_ID);
-    const secondContext = await runtime.get(secondProject.id);
+    const defaultContextLease = await runtime.acquire(DEFAULT_PROJECT_ID);
+    leases.push(defaultContextLease);
+    const defaultContext = defaultContextLease.context;
+    const secondContextLease = await runtime.acquire(secondProject.id);
+    leases.push(secondContextLease);
+    const secondContext = secondContextLease.context;
     const task = await fixture("task.json");
     await defaultContext.taskStore.saveTask({ ...task, id: "shared-task", projectId: DEFAULT_PROJECT_ID });
     await secondContext.taskStore.saveTask({ ...task, id: "shared-task", projectId: secondProject.id, filename: "second.png" });
@@ -113,6 +118,7 @@ test("baseline Project Library create/list/open/export preserves manifests and i
   } finally {
     await exportedRuntime?.close();
     await exported?.close();
+    await Promise.all(leases.map((lease) => lease.release()));
     await runtime.close();
     await source.close();
     await rm(root, { recursive: true, force: true });

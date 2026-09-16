@@ -174,4 +174,32 @@ describe("application shell layout", () => {
     expect(source).toContain('libraryActionRef.current = "rename"');
     expect(source).toContain('disabled={libraryBusy !== null} loading={libraryBusy === "rename"}');
   });
+  it("blocks library transfers for dirty or saving settings without discarding them", async () => {
+    const source = await readFile(appSource, "utf8");
+    const body = source.slice(source.indexOf("  const settingsReadyForLibraryTransfer ="), source.indexOf("  const prepareWorkspaceForTransfer ="));
+    const project = { dirty: false, saving: false };
+    const global = { dirtyKeys: new Set<string>(), saveState: "idle" };
+    const messages: unknown[] = [];
+    // Execute the shell's gate with stores only; no window or real project data.
+    const ready = new Function("useSettingsStore", "useGlobalSettingsStore", "setToast", `${body}; return settingsReadyForLibraryTransfer;`)(
+      { getState: () => project }, { getState: () => global }, (message: unknown) => messages.push(message),
+    );
+    expect(ready()).toBe(true);
+    project.dirty = true;
+    expect(ready()).toBe(false);
+    expect(project.dirty).toBe(true);
+    project.dirty = false;
+    project.saving = true;
+    expect(ready()).toBe(false);
+    project.saving = false;
+    global.dirtyKeys.add("MAX_BODY_MB");
+    expect(ready()).toBe(false);
+    global.dirtyKeys.clear();
+    global.saveState = "saving";
+    expect(ready()).toBe(false);
+    global.saveState = "idle";
+    expect(ready()).toBe(true);
+    expect(messages).toHaveLength(4);
+  });
+
 });

@@ -89,6 +89,7 @@ test("projects use separate SQLite files and project-scoped IPC", async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-library-"));
   const libraryRoot = join(tempRoot, "Local SlateSync Library");
   const library = createProjectLibrary(libraryRoot);
+  const leases = []; // These assertions keep multiple project contexts alive.
   const runtime = createProjectRuntime(library);
 
   try {
@@ -112,8 +113,12 @@ test("projects use separate SQLite files and project-scoped IPC", async () => {
     await access(join(first.directoryPath, "project.json"));
     await access(join(second.directoryPath, "project.sqlite"));
 
-    const firstContext = await runtime.get(first.id);
-    const secondContext = await runtime.get(second.id);
+    const firstContextLease = await runtime.acquire(first.id);
+    leases.push(firstContextLease);
+    const firstContext = firstContextLease.context;
+    const secondContextLease = await runtime.acquire(second.id);
+    leases.push(secondContextLease);
+    const secondContext = secondContextLease.context;
     await firstContext.taskStore.saveTask({
       id: "same-task-id",
       filename: "project-a.png",
@@ -199,6 +204,7 @@ test("projects use separate SQLite files and project-scoped IPC", async () => {
       /项目已归档/,
     );
   } finally {
+    await Promise.all(leases.map((lease) => lease.release()));
     await runtime.close();
     await library.close();
     await rm(tempRoot, { recursive: true, force: true });

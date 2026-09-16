@@ -46,6 +46,21 @@ import {
 import { throwIfRecognitionCanceled } from "../lib/ocr/cancellation.mjs";
 
 export function registerIpcHandlers(ipcMain, context) {
+  // Track whole handler lifetimes, not just individual database calls. Quit
+  // blocks new work and drains cancellation/final diagnostic writes before the
+  // storage Worker receives shutdown.
+  let shuttingDown = false;
+  const inFlight = new Set();
+  const transport = ipcMain;
+  ipcMain = { handle(channel, handler) {
+    transport.handle(channel, (...args) => {
+      if (shuttingDown) return Promise.reject(Object.assign(new Error("应用正在退出"), { code: "APP_CLOSING" }));
+      const request = Promise.resolve().then(() => handler(...args));
+      inFlight.add(request);
+      void request.finally(() => inFlight.delete(request)).catch(() => {});
+      return request;
+    });
+  } };
   const {
     workflowConfig,
     getWorkflowConfig = async () => workflowConfig,
@@ -335,10 +350,10 @@ export function registerIpcHandlers(ipcMain, context) {
 
   ipcMain.handle("load-project", async (_event, { id }) => {
     if (!projectRuntime) throw new Error("项目运行时不可用");
-    return withProjectRead(id, async () => {
+    return withProjectRead(id, async (context) => {
       // 走项目运行时而不是 projectLibrary.getProject：共享句柄免去每请求
       // 临时开库，readOnly 语义（allowArchived: true）与旧实现等价。
-      const context = await resolveProjectContext(id, { readOnly: true });
+
       return sanitizeProject(context.project);
     });
   });
@@ -348,8 +363,7 @@ export function registerIpcHandlers(ipcMain, context) {
   // 与局部刷新使用。
   ipcMain.handle("load-project-snapshot", async (_event, { id } = {}) => {
     if (!projectRuntime) throw new Error("项目运行时不可用");
-    return withProjectRead(id, async () => {
-      const context = await resolveProjectContext(id, { readOnly: true });
+    return withProjectRead(id, async (context) => {
       const [scenarios, tasks] = await Promise.all([
         context.scenarioStore ? context.scenarioStore.listProfiles() : [],
         context.taskStore ? context.taskStore.listTasks() : [],
@@ -420,23 +434,20 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("list-scenarios", async (_event, body = {}) => {
-    return withProjectRead(body.projectId, async () => {
-      const context = await resolveProjectContext(body.projectId, { readOnly: true });
+    return withProjectRead(body.projectId, async (context) => {
       return context.scenarioStore ? context.scenarioStore.listProfiles() : [];
     });
   });
 
   ipcMain.handle("load-scenario", async (_event, { projectId, id }) => {
-    return withProjectRead(projectId, async () => {
-      const context = await resolveProjectContext(projectId, { readOnly: true });
+    return withProjectRead(projectId, async (context) => {
       if (!context.scenarioStore) throw new Error("场记结构存储不可用");
       return context.scenarioStore.getProfile(id);
     });
   });
 
   ipcMain.handle("import-scenario", async (_event, { projectId, profile }) => {
-    return withProjectWrite(projectId, async () => {
-      const context = await resolveProjectContext(projectId);
+    return withProjectWrite(projectId, async (context) => {
       if (!context.scenarioStore) throw new Error("场记结构存储不可用");
       return context.scenarioStore.importProfile(profile);
     });
@@ -647,6 +658,8 @@ export function registerIpcHandlers(ipcMain, context) {
     if (activeModelProbes.has(providerId)) throw providerValidationError("该接口已有探针正在运行", 409);
     const controller = new AbortController();
     activeModelProbes.set(providerId, controller);
+    // An admitted handler may start after shutdown has already begun.
+    if (shuttingDown) controller.abort(new DOMException("应用正在退出", "AbortError"));
     try {
       const probeRevision = provider.revision;
       const apiKey = registry.getApiKey(providerId);
@@ -747,12 +760,14 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("recognize", async (event, body) => {
     const release = recognitionLimiter.acquire();
     const controller = new AbortController();
+    if (shuttingDown) controller.abort(new DOMException("应用正在退出", "AbortError"));
     const requestedProjectId = String(body?.projectId || "");
     const activeRecognition = createActiveRecognition(controller);
     addActiveRecognition(requestedProjectId, activeRecognition);
     const capture = createSessionCapture();
     let projectContext = null;
     let activeProjectId = null;
+    let storageLease = null;
     try {
       if (!requestedProjectId) throw new Error("请先选择项目");
       // Acquire the write lease before resolving the runtime. This closes the
@@ -760,8 +775,9 @@ export function registerIpcHandlers(ipcMain, context) {
       // its SQLite-backed stores.
       beginProjectWrite(requestedProjectId);
       activeProjectId = requestedProjectId;
+      storageLease = await projectRuntime?.acquire?.(requestedProjectId);
       const workflow = await getWorkflowConfig();
-      projectContext = await resolveProjectContext(body?.projectId);
+      projectContext = storageLease?.context ?? await resolveProjectContext(body?.projectId);
       const projectSettings = normalizeProjectSettings(
         projectContext.project?.settings || projectSettingsFromWorkflow(workflow),
         projectSettingsFromWorkflow(workflow),
@@ -898,15 +914,20 @@ export function registerIpcHandlers(ipcMain, context) {
       }
       throw safeError;
     } finally {
-      removeActiveRecognition(requestedProjectId, activeRecognition);
       try {
-        if (activeProjectId) endProjectWrite(activeProjectId);
-        release();
+        try { await storageLease?.release(); }
+        finally {
+          if (activeProjectId) endProjectWrite(activeProjectId);
+          release();
+        }
       } finally {
         // cancel-recognition waits for this signal, so it cannot claim the job
         // stopped while its write lease or recognition limiter is still held.
         // Resolve even if a defensive cleanup hook fails, otherwise the stop
         // IPC could wait forever after the recognition promise has settled.
+        // Keep cancellation discoverable until the asynchronous Worker lease
+        // release finishes; otherwise a late cancel could falsely report idle.
+        removeActiveRecognition(requestedProjectId, activeRecognition);
         activeRecognition.resolveSettled();
       }
     }
@@ -946,8 +967,7 @@ export function registerIpcHandlers(ipcMain, context) {
   );
 
   ipcMain.handle("list-tasks", async (_event, body = {}) => {
-    return withProjectRead(body.projectId, async () => {
-      const context = await resolveProjectContext(body.projectId, { readOnly: true });
+    return withProjectRead(body.projectId, async (context) => {
       // Keep the preload contract compact: task lists cross IPC as arrays.
       if (!context.taskStore) return [];
       return context.taskStore.listTasks();
@@ -955,8 +975,7 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("load-task", async (_event, { projectId, id }) => {
-    return withProjectRead(projectId, async () => {
-      const context = await resolveProjectContext(projectId, { readOnly: true });
+    return withProjectRead(projectId, async (context) => {
       if (!context.taskStore) throw new Error("任务存储不可用");
       const task = await context.taskStore.loadTask(id);
       if (!task?.projectSettingsSnapshot) return task;
@@ -979,8 +998,7 @@ export function registerIpcHandlers(ipcMain, context) {
   ipcMain.handle("save-task", async (_event, body) => {
     const task = body?.task || body;
     const projectId = body?.projectId || task?.projectId;
-    return withProjectWrite(projectId, async () => {
-      const context = await resolveProjectContext(projectId);
+    return withProjectWrite(projectId, async (context) => {
       if (!context.taskStore) throw new Error("任务存储不可用");
       const resolvedProjectId = context.project?.id || projectId;
       const safeTask = { ...task };
@@ -1002,8 +1020,7 @@ export function registerIpcHandlers(ipcMain, context) {
   });
 
   ipcMain.handle("delete-task", async (_event, { projectId, id }) => {
-    return withProjectWrite(projectId, async () => {
-      const context = await resolveProjectContext(projectId);
+    return withProjectWrite(projectId, async (context) => {
       if (!context.taskStore) throw new Error("任务存储不可用");
       const resolvedProjectId = context.project?.id || projectId;
       await context.taskStore.deleteTask(id);
@@ -1215,10 +1232,12 @@ export function registerIpcHandlers(ipcMain, context) {
     beginLibraryRead();
     try {
       beginProjectRead(projectId);
+      let lease;
       try {
-        return await operation();
+        lease = await projectRuntime?.acquire?.(projectId, { allowArchived: true });
+        return await operation(lease?.context ?? await resolveProjectContext(projectId, { readOnly: true }));
       } finally {
-        endProjectRead(projectId);
+        try { await lease?.release(); } finally { endProjectRead(projectId); }
       }
     } finally {
       endLibraryRead();
@@ -1244,10 +1263,13 @@ export function registerIpcHandlers(ipcMain, context) {
 
   async function withProjectWrite(projectId, operation) {
     beginProjectWrite(projectId);
+    let lease;
     try {
-      return await operation();
+      lease = await projectRuntime?.acquire?.(projectId);
+      // Reuse the outer projection instead of rescanning tasks for each store call.
+      return await operation(lease?.context ?? (projectRuntime ? await resolveProjectContext(projectId) : undefined));
     } finally {
-      endProjectWrite(projectId);
+      try { await lease?.release(); } finally { endProjectWrite(projectId); }
     }
   }
 
@@ -1347,6 +1369,27 @@ export function registerIpcHandlers(ipcMain, context) {
     recognitions.delete(recognition);
     if (!recognitions.size) activeRecognitions.delete(projectId);
   }
+
+  function cancelRecognitions() {
+    for (const recognitions of activeRecognitions.values()) {
+      for (const recognition of recognitions) recognition.controller.abort(new DOMException("应用正在退出", "AbortError"));
+    }
+  }
+  return {
+    cancelRecognitions,
+    // A renderer veto cancels activation and restores admission to the current library.
+    cancelLibraryTransfer() { libraryTransferInProgress = false; },
+    async shutdown() {
+      shuttingDown = true;
+      cancelRecognitions();
+      for (const controller of activeModelProbes.values()) {
+        controller.abort(new DOMException("应用正在退出", "AbortError"));
+      }
+      // A handler accepted in this tick may not have entered its body yet.
+      // Its recognition controller observes shutdown immediately when created.
+      await Promise.allSettled([...inFlight]);
+    },
+  };
 }
 
 function projectWriteBusy(action = "归档") {

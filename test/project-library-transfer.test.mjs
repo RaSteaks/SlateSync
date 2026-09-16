@@ -144,6 +144,7 @@ test("exports and imports a complete open project package without changing the s
   const packagePath = projectExportPath(join(tempRoot, "Downloads"), "片名 / Day 01");
   const defaultPackagePath = projectExportPath(join(tempRoot, "Downloads"), "默认项目");
   const source = createProjectLibrary(sourcePath);
+  const leases = []; // These assertions keep multiple project contexts alive.
   const runtime = createProjectRuntime(source);
   let imported;
 
@@ -152,7 +153,9 @@ test("exports and imports a complete open project package without changing the s
       name: "片名 / Day 01",
       description: "完整项目传输",
     });
-    const sourceContext = await runtime.get(sourceProject.id);
+    const sourceContextLease = await runtime.acquire(sourceProject.id);
+    leases.push(sourceContextLease);
+    const sourceContext = sourceContextLease.context;
     await sourceContext.taskStore.saveTask({
       id: "transfer-task",
       projectId: sourceProject.id,
@@ -259,6 +262,7 @@ test("exports and imports a complete open project package without changing the s
     assert.deepEqual(await sourceContext.taskStore.loadTask("transfer-task"), sourceTaskBefore);
     assert.deepEqual(await sourceContext.diagnostics.loadSession("transfer-diagnostic"), sourceDiagnosticBefore);
   } finally {
+    await Promise.all(leases.map((lease) => lease.release()));
     await runtime.close();
     await source.close();
     await rm(tempRoot, { recursive: true, force: true });

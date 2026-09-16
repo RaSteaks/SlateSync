@@ -39,17 +39,14 @@ import {
 import { createSlateScanner } from "./slate-scanner.mjs";
 import { createSettingsStore } from "./settings-store.mjs";
 import {
-  createProjectLibrary,
   LEGACY_DEFAULT_LIBRARY_FOLDER,
   migrateDefaultLibraryPath,
 } from "../lib/project-library.mjs";
 import {
-  exportProjectLibrary,
   libraryExportPath,
   projectExportPath,
-  validateProjectLibrary,
 } from "../lib/project-library-transfer.mjs";
-import { createProjectRuntime } from "../lib/project-runtime.mjs";
+import { createStorageClient } from "../lib/storage-client.mjs";
 import { projectSettingsFromWorkflow } from "../lib/project-settings.mjs";
 import {
   closePaddleOcrWorker,
@@ -87,6 +84,9 @@ if (isDev) {
 let mainWindow = null;
 let projectLibrary = null;
 let projectRuntime = null;
+let storageClient = null;
+let ipcLifecycle = null;
+let pendingLibraryActivation = null;
 let appLogger = null;
 let paddleOcrInstaller = null;
 let paddleOcrExitCleanupPromise = null;
@@ -202,7 +202,7 @@ async function initialize() {
   const fileDialogs = createFileDialogs(() => mainWindow);
   const slateScanner = createSlateScanner();
   const workflowDefaults = projectSettingsFromWorkflow(await getWorkflowConfig());
-  const libraryRoot = await initialLibraryPath(runtimeSettings.libraryPath);
+  let libraryRoot = await initialLibraryPath(runtimeSettings.libraryPath);
   appLogger.info("app", "项目库路径已解析", { path: libraryRoot });
   if (runtimeSettings.libraryPath && resolve(runtimeSettings.libraryPath) !== resolve(libraryRoot)) {
     // Keep a previously persisted default path aligned with its successful
@@ -212,15 +212,19 @@ async function initialize() {
       libraryPath: libraryRoot,
     }));
   }
-  projectLibrary = createProjectLibrary(libraryRoot, {
-    defaultSettings: workflowDefaults,
+  // SQLite, native key lookup, encryption and transfers live in one Worker.
+  // Only non-secret config/path snapshots cross its private RPC boundary.
+  storageClient = createStorageClient({
+    getMatching: async () => (await getWorkflowConfig()).scenario?.matching,
   });
-  // Copy the legacy global database into the default project without deleting
-  // the original data directory. The library records a migration marker so
-  // restarts remain safe and idempotent.
-  await projectLibrary.migrateLegacyData(join(app.getPath("userData"), "data"));
-  projectRuntime = createProjectRuntime(projectLibrary, {
-    matching: async () => (await getWorkflowConfig()).scenario?.matching,
+  projectLibrary = storageClient.projectLibrary;
+  projectRuntime = storageClient.projectRuntime;
+  await storageClient.initialize({
+    root: libraryRoot,
+    defaultSettings: workflowDefaults,
+    matching: (await getWorkflowConfig()).scenario?.matching,
+    legacyDataDir: join(app.getPath("userData"), "data"),
+    resourcesPath: process.resourcesPath,
   });
 
   const libraryActions = {
@@ -248,7 +252,7 @@ async function initialize() {
         dirname(libraryRoot),
       );
       if (!selected) return { canceled: true };
-      const imported = await validateProjectLibrary(selected);
+      const imported = await storageClient.validateLibrary(selected);
       await activateLibrary(imported.path);
       return { canceled: false, restartRequired: true, library: imported };
     },
@@ -259,7 +263,7 @@ async function initialize() {
       );
       if (!selected) return { canceled: true };
       const target = libraryExportPath(dirname(selected), basename(selected));
-      const exported = await exportProjectLibrary(libraryRoot, target);
+      const exported = await storageClient.exportLibrary(target);
       return { canceled: false, library: exported };
     },
 
@@ -269,7 +273,7 @@ async function initialize() {
       );
       if (!selected) return { canceled: true };
       const target = libraryExportPath(selected, basename(libraryRoot));
-      const relocated = await exportProjectLibrary(libraryRoot, target);
+      const relocated = await storageClient.exportLibrary(target);
       await activateLibrary(relocated.path);
       return { canceled: false, restartRequired: true, library: relocated };
     },
@@ -282,23 +286,25 @@ async function initialize() {
   };
 
   async function activateLibrary(nextPath) {
-    // Persist the selected package only after it has passed validation/copy.
-    // Close current connections before scheduling a relaunch so no late WAL
-    // write can race with the switch to the next Project Library.
-    const saved = await settingsStore.save({
-      ...runtimeSettings,
-      libraryPath: resolve(nextPath),
-    });
-    Object.assign(runtimeSettings, saved);
-    await projectRuntime?.close();
-    await projectLibrary?.close();
-    setTimeout(() => {
-      app.relaunch();
-      app.exit(0);
-    }, 150);
+    // Defer switching the persisted destination and scheduling relaunch until
+    // all windows accept closure. A veto must keep the current library usable.
+    const savePath = async (path) => {
+      const saved = await settingsStore.save({ ...runtimeSettings, libraryPath: resolve(path) });
+      Object.assign(runtimeSettings, saved);
+    };
+    pendingLibraryActivation = {
+      commit: async () => { await savePath(nextPath); app.relaunch(); },
+      cancel: async () => {
+        // Rename already moved the active library; imports/copies did not.
+        const current = await projectLibrary.getLibraryInfo();
+        await savePath(current.path);
+        libraryRoot = current.path;
+      },
+    };
+    setImmediate(() => app.quit());
   }
 
-  registerIpcHandlers(ipcMain, {
+  ipcLifecycle = registerIpcHandlers(ipcMain, {
     getWorkflowConfig,
     runtimeProviderKeys,
     runtimeEnv,
@@ -442,6 +448,14 @@ async function createWindow() {
       preload: join(__dirname, "..", "out", "preload", "index.cjs"),
     },
   });
+  mainWindow.webContents.on("will-prevent-unload", () => {
+    const activation = pendingLibraryActivation;
+    if (!activation) return;
+    pendingLibraryActivation = null;
+    // Respect the renderer veto; do not discard drafts or leave LIBRARY_BUSY set.
+    void activation.cancel().catch((error) => appLogger?.error("app", "取消项目库切换失败", { error }))
+      .finally(() => ipcLifecycle?.cancelLibraryTransfer());
+  });
 
   // Apply the same boundary to user navigation and server redirects. A Vite
   // response must not redirect the privileged Preload onto a remote origin.
@@ -550,45 +564,47 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on("before-quit", (event) => {
+app.on("before-quit", () => {
+  // Renderer beforeunload may veto quit to flush a dirty draft. Cancel work,
+  // but leave storage admission open until every window agrees to close.
+  if (!paddleOcrExitCleanupComplete) ipcLifecycle?.cancelRecognitions();
+});
+
+app.on("will-quit", (event) => {
   if (paddleOcrExitCleanupComplete) return;
-  // Electron does not await async event listeners. Prevent the first quit
-  // request, close the queue with a hard deadline, then re-issue the quit so
-  // will-quit can finish the remaining non-OCR resources.
+  // Windows have now accepted closure. Electron does not await listeners, so
+  // prevent actual exit until accepted saves, OCR and logging are all drained.
   event.preventDefault();
   if (paddleOcrExitCleanupPromise) return;
   paddleOcrInstaller?.cancel();
-  paddleOcrExitCleanupPromise = closePaddleOcrWorker({
-    force: true,
-    shutdown: true,
-    deadlineAt: Date.now() + PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS,
-  })
+  paddleOcrExitCleanupPromise = (async () => {
+    // Stop admission and cancel recognition before draining its final writes.
+    // OCR has a deadline; durable storage deliberately has no forced timeout.
+    const drain = ipcLifecycle?.shutdown();
+    await Promise.all([
+      drain,
+      closePaddleOcrWorker({
+        force: true,
+        shutdown: true,
+        deadlineAt: Date.now() + PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS,
+      }).catch((error) => appLogger?.warn("ocr", "应用退出时关闭 PaddleOCR Worker 失败", { error })),
+    ]);
+    if (pendingLibraryActivation) {
+      const activation = pendingLibraryActivation;
+      pendingLibraryActivation = null;
+      await activation.commit();
+    }
+    await storageClient?.close();
+    appLogger?.info("app", "存储已排空，应用即将退出");
+    await appLogger?.close();
+  })()
     .catch((error) => {
-      appLogger?.warn("ocr", "应用退出时关闭 PaddleOCR Worker 失败", { error });
+      // A crashed Worker rejects all requests; report the failure instead of
+      // claiming pending writes were saved or automatically replaying them.
+      console.error("SlateSync shutdown failed:", error);
     })
     .finally(() => {
       paddleOcrExitCleanupComplete = true;
       app.quit();
     });
-});
-
-app.on("will-quit", () => {
-  appLogger?.info("app", "应用即将退出");
-  // Close cached project connections before Electron tears down the main
-  // process. The library remains a portable folder that can be backed up.
-  void projectRuntime?.close();
-  void projectLibrary?.close();
-  // Keep this idempotent fallback for direct/native quits that bypass the
-  // before-quit gate; force mode also invalidates any late preload operation.
-  paddleOcrInstaller?.cancel();
-  void closePaddleOcrWorker({
-    force: true,
-    shutdown: true,
-    deadlineAt: Date.now() + PADDLEOCR_EXIT_SHUTDOWN_TIMEOUT_MS,
-  }).catch((error) => {
-    appLogger?.warn("ocr", "退出阶段 PaddleOCR Worker 兜底关闭失败", { error });
-  });
-  // Awaiting the queue here preserves the final lifecycle line without making
-  // logging part of the recognition or window error paths.
-  void appLogger?.close();
 });

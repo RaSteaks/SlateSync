@@ -296,6 +296,7 @@ export function App() {
     libraryActionRef.current = action;
     setLibraryBusy(action);
     try {
+      if (!settingsReadyForLibraryTransfer()) return;
       if (!(await prepareWorkspaceForTransfer())) return;
       const api = getSlateSync();
       const result = action === "import"
@@ -315,6 +316,17 @@ export function App() {
         setLibraryMenu((current) => ({ ...current, open: false }));
       }
     }
+  };
+
+  // Library restart must not strand unsaved settings behind Main's transfer lock.
+  const settingsReadyForLibraryTransfer = () => {
+    const projectSettings = useSettingsStore.getState();
+    const globalSettings = useGlobalSettingsStore.getState();
+    if (projectSettings.dirty || projectSettings.saving || globalSettings.dirtyKeys.size || globalSettings.saveState === "saving") {
+      setToast({ tone: "warning", message: "请先保存或放弃设置修改，再操作项目库" });
+      return false;
+    }
+    return true;
   };
 
   const prepareWorkspaceForTransfer = async (owner?: ReturnType<typeof acquireWorkspaceOperation>) => {
@@ -363,6 +375,7 @@ export function App() {
     setRenameBusy(true);
     setRenameError(null);
     try {
+      if (!settingsReadyForLibraryTransfer()) return;
       if (!(await prepareWorkspaceForTransfer())) return;
       const result = await unwrap(await getSlateSync().projects.renameLibrary({ name: renameName.trim() }));
       if (result.canceled) return;

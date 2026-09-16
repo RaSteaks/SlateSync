@@ -1,0 +1,63 @@
+{
+  "measuredAt": "2026-09-15T17:32:02.551Z",
+  "node": "v24.13.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "notes": "Three tiny durable saves; same optimized storage implementation, synchronous caller vs Worker. Timer interval 5ms. CPU/RSS cover the whole process, not only Main. Synthetic keys and temporary data only. No GUI.",
+  "results": [
+    {
+      "sizeMiB": 32,
+      "databaseMiB": 32.105549812316895,
+      "synchronous": {
+        "threeWritesWallMs": 102.072708,
+        "callingThreadMaxTimerGapMs": 36.473708999999985,
+        "processCpuMs": 73.061,
+        "processRssMiB": 360.84375
+      },
+      "worker": {
+        "threeWritesWallMs": 94.93408399999998,
+        "callingThreadMaxTimerGapMs": 5.697917000000018,
+        "processCpuMs": 74.109,
+        "processRssMiB": 433.53125
+      },
+      "workerState": {
+        "contexts": 1,
+        "idle": 1,
+        "threadId": 1,
+        "heapUsedMiB": 7.177070617675781,
+        "externalMiB": 163.6660270690918
+      },
+      "afterRuntimeClose": {
+        "contexts": 0,
+        "leases": 0
+      }
+    },
+    {
+      "sizeMiB": 128,
+      "databaseMiB": 128.1992998123169,
+      "synchronous": {
+        "threeWritesWallMs": 331.03308300000003,
+        "callingThreadMaxTimerGapMs": 114.43408399999998,
+        "processCpuMs": 238.554,
+        "processRssMiB": 1490.984375
+      },
+      "worker": {
+        "threeWritesWallMs": 325.0042920000001,
+        "callingThreadMaxTimerGapMs": 5.962792000000036,
+        "processCpuMs": 236.142,
+        "processRssMiB": 1367.609375
+      },
+      "workerState": {
+        "contexts": 1,
+        "idle": 1,
+        "threadId": 2,
+        "heapUsedMiB": 5.338233947753906,
+        "externalMiB": 3.132051467895508
+      },
+      "afterRuntimeClose": {
+        "contexts": 0,
+        "leases": 0
+      }
+    }
+  ]
+}
