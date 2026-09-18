@@ -93,7 +93,7 @@ test("first read scans, answers, and writes the defaults key back", () => {
   }
 });
 
-test("tasks without a successful result never become defaults", () => {
+test("tasks without a successful result cache an empty answer", () => {
   const dataDir = mkdtempSync(join(tmpdir(), "slatesync-defaults-unqualified-"));
   const db = openProjectDb(dataDir);
   try {
@@ -112,8 +112,57 @@ test("tasks without a successful result never become defaults", () => {
       "2026-01-03T00:00:00.000Z",
     );
     assert.equal(readLastRecognitionDefaults(db), null);
+    assert.deepEqual(readRawDefaults(db), { empty: true });
+  } finally {
+    closeSlateDatabase(db);
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("empty defaults survive reopen without payload scans and successful saves replace them", async (t) => {
+  const dataDir = mkdtempSync(join(tmpdir(), "slatesync-defaults-empty-cache-"));
+  let db = openProjectDb(dataDir);
+  let store;
+  try {
+    assert.equal(readLastRecognitionDefaults(db), null);
+    closeSlateDatabase(db);
+    db = openProjectDb(dataDir);
+    store = createTaskStore(dataDir, { db, filename: SQLITE_FILENAMES.project });
+    await store.saveTask({ id: "draft", status: "draft", imageDataGroups: [["synthetic-payload"]] });
+    // Empty migration and draft saves preserve the known empty answer.
+    assert.equal(readLastRecognitionDefaults(db), null);
+    const prepare = db.prepare.bind(db);
+    let scans = 0;
+    t.mock.method(db, "prepare", (sql) => {
+      if (sql.includes("sourceRowid, data_json")) scans++;
+      return prepare(sql);
+    });
+    assert.equal(readLastRecognitionDefaults(db), null);
+    await store.updateTask("draft", { filename: "renamed.png" });
+    assert.equal(readLastRecognitionDefaults(db), null);
+    assert.equal(scans, 0);
+    await store.updateTask("draft", { provider: "openai", model: "vision", result: { records: [] } });
+    assert.equal(readLastRecognitionDefaults(db).modelId, "vision");
+    assert.equal(scans, 0);
+    await store.deleteTask("draft");
+    assert.equal(readLastRecognitionDefaults(db), null);
+    assert.equal(readLastRecognitionDefaults(db), null);
+    assert.equal(scans, 1);
+    t.mock.restoreAll();
+    await store.close();
+    closeSlateDatabase(db);
+    db = openProjectDb(dataDir);
+    const reopenedPrepare = db.prepare.bind(db);
+    t.mock.method(db, "prepare", (sql) => {
+      assert.ok(!sql.includes("sourceRowid, data_json"), "reopen must reuse the persisted empty answer");
+      return reopenedPrepare(sql);
+    });
+    assert.equal(readLastRecognitionDefaults(db), null);
+    invalidateRecognitionDefaults(db);
     assert.equal(readRawDefaults(db), null);
   } finally {
+    t.mock.restoreAll();
+    await store?.close();
     closeSlateDatabase(db);
     rmSync(dataDir, { recursive: true, force: true });
   }

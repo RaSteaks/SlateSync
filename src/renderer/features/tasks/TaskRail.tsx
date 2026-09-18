@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FileClock, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { TaskListItem } from "../../../shared/contracts/index.js";
 import { Button, EmptyState, IconButton, InlineError, Input, Stack, Text } from "../../design-system";
 import { useTaskStore } from "../../state";
@@ -34,6 +34,17 @@ function taskSearchText(task: TaskListItem) {
     .toLocaleLowerCase("zh-CN");
 }
 
+// Reuse Intl's formatter across virtual rows and progress/save rerenders;
+// toLocaleString with options constructs one formatter for every visible row.
+const taskDateFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+});
+function taskDateLabel(value: string | null | undefined) {
+  if (!value) return "未保存";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Invalid Date" : taskDateFormatter.format(date);
+}
+
 interface TaskRailProps {
   readonly onSelect: (id: string) => void;
   readonly onRefresh: () => void;
@@ -51,11 +62,16 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
   const saveState = useTaskStore((state) => state.saveState);
   const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const query = search.trim().toLocaleLowerCase("zh-CN");
+  // Keep typing urgent while filtering a large local history is interruptible.
+  // Build normalized search text only on first search, never on project opening.
+  const query = useDeferredValue(search.trim().toLocaleLowerCase("zh-CN"));
+  const hasQuery = Boolean(query);
+  const searchIndex = useMemo(() => hasQuery ? tasks.map(taskSearchText) : [], [tasks, hasQuery]);
   const visibleTasks = useMemo(
-    () => tasks.filter((task) => !query || taskSearchText(task).includes(query)),
-    [query, tasks],
+    () => query ? tasks.filter((_task, index) => searchIndex[index]?.includes(query)) : tasks,
+    [query, tasks, searchIndex],
   );
+  const getItemKey = useCallback((index: number) => visibleTasks[index]?.id || index, [visibleTasks]);
 
   useEffect(() => {
     // A narrower result set must always start at its first row; otherwise a
@@ -70,6 +86,8 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 62,
     overscan: 6,
+    // Measurement belongs to the task, not its position after search/refresh.
+    getItemKey,
   });
 
   return (
@@ -161,7 +179,7 @@ export function TaskRail({ onSelect, onRefresh, onNew, onDelete, onRetrySave, sw
                   >
                     <span>
                       <strong>{taskLabel(task.filename, task.id)}</strong>
-                      <small>{taskStatusLabel(task.status)} · {task.recordCount || 0} 条 · {task.updatedAt ? new Date(task.updatedAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "未保存"}</small>
+                      <small>{taskStatusLabel(task.status)} · {task.recordCount || 0} 条 · {taskDateLabel(task.updatedAt)}</small>
                     </span>
                     <Text tone="subtle" size="xs" mono>{task.pageCount || 0} 页</Text>
                   </button>

@@ -38,8 +38,8 @@ const tasks: TaskListItem[] = [
   },
 ];
 
-function mountRail() {
-  useTaskStore.setState({ items: tasks, loadedProjectId: "project-1", activeId: null, active: null, loading: false, saveState: "saved", error: null });
+function mountRail(items = tasks) {
+  useTaskStore.setState({ items, loadedProjectId: "project-1", activeId: null, active: null, loading: false, saveState: "saved", error: null });
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -77,6 +77,29 @@ afterEach(() => {
 });
 
 describe("task history rail", () => {
+  it("bounds large-history DOM and reuses search normalization across keystrokes", () => {
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(260);
+    const largeHistory = Array.from({ length: 5000 }, (_, index) => ({
+      ...tasks[0]!, id: `task-${index}`, filename: `slate-${index}.png`,
+    }));
+    const normalized = vi.spyOn(String.prototype, "toLocaleLowerCase");
+    const host = mountRail(largeHistory);
+    // Opening should neither normalize 5,000 search records nor render them all.
+    expect(normalized.mock.calls.length).toBeLessThan(100);
+    expect(host.querySelectorAll('button[aria-label^="删除"]').length).toBeLessThan(30);
+    const search = host.querySelector<HTMLInputElement>('input[aria-label="搜索历史任务"]')!;
+    fillSearch(search, "slate-499");
+    expect(host.textContent).toContain("匹配 11 / 5000 个任务");
+    normalized.mockClear();
+    fillSearch(search, "slate-4999");
+    expect(host.textContent).toContain("slate-4999.png");
+    expect(host.textContent).toContain("匹配 1 / 5000 个任务");
+    expect(normalized.mock.calls.length).toBeLessThan(100);
+    act(() => search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(host.textContent).toContain("共 5000 个历史任务");
+    expect(host.querySelectorAll('button[aria-label^="删除"]').length).toBeLessThan(30);
+  });
+
   it("filters historical tasks and exposes a helpful no-result state", () => {
     vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(260);
     const host = mountRail();
