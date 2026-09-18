@@ -411,6 +411,53 @@ async function main() {
       assert.equal(await page.evaluate(async () => (await import('/state/slate-store.ts')).useSlateStore.getState().filename), null);
       assert.equal(await page.evaluate(() => [...window.__review.tasks.values()].some(task => task.customPrompt === '离开前最后修改')), true);
     });
+    await test('large-task-history', async () => {
+      // Seed summaries through the same snapshot boundary used by project open.
+      await page.evaluate(() => {
+        const tasks = Array.from({ length: 5000 }, (_, i) => ({ id: `perf-${i}`, filename: `history-${i}.png`,
+          status: 'draft', recordCount: 0, pageCount: 1, updatedAt: '2026-09-16T00:00:00.000Z' }));
+        window.__review.history = tasks;
+        window.slateSync.projects.loadSnapshot = async ({ id }) => ({ ok: true, data: {
+          project: window.__review.projects.find(project => project.id === id), scenarios: [], tasks,
+        } });
+        window.slateSync.tasks.list = async () => ({ ok: true, data: tasks });
+      });
+      const start = Date.now();
+      await openProject();
+      await page.getByText('共 5000 个历史任务', { exact: true }).waitFor();
+      const openMs = Date.now() - start;
+      const rendered = await page.getByRole('button', { name: /^删除history-/ }).count();
+      assert.ok(rendered > 0 && rendered < 40, `bounded visible history: ${rendered}`);
+      await page.locator('section[aria-labelledby="task-rail-title"] [class*="taskRail"]').evaluate(element => { element.scrollTop = element.scrollHeight; });
+      const search = page.getByRole('searchbox', { name: '搜索历史任务' });
+      await search.fill('history-4999');
+      await page.getByText('匹配 1 / 5000 个任务', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '删除history-4999.png', exact: true }).waitFor();
+      await search.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement?.textContent), '清除');
+      await page.keyboard.press('Enter');
+      await page.getByText('共 5000 个历史任务', { exact: true }).waitFor();
+      await search.fill('没有这个文件');
+      await page.getByText('没有匹配任务', { exact: true }).waitFor();
+      await search.press('Escape');
+      await page.getByText('共 5000 个历史任务', { exact: true }).waitFor();
+      await page.setViewportSize({ width: 960, height: 700 });
+      await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+      await search.fill('history-4999');
+      await page.getByText('匹配 1 / 5000 个任务', { exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await page.screenshot({ path: path.join(output, 'large-task-history.png'), fullPage: true });
+      await writeFile(path.join(output, 'large-task-history.json'), JSON.stringify({ syntheticTaskCount: 5000, rendered, openMs }, null, 2));
+      // A failed refresh preserves the searchable history and permits retry.
+      await page.evaluate(() => { window.slateSync.tasks.list = async () => ({ ok: false, error: { code: 'TEST', message: '模拟任务刷新失败', retryable: true } }); });
+      await nav('刷新任务列表');
+      await page.getByText('模拟任务刷新失败', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '删除history-4999.png', exact: true }).waitFor();
+      await page.evaluate(() => { window.slateSync.tasks.list = async () => ({ ok: true, data: window.__review.history }); });
+      await nav('刷新任务列表');
+      await page.getByText('模拟任务刷新失败', { exact: true }).waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: '删除history-4999.png', exact: true }).waitFor();
+    });
     // Share the isolated browser/gateway with geometry, focus and contrast
     // regressions so layout work also runs all nine interaction flows above.
     await layoutChecks({ page, test, nav, output });

@@ -4,7 +4,7 @@
 // 元数据刷新、closeProject 只关一次共享句柄且可重建、归档读写分离、
 // defaults 端到端流转。
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -14,6 +14,30 @@ import {
   DEFAULT_PROJECT_ID,
 } from "../lib/project-library.mjs";
 import { createProjectRuntime } from "../lib/project-runtime.mjs";
+
+test("first project summary includes migrated tasks even after an empty defaults read", async () => {
+  const root = await mkdtemp(join(tmpdir(), "slatesync-runtime-migrated-summary-"));
+  const library = createProjectLibrary(join(root, "library"));
+  const runtime = createProjectRuntime(library);
+  try {
+    const project = await library.createProject({ name: "legacy snapshots" });
+    assert.equal(project.lastRecognitionDefaults, null);
+    const tasksDir = join(project.directoryPath, "tasks");
+    await mkdir(tasksDir, { recursive: true });
+    await writeFile(join(tasksDir, "legacy.json"), JSON.stringify({
+      id: "legacy", provider: "openai", model: "legacy-model", result: { records: [] },
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z",
+    }));
+    // The very first response must agree with its history, not just a later refresh.
+    const context = await runtime.get(project.id);
+    assert.equal(context.project.taskCount, 1);
+    assert.equal(context.project.latestTaskAt, "2026-01-02T00:00:00.000Z");
+    assert.equal(context.project.lastRecognitionDefaults.modelId, "legacy-model");
+    assert.equal((await context.taskStore.listTasks()).length, 1);
+  } finally {
+    await runtime.close(); await library.close(); await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("repeated gets reuse one shared context and refresh project metadata per request", async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), "slatesync-runtime-shared-"));
