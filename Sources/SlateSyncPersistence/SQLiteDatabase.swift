@@ -33,13 +33,17 @@ public actor SQLiteDatabase {
     private let encryptionID: String?
     private var snapshotURL: URL
     private let openMode: OpenMode
+    // Cache the exact authenticated envelope, not filesystem timestamps. Equal-size
+    // in-place edits on coarse-timestamp volumes must invalidate cached plaintext.
+    private var loadedSnapshot: Data?
 
     // `nonisolated(unsafe)` is restricted to storage so deinit can close the C
     // handle. All operational access remains actor-isolated.
     nonisolated(unsafe) private var handle: OpaquePointer?
 
     public init(url: URL, mode: OpenMode = .readWriteCreate) throws {
-        self.url = url.standardizedFileURL
+        let url = url.standardizedFileURL
+        self.url = url
         self.snapshotURL = url.standardizedFileURL
         self.openMode = mode
         self.encryptionID = try LocalProjectEncryption.identifier(for: url)
@@ -55,8 +59,8 @@ public actor SQLiteDatabase {
                 throw LocalProjectEncryption.error("无法创建加密数据库内存连接")
             }
             do {
-                try CrossProcessFileLock.withExclusiveLock(at: URL(fileURLWithPath: url.path + ".lock.tmp")) {
-                    try EncryptedSQLiteSnapshot.load(url: url, into: opened)
+                let initialSnapshot = try CrossProcessFileLock.withExclusiveLock(at: URL(fileURLWithPath: url.path + ".lock.tmp")) {
+                    var snapshot = try EncryptedSQLiteSnapshot.load(url: url, into: opened)
                     if !FileManager.default.fileExists(atPath: url.path) {
                         // Materialize an empty page so the first durable snapshot
                         // exists before any caller can issue a fallible mutation.
@@ -64,10 +68,14 @@ public actor SQLiteDatabase {
                     }
                     // Opening an authenticated encrypted snapshot is read-only;
                     // resealing it here needlessly rewrites the entire project.
-                    if mode != .readOnly, try !EncryptedSQLiteSnapshot.isEncryptedFile(at: url) {
-                        try EncryptedSQLiteSnapshot.save(handle: opened, to: url, id: encryptionID)
+                    if mode != .readOnly, snapshot == nil {
+                        snapshot = try EncryptedSQLiteSnapshot.save(handle: opened, to: url, id: encryptionID)
                     }
+                    // The first query can reuse the snapshot authenticated by
+                    // init; a later external replacement still invalidates it.
+                    return snapshot
                 }
+                loadedSnapshot = initialSnapshot
                 try Self.executeScript(opened, sql: "PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY;")
             } catch {
                 sqlite3_close(opened)
@@ -140,7 +148,9 @@ public actor SQLiteDatabase {
     /// every failure and the original stable SQLite error remains authoritative.
     @discardableResult
     public func transaction(_ commands: [SQLiteCommand]) throws -> [Int] {
-        try withEncryptedSnapshot(writing: true) { database in try database.transactionUnlocked(commands) }
+        // An empty compatibility import must not reseal a large encrypted DB.
+        guard !commands.isEmpty else { return [] }
+        return try withEncryptedSnapshot(writing: true) { database in try database.transactionUnlocked(commands) }
     }
 
     private func transactionUnlocked(_ commands: [SQLiteCommand]) throws -> [Int] {
@@ -324,6 +334,7 @@ public actor SQLiteDatabase {
     /// filesystem SQLite handle. Follow the committed library rename explicitly.
     func relocateEncryptedBacking(to newURL: URL) {
         snapshotURL = newURL.standardizedFileURL
+        loadedSnapshot = nil
     }
 
     private func withEncryptedSnapshot<T>(writing: Bool, _ operation: @Sendable (isolated SQLiteDatabase) throws -> T) throws -> T {
@@ -336,10 +347,24 @@ public actor SQLiteDatabase {
             guard FileManager.default.fileExists(atPath: snapshotURL.path) else {
                 throw LocalProjectEncryption.error("加密项目数据库已被移动或删除，请重新打开项目库")
             }
-            try EncryptedSQLiteSnapshot.load(url: snapshotURL, into: handle)
-            let result = try operation(self)
-            if writing { try EncryptedSQLiteSnapshot.save(handle: handle, to: snapshotURL, id: encryptionID) }
-            return result
+            do {
+                let bytes = try Data(contentsOf: snapshotURL)
+                if loadedSnapshot != bytes {
+                    // Load the exact bytes compared here; plaintext/WAL inputs
+                    // return nil and must always be reloaded on the next access.
+                    loadedSnapshot = try EncryptedSQLiteSnapshot.load(url: snapshotURL, into: handle, bytes: bytes)
+                }
+                let result = try operation(self)
+                if writing {
+                    loadedSnapshot = try EncryptedSQLiteSnapshot.save(handle: handle, to: snapshotURL, id: encryptionID)
+                }
+                return result
+            } catch {
+                // A failed script or save may have mutated memory. Force a
+                // reload before any subsequent read or write can observe it.
+                loadedSnapshot = nil
+                throw error
+            }
         }
     }
 

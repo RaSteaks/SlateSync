@@ -4,6 +4,25 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class SlateSyncRuntimeTests: XCTestCase {
+    func testSettingsDraftResolutionDoesNotSaveOrReplaceRuntime() async throws {
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runtime = SlateSyncRuntime(locator: ApplicationSupportLocator(root: root),
+                                       environment: ["PADDLEOCR_PYTHON": "/environment/python"],
+                                       keychainBackend: InMemoryKeychainBackend())
+        let before = await runtime.bootstrap()
+        // Diagnostics preview follows normal precedence but does not commit.
+        let preview = await runtime.resolveSettingsDraft(.init([.paddleOCRPython: "/draft/python", .visionOCRLanguage: "en-US"]))
+        XCTAssertEqual(preview[.paddleOCRPython], "/draft/python")
+        XCTAssertEqual(preview[.visionOCRLanguage], "en-US")
+        let after = await runtime.currentSnapshot()
+        let stored = try await runtime.globalConfigStore.load()
+        XCTAssertEqual(after.configuration.values, before.configuration.values)
+        XCTAssertNil(stored.values[.paddleOCRPython])
+        let fallback = await runtime.resolveSettingsDraft(.init())
+        XCTAssertEqual(fallback[.paddleOCRPython], "/environment/python")
+    }
+
     func testBootstrapLoadsStoresResolvesDynamicDefaultsAndReportsMissingSource() async throws {
         let root = try makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Shared feedback keeps recovery in the owning feature, without global toast
 /// timers or changing a model's operation lifetime when a view is remounted.
 struct SlateStatusBar<Actions: View>: View {
@@ -33,7 +35,7 @@ struct SlateStatusBar<Actions: View>: View {
             } else {
                 Image(systemName: symbol).foregroundStyle(color).accessibilityHidden(true)
             }
-            Text(message).font(.callout).textSelection(.enabled).fixedSize(
+            Text(L10n.message(message)).font(.callout).textSelection(.enabled).fixedSize(
                 horizontal: false, vertical: true)
             Spacer(minLength: 8)
             actions()
@@ -67,7 +69,7 @@ struct SlateEmptyState<Actions: View>: View {
         ContentUnavailableView {
             Label(title, systemImage: symbol)
         } description: {
-            Text(message)
+            Text(L10n.message(message))
         } actions: {
             actions()
         }
@@ -148,7 +150,7 @@ struct SlateSearchField: View {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("清除\(title)").help("清除\(title)")
+            .accessibilityLabel(L10n.tr("清除{0}", [String(describing: title)])).help(L10n.tr("清除{0}", [String(describing: title)]))
             .accessibilityIdentifier("\(identifier).clear")
             .opacity(text.isEmpty ? 0 : 1).disabled(text.isEmpty)
             .accessibilityHidden(text.isEmpty)

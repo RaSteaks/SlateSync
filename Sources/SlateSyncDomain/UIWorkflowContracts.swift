@@ -192,6 +192,8 @@ public protocol LocalSlateWorkflowServing: Sendable {
 }
 
 public protocol GlobalSettingsWorkflowServing: Sendable {
+    /// Checks a settings draft without persisting it or installing dependencies.
+    func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck]
     func globalSettings() async throws -> GlobalSettingsProjection
     func saveGlobalSettings(values: GlobalSettingValues, customProviders: [CustomProviderConfiguration]) async throws -> GlobalSettingsProjection
     func setProviderCredential(_ value: String?, providerID: String) async throws

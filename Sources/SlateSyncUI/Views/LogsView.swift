@@ -1,6 +1,8 @@
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct LogsView: View {
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: LogsModel
@@ -19,20 +21,23 @@ public struct LogsView: View {
             // rows below remain native list content for dense scrolling.
             SlateGlassContainer {
                 HStack {
-                    Menu("级别", systemImage: "line.3.horizontal.decrease.circle") {
+                    Menu(L10n.tr("级别"), systemImage: "line.3.horizontal.decrease.circle") {
                         ForEach(ProductLogSeverity.allCases, id: \.self) { severity in
                             Toggle(severity.title, isOn: severityBinding(severity))
                         }
                     }
-                    SlateSearchField(title: "筛选分类", text: $model.category, identifier: "logs.category").frame(maxWidth: 180)
-                    Button("刷新", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
-                    Button("打开日志文件夹", systemImage: "folder") {
+                    // Keep the native menu at its intrinsic width; the trailing
+                    // spacer owns surplus space in the filter strip.
+                    .fixedSize()
+                    SlateSearchField(title: L10n.tr("筛选分类"), text: $model.category, identifier: "logs.category").frame(maxWidth: 180)
+                    Button(L10n.tr("刷新"), systemImage: "arrow.clockwise") { Task { await model.refresh() } }
+                    Button(L10n.tr("打开日志文件夹"), systemImage: "folder") {
                         Task { opener.openDirectory(await model.directory()) }
                     }
                     Spacer()
-                    if model.isRefreshing { ProgressView().controlSize(.small).accessibilityLabel("正在读取日志") }
+                    if model.isRefreshing { ProgressView().controlSize(.small).accessibilityLabel(L10n.tr("正在读取日志")) }
                     if recognition.operation.isRunning {
-                        Label("识别进行中", systemImage: "viewfinder")
+                        Label(L10n.tr("识别进行中"), systemImage: "viewfinder")
                             .foregroundStyle(SlateSyncTheme.accent)
                     }
                 }
@@ -41,7 +46,10 @@ public struct LogsView: View {
             }
             Divider()
             if model.entries.isEmpty, !model.isRefreshing {
-                ContentUnavailableView("暂无日志", systemImage: "doc.text.magnifyingglass", description: Text("日志仅保留脱敏的产品事件。"))
+                ContentUnavailableView(L10n.tr("暂无日志"), systemImage: "doc.text.magnifyingglass", description: Text(L10n.tr("日志仅保留脱敏的产品事件。")))
+                    // Match List's flexible footprint so empty/filter results
+                    // keep the filter strip pinned below the window toolbar.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(model.entries) { entry in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -50,7 +58,7 @@ public struct LogsView: View {
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         Text(entry.category).font(.caption.monospaced()).frame(width: 96, alignment: .leading)
                         VStack(alignment: .leading) {
-                            Text(entry.message)
+                            Text(L10n.message(entry.message))
                             Text(entry.event).font(.caption.monospaced()).foregroundStyle(.secondary)
                         }
                     }
@@ -59,11 +67,11 @@ public struct LogsView: View {
                 }.accessibilityIdentifier(AccessibilityID.logsList)
             }
         }
-        .navigationTitle("运行日志")
+        .navigationTitle(L10n.tr("运行日志"))
         .safeAreaInset(edge: .bottom) {
             if model.degraded {
-                SlateStatusBar(message: "部分日志无法读取，已保留可用记录。", tone: .warning) {
-                    Button("重试") { Task { await model.refresh() } }
+                SlateStatusBar(message: L10n.tr("部分日志无法读取，已保留可用记录。"), tone: .warning) {
+                    Button(L10n.tr("重试")) { Task { await model.refresh() } }
                 }
             }
         }
@@ -85,7 +93,7 @@ public struct LogsView: View {
 }
 
 private extension ProductLogSeverity {
-    var title: String { switch self { case .debug: "调试"; case .info: "信息"; case .warning: "警告"; case .error: "错误" } }
+    var title: String { switch self { case .debug: L10n.tr("调试"); case .info: L10n.tr("信息"); case .warning: L10n.tr("警告"); case .error: L10n.tr("错误") } }
     var symbol: String { switch self { case .debug: "ladybug"; case .info: "info.circle"; case .warning: "exclamationmark.triangle"; case .error: "xmark.octagon" } }
     // Severity uses the same adaptive semantic colors as feature feedback.
     // Info stays neutral so amber is reserved for live-recognition signals.

@@ -1,6 +1,8 @@
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Project-scoped settings draft. It never reads or writes provider
 /// credentials; the immutable draft is committed by one atomic façade call.
 @MainActor @Observable
@@ -19,7 +21,7 @@ public final class ProjectSettingsModel {
 
     public func flushIfNeeded() async throws {
         guard !operation.isRunning else {
-            throw SlateSyncError(code: "PROJECT_SETTINGS_BUSY", message: "项目设置正在读取或保存，请稍后重试", retryable: true)
+            throw SlateSyncError(code: "PROJECT_SETTINGS_BUSY", message: L10n.tr("项目设置正在读取或保存，请稍后重试"), retryable: true)
         }
         guard let project else { return }
         guard name != project.name || description != project.description || settings != project.settings else { return }
@@ -37,7 +39,7 @@ public final class ProjectSettingsModel {
             return
         }
         let request = generation
-        operation = .running(label: "正在读取项目设置…")
+        operation = .running(label: L10n.tr("正在读取项目设置…"))
         do {
             let value = try await service.project(id: projectID)
             let scenarios = try await (service as? any LocalSlateWorkflowServing)?.listScenarios(projectID: projectID) ?? []
@@ -58,12 +60,12 @@ public final class ProjectSettingsModel {
         guard let project, !operation.isRunning else { return }
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedName.isEmpty else {
-            operation = .failed(.init(code: "PROJECT_NAME_REQUIRED", message: "项目名称不能为空"))
+            operation = .failed(.init(code: "PROJECT_NAME_REQUIRED", message: L10n.tr("项目名称不能为空")))
             return
         }
         let draft = settings
         let request = generation
-        operation = .running(label: "正在保存…")
+        operation = .running(label: L10n.tr("正在保存…"))
         do {
             try draft.validate()
             let saved = try await service.updateProject(
@@ -77,7 +79,7 @@ public final class ProjectSettingsModel {
             guard request == generation, self.project?.id == project.id else { return }
             self.project = saved
             onSaved?(saved)
-            operation = .succeeded(message: "项目设置已保存")
+            operation = .succeeded(message: L10n.tr("项目设置已保存"))
         } catch {
             guard request == generation, self.project?.id == project.id else { return }
             operation = .failed(ProductPrivacy.error(error))

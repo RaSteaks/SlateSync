@@ -4,6 +4,97 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class LocalProjectEncryptionTests: XCTestCase {
+    func testCachedSnapshotObservesSameSizeInPlaceReplacementBeforeWriting() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("encrypted-in-place-replacement")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let url = root.appending(path: "project.sqlite")
+        let database = try SQLiteDatabase(url: url)
+        try await database.executeScript("CREATE TABLE sample(value TEXT); INSERT INTO sample VALUES ('before');")
+        let original = try Data(contentsOf: url)
+        let other = try SQLiteDatabase(url: url)
+        try await other.execute("UPDATE sample SET value = 'after!';")
+        let replacement = try Data(contentsOf: url)
+        try await other.close()
+        XCTAssertEqual(original.count, replacement.count)
+        // First cache the original envelope, then overwrite without replacing
+        // the file or changing its size; restore mtime to model weak metadata.
+        try original.write(to: url)
+        let cached = try await database.scalar("SELECT value FROM sample;")
+        XCTAssertEqual(cached, "before")
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let file = try FileHandle(forWritingTo: url)
+        try file.write(contentsOf: replacement)
+        try file.close()
+        try FileManager.default.setAttributes([.modificationDate: attributes[.modificationDate]!], ofItemAtPath: url.path)
+        try await database.execute("INSERT INTO sample VALUES ('retained');")
+        let rows = try await database.rows("SELECT value FROM sample ORDER BY rowid;")
+        XCTAssertEqual(rows.compactMap { $0["value"] ?? nil }, ["after!", "retained"])
+        try await database.close()
+        let reopened = try SQLiteDatabase(url: url)
+        let persisted = try await reopened.scalar("SELECT value FROM sample ORDER BY rowid LIMIT 1;")
+        XCTAssertEqual(persisted, "after!")
+        try await reopened.close()
+    }
+
+    func testCachedEncryptedReadsObserveOtherWritersAndDiscardFailedScripts() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("encrypted-revision-cache")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let url = root.appending(path: "project.sqlite")
+        let first = try SQLiteDatabase(url: url)
+        try await first.executeScript("CREATE TABLE sample(value TEXT); INSERT INTO sample VALUES ('initial');")
+        let second = try SQLiteDatabase(url: url)
+        // Alternate connections without sleeps: even same-size replacements
+        // within one timestamp tick must invalidate the other owner's cache.
+        for value in ["first", "other", "third"] {
+            try await second.execute("UPDATE sample SET value = ?;", bindings: [value])
+            let observed = try await first.scalar("SELECT value FROM sample;")
+            XCTAssertEqual(observed, value)
+        }
+        do {
+            try await first.executeScript("UPDATE sample SET value = 'uncommitted'; SELECT * FROM missing_table;")
+            XCTFail("Expected script failure")
+        } catch {}
+        let restored = try await first.scalar("SELECT value FROM sample;")
+        XCTAssertEqual(restored, "third")
+        try await first.execute("INSERT INTO sample VALUES ('retained');")
+        let count = try await second.scalar("SELECT COUNT(*) FROM sample;")
+        XCTAssertEqual(count, "2")
+        try await first.close()
+        try await second.close()
+    }
+
+    func testCachedEncryptedReadRejectsInPlaceCorruption() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("encrypted-cache-corruption")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let url = root.appending(path: "project.sqlite")
+        let database = try SQLiteDatabase(url: url)
+        try await database.executeScript("CREATE TABLE sample(value TEXT); INSERT INTO sample VALUES ('kept');")
+        _ = try await database.scalar("SELECT value FROM sample;")
+        let original = try Data(contentsOf: url)
+        var corrupt = original
+        corrupt[corrupt.count - 1] ^= 1
+        // Preserve the inode and length to exercise nanosecond change tracking.
+        let file = try FileHandle(forWritingTo: url)
+        try file.write(contentsOf: corrupt)
+        try file.close()
+        do {
+            _ = try await database.scalar("SELECT value FROM sample;")
+            XCTFail("Corrupt backing data must not be hidden by cached plaintext")
+        } catch {}
+        try original.write(to: url, options: .atomic)
+        let recovered = try await database.scalar("SELECT value FROM sample;")
+        XCTAssertEqual(recovered, "kept")
+        try FileManager.default.removeItem(at: url)
+        do {
+            _ = try await database.scalar("SELECT value FROM sample;")
+            XCTFail("Deleted backing data must not be hidden by the cache")
+        } catch {}
+        try await database.close()
+    }
+
     func testOpeningEncryptedDatabaseDoesNotRewriteSnapshot() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("encrypted-open-read-only")
         defer { try? FileManager.default.removeItem(at: root) }

@@ -146,6 +146,9 @@ Settings has a 780×620 default and a 700×540 minimum, with scrollable native f
 and a native segmented selector for General / Provider / Recognition / OCR /
 Advanced. A single flexible content host avoids the fixed ideal size imposed by
 the macOS 15 Settings TabView host.
+OCR environment diagnostics use native form rows with selectable path/version
+details, textual status and SF Symbols; success/warning/error reuse theme colors.
+Checks have explicit idle, progress, cancel, failure and stale-result states.
 Tables retain their own bounded scroll region, independent of adjacent forms.
 Minimum sizes refer to the complete native window. `slateWindowMinimumSize`
 measures the owning window's chrome and subtracts it from the content minimum;
@@ -241,6 +244,8 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
   行内保留项目识别线，加入 40 pt 图标底座和打开/归档提示符。
 - 侧栏显示 SlateSync 品牌与“场记整理工作台”，底部提供原生全局设置入口。
   侧栏底色、选择和键盘行为继续由系统拥有。
+- “当前项目”分组标题右侧显示已打开项目名称；名称保持单行、中间截断并提供完整
+  悬停提示，未打开项目时不显示占位文字，避免与下方导航项争夺层级。
 - 任务栏增加项目任务标题与总数，状态同时使用文字和 SF Symbols；搜索不改变总数含义。
 - 保留三段原生工作页、原稿对照、保存屏障、300 pt 配置面板与现有密度规则。
   不新增动画，减少动态效果设置无需额外适配。
@@ -274,3 +279,11 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
 - Credential badges retain capsule geometry; custom outlines appear only for accessibility modes.
 - Search owns its focus/separator outline; the configuration panel owns its full-opacity leading rule, avoiding duplicate helper borders.
 - The library summary uses a canvas-backed fallback, including reduced transparency, distinct from the evidence-surface list.
+
+### 应用语言（2026-09-16）
+
+- 通用设置提供「语言 / Language」，选项以本语言名显示「简体中文」「English」。
+  同一语言覆盖所有窗口、应用菜单和帮助，重启后统一生效；不通过替换 View 身份切换语言。
+- 英文文案使用同一原生字体、颜色与密度体系，较长说明允许换行，设置表单保留独立滚动。
+- `L10n` 与 `Resources/English.json` 是显示文案的统一入口；用户内容、识别提示词与导出格式
+  不受界面语言影响。UI 文案与参数覆盖由 `script/audit_localization.py` 和语言回归测试检查。

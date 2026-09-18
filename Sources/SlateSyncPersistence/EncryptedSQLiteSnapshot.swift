@@ -2,22 +2,15 @@ import Foundation
 import SQLite3
 import SlateSyncDomain
 
-/// SQLite plaintext exists only in memory. Each operation reloads under the
-/// same cross-process lock, so independent store actors cannot lose updates.
-/// This favors confidentiality and simplicity over large-database throughput.
+/// SQLite plaintext exists only in memory. The database owner checks snapshot
+/// bytes under the cross-process lock and reloads when another writer has
+/// committed, so repeated reads can reuse memory without losing updates.
 enum EncryptedSQLiteSnapshot {
-    /// Inspect only the envelope prefix; opening a large project must not
-    /// allocate another full database merely to decide whether migration ran.
-    static func isEncryptedFile(at url: URL) throws -> Bool {
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-        let file = try FileHandle(forReadingFrom: url)
-        defer { try? file.close() }
-        return LocalProjectEncryption.isEncrypted(try file.read(upToCount: 64) ?? Data())
-    }
-
-    static func load(url: URL, into handle: OpaquePointer) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        let bytes = try Data(contentsOf: url)
+    /// Return only the envelope actually authenticated by this load. Legacy WAL
+    /// databases cannot be cached by their main-file bytes alone.
+    static func load(url: URL, into handle: OpaquePointer, bytes suppliedBytes: Data? = nil) throws -> Data? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let bytes = try suppliedBytes ?? Data(contentsOf: url)
         if LocalProjectEncryption.isEncrypted(bytes) {
             let plain = try LocalProjectEncryption.open(bytes)
             guard let buffer = sqlite3_malloc64(UInt64(plain.count)) else { throw LocalProjectEncryption.error("项目数据库内存不足") }
@@ -46,9 +39,11 @@ enum EncryptedSQLiteSnapshot {
         guard sqlite3_exec(handle, "PRAGMA journal_mode=MEMORY; PRAGMA temp_store=MEMORY;", nil, nil, nil) == SQLITE_OK else {
             throw LocalProjectEncryption.error("无法初始化加密数据库")
         }
+        return LocalProjectEncryption.isEncrypted(bytes) ? bytes : nil
     }
 
-    static func save(handle: OpaquePointer, to url: URL, id: String) throws {
+    @discardableResult
+    static func save(handle: OpaquePointer, to url: URL, id: String) throws -> Data {
         var count: Int64 = 0
         guard let bytes = sqlite3_serialize(handle, "main", &count, 0) else {
             throw LocalProjectEncryption.error("无法序列化项目数据库")
@@ -60,5 +55,6 @@ enum EncryptedSQLiteSnapshot {
         guard try LocalProjectEncryption.open(encrypted) == data else { throw LocalProjectEncryption.error("项目数据库加密校验失败") }
         try FileManagerAtomicFileWriter().writeRaw(encrypted, to: url, permissions: 0o600)
         try LocalProjectEncryption.removeSQLiteSidecars(for: url)
+        return encrypted
     }
 }

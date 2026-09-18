@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct HelpView: View {
     @Environment(\.slateSyncDensity) private var density
     @Environment(\.openSettings) private var openSettings
@@ -38,20 +40,10 @@ public struct HelpView: View {
     public var body: some View {
         HSplitView {
             VStack(spacing: 0) {
-                // Search and language controls share one sampling group while
-                // the help List remains a native navigation surface.
-                SlateGlassContainer(spacing: density.rowPadding) {
-                    VStack(spacing: density.rowPadding) {
-                        Picker("语言 / Language", selection: $model.english) {
-                            Text("简体中文").tag(false)
-                            Text("English").tag(true)
-                        }
-                        .padding(4)
-                        .slateGlassSurface(.control, interactive: true)
-                        SlateSearchField(title: "搜索帮助", text: $model.query, identifier: AccessibilityID.helpSearch)
-                    }
+                // Help follows the application language selected in General Settings;
+                // this surface only searches and displays the selected help content.
+                SlateSearchField(title: model.english ? "Search help" : L10n.tr("搜索帮助"), text: $model.query, identifier: AccessibilityID.helpSearch)
                     .padding(10)
-                }
                 Divider()
                 List(model.results, selection: $model.selection) { section in
                     Label(model.title(section), systemImage: section.symbol)
@@ -70,15 +62,15 @@ public struct HelpView: View {
                     }
                 } else {
                     ContentUnavailableView(
-                        model.english ? "No help found" : "未找到内容",
+                        model.english ? "No help found" : L10n.tr("未找到内容"),
                         systemImage: "magnifyingglass",
-                        description: Text(model.english ? "Try Provider, OCR, CSV, or logs." : "请尝试 Provider、OCR、CSV 或日志。")
+                        description: Text(model.english ? "Try Provider, OCR, CSV, or logs." : L10n.tr("请尝试 Provider、OCR、CSV 或日志。"))
                     )
                 }
             }
             .frame(minWidth: 420)
         }
-        .navigationTitle("帮助")
+        .navigationTitle(model.english ? "Help" : L10n.tr("帮助"))
         // The help model remains mounted while Settings opens, preserving the
         // search query, selected chapter, and native scroll position.
         .safeAreaInset(edge: .bottom) {
@@ -107,7 +99,7 @@ public struct HelpView: View {
 
             if !section.steps.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(model.english ? "Steps" : "操作步骤")
+                    Text(model.english ? "Steps" : L10n.tr("操作步骤"))
                         .font(.headline)
                     ForEach(Array(section.steps.enumerated()), id: \.element.id) { index, step in
                         HStack(alignment: .top, spacing: 10) {
@@ -130,7 +122,7 @@ public struct HelpView: View {
 
             if !section.tips.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(model.english ? "Tips" : "提示")
+                    Text(model.english ? "Tips" : L10n.tr("提示"))
                         .font(.headline)
                     ForEach(section.tips) { tip in
                         Label(model.tipText(tip), systemImage: "lightbulb")
@@ -144,7 +136,7 @@ public struct HelpView: View {
 
             if !section.faqs.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(model.english ? "Frequently asked questions" : "常见问题")
+                    Text(model.english ? "Frequently asked questions" : L10n.tr("常见问题"))
                         .font(.headline)
                     ForEach(section.faqs) { faq in
                         DisclosureGroup(model.faqQuestion(faq)) {
@@ -160,7 +152,7 @@ public struct HelpView: View {
 
             if !section.actions.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(model.english ? "Shortcuts" : "快捷操作")
+                    Text(model.english ? "Shortcuts" : L10n.tr("快捷操作"))
                         .font(.headline)
                     ForEach(section.actions, id: \.self) { action in
                         actionView(action)
@@ -170,21 +162,21 @@ public struct HelpView: View {
 
             if !section.externalLinks.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(model.english ? "External documentation" : "外部文档")
+                    Text(model.english ? "External documentation" : L10n.tr("外部文档"))
                         .font(.headline)
                     ForEach(section.externalLinks) { link in
                         if let url = URL(string: link.url) {
                             Link("\(model.linkTitle(link)) ↗", destination: url)
-                                .help(model.english ? "Open in browser" : "在浏览器中打开")
+                                .help(model.english ? "Open in browser" : L10n.tr("在浏览器中打开"))
                         }
                     }
-                    Text(model.english ? "External links open in your browser." : "外部链接将在浏览器中打开。")
+                    Text(model.english ? "External links open in your browser." : L10n.tr("外部链接将在浏览器中打开。"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
             Divider()
-            Text(model.english ? "This help is bundled with SlateSync and works offline." : "本帮助内容随 SlateSync 安装，无需网络。")
+            Text(model.english ? "This help is bundled with SlateSync and works offline." : L10n.tr("本帮助内容随 SlateSync 安装，无需网络。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
         .textSelection(.enabled)
@@ -194,66 +186,66 @@ public struct HelpView: View {
     private func actionView(_ action: HelpActionID) -> some View {
         switch action {
         case .openProjectLibrary:
-            Button(model.english ? "Open project library" : "打开项目库", systemImage: "square.grid.2x2", action: onOpenProjectLibrary)
+            Button(model.english ? "Open project library" : L10n.tr("打开项目库"), systemImage: "square.grid.2x2", action: onOpenProjectLibrary)
         case .openProviderSettings:
-            Button(model.english ? "Open Provider settings" : "打开 Provider 设置", systemImage: "slider.horizontal.3") {
+            Button(model.english ? "Open Provider settings" : L10n.tr("打开 Provider 设置"), systemImage: "slider.horizontal.3") {
                 openSettingsDestination(category: .providers)
             }
         case .configureOpenRouter:
-            Button(model.english ? "Configure OpenRouter" : "配置 OpenRouter", systemImage: "key") {
+            Button(model.english ? "Configure OpenRouter" : L10n.tr("配置 OpenRouter"), systemImage: "key") {
                 openSettingsDestination(category: .providers, providerID: "openrouter")
             }
         case .openRecognitionSettings:
-            Button(model.english ? "Open recognition settings" : "打开识别设置", systemImage: "slider.horizontal.3") {
+            Button(model.english ? "Open recognition settings" : L10n.tr("打开识别设置"), systemImage: "slider.horizontal.3") {
                 openSettingsDestination(category: .recognition)
             }
         case .openOCRSettings:
-            Button(model.english ? "Open OCR settings" : "打开 OCR 设置", systemImage: "doc.text.viewfinder") {
+            Button(model.english ? "Open OCR settings" : L10n.tr("打开 OCR 设置"), systemImage: "doc.text.viewfinder") {
                 openSettingsDestination(category: .ocr)
             }
         case .openVisionOCR:
-            Button(model.english ? "Locate Vision OCR" : "定位 Vision OCR", systemImage: "viewfinder") {
+            Button(model.english ? "Locate Vision OCR" : L10n.tr("定位 Vision OCR"), systemImage: "viewfinder") {
                 openSettingsDestination(category: .ocr, subregion: .vision)
             }
         case .openPaddleOCR:
-            Button(model.english ? "Locate PaddleOCR" : "定位 PaddleOCR", systemImage: "shippingbox") {
+            Button(model.english ? "Locate PaddleOCR" : L10n.tr("定位 PaddleOCR"), systemImage: "shippingbox") {
                 openSettingsDestination(category: .ocr, subregion: .paddleOCR)
             }
         case .openProjectSettings:
             if hasProject {
-                Button(model.english ? "Open current project settings" : "打开当前项目设置", systemImage: "slider.horizontal.3", action: onOpenProjectSettings)
+                Button(model.english ? "Open current project settings" : L10n.tr("打开当前项目设置"), systemImage: "slider.horizontal.3", action: onOpenProjectSettings)
             } else {
                 unavailableAction(
-                    message: model.english ? "Current project settings are unavailable until a project is open." : "当前项目设置不可用：请先打开一个项目。"
+                    message: model.english ? "Current project settings are unavailable until a project is open." : L10n.tr("当前项目设置不可用：请先打开一个项目。")
                 )
             }
         case .enterCurrentTask:
             if hasTask {
-                Button(model.english ? "Enter current task" : "进入当前任务", systemImage: "rectangle.3.group", action: onEnterCurrentTask)
+                Button(model.english ? "Enter current task" : L10n.tr("进入当前任务"), systemImage: "rectangle.3.group", action: onEnterCurrentTask)
             } else {
                 unavailableAction(
-                    message: model.english ? "Current task is unavailable until a project and task are open." : "当前任务不可用：请先打开项目和任务。"
+                    message: model.english ? "Current task is unavailable until a project and task are open." : L10n.tr("当前任务不可用：请先打开项目和任务。")
                 )
             }
         case .openCurrentTaskCSV:
             if hasTask {
-                Button(model.english ? "Open current task Resolve CSV" : "打开当前任务的 Resolve CSV", systemImage: "tablecells", action: onOpenCSV)
+                Button(model.english ? "Open current task Resolve CSV" : L10n.tr("打开当前任务的 Resolve CSV"), systemImage: "tablecells", action: onOpenCSV)
             } else {
                 unavailableAction(
-                    message: model.english ? "Resolve CSV is unavailable until a task is open." : "Resolve CSV 不可用：请先打开一个任务。"
+                    message: model.english ? "Resolve CSV is unavailable until a task is open." : L10n.tr("Resolve CSV 不可用：请先打开一个任务。")
                 )
             }
         case .openLogs:
-            Button(model.english ? "Open run logs" : "打开运行日志", systemImage: "doc.text.magnifyingglass", action: onOpenLogs)
+            Button(model.english ? "Open run logs" : L10n.tr("打开运行日志"), systemImage: "doc.text.magnifyingglass", action: onOpenLogs)
         }
     }
 
     private func unavailableAction(message: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Label(message, systemImage: "lock")
+            Label(L10n.message(message), systemImage: "lock")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(model.english ? "Open project library" : "打开项目库", systemImage: "square.grid.2x2", action: onOpenProjectLibrary)
+            Button(model.english ? "Open project library" : L10n.tr("打开项目库"), systemImage: "square.grid.2x2", action: onOpenProjectLibrary)
         }
     }
 

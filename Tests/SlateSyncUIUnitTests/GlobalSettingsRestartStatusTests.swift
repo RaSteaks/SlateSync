@@ -29,15 +29,25 @@ final class GlobalSettingsRestartStatusTests: XCTestCase {
     }
 
     private actor RestartSettingsFake: GlobalSettingsWorkflowServing {
+        private(set) var checkedValues: GlobalSettingValues?
         let saveResponse: GlobalSettingsProjection
         private let loadResponse: GlobalSettingsProjection
+        private let suspendsChecks: Bool
 
-        init(saveResponse: GlobalSettingsProjection, loadResponse: GlobalSettingsProjection) {
+        init(saveResponse: GlobalSettingsProjection, loadResponse: GlobalSettingsProjection, suspendsChecks: Bool = false) {
             self.saveResponse = saveResponse
             self.loadResponse = loadResponse
+            self.suspendsChecks = suspendsChecks
         }
 
         func globalSettings() async throws -> GlobalSettingsProjection { loadResponse }
+        // Diagnostics echo their snapshot, allowing the model tests to detect
+        // accidental saves, draft resets, or stale-result publication.
+        func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
+            checkedValues = values
+            if suspendsChecks { try await Task.sleep(for: .seconds(60)) }
+            return [.init(id: "python", title: "Python", status: .passed, detail: "3.12")]
+        }
         func saveGlobalSettings(
             values: GlobalSettingValues,
             customProviders: [CustomProviderConfiguration]
@@ -55,6 +65,46 @@ final class GlobalSettingsRestartStatusTests: XCTestCase {
             throw SlateSyncError(code: "TEST_UNREACHABLE", message: "not part of this fixture", status: 500)
         }
         func cancelPaddleOCRInstallation() async {}
+    }
+
+    func testOCRCheckUsesDraftAndMarksResultsStaleAfterEditing() async {
+        let fake = RestartSettingsFake(saveResponse: projection(restartRequired: false), loadResponse: projection(restartRequired: false))
+        let model = GlobalSettingsModel(service: fake)
+        await model.load()
+        model.setValue("/draft/python", for: .paddleOCRPython)
+        await model.checkOCREnvironment()
+        let checked = await fake.checkedValues
+        XCTAssertEqual(checked?[.paddleOCRPython], "/draft/python")
+        XCTAssertNil(model.live?.values[.paddleOCRPython])
+        XCTAssertFalse(model.ocrChecksAreStale)
+        model.setValue("fast", for: .visionOCRRecognitionLevel)
+        XCTAssertTrue(model.ocrChecksAreStale)
+        await model.checkOCREnvironment()
+        XCTAssertFalse(model.ocrChecksAreStale)
+        XCTAssertEqual(model.value(.paddleOCRPython), "/draft/python")
+        model.invalidateOCREnvironmentCheck()
+        XCTAssertTrue(model.ocrChecks.isEmpty)
+    }
+
+    func testOCRCheckDoesNotRunAfterDrain() async {
+        let fake = RestartSettingsFake(saveResponse: projection(restartRequired: false), loadResponse: projection(restartRequired: false))
+        let model = GlobalSettingsModel(service: fake)
+        await model.drain()
+        await model.checkOCREnvironment()
+        let checked = await fake.checkedValues
+        XCTAssertNil(checked)
+        XCTAssertFalse(model.ocrCheckOperation.isRunning)
+    }
+
+    func testDrainCancelsAndJoinsRunningOCRCheck() async {
+        let fake = RestartSettingsFake(saveResponse: projection(restartRequired: false), loadResponse: projection(restartRequired: false), suspendsChecks: true)
+        let model = GlobalSettingsModel(service: fake)
+        let task = Task { await model.checkOCREnvironment() }
+        while !model.ocrCheckOperation.isRunning { await Task.yield() }
+        await model.drain()
+        await task.value
+        XCTAssertEqual(model.ocrCheckOperation, .canceled)
+        XCTAssertTrue(model.ocrChecks.isEmpty)
     }
 
     func testChangedWorkflowPathSaveAnnouncesRestartRequirement() async {

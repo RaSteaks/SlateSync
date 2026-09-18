@@ -2,7 +2,10 @@ import SlateSyncDomain
 import SlateSyncWorkflow
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct SettingsRootView: View {
+    @AppStorage(AppLanguage.preferenceKey) private var applicationLanguage = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("density") private var density = "comfortable"
     @Bindable private var settings: GlobalSettingsModel
@@ -14,13 +17,16 @@ public struct SettingsRootView: View {
     @State private var category = SettingsCategory.general
     @State private var focusedOCRSubregion: SettingsSubregion?
     @State private var highlightedOCRSubregion: SettingsSubregion?
+    private let preferences: UserDefaults
     private let navigation: SettingsNavigationModel
 
     public init(
         settings: GlobalSettingsModel,
         paddleInstaller: PaddleInstallerModel,
-        navigation: SettingsNavigationModel
+        navigation: SettingsNavigationModel,
+        preferences: UserDefaults = .standard
     ) {
+        self.preferences = preferences
         self.settings = settings
         self.paddleInstaller = paddleInstaller
         self.navigation = navigation
@@ -34,7 +40,7 @@ public struct SettingsRootView: View {
             // The segmented control carries its own native bezel; an added
             // glass card doubles the frame and reads as a black border on the
             // dark canvas, so the classifier sits directly on the background.
-            Picker("设置分类", selection: $category) {
+            Picker(L10n.tr("设置分类"), selection: $category) {
                 ForEach(SettingsCategory.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden()
@@ -53,7 +59,7 @@ public struct SettingsRootView: View {
             .padding(density == "compact" ? 12 : 20)
         }
         .slateWindowMinimumSize(width: 700, height: 540)
-        .navigationTitle("设置")
+        .navigationTitle(L10n.tr("设置"))
         // Settings shares the workbench canvas instead of the system window
         // gray, keeping both windows on one neutral scale in each appearance.
         .background(SlateSyncTheme.canvas)
@@ -81,7 +87,10 @@ public struct SettingsRootView: View {
         .onChange(of: paddleInstaller.operation) {
             // Installation changes the persisted Python path outside this
             // form; merge that result without replacing unrelated user edits.
-            if case .succeeded = paddleInstaller.operation { Task { await settings.refresh() } }
+            if case .succeeded = paddleInstaller.operation {
+                settings.invalidateOCREnvironmentCheck()
+                Task { await settings.refresh() }
+            }
         }
         .sheet(
             isPresented: Binding(
@@ -115,7 +124,7 @@ public struct SettingsRootView: View {
             }
         }
         .confirmationDialog(
-            "删除自定义 Provider？",
+            L10n.tr("删除自定义 Provider？"),
             isPresented: Binding(
                 get: { providerPendingDeletion != nil },
                 set: { if !$0 { providerPendingDeletion = nil } }
@@ -123,14 +132,14 @@ public struct SettingsRootView: View {
             titleVisibility: .visible
         ) {
             if let provider = providerPendingDeletion {
-                Button("删除“\(provider.name)”", role: .destructive) {
+                Button(L10n.tr("删除“{0}”", [String(describing: provider.name)]), role: .destructive) {
                     providerPendingDeletion = nil
                     Task { await settings.removeCustomProvider(id: provider.id) }
                 }
             }
-            Button("取消", role: .cancel) { providerPendingDeletion = nil }
+            Button(L10n.tr("取消"), role: .cancel) { providerPendingDeletion = nil }
         } message: {
-            Text("删除后需要保存 Provider 设置才会持久化。")
+            Text(L10n.tr("删除后需要保存 Provider 设置才会持久化。"))
         }
         .safeAreaInset(edge: .bottom) {
             if case .failed(let error) = settings.operation {
@@ -185,20 +194,40 @@ public struct SettingsRootView: View {
 
     private var general: some View {
         Form {
-            Picker("外观", selection: $appearance) {
-                Text("跟随系统").tag("system")
-                Text("浅色").tag("light")
-                Text("深色").tag("dark")
+            // Native menus and AppKit panels read language at launch. Persist
+            // the next choice without replacing editors or interrupting work.
+            Section {
+                Picker("语言 / Language", selection: $applicationLanguage) {
+                    Text(verbatim: "简体中文").tag(AppLanguage.simplifiedChinese.rawValue)
+                    Text(verbatim: "English").tag(AppLanguage.english.rawValue)
+                }
+                .accessibilityLabel("语言 / Language")
+                .accessibilityIdentifier("settings.applicationLanguage")
+                .onChange(of: applicationLanguage) {
+                    AppLanguage.save(AppLanguage(rawValue: applicationLanguage) ?? .simplifiedChinese, in: preferences)
+                }
+                if applicationLanguage != L10n.language.rawValue {
+                    Label(L10n.tr("语言已保存，重启 SlateSync 后应用到所有窗口、菜单和帮助。"), systemImage: "arrow.clockwise")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.languageRestart")
+                }
+            } footer: {
+                Text(L10n.tr("应用语言包含界面、菜单和帮助。更改后请退出并重新打开 SlateSync。"))
+            }
+            Picker(L10n.tr("外观"), selection: $appearance) {
+                Text(L10n.tr("跟随系统")).tag("system")
+                Text(L10n.tr("浅色")).tag("light")
+                Text(L10n.tr("深色")).tag("dark")
             }
             // macOS Form presents picker titles as sibling static text, so
             // explicitly name the interactive controls for VoiceOver/XCUI.
-            .accessibilityLabel("外观")
+            .accessibilityLabel(L10n.tr("外观"))
             .accessibilityIdentifier(AccessibilityID.settingsAppearance)
-            Picker("界面密度", selection: $density) {
-                Text("舒适").tag("comfortable")
-                Text("紧凑").tag("compact")
+            Picker(L10n.tr("界面密度"), selection: $density) {
+                Text(L10n.tr("舒适")).tag("comfortable")
+                Text(L10n.tr("紧凑")).tag("compact")
             }
-            .accessibilityLabel("界面密度")
+            .accessibilityLabel(L10n.tr("界面密度"))
             .accessibilityIdentifier(AccessibilityID.settingsDensity)
         }.formStyle(.grouped)
     }
@@ -221,24 +250,24 @@ public struct SettingsRootView: View {
     private var providers: some View {
         VStack(spacing: 0) {
             List {
-                Section("内建 Provider") {
+                Section(L10n.tr("内建 Provider")) {
                     ForEach((settings.live?.providers ?? []).filter { $0.type != .custom }, id: \.id) { provider in
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(provider.label)
+                                Text(L10n.providerLabel(provider))
                                 Text(provider.id).font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
                             Spacer()
                             credentialStatusChip(provider.id)
-                            Button("刷新模型") { Task { await settings.discover(providerID: provider.id) } }
+                            Button(L10n.tr("刷新模型")) { Task { await settings.discover(providerID: provider.id) } }
                                 .disabled(
                                     settings.providerOperations[provider.id]?.isRunning == true || !provider.configured)
-                            Button("配置…") { credentialProvider = provider }
+                            Button(L10n.tr("配置…")) { credentialProvider = provider }
                         }
                         providerStatus(provider.id)
                     }
                 }
-                Section("自定义 Provider") {
+                Section(L10n.tr("自定义 Provider")) {
                     ForEach(settings.customProviders, id: \.id) { provider in
                         HStack {
                             VStack(alignment: .leading) {
@@ -248,23 +277,23 @@ public struct SettingsRootView: View {
                             }
                             Spacer()
                             if let summary = settings.live?.providers.first(where: { $0.id == provider.id }) {
-                                Button("刷新模型") { Task { await settings.discover(providerID: provider.id) } }
+                                Button(L10n.tr("刷新模型")) { Task { await settings.discover(providerID: provider.id) } }
                                     .disabled(
                                         settings.providerOperations[provider.id]?.isRunning == true
                                             || !summary.configured)
-                                Button("配置…") { credentialProvider = summary }
+                                Button(L10n.tr("配置…")) { credentialProvider = summary }
                             }
-                            Button("编辑…") { providerEditing = provider }
-                            Button("删除…", role: .destructive) { providerPendingDeletion = provider }
+                            Button(L10n.tr("编辑…")) { providerEditing = provider }
+                            Button(L10n.tr("删除…"), role: .destructive) { providerPendingDeletion = provider }
                         }
                         providerStatus(provider.id)
                     }
-                    Button("添加自定义 Provider…", systemImage: "plus") { showsCustomProvider = true }
+                    Button(L10n.tr("添加自定义 Provider…"), systemImage: "plus") { showsCustomProvider = true }
                 }
             }
             HStack {
                 Spacer()
-                Button("保存 Provider 设置") { Task { await settings.save() } }
+                Button(L10n.tr("保存 Provider 设置")) { Task { await settings.save() } }
                     .slatePrimaryActionStyle()
                     .disabled(settings.operation.isRunning)
             }.padding(10)
@@ -273,16 +302,16 @@ public struct SettingsRootView: View {
 
     private var recognition: some View {
         Form {
-            Section("请求") {
-                settingField("请求超时（毫秒）", .modelRequestTimeoutMS)
-                settingField("超时重试次数", .modelRequestMaxRetries)
-                settingField("页并发数", .modelPageConcurrency)
-                settingField("全局识别并发数", .maxConcurrentRecognitions)
+            Section(L10n.tr("请求")) {
+                settingField(L10n.tr("请求超时（毫秒）"), .modelRequestTimeoutMS)
+                settingField(L10n.tr("超时重试次数"), .modelRequestMaxRetries)
+                settingField(L10n.tr("页并发数"), .modelPageConcurrency)
+                settingField(L10n.tr("全局识别并发数"), .maxConcurrentRecognitions)
             }
-            Section("模型") {
-                LabeledContent("可用模型", value: "\(settings.live?.models.count ?? 0)")
+            Section(L10n.tr("模型")) {
+                LabeledContent(L10n.tr("可用模型"), value: "\(settings.live?.models.count ?? 0)")
             }
-            Button("保存") { Task { await settings.save() } }
+            Button(L10n.tr("保存")) { Task { await settings.save() } }
                 .slatePrimaryActionStyle()
                 .disabled(settings.operation.isRunning)
         }.formStyle(.grouped)
@@ -292,37 +321,36 @@ public struct SettingsRootView: View {
         ScrollViewReader { proxy in
             Form {
                 Section("Vision") {
-                    LabeledContent("可用性", value: settings.live?.visionAvailable == true ? "可用" : "不可用")
-                    settingPicker("启用策略", .visionOCREnabled, [("自动", "auto"), ("启用", "true"), ("禁用", "false")])
-                    settingField("语言", .visionOCRLanguage)
-                    settingPicker("识别级别", .visionOCRRecognitionLevel, [("精准", "accurate"), ("快速", "fast")])
+                    settingPicker(L10n.tr("启用策略"), .visionOCREnabled, [(L10n.tr("自动"), "auto"), (L10n.tr("启用"), "true"), (L10n.tr("禁用"), "false")])
+                    settingField(L10n.tr("语言"), .visionOCRLanguage)
+                    settingPicker(L10n.tr("识别级别"), .visionOCRRecognitionLevel, [(L10n.tr("精准"), "accurate"), (L10n.tr("快速"), "fast")])
                 }
                 .id(SettingsSubregion.vision.rawValue)
                 Section("Paddle OCR") {
-                    LabeledContent("可用性", value: settings.live?.paddleAvailable == true ? "可用" : "未配置")
-                    settingPicker("启用策略", .paddleOCREnabled, [("自动", "auto"), ("启用", "true"), ("禁用", "false")])
+                    settingPicker(L10n.tr("启用策略"), .paddleOCREnabled, [(L10n.tr("自动"), "auto"), (L10n.tr("启用"), "true"), (L10n.tr("禁用"), "false")])
                     settingPicker(
-                        "预设", .paddleOCRPreset,
-                        [("自定义", "custom"), ("性能", "performance"), ("平衡", "balanced"), ("快速", "fast")])
-                    settingPicker("配置档", .paddleOCRProfile, [("快速", "fast"), ("平衡", "balanced"), ("精准", "accurate")])
-                    settingField("Python 可执行文件", .paddleOCRPython)
-                    settingField("语言", .paddleOCRLanguage)
-                    Text("自动安装需要 Python 3.10+，安装过程不会在测试中联网。")
+                        L10n.tr("预设"), .paddleOCRPreset,
+                        [(L10n.tr("自定义"), "custom"), (L10n.tr("性能"), "performance"), (L10n.tr("平衡"), "balanced"), (L10n.tr("快速"), "fast")])
+                    settingPicker(L10n.tr("配置档"), .paddleOCRProfile, [(L10n.tr("快速"), "fast"), (L10n.tr("平衡"), "balanced"), (L10n.tr("精准"), "accurate")])
+                    settingField(L10n.tr("Python 可执行文件"), .paddleOCRPython)
+                    settingField(L10n.tr("语言"), .paddleOCRLanguage)
+                    Text(L10n.tr("自动安装需要 Python 3.10+，安装过程不会在测试中联网。"))
                         .font(.caption).foregroundStyle(.secondary)
                     if let progress = paddleInstaller.progress {
-                        ProgressView(value: progress.percent, total: 100) { Text(progress.message) }
+                        ProgressView(value: progress.percent, total: 100) { Text(L10n.message(progress.message)) }
                     }
                     HStack {
-                        Button(settings.live?.paddleAvailable == true ? "重新安装 PaddleOCR" : "安装 PaddleOCR") {
+                        Button(settings.live?.paddleAvailable == true ? L10n.tr("重新安装 PaddleOCR") : L10n.tr("安装 PaddleOCR")) {
                             paddleInstaller.install()
-                        }.disabled(paddleInstaller.operation.isRunning)
+                        }.disabled(paddleInstaller.operation.isRunning || settings.ocrCheckOperation.isRunning)
                         if paddleInstaller.operation.isRunning {
-                            Button("取消", role: .cancel) { paddleInstaller.cancel() }
+                            Button(L10n.tr("取消"), role: .cancel) { paddleInstaller.cancel() }
                         }
                     }
                 }
                 .id(SettingsSubregion.paddleOCR.rawValue)
-                Button("保存") { Task { await settings.save() } }
+                ocrEnvironmentSection
+                Button(L10n.tr("保存")) { Task { await settings.save() } }
                     .slatePrimaryActionStyle()
                     .disabled(settings.operation.isRunning)
             }
@@ -338,14 +366,52 @@ public struct SettingsRootView: View {
             }
             .overlay(alignment: .top) {
                 if let highlightedOCRSubregion {
-                    Text(highlightedOCRSubregion == .vision ? "已定位到 Vision" : "已定位到 Paddle OCR")
+                    Text(highlightedOCRSubregion == .vision ? L10n.tr("已定位到 Vision") : L10n.tr("已定位到 Paddle OCR"))
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(SlateSyncTheme.accent.opacity(0.16), in: .capsule)
                         .padding(.top, 6)
-                        .accessibilityLabel("已定位到\(highlightedOCRSubregion == .vision ? " Vision" : " Paddle OCR")")
+                        .accessibilityLabel(L10n.tr("已定位到{0}", [String(describing: highlightedOCRSubregion == .vision ? " Vision" : " Paddle OCR")]))
                 }
+            }
+        }
+    }
+
+    /// Native form rows share the existing settings typography and semantic
+    /// colors; symbols and text convey status independently of color.
+    private var ocrEnvironmentSection: some View {
+        Section(L10n.tr("OCR 环境检测")) {
+            Text(L10n.tr("按当前设置检测 Vision、Python 和 Paddle OCR 依赖；不会保存设置、安装依赖或下载模型。模型与设备能否识别需运行实际任务验证。"))
+                .font(.caption).foregroundStyle(.secondary)
+            Button(L10n.tr("检测 OCR 环境")) { Task { await settings.checkOCREnvironment() } }
+                .disabled(settings.ocrCheckOperation.isRunning || paddleInstaller.operation.isRunning || settings.live == nil)
+                .accessibilityIdentifier("settings.ocr.check")
+            if settings.ocrCheckOperation.isRunning {
+                ProgressView(L10n.tr("正在检测 OCR 环境…"))
+                Button(L10n.tr("取消"), role: .cancel) { settings.cancelOCREnvironmentCheck() }
+            } else if case .failed(let error) = settings.ocrCheckOperation {
+                Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger)
+            } else if settings.ocrChecks.isEmpty {
+                Text(L10n.tr("尚未检测")).foregroundStyle(.secondary)
+            }
+            if settings.ocrChecksAreStale {
+                Label(L10n.tr("设置已更改，请重新检测。"), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(SlateSyncTheme.warning)
+            }
+            ForEach(settings.ocrChecks) { check in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L10n.message(check.title))
+                        Spacer()
+                        Label(check.status == .passed ? L10n.tr("通过") : check.status == .failed ? L10n.tr("失败") : L10n.tr("需注意"),
+                              systemImage: check.status == .passed ? "checkmark.circle" : check.status == .failed ? "xmark.circle" : "exclamationmark.triangle")
+                            .foregroundStyle(check.status == .passed ? SlateSyncTheme.success : check.status == .failed ? SlateSyncTheme.danger : SlateSyncTheme.warning)
+                    }
+                    Text(L10n.message(check.detail)).font(.caption).foregroundStyle(.secondary)
+                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
             }
         }
     }
@@ -365,15 +431,15 @@ public struct SettingsRootView: View {
 
     private var advanced: some View {
         Form {
-            Section("存储") {
+            Section(L10n.tr("存储")) {
                 // Old renderer row: label + hint. The field edits the
                 // configured value; the effective path below is resolved at
                 // startup and only changes after a restart.
-                settingField("工作流配置路径", .slateSyncConfigPath)
-                Text("开发环境读取；修改后下次启动生效。")
+                settingField(L10n.tr("工作流配置路径"), .slateSyncConfigPath)
+                Text(L10n.tr("开发环境读取；修改后下次启动生效。"))
                     .font(.caption).foregroundStyle(.secondary)
                 if let workflowPath = settings.live?.runtime.workflowConfigPath {
-                    LabeledContent("实际生效路径") {
+                    LabeledContent(L10n.tr("实际生效路径")) {
                         Text(workflowPath)
                             .font(.caption.monospaced())
                             .lineLimit(1)
@@ -382,21 +448,21 @@ public struct SettingsRootView: View {
                     }
                 }
                 if settings.live?.restartRequired == true {
-                    Text("工作流配置路径已修改，重启 SlateSync 后生效。")
+                    Text(L10n.tr("工作流配置路径已修改，重启 SlateSync 后生效。"))
                         .font(.caption).foregroundStyle(SlateSyncTheme.warning)
                 }
             }
             if let snapshot = settings.live?.runtime {
-                Section("原生启动状态") {
-                    LabeledContent("配置项", value: "\(snapshot.resolvedSettingCount)")
-                    LabeledContent("配置版本", value: "\(snapshot.globalConfigVersion)")
-                    LabeledContent("旧凭据迁移", value: migrationStatus(snapshot.migrationStatus))
+                Section(L10n.tr("原生启动状态")) {
+                    LabeledContent(L10n.tr("配置项"), value: "\(snapshot.resolvedSettingCount)")
+                    LabeledContent(L10n.tr("配置版本"), value: "\(snapshot.globalConfigVersion)")
+                    LabeledContent(L10n.tr("旧凭据迁移"), value: migrationStatus(snapshot.migrationStatus))
                     if snapshot.migrationStatus == .failed || snapshot.migrationStatus == .awaitingAuthorization {
-                        Button(snapshot.migrationStatus == .awaitingAuthorization ? "迁移旧凭据" : "重试旧凭据迁移") { Task { await settings.retryLegacyCredentialMigration() } }
+                        Button(snapshot.migrationStatus == .awaitingAuthorization ? L10n.tr("迁移旧凭据") : L10n.tr("重试旧凭据迁移")) { Task { await settings.retryLegacyCredentialMigration() } }
                     }
                 }
             }
-            Button("保存") { Task { await settings.save() } }
+            Button(L10n.tr("保存")) { Task { await settings.save() } }
                 .slatePrimaryActionStyle()
                 .disabled(settings.operation.isRunning)
         }.formStyle(.grouped)
@@ -425,9 +491,9 @@ public struct SettingsRootView: View {
     @ViewBuilder private func providerStatus(_ providerID: String) -> some View {
         if let result = settings.discoveryResults[providerID] {
             HStack {
-                Text("可用 \(result.visionModelCount)")
+                Text(L10n.tr("可用 {0}", [String(describing: result.visionModelCount)]))
                 if let pending = result.pendingModels, !pending.isEmpty {
-                    Button("验证 \(pending.count) 个候选模型") {
+                    Button(L10n.tr("验证 {0} 个候选模型", [String(describing: pending.count)])) {
                         Task {
                             await settings.probe(
                                 providerID: providerID,
@@ -437,26 +503,26 @@ public struct SettingsRootView: View {
                     }
                 }
                 if settings.probingProviderIDs.contains(providerID) {
-                    Button("取消", role: .cancel) {
+                    Button(L10n.tr("取消"), role: .cancel) {
                         Task { await settings.cancelProbe(providerID: providerID) }
                     }
                 }
-                if let warning = result.warning { Text(warning).foregroundStyle(.secondary).lineLimit(2) }
+                if let warning = result.warning { Text(L10n.message(warning)).foregroundStyle(.secondary).lineLimit(2) }
             }
             .font(.caption)
         } else if case .failed(let error) = settings.providerOperations[providerID] {
-            Text(error.message).font(.caption).foregroundStyle(SlateSyncTheme.danger)
+            Text(L10n.message(error.message)).font(.caption).foregroundStyle(SlateSyncTheme.danger)
         }
     }
 
     private func migrationStatus(_ status: LegacyCredentialMigrationStatus) -> String {
         switch status {
-        case .notRun: "未运行"
-        case .awaitingAuthorization: "等待手动迁移"
-        case .sourceMissing: "未发现旧凭据"
-        case .noCredentials: "无可迁移凭据"
-        case .migrated: "已完成"
-        case .failed: "失败"
+        case .notRun: L10n.tr("未运行")
+        case .awaitingAuthorization: L10n.tr("等待手动迁移")
+        case .sourceMissing: L10n.tr("未发现旧凭据")
+        case .noCredentials: L10n.tr("无可迁移凭据")
+        case .migrated: L10n.tr("已完成")
+        case .failed: L10n.tr("失败")
         }
     }
 }
@@ -531,7 +597,7 @@ private struct BuiltinProviderConfigurationSheet: View {
                     }
                     if let statusMessage {
                         Label(
-                            statusMessage,
+                            L10n.message(statusMessage),
                             systemImage: statusIsError ? "exclamationmark.triangle" : "checkmark.circle"
                         )
                         .foregroundStyle(statusIsError ? SlateSyncTheme.danger : SlateSyncTheme.success)
@@ -544,14 +610,14 @@ private struct BuiltinProviderConfigurationSheet: View {
             }
             Divider()
             HStack(spacing: 10) {
-                Button("取消", role: .cancel) { dismiss() }
+                Button(L10n.tr("取消"), role: .cancel) { dismiss() }
                 Spacer()
-                Button("验证连接", systemImage: "arrow.triangle.2.circlepath") {
+                Button(L10n.tr("验证连接"), systemImage: "arrow.triangle.2.circlepath") {
                     validateConnection()
                 }
                 .disabled(isSaving || isDirty)
-                .help(isDirty ? "请先保存未保存的配置" : "使用已保存配置刷新模型列表")
-                Button("保存配置") { save() }
+                .help(isDirty ? L10n.tr("请先保存未保存的配置") : L10n.tr("使用已保存配置刷新模型列表"))
+                Button(L10n.tr("保存配置")) { save() }
                     .keyboardShortcut(.defaultAction)
                     .slatePrimaryActionStyle()
                     .disabled(isSaving)
@@ -563,37 +629,37 @@ private struct BuiltinProviderConfigurationSheet: View {
         .disabled(isSaving)
         .interactiveDismissDisabled(isSaving)
         .confirmationDialog(
-            "删除 \(provider.label) 的 API Key？",
+            L10n.tr("删除 {0} 的 API Key？", [String(describing: L10n.providerLabel(provider))]),
             isPresented: $confirmsKeyDeletion,
             titleVisibility: .visible
         ) {
-            Button("删除 API Key", role: .destructive) {
+            Button(L10n.tr("删除 API Key"), role: .destructive) {
                 deleteKey()
             }
-            Button("取消", role: .cancel) {}
+            Button(L10n.tr("取消"), role: .cancel) {}
         } message: {
-            Text("删除后不会修改 Base URL 或模型配置；之后需要重新输入 API Key 才能连接。")
+            Text(L10n.tr("删除后不会修改 Base URL 或模型配置；之后需要重新输入 API Key 才能连接。"))
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("\(provider.label) 配置").font(.title2.weight(.semibold))
-            Text("先保存配置，再使用“验证连接”确认模型服务和视觉能力。")
+            Text(L10n.tr("{0} 配置", [String(describing: L10n.providerLabel(provider))])).font(.title2.weight(.semibold))
+            Text(L10n.tr("先保存配置，再使用“验证连接”确认模型服务和视觉能力。"))
                 .font(.callout).foregroundStyle(.secondary)
         }
     }
 
     private var serviceSection: some View {
-        GroupBox("服务说明") {
+        GroupBox(L10n.tr("服务说明")) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(definition.serviceDescription)
+                Text(L10n.message(definition.serviceDescription))
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 HStack(spacing: 14) {
-                    externalLink("官方网站", url: definition.websiteURL)
-                    externalLink("获取 API Key", url: definition.apiKeyURL)
-                    externalLink("官方配置文档", url: definition.documentationURL)
+                    externalLink(L10n.tr("官方网站"), url: definition.websiteURL)
+                    externalLink(L10n.tr("获取 API Key"), url: definition.apiKeyURL)
+                    externalLink(L10n.tr("官方配置文档"), url: definition.documentationURL)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -601,50 +667,50 @@ private struct BuiltinProviderConfigurationSheet: View {
     }
 
     private var connectionSection: some View {
-        GroupBox("连接配置") {
+        GroupBox(L10n.tr("连接配置")) {
             VStack(alignment: .leading, spacing: 12) {
-                TextField("API 基础地址（Base URL）", text: $baseURL)
+                TextField(L10n.tr("API 基础地址（Base URL）"), text: $baseURL)
                     .textFieldStyle(.roundedBorder)
                 HStack {
-                    Button("恢复默认地址") {
+                    Button(L10n.tr("恢复默认地址")) {
                         baseURL = defaultBaseURL
                     }
-                    Text("当前值会用于拼接服务端点")
+                    Text(L10n.tr("当前值会用于拼接服务端点"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let baseURLWarning {
-                    Label(baseURLWarning, systemImage: "exclamationmark.triangle")
+                    Label(L10n.message(baseURLWarning), systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(SlateSyncTheme.warning)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("这里填写服务的基础地址，不要填写具体接口路径；应用会按协议自动追加请求端点。")
+                    Text(L10n.tr("这里填写服务的基础地址，不要填写具体接口路径；应用会按协议自动追加请求端点。"))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !definition.protocolDescription.isEmpty {
-                    LabeledContent("API 协议") {
-                        Text(definition.protocolDescription)
+                    LabeledContent(L10n.tr("API 协议")) {
+                        Text(L10n.message(definition.protocolDescription))
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.trailing)
                     }
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(hasConfiguredKey ? "替换 API Key" : "API Key")
+                    Text(hasConfiguredKey ? L10n.tr("替换 API Key") : "API Key")
                         .font(.headline)
-                    SecureField("留空保留当前 API Key", text: $apiKey)
+                    SecureField(L10n.tr("留空保留当前 API Key"), text: $apiKey)
                         .textFieldStyle(.roundedBorder)
-                    Text(definition.apiKeyHint)
+                    Text(L10n.message(definition.apiKeyHint))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if hasConfiguredKey {
-                        Label("已配置；留空保留当前 API Key。", systemImage: "checkmark.circle")
+                        Label(L10n.tr("已配置；留空保留当前 API Key。"), systemImage: "checkmark.circle")
                             .font(.caption).foregroundStyle(SlateSyncTheme.success)
-                        Button("删除已保存 API Key", role: .destructive) {
+                        Button(L10n.tr("删除已保存 API Key"), role: .destructive) {
                             confirmsKeyDeletion = true
                         }
                     } else if let state = settings.live?.credentialStatuses[provider.id], state == .unavailable {
-                        Label("钥匙串状态读取失败；请确认授权后重试。", systemImage: "lock.trianglebadge.exclamationmark")
+                        Label(L10n.tr("钥匙串状态读取失败；请确认授权后重试。"), systemImage: "lock.trianglebadge.exclamationmark")
                             .font(.caption).foregroundStyle(SlateSyncTheme.warning)
                     }
                 }
@@ -654,24 +720,24 @@ private struct BuiltinProviderConfigurationSheet: View {
     }
 
     private var modelSection: some View {
-        GroupBox("模型与识别能力") {
+        GroupBox(L10n.tr("模型与识别能力")) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(definition.modelHint)
+                Text(L10n.message(definition.modelHint))
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
-                Text("模型列表获取成功，不代表每个模型都支持当前识别任务；能力验证会单独标记可用模型。")
+                Text(L10n.tr("模型列表获取成功，不代表每个模型都支持当前识别任务；能力验证会单独标记可用模型。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("模型选择仍属于项目/任务设置；这里仅刷新和验证当前 Provider 的模型能力。")
+                Text(L10n.tr("模型选择仍属于项目/任务设置；这里仅刷新和验证当前 Provider 的模型能力。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    Button("刷新模型") { refreshModels() }
+                    Button(L10n.tr("刷新模型")) { refreshModels() }
                         .disabled(isDirty || settings.providerOperations[provider.id]?.isRunning == true)
-                    Button("验证待选模型") { probePendingModels() }
+                    Button(L10n.tr("验证待选模型")) { probePendingModels() }
                         .disabled(isDirty || !hasPendingModels || settings.providerOperations[provider.id]?.isRunning == true)
                     if settings.probingProviderIDs.contains(provider.id) {
-                        Button("取消验证", role: .cancel) {
+                        Button(L10n.tr("取消验证"), role: .cancel) {
                             Task { await settings.cancelProbe(providerID: provider.id) }
                         }
                     }
@@ -679,7 +745,7 @@ private struct BuiltinProviderConfigurationSheet: View {
                 if let result = settings.discoveryResults[provider.id] {
                     discoveryResult(result)
                 } else {
-                    Text("尚未获取模型列表。保存配置后点击“验证连接”开始检查。")
+                    Text(L10n.tr("尚未获取模型列表。保存配置后点击“验证连接”开始检查。"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 providerOperation
@@ -689,18 +755,18 @@ private struct BuiltinProviderConfigurationSheet: View {
     }
 
     private var advancedSection: some View {
-        DisclosureGroup("高级选项", isExpanded: $advancedExpanded) {
+        DisclosureGroup(L10n.tr("高级选项"), isExpanded: $advancedExpanded) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("只显示当前 Provider 支持的选项。除下列字段外，不允许编辑任意认证请求头。")
+                Text(L10n.tr("只显示当前 Provider 支持的选项。除下列字段外，不允许编辑任意认证请求头。"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(definition.advancedOptions) { option in
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(option.title)
+                        Text(L10n.message(option.title))
                             .font(.headline)
-                        TextField(option.isRequired ? "必填" : "可选", text: binding(for: option.key))
+                        TextField(option.isRequired ? L10n.tr("必填") : L10n.tr("可选"), text: binding(for: option.key))
                             .textFieldStyle(.roundedBorder)
-                        Text("\(option.description) 默认：\(option.defaultValue.isEmpty ? "无" : option.defaultValue)")
+                        Text(L10n.tr("{0} 默认：{1}", [String(describing: L10n.message(option.description)), String(describing: option.defaultValue.isEmpty ? L10n.tr("无") : option.defaultValue)]))
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -724,7 +790,7 @@ private struct BuiltinProviderConfigurationSheet: View {
     private func externalLink(_ title: String, url: String?) -> some View {
         if let url, let destination = URL(string: url) {
             Link("\(title) ↗", destination: destination)
-                .help("在浏览器中打开\(title)")
+                .help(L10n.tr("在浏览器中打开{0}", [String(describing: title)]))
         }
     }
 
@@ -740,42 +806,42 @@ private struct BuiltinProviderConfigurationSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(
-                    result.source == .api ? "连接成功" : "未确认连接，使用本地目录",
+                    result.source == .api ? L10n.tr("连接成功") : L10n.tr("未确认连接，使用本地目录"),
                     systemImage: result.source == .api ? "checkmark.circle" : "questionmark.circle"
                 )
                 .foregroundStyle(result.source == .api ? SlateSyncTheme.success : SlateSyncTheme.warning)
                 Spacer()
-                Text("视觉模型 \(result.visionModelCount) 个")
+                Text(L10n.tr("视觉模型 {0} 个", [String(describing: result.visionModelCount)]))
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             if let available = result.availableModelCount {
-                Text("服务端返回 \(available) 个模型，当前筛选出 \(result.visionModelCount) 个视觉模型。")
+                Text(L10n.tr("服务端返回 {0} 个模型，当前筛选出 {1} 个视觉模型。", [String(describing: available), String(describing: result.visionModelCount)]))
                     .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(ProviderCatalog.sort(result.models), id: \.id) { model in
                 modelRow(model)
             }
             if let pending = result.pendingModels, !pending.isEmpty {
-                Text("待验证（\(pending.count)）")
+                Text(L10n.tr("待验证（{0}）", [String(describing: pending.count)]))
                     .font(.subheadline.weight(.semibold)).padding(.top, 4)
                 ForEach(pending, id: \.id) { model in modelRow(model) }
             }
             if let unsupported = result.unsupportedModels, !unsupported.isEmpty {
-                Text("不支持当前识别（\(unsupported.count)）")
+                Text(L10n.tr("不支持当前识别（{0}）", [String(describing: unsupported.count)]))
                     .font(.subheadline.weight(.semibold)).padding(.top, 4)
                 ForEach(unsupported, id: \.id) { model in
-                    Label("\(model.id)：\(model.reason)", systemImage: "nosign")
+                    Label("\(model.id): \(L10n.message(model.reason))", systemImage: "nosign")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let failed = result.failedModels, !failed.isEmpty {
-                Text("验证失败（\(failed.count)）")
+                Text(L10n.tr("验证失败（{0}）", [String(describing: failed.count)]))
                     .font(.subheadline.weight(.semibold)).padding(.top, 4)
                 ForEach(failed, id: \.id) { model in modelRow(model) }
             }
             if let warning = result.warning {
-                Text(warning).font(.caption).foregroundStyle(SlateSyncTheme.warning)
+                Text(L10n.message(warning)).font(.caption).foregroundStyle(SlateSyncTheme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -803,15 +869,15 @@ private struct BuiltinProviderConfigurationSheet: View {
         Group {
             switch settings.providerOperations[provider.id] {
             case .running(let label):
-                Label(label, systemImage: "arrow.triangle.2.circlepath")
+                Label(L10n.message(label), systemImage: "arrow.triangle.2.circlepath")
             case .succeeded(let message):
-                Label(message, systemImage: "checkmark.circle")
+                Label(L10n.message(message), systemImage: "checkmark.circle")
                     .foregroundStyle(SlateSyncTheme.success)
             case .failed(let error):
                 Label(providerFailureMessage(error), systemImage: "exclamationmark.circle")
                     .foregroundStyle(SlateSyncTheme.danger)
             case .canceled:
-                Label("验证已取消", systemImage: "slash.circle")
+                Label(L10n.tr("验证已取消"), systemImage: "slash.circle")
             case .idle, .none:
                 EmptyView()
             }
@@ -823,36 +889,36 @@ private struct BuiltinProviderConfigurationSheet: View {
     private func providerFailureMessage(_ error: SlateSyncError) -> String {
         switch error.status {
         case 401, 403:
-            return "鉴权或权限不足：请检查或替换 API Key。"
+            return L10n.tr("鉴权或权限不足：请检查或替换 API Key。")
         case 402:
-            return "账户余额或额度不足：请前往服务商账户检查。"
+            return L10n.tr("账户余额或额度不足：请前往服务商账户检查。")
         case 404:
-            return "地址或接口错误：请检查 API 基础地址（Base URL）。"
+            return L10n.tr("地址或接口错误：请检查 API 基础地址（Base URL）。")
         case 429:
-            return "请求过于频繁或达到额度限制：请稍后重试并检查服务商账户。"
+            return L10n.tr("请求过于频繁或达到额度限制：请稍后重试并检查服务商账户。")
         default:
             if error.code == RecognitionFailure.timeout.code || error.retryable {
-                return "网络失败或请求超时：请检查网络后重试。"
+                return L10n.tr("网络失败或请求超时：请检查网络后重试。")
             }
-            return error.message
+            return L10n.message(error.message)
         }
     }
 
     private func modelStatus(_ model: ModelData) -> String {
         switch model.capabilityStatus {
-        case .verified: "验证通过"
-        case .pending: "待验证"
-        case .unsupported: "不支持识别"
-        case .failed: "验证失败"
-        case .canceled: "已取消"
-        case .declared, .inferred: model.discovered == true ? "已发现" : "可用"
-        case .none: "已发现"
+        case .verified: L10n.tr("验证通过")
+        case .pending: L10n.tr("待验证")
+        case .unsupported: L10n.tr("不支持识别")
+        case .failed: L10n.tr("验证失败")
+        case .canceled: L10n.tr("已取消")
+        case .declared, .inferred: model.discovered == true ? L10n.tr("已发现") : L10n.tr("可用")
+        case .none: L10n.tr("已发现")
         }
     }
 
     private func refreshModels() {
         guard !isDirty else {
-            statusMessage = "请先保存未保存的配置，再验证连接。"
+            statusMessage = L10n.tr("请先保存未保存的配置，再验证连接。")
             statusIsError = true
             return
         }
@@ -861,7 +927,7 @@ private struct BuiltinProviderConfigurationSheet: View {
 
     private func validateConnection() {
         guard !isDirty else {
-            statusMessage = "请先保存未保存的配置，再验证连接。"
+            statusMessage = L10n.tr("请先保存未保存的配置，再验证连接。")
             statusIsError = true
             return
         }
@@ -885,7 +951,7 @@ private struct BuiltinProviderConfigurationSheet: View {
             return
         }
         guard !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            statusMessage = "API 基础地址不能为空；请填写地址或恢复默认地址。"
+            statusMessage = L10n.tr("API 基础地址不能为空；请填写地址或恢复默认地址。")
             statusIsError = true
             return
         }
@@ -917,6 +983,11 @@ private struct BuiltinProviderConfigurationSheet: View {
             if result.credentialSaved {
                 apiKey = ""
             }
+            // Return to settings only after configuration and any requested
+            // credential update succeed; partial failures stay visible for retry.
+            if result.isComplete {
+                dismiss()
+            }
         }
     }
 
@@ -926,7 +997,7 @@ private struct BuiltinProviderConfigurationSheet: View {
         Task { @MainActor in
             do {
                 try await settings.removeProviderCredential(providerID: provider.id)
-                statusMessage = "API Key 已删除。"
+                statusMessage = L10n.tr("API Key 已删除。")
                 statusIsError = false
             } catch {
                 statusMessage = ProductPrivacy.error(error).message
@@ -947,15 +1018,15 @@ private struct CredentialSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("\(provider.label) 凭据").font(.title2.bold())
-            Text("凭据仅保存在 macOS 钥匙串，保存后不会回显。").foregroundStyle(.secondary)
-            SecureField("新凭据", text: $credential)
-            if let error { Text(error.message).foregroundStyle(SlateSyncTheme.danger) }
+            Text(L10n.tr("{0} 凭据", [String(describing: L10n.providerLabel(provider))])).font(.title2.bold())
+            Text(L10n.tr("凭据仅保存在 macOS 钥匙串，保存后不会回显。")).foregroundStyle(.secondary)
+            SecureField(L10n.tr("新凭据"), text: $credential)
+            if let error { Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger) }
             HStack {
-                Button("清除凭据", role: .destructive) { submit(nil) }
+                Button(L10n.tr("清除凭据"), role: .destructive) { submit(nil) }
                 Spacer()
-                Button("取消", role: .cancel) { dismiss() }
-                Button("保存") { submit(credential) }
+                Button(L10n.tr("取消"), role: .cancel) { dismiss() }
+                Button(L10n.tr("保存")) { submit(credential) }
                     .slatePrimaryActionStyle()
                     .disabled(credential.isEmpty)
             }
@@ -1009,35 +1080,35 @@ private struct CustomProviderSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(provider == nil ? "添加自定义 Provider" : "编辑自定义 Provider").font(.title2.bold())
+            Text(provider == nil ? L10n.tr("添加自定义 Provider") : L10n.tr("编辑自定义 Provider")).font(.title2.bold())
             Form {
-                TextField("名称", text: $name)
+                TextField(L10n.tr("名称"), text: $name)
                 TextField("HTTP(S) Base URL", text: $baseURL)
-                TextField("手动模型 ID（逗号分隔）", text: $modelIDs)
-                Picker("传输", selection: $transport) {
+                TextField(L10n.tr("手动模型 ID（逗号分隔）"), text: $modelIDs)
+                Picker(L10n.tr("传输"), selection: $transport) {
                     Text("Chat Completions").tag(ProviderTransport.chatCompletions)
                     Text("Responses").tag(ProviderTransport.responses)
                 }
-                Picker("JSON 模式", selection: $jsonMode) {
+                Picker(L10n.tr("JSON 模式"), selection: $jsonMode) {
                     Text("JSON Schema").tag(ProviderJSONMode.jsonSchema)
                     Text("JSON Object").tag(ProviderJSONMode.jsonObject)
                     Text("Prompt").tag(ProviderJSONMode.prompt)
                 }
-                Picker("图像细节", selection: $imageDetail) {
-                    Text("自动").tag(ImageDetail.auto)
-                    Text("低").tag(ImageDetail.low)
-                    Text("高").tag(ImageDetail.high)
-                    Text("原始").tag(ImageDetail.original)
+                Picker(L10n.tr("图像细节"), selection: $imageDetail) {
+                    Text(L10n.tr("自动")).tag(ImageDetail.auto)
+                    Text(L10n.tr("低")).tag(ImageDetail.low)
+                    Text(L10n.tr("高")).tag(ImageDetail.high)
+                    Text(L10n.tr("原始")).tag(ImageDetail.original)
                 }
             }
             if case .failed(let error) = settings.operation {
-                Label(error.message, systemImage: "exclamationmark.triangle")
+                Label(L10n.message(error.message), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(SlateSyncTheme.danger)
             }
             HStack {
                 Spacer()
-                Button("取消", role: .cancel) { dismiss() }
-                Button(provider == nil ? "添加" : "保存") {
+                Button(L10n.tr("取消"), role: .cancel) { dismiss() }
+                Button(provider == nil ? L10n.tr("添加") : L10n.tr("保存")) {
                     Task {
                         if await settings.saveCustomProvider(
                             existing: provider,

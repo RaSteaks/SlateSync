@@ -182,12 +182,14 @@ public final class HelpModel {
             if selection == "settings" { selection = "providers" }
         }
     }
-    public var english = false
+    // Help shares the launch language with menus and every other app surface.
+    public var english: Bool
     public let sections: [HelpSection]
     public let contentSHA256: String
     public let resourceError: String?
 
-    public init() {
+    public init(language: AppLanguage = L10n.language) {
+        english = language == .english
         do {
             guard let url = Bundle.module.url(forResource: "help-sections", withExtension: "json") else {
                 throw CocoaError(.fileNoSuchFile)

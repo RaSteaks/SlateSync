@@ -4,6 +4,109 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectStoresTests: XCTestCase {
+    func testReopeningEncryptedDiagnosticsDoesNotRewriteAndImportsMissingSnapshots() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("diagnostics-reopen")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let store = try DiagnosticsStore(projectDirectory: root)
+        _ = try await store.saveSession(Data(#"{"filename":"authoritative.pdf"}"#.utf8), sessionID: "existing")
+        try await store.close()
+        let url = root.appending(path: SQLiteV1.projectDatabaseFilename)
+        let before = try Data(contentsOf: url)
+        // Reopening saved JSON must not reseal an unchanged database.
+        let reopened = try DiagnosticsStore(projectDirectory: root)
+        let sessions = try await reopened.listSessions()
+        XCTAssertEqual(sessions.count, 1)
+        try await reopened.close()
+        XCTAssertEqual(try Data(contentsOf: url), before)
+        let directory = root.appending(path: "diagnostics")
+        try Data(#"{"id":"existing","filename":"stale.pdf"}"#.utf8).write(to: directory.appending(path: "existing.json"))
+        try Data(#"{"id":"missing","filename":"recovered.pdf"}"#.utf8).write(to: directory.appending(path: "legacy-name.json"))
+        let importing = try DiagnosticsStore(projectDirectory: root)
+        let imported = try await importing.listSessions()
+        XCTAssertEqual(Set(imported.compactMap(\.id)), ["existing", "missing"])
+        XCTAssertEqual(imported.first { $0.id == "existing" }?.filename, "authoritative.pdf")
+        try await importing.close()
+        let afterImport = try Data(contentsOf: url)
+        let final = try DiagnosticsStore(projectDirectory: root)
+        _ = try await final.listSessions()
+        try await final.close()
+        XCTAssertEqual(try Data(contentsOf: url), afterImport)
+    }
+
+    func testReopeningManyEncryptedTasksDoesNotRewriteDatabase() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("many-task-reopen")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let store = try ProjectTaskStore(projectDirectory: root)
+        for index in 0..<32 {
+            _ = try await store.saveTask(PersistenceTestSupport.jsonData([
+                "id": "task-\(index)", "filename": "场记单-\(index).pdf",
+                "imageDataUrls": [String(repeating: "A", count: 64 * 1024)],
+            ]))
+        }
+        let expected = try await store.listTasks()
+        try await store.close()
+        let before = try Data(contentsOf: store.databaseURL)
+        var durations: [Duration] = []
+        for _ in 0..<5 {
+            let start = ContinuousClock.now
+            let reopened = try ProjectTaskStore(projectDirectory: root)
+            let actual = try await reopened.listTasks()
+            _ = try await reopened.loadTask("task-0")
+            durations.append(start.duration(to: .now))
+            XCTAssertEqual(actual, expected)
+            try await reopened.close()
+        }
+        print("Encrypted project reopen, 32 × 64 KiB, median of 5: \(durations.sorted()[2])")
+        // A changed nonce would expose even a logically identical rewrite.
+        XCTAssertEqual(try Data(contentsOf: store.databaseURL), before)
+    }
+
+    func testTaskExistenceProbeDoesNotRequireFullPayload() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("task-existence-probe")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ProjectTaskStore(projectDirectory: root)
+        _ = try await store.saveTask(PersistenceTestSupport.jsonData([
+            "id": "large-task",
+            "imageDataUrls": [String(repeating: "A", count: 512 * 1024)],
+        ]))
+
+        // The production query selects only a constant for this large row.
+        try await store.requireTaskExists("large-task")
+        do {
+            try await store.requireTaskExists("missing-task")
+            XCTFail("A missing task must fail the same ownership guard")
+        } catch {
+            XCTAssertEqual((error as? SlateSyncError)?.code, "ENOENT")
+        }
+        try await store.close()
+    }
+
+    func testReopenImportsMissingSnapshotsWithoutReplacingAuthoritativeRows() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("task-missing-snapshot-import")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ProjectTaskStore(projectDirectory: root)
+        _ = try await store.saveTask(Data(#"{"id":"existing","status":"completed"}"#.utf8))
+        try await store.close()
+        let snapshots = root.appending(path: "tasks")
+        try Data(#"{"id":"existing","status":"stale"}"#.utf8).write(to: snapshots.appending(path: "existing.json"))
+        // Noncanonical legacy filenames still use the embedded ID on import.
+        try Data(#"{"id":"missing","status":"draft"}"#.utf8).write(to: snapshots.appending(path: "legacy-name.json"))
+        let reopened = try ProjectTaskStore(projectDirectory: root)
+        let tasks = try await reopened.listTasks()
+        XCTAssertEqual(Set(tasks.compactMap(\.id)), ["existing", "missing"])
+        XCTAssertEqual(tasks.first { $0.id == "existing" }?.status, "completed")
+        try await reopened.close()
+        // Even a filename matching another SQLite row cannot hide a distinct
+        // embedded legacy ID; filename-only shortcuts would lose this task.
+        try Data(#"{"id":"embedded","status":"draft"}"#.utf8).write(to: snapshots.appending(path: "existing.json"))
+        let legacy = try ProjectTaskStore(projectDirectory: root)
+        let recovered = try await legacy.listTasks()
+        XCTAssertEqual(Set(recovered.compactMap(\.id)), ["existing", "missing", "embedded"])
+        try await legacy.close()
+    }
+
     func testLibraryListingDoesNotRewriteEncryptedProjectSnapshots() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("readonly-library-statistics")
         defer { try? FileManager.default.removeItem(at: root) }

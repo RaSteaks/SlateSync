@@ -1,6 +1,8 @@
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 // Shared components for the 2026-09-14 Slate Workbench direction. Every color
 // comes from SlateSyncTheme or system semantics (DESIGN.md: feature views never
 // embed RGB literals), and each signature element appears only in its owning
@@ -170,12 +172,12 @@ public struct LeaderProgress: View {
     }
 
     var centerLabel: String {
-        if let completed, let total { return "第 \(completed)/\(total) 页" }
+        if let completed, let total { return L10n.tr("第 {0}/{1} 页", [String(describing: completed), String(describing: total)]) }
         return phaseText
     }
 
     var accessibilityValue: String {
-        if let completed, let total { return "第 \(completed) 页,共 \(total) 页" }
+        if let completed, let total { return L10n.tr("第 {0} 页,共 {1} 页", [String(describing: completed), String(describing: total)]) }
         return phaseText
     }
 
@@ -193,7 +195,7 @@ public struct LeaderProgress: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("识别进度")
+        .accessibilityLabel(L10n.tr("识别进度"))
         .accessibilityValue(Text(accessibilityValue))
     }
 
@@ -235,7 +237,7 @@ public struct LeaderProgress: View {
             } else {
                 VStack(spacing: 4) {
                     ProgressView().controlSize(.small)
-                    Text(phaseText)
+                    Text(L10n.message(phaseText))
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .lineLimit(1)
                 }
@@ -303,10 +305,10 @@ public struct CredentialChip: View {
 
     var title: String {
         switch state {
-        case .configured: "已配置"
-        case .missing: "缺失"
-        case .needsAuthorization: "需要授权"
-        case .readFailed: "读取失败"
+        case .configured: L10n.tr("已配置")
+        case .missing: L10n.tr("缺失")
+        case .needsAuthorization: L10n.tr("需要授权")
+        case .readFailed: L10n.tr("读取失败")
         }
     }
 
@@ -349,7 +351,7 @@ public struct CredentialChip: View {
         // Preserve pill geometry; reserve the extra outline for accessibility.
         .slateGlassSurface(.status(glassTone), shape: .capsule, border: .accessibilityOnly)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("凭据状态 \(title)")
+        .accessibilityLabel(L10n.tr("凭据状态 {0}", [String(describing: title)]))
     }
 }
 

@@ -6,6 +6,8 @@ import SlateSyncUI
 import SlateSyncWorkflow
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 @main
 @MainActor
 struct SlateSyncApp: App {
@@ -49,9 +51,10 @@ struct SlateSyncApp: App {
             // 终极回退不可达：两个非空常量 suite 名不会同时创建失败；若真
             // 发生，宁可隔离启动显式失败，也不静默写真实 .standard 破坏
             // 测试隔离承诺。
-            precondition(isolatedPreferences != nil, "无法创建隔离偏好 suite")
+            precondition(isolatedPreferences != nil, L10n.tr("无法创建隔离偏好 suite"))
         }
         preferences = isolated ? (isolatedPreferences ?? .standard) : .standard
+        L10n.configure(preferences: preferences)
         let runtime = SlateSyncRuntime(
             locator: locator,
             environment: isolated ? [:] : ProcessInfo.processInfo.environment,
@@ -104,6 +107,7 @@ struct SlateSyncApp: App {
                 projectOwnership: projectOwnership
             )
                 .defaultAppStorage(preferences)
+                .environment(\.locale, L10n.language.locale)
                 .slateWindowMinimumSize(width: 960, height: 600)
                 .task {
                     appDelegate.termination = termination
@@ -120,9 +124,11 @@ struct SlateSyncApp: App {
             SettingsRootView(
                 settings: globalSettings,
                 paddleInstaller: paddleInstaller,
-                navigation: settingsNavigation
+                navigation: settingsNavigation,
+                preferences: preferences
             )
                 .defaultAppStorage(preferences)
+                .environment(\.locale, L10n.language.locale)
                 .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired)
         }
         // Settings keeps a readable default while permitting longer forms.
@@ -315,7 +321,7 @@ final class SlateSyncAppDelegate: NSObject, NSApplicationDelegate {
         // native editor before any asynchronous store drain, respecting IME.
         for window in sender.windows {
             if let editor = window.firstResponder as? NSTextView, editor.hasMarkedText() {
-                termination.reportCloseFailure(SlateSyncError(code: "EDIT_COMPOSITION", message: "请先完成当前文字输入，再退出"))
+                termination.reportCloseFailure(SlateSyncError(code: "EDIT_COMPOSITION", message: L10n.tr("请先完成当前文字输入，再退出")))
                 return .terminateCancel
             }
             guard window.makeFirstResponder(nil) else { return .terminateCancel }

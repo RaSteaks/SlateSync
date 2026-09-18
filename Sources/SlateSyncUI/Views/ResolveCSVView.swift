@@ -2,6 +2,8 @@ import SlateSyncDomain
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct ResolveCSVView: View {
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ResolveCSVModel
@@ -48,7 +50,7 @@ public struct ResolveCSVView: View {
                 HStack {
                     importAction
                     Spacer(minLength: 4)
-                    Menu("结果操作", systemImage: "ellipsis.circle") { mergeActions }
+                    Menu(L10n.tr("结果操作"), systemImage: "ellipsis.circle") { mergeActions }
                         .tint(Color.secondary)
                     exportAction
                 }
@@ -74,8 +76,8 @@ public struct ResolveCSVView: View {
                 .disabled(model.operation.isRunning)
             } else {
                 SlateEmptyState(
-                    title: "未导入 Resolve CSV", symbol: "tablecells",
-                    message: "导入后可直接编辑并保留原始字节格式。"
+                    title: L10n.tr("未导入 Resolve CSV"), symbol: "tablecells",
+                    message: L10n.tr("导入后可直接编辑并保留原始字节格式。")
                 ) { importAction }
             }
         }
@@ -87,7 +89,7 @@ public struct ResolveCSVView: View {
                 SlateStatusBar(message: error.message, tone: .error) {
                     // Keep recovery with the failed table. Users can retry an
                     // export or replace the source without dismissing errors.
-                    Menu("恢复操作") {
+                    Menu(L10n.tr("恢复操作")) {
                         importAction
                         mergeActions
                         exportAction
@@ -118,12 +120,12 @@ public struct ResolveCSVView: View {
             }
         }
         .confirmationDialog(
-            "仍有未解决的合并告警", isPresented: $requestsExport, titleVisibility: .visible
+            L10n.tr("仍有未解决的合并告警"), isPresented: $requestsExport, titleVisibility: .visible
         ) {
-            Button("仍要导出 CSV") { confirmPendingExport() }
-            Button("返回校对", role: .cancel) { pendingExportData = nil }
+            Button(L10n.tr("仍要导出 CSV")) { confirmPendingExport() }
+            Button(L10n.tr("返回校对"), role: .cancel) { pendingExportData = nil }
         } message: {
-            Text("当前合并结果包含 \(unresolvedCount) 项告警，导出文件会保留这些行的当前值。")
+            Text(L10n.tr("当前合并结果包含 {0} 项告警，导出文件会保留这些行的当前值。", [String(describing: unresolvedCount)]))
         }
     }
 
@@ -146,25 +148,25 @@ public struct ResolveCSVView: View {
             if let diagnostics = model.lastMergeDiagnostics {
                 if !diagnostics.unrecognizedMaterials.isEmpty {
                     diagnosticBadge(
-                        "未匹配素材 \(diagnostics.unrecognizedMaterials.count)",
+                        L10n.tr("未匹配素材 {0}", [String(describing: diagnostics.unrecognizedMaterials.count)]),
                         symbol: "exclamationmark.triangle")
                 }
                 let missingKeys = diagnostics.missingCameraFPSKeys.count + diagnostics.missingShootDayKeys.count
                 if missingKeys > 0 {
-                    diagnosticBadge("关键信息缺失 \(missingKeys)", symbol: "questionmark.circle")
+                    diagnosticBadge(L10n.tr("关键信息缺失 {0}", [String(describing: missingKeys)]), symbol: "questionmark.circle")
                 }
                 if !diagnostics.sequenceAnomalies.isEmpty {
                     diagnosticBadge(
-                        "次序异常 \(diagnostics.sequenceAnomalies.count)",
+                        L10n.tr("次序异常 {0}", [String(describing: diagnostics.sequenceAnomalies.count)]),
                         symbol: "exclamationmark.arrow.triangle")
                 }
                 if !diagnostics.unresolvedStatuses.isEmpty {
                     diagnosticBadge(
-                        "未写入记录 \(diagnostics.unresolvedStatuses.count)", symbol: "nosign")
+                        L10n.tr("未写入记录 {0}", [String(describing: diagnostics.unresolvedStatuses.count)]), symbol: "nosign")
                 }
             }
             Spacer(minLength: 8)
-            Button(showsDiagnostics ? "收起详情" : "详情") { showsDiagnostics.toggle() }
+            Button(showsDiagnostics ? L10n.tr("收起详情") : L10n.tr("详情")) { showsDiagnostics.toggle() }
                 .font(.caption)
         }
         .padding(.horizontal, density.panelPadding)
@@ -196,10 +198,10 @@ public struct ResolveCSVView: View {
                 }
             }
             if rows.count > visible.count {
-                Text("其余 \(rows.count - visible.count) 项见日志。")
+                Text(L10n.tr("其余 {0} 项见日志。", [String(describing: rows.count - visible.count)]))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("在识别结果中修正后重新合并；手动编辑会保留。")
+            Text(L10n.tr("在识别结果中修正后重新合并；手动编辑会保留。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(density.panelPadding)
@@ -207,22 +209,22 @@ public struct ResolveCSVView: View {
 
     private func diagnosticsRows(_ diagnostics: ResolveMergeResult) -> [DiagnosticRow] {
         let statusRows = diagnostics.unresolvedStatuses.map { status in
-            let subject = status.fileName ?? "第 \(status.recordIndex + 1) 条"
+            let subject = status.fileName ?? L10n.tr("第 {0} 条", [String(describing: status.recordIndex + 1)])
             let message: String
             switch status.status {
             case "missing-key":
-                message = "\(subject) 缺少素材标识，未写入 CSV"
+                message = L10n.tr("{0} 缺少素材标识，未写入 CSV", [String(describing: subject)])
             case "incomplete":
-                let fields = status.missingFields?.joined(separator: "、") ?? "场记字段"
-                message = "\(subject) 缺少\(fields)，未写入场记字段"
+                let fields = status.missingFields?.map { L10n.message($0) }.joined(separator: L10n.language == .english ? ", " : "、") ?? L10n.tr("场记字段")
+                message = L10n.tr("{0} 缺少{1}，未写入场记字段", [String(describing: subject), String(describing: fields)])
             case "conflict":
-                message = "\(subject) 的识别结果冲突，场记字段未写入"
+                message = L10n.tr("{0} 的识别结果冲突，场记字段未写入", [String(describing: subject)])
             case "unmatched":
-                message = "\(subject) 未匹配到 Resolve CSV 行，未写入"
+                message = L10n.tr("{0} 未匹配到 Resolve CSV 行，未写入", [String(describing: subject)])
             case "duplicate":
-                message = "\(subject) 是重复识别记录，未写入"
+                message = L10n.tr("{0} 是重复识别记录，未写入", [String(describing: subject)])
             default:
-                message = "\(subject) 的识别结果未写入 CSV"
+                message = L10n.tr("{0} 的识别结果未写入 CSV", [String(describing: subject)])
             }
             return DiagnosticRow(
                 id: "status-\(status.recordIndex)-\(status.status)",
@@ -232,19 +234,19 @@ public struct ResolveCSVView: View {
         let materialRows = diagnostics.unrecognizedMaterials.enumerated().map { index, material in
             DiagnosticRow(
                 id: "material-\(index)-\(material)",
-                message: "素材 \(material) 未在识别结果中匹配",
+                message: L10n.tr("素材 {0} 未在识别结果中匹配", [String(describing: material)]),
                 symbol: "square.slash")
         }
         let fpsRows = diagnostics.missingCameraFPSKeys.enumerated().map { index, material in
             DiagnosticRow(
                 id: "fps-\(index)-\(material)",
-                message: "素材 \(material) 缺少相机帧率信息",
+                message: L10n.tr("素材 {0} 缺少相机帧率信息", [String(describing: material)]),
                 symbol: "questionmark.circle")
         }
         let dayRows = diagnostics.missingShootDayKeys.enumerated().map { index, material in
             DiagnosticRow(
                 id: "day-\(index)-\(material)",
-                message: "素材 \(material) 缺少拍摄日信息",
+                message: L10n.tr("素材 {0} 缺少拍摄日信息", [String(describing: material)]),
                 symbol: "questionmark.circle")
         }
         let sequenceRows = diagnostics.sequenceAnomalies.enumerated().map { index, anomaly in
@@ -268,7 +270,7 @@ public struct ResolveCSVView: View {
                     // edits last, canonicalize the whole table.
                     // Old naming: <baseName(metadataFile)>_场记已回填.csv.
                     exportDefaultName = ResolveCSVModel.suggestedFilename(
-                        model.filename, fallback: "Resolve", suffix: "场记已回填")
+                        model.filename, fallback: "Resolve", suffix: L10n.tr("场记已回填"))
                     data = try await model.exportData(
                         records: recognition.resolveRecords,
                         metadata: workspace.selectedTask?.slateMetadata ?? [],
@@ -301,7 +303,7 @@ public struct ResolveCSVView: View {
         exportsCSV = true
     }
     private var importAction: some View {
-        Button("导入 CSV…", systemImage: "square.and.arrow.down") {
+        Button(L10n.tr("导入 CSV…"), systemImage: "square.and.arrow.down") {
             // Embedded workspace imports use its single presentation owner;
             // standalone surfaces retain the original local file importer.
             if let onImport { onImport() } else { importsCSV = true }
@@ -312,7 +314,7 @@ public struct ResolveCSVView: View {
 
     @ViewBuilder private var mergeActions: some View {
         if let recognition, let workspace {
-            Button("合并识别结果") {
+            Button(L10n.tr("合并识别结果")) {
                 Task {
                     do {
                         try await workspace.flush()
@@ -324,27 +326,13 @@ public struct ResolveCSVView: View {
                 }
             }.disabled(
                 model.table == nil || recognition.resolveRecords.isEmpty || model.operation.isRunning)
-            Button("独立导出…") {
-                Task {
-                    do {
-                        try await workspace.flush()
-                        // Old naming: <baseName(sheetTitle || 场记单)>_场记识别.csv.
-                        exportDefaultName = ResolveCSVModel.suggestedFilename(
-                            recognition.result?.result.sheetTitle, fallback: "场记单", suffix: "场记识别")
-                        exportDocument = CSVDocument(
-                            data: try await model.standaloneData(
-                                records: recognition.resolveRecords, settings: workspace.projectSettings.resolve))
-                        exportsCSV = true
-                    } catch { model.report(error) }
-                }
-            }.disabled(recognition.resolveRecords.isEmpty || model.operation.isRunning)
         }
     }
 
     private var exportAction: some View {
-        Button("导出 CSV…", systemImage: "square.and.arrow.up") {
-            // The canonical preflight decides whether unresolved warnings need
-            // confirmation; stale diagnostics are never used to bypass it.
+        Button(L10n.tr("导出 CSV…"), systemImage: "square.and.arrow.up") {
+            // This single CSV export entry uses the canonical preflight to decide
+            // whether warnings need confirmation; stale diagnostics cannot bypass it.
             performExport()
         }
         .tint(Color.secondary)
@@ -353,7 +341,7 @@ public struct ResolveCSVView: View {
 
     @ViewBuilder private var tableSummary: some View {
         if let table = model.table {
-            Text("\(table.rows.count) 行 · \(table.headers.count) 列")
+            Text(L10n.tr("{0} 行 · {1} 列", [String(describing: table.rows.count), String(describing: table.headers.count)]))
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 .fixedSize()
         }

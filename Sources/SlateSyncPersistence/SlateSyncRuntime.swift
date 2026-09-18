@@ -273,6 +273,19 @@ public actor SlateSyncRuntime: SettingsServing {
         return snapshot.configuration.values[typedKey]
     }
 
+    /// Resolve an editor snapshot with the same environment/legacy precedence
+    /// as a save, without changing the persisted or running configuration.
+    public func resolveSettingsDraft(_ values: GlobalSettingValues) async -> GlobalSettingValues {
+        _ = await bootstrap()
+        return ConfigurationResolver.resolveAll(
+            globalSettings: values,
+            processEnvironment: processEnvironment,
+            envFile: loadEnvironment().values,
+            legacySettings: snapshot.machineSettings,
+            applicationSupportRoot: locator.url
+        ).values
+    }
+
     public func setValue(_ value: String?, for key: String) async throws {
         _ = await bootstrap()
         guard GlobalSettingKey(rawValue: key) != nil else {

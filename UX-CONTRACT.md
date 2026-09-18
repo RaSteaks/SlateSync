@@ -17,10 +17,15 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 - The primary window uses stable sidebar selection for Project Library,
   Workspace, Logs and Help.
+- When a project is acquired, the Current Project section header shows its
+  saved name beside the localized label; closing the project removes the name.
 - Global settings open in the dedicated macOS Settings scene with `Cmd-,`.
 - Project settings remain project-scoped and never replace machine settings.
 - Switching project/task flushes the single autosave writer before publishing
   the next projection. Failed flush keeps the user in the current context.
+- Workspace segments acknowledge selection synchronously while keeping the
+  current editor mounted until saving succeeds. Repeated clicks during that
+  save select the latest destination; failure restores the current segment.
 
 ## Canonical operations
 
@@ -64,11 +69,21 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 ## Accessibility and locale
 
-- All migration phases require Chinese language and Chinese IME acceptance only.
-  Other languages do not require dedicated acceptance coverage. Existing file-format
-  aliases and Unicode compatibility remain part of data compatibility.
+- Application language is selected in Global Settings → General using
+  `applicationLanguage` (`zh-Hans` / `en`). `L10n` owns launch-scoped product copy;
+  the same locale reaches all windows and Help. Save updates `AppleLanguages`
+  in the same preference suite for native menus/panels on the next launch.
+  A restart notice is shown; switching never recreates an active editor.
+- Both Chinese and English product interfaces require coverage. Chinese IME and
+  all existing Unicode/file-format compatibility requirements remain unchanged.
+- Authored messages use `English.json`; domain errors and stored diagnostic events
+  are translated only for display. Unknown service/system messages stay verbatim.
+  User project/provider names, recognized text, prompts, CSV contents, canonical
+  take-status values and persisted route IDs must not be translated.
+- The old `helpEnglish` flag no longer controls any screen. Help always follows
+  the application language; it continues to search both bundled languages offline.
 - Target WCAG 2.2 AA and native macOS keyboard conventions.
-- All icon-only actions have Chinese accessibility labels and help tooltips.
+- All icon-only actions have accessibility labels and help tooltips in the selected language.
 - Theme follows system by default, respects increased contrast and reduced motion.
 - Chinese IME composition must not trigger Enter shortcuts, autosave commits,
   search dispatch or table cell completion prematurely.

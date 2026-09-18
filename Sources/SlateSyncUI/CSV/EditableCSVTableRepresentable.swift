@@ -2,6 +2,8 @@ import AppKit
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Pure grid navigation keeps keyboard semantics deterministic even when an
 /// AppKit field editor is recreated by NSTableView's virtualization layer.
 /// The coordinator applies the returned destination only after committing the
@@ -93,7 +95,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableID: UUID,
         table: ResolveCSVTable,
         revision: Int,
-        accessibilityLabel: String = "可编辑 Resolve CSV",
+        accessibilityLabel: String = L10n.tr("可编辑 Resolve CSV"),
         density: SlateSyncDensity? = nil,
         onCommit: @escaping @MainActor @Sendable (CSVCellCommit) -> Void,
         editorRegistration: (@MainActor ((@MainActor () throws -> Void)?) -> Void)? = nil
@@ -224,7 +226,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         public func flushEdit() throws {
             guard let field = editingField else { return }
             if (field.currentEditor() as? NSTextView)?.hasMarkedText() == true {
-                throw SlateSyncError(code: "EDIT_COMPOSITION", message: "请先完成当前文字输入，再切换或关闭")
+                throw SlateSyncError(code: "EDIT_COMPOSITION", message: L10n.tr("请先完成当前文字输入，再切换或关闭"))
             }
             timer?.cancel()
             commit(field)
@@ -272,7 +274,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             field.tag = row * max(1, parent.table.headers.count) + column
             field.isEditable = parent.isEnabled
             field.stringValue = value(row: row, column: column)
-            field.setAccessibilityLabel("第 \(row + 1) 行，\(parent.table.headers[column])")
+            field.setAccessibilityLabel(L10n.tr("第 {0} 行，{1}", [String(describing: row + 1), String(describing: parent.table.headers[column])]))
             return field
         }
 
@@ -326,7 +328,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             headers = parent.table.headers
             for (index, title) in headers.enumerated() {
                 let column = NSTableColumn(identifier: .init("csv.column.\(index)"))
-                column.title = title.isEmpty ? "第 \(index + 1) 列" : title
+                column.title = title.isEmpty ? L10n.tr("第 {0} 列", [String(describing: index + 1)]) : title
                 column.width = 160
                 column.minWidth = 88
                 column.maxWidth = 480

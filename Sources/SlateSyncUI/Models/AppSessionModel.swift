@@ -1,6 +1,8 @@
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Window-scoped navigation owner. Route publication happens only after the
 /// active editor barrier flushes, so commands cannot move a window away from
 /// a recoverable draft failure.
@@ -29,7 +31,7 @@ public final class AppSessionModel {
         let request = generation
         guard destination != route else { return }
         if [.workspace, .projectSettings].contains(destination), projectID == nil {
-            navigationError = .init(code: "PROJECT_REQUIRED", message: "请先从项目库打开一个活跃项目")
+            navigationError = .init(code: "PROJECT_REQUIRED", message: L10n.tr("请先从项目库打开一个活跃项目"))
             return
         }
         do {

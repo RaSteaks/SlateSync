@@ -14,6 +14,58 @@ final class SlateSyncUITests: XCTestCase {
         try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
     }
 
+    /// Exercise the actual persisted setting rather than a launch-time locale
+    /// override. Each restart reuses the isolated library and preference suite.
+    @MainActor
+    func testApplicationLanguageRoundTripIncludesHelpMenusAndUserContent() {
+        let app = launchIsolatedApp()
+        XCTAssertTrue(app.buttons["project.create"].firstMatch.waitForExistence(timeout: 8))
+        app.typeKey(",", modifierFlags: .command)
+        let language = app.popUpButtons["settings.applicationLanguage"]
+        XCTAssertTrue(language.waitForExistence(timeout: 5))
+        language.click()
+        app.menuItems["English"].firstMatch.click()
+        XCTAssertTrue(app.descendants(matching: .any)["settings.languageRestart"].firstMatch.waitForExistence(timeout: 3))
+        app.terminate()
+        app.launch()
+        app.activate()
+
+        XCTAssertTrue(app.staticTexts["Project Library"].firstMatch.waitForExistence(timeout: 8))
+        app.staticTexts["Help"].firstMatch.click()
+        XCTAssertTrue(app.textFields["help.search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Quick start"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.popUpButtons["settings.helpLanguage"].exists)
+        attachReview("English help", app: app)
+        app.staticTexts["Logs"].firstMatch.click()
+        XCTAssertTrue(app.buttons["Refresh"].firstMatch.waitForExistence(timeout: 3))
+        app.staticTexts["Project Library"].firstMatch.click()
+        app.typeKey("n", modifierFlags: [.command, .shift])
+        let name = app.textFields["project.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 3))
+        name.typeText("中文项目 English")
+        app.buttons["project.create.confirm"].firstMatch.click()
+        XCTAssertTrue(app.buttons["task.create"].firstMatch.waitForExistence(timeout: 8))
+        app.staticTexts["Project Settings"].firstMatch.click()
+        let savedName = app.textFields["project.settings.name"]
+        XCTAssertTrue(savedName.waitForExistence(timeout: 3))
+        XCTAssertEqual(savedName.value as? String, "中文项目 English")
+        XCTAssertTrue(app.menuBars.menuBarItems["Recognition"].exists)
+        attachReview("English workspace with original project name", app: app)
+
+        app.typeKey(",", modifierFlags: .command)
+        XCTAssertTrue(language.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Appearance"].firstMatch.exists)
+        attachReview("English general settings", app: app)
+        language.click()
+        app.menuItems["简体中文"].firstMatch.click()
+        app.terminate()
+        app.launch()
+        app.activate()
+        XCTAssertTrue(app.staticTexts["项目库"].firstMatch.waitForExistence(timeout: 8))
+        app.staticTexts["帮助"].firstMatch.click()
+        XCTAssertTrue(app.staticTexts["快速开始"].firstMatch.waitForExistence(timeout: 3))
+    }
+
     // XCUIAutomation is MainActor-isolated in the macOS 26 SDK.
     @MainActor
     func testLaunchesMainWindowAndProjectLibrary() {
@@ -42,6 +94,14 @@ final class SlateSyncUITests: XCTestCase {
         // XCUI; the workspace-owned task action is the stable route witness.
         let taskCreate = app.buttons.matching(identifier: "task.create").firstMatch
         XCTAssertTrue(taskCreate.waitForExistence(timeout: 8))
+        // The sidebar keeps the acquired project visible beside its group
+        // heading, independent of the workspace's current detail route.
+        let currentProjectName = app.staticTexts["sidebar.currentProjectName"]
+        XCTAssertTrue(currentProjectName.waitForExistence(timeout: 3))
+        // macOS combines both texts in the native Section header for
+        // VoiceOver, so assert the user-authored portion without depending on
+        // the localized heading or accessibility punctuation.
+        XCTAssertTrue(currentProjectName.label.contains("隔离测试项目"))
 
         // Reopen through the native row primary action, not the toolbar. This
         // catches regressions where double-click only changes List selection.

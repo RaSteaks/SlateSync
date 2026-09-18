@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Mutable, secret-free result projection owned by the window session. Every
 /// commit is converted back to the persisted canonical record shape.
 struct EditableRecognitionRecord: Identifiable, Hashable, Sendable {
@@ -137,7 +139,7 @@ public final class RecognitionModel {
     public func loadOptions() async {
         optionsGeneration += 1
         let request = optionsGeneration
-        optionsOperation = .running(label: "正在读取识别选项…")
+        optionsOperation = .running(label: L10n.tr("正在读取识别选项…"))
         do {
             let projection = try await settings.globalSettings()
             guard optionsGeneration == request else { return }
@@ -171,14 +173,14 @@ public final class RecognitionModel {
               canRecognize(providerID: providerID, modelID: modelID) else {
             operation = .failed(SlateSyncError(
                 code: "RECOGNITION_OPTION_UNAVAILABLE",
-                message: "所选 Provider 或模型当前不可用，请刷新后重试"
+                message: L10n.tr("所选 Provider 或模型当前不可用，请刷新后重试")
             ))
             return
         }
         let id = UUID()
         projectID = request.projectID
         operationID = id
-        operation = .running(label: "准备识别…")
+        operation = .running(label: L10n.tr("准备识别…"))
         progress = nil
         result = nil
         resultTaskID = nil
@@ -208,7 +210,7 @@ public final class RecognitionModel {
                 editableRecords = value.result.records.map(EditableRecognitionRecord.init)
                 resultTaskID = request.taskID
                 resultTableID = UUID()
-                operation = .succeeded(message: "已识别 \(value.result.records.count) 条场记")
+                operation = .succeeded(message: L10n.tr("已识别 {0} 条场记", [String(describing: value.result.records.count)]))
             } catch {
                 guard operationID == id else { return }
                 let wrapped = ProductPrivacy.error(error)
@@ -228,7 +230,7 @@ public final class RecognitionModel {
         let id = UUID()
         self.projectID = projectID
         operationID = id
-        operation = .running(label: "正在读取场记 CSV…")
+        operation = .running(label: L10n.tr("正在读取场记 CSV…"))
         resultTaskID = nil
         recognitionTask = Task { [self] in
             do {
@@ -238,7 +240,7 @@ public final class RecognitionModel {
                 if operationID == id {
                     slateCSVRecords = records
                     slateCSVFilename = filename
-                    operation = .succeeded(message: "已载入 \(records.count) 条本地场记")
+                    operation = .succeeded(message: L10n.tr("已载入 {0} 条本地场记", [String(describing: records.count)]))
                 }
             } catch {
                 if operationID == id {
@@ -260,10 +262,10 @@ public final class RecognitionModel {
         guard commitVisibleEditor() else { return }
         let id = UUID()
         operationID = id
-        operation = .running(label: "正在生成本地结果…")
+        operation = .running(label: L10n.tr("正在生成本地结果…"))
         resultTaskID = nil
         let records = slateCSVRecords
-        let filename = slateCSVFilename ?? "场记 CSV"
+        let filename = slateCSVFilename ?? L10n.tr("场记 CSV")
         recognitionTask = Task { [self] in
             do {
                 try await flush()
@@ -276,7 +278,7 @@ public final class RecognitionModel {
                     editableRecords = value.enumerated().map { EditableRecognitionRecord($0.element, fallbackID: "slate-csv-\($0.offset)") }
                     resultTaskID = taskID
                     commit(value, filename)
-                    operation = .succeeded(message: "已生成 \(value.count) 条本地结果")
+                    operation = .succeeded(message: L10n.tr("已生成 {0} 条本地结果", [String(describing: value.count)]))
                 }
             } catch {
                 if operationID == id {
@@ -290,7 +292,7 @@ public final class RecognitionModel {
     public func cancel() {
         guard let projectID, let task = recognitionTask, cancelTask == nil else { return }
         let id = operationID
-        operation = .running(label: "正在取消…")
+        operation = .running(label: L10n.tr("正在取消…"))
         // Cancel the captured task before awaiting the service; a cancellation
         // during flush must never start a new request after cancel returned.
         task.cancel()
@@ -350,7 +352,7 @@ public final class RecognitionModel {
     /// Recognition and Resolve share one native cell editor, including its
     /// marked-text barrier, keyboard semantics and delayed commit behavior.
     public var resultTable: ResolveCSVTable {
-        ResolveCSVTable(headers: ["卡号", "素材编号", "场", "镜", "条", "状态", "描述", "备注"],
+        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("条"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注")],
             rows: editableRecords.map { [$0.cardNumber, $0.videoCode, $0.scene, $0.shot, $0.take, $0.takeStatus, $0.description, $0.comments] },
             format: .init())
     }

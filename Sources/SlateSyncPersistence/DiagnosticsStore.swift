@@ -154,6 +154,11 @@ public actor DiagnosticsStore {
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension.lowercased() == "json" }
+        // No legacy files means there is no reason to materialize every row ID.
+        guard !entries.isEmpty else { return }
+        // Existing SQLite rows are authoritative; duplicate snapshots must not
+        // create a write transaction that reseals an unchanged encrypted DB.
+        let existingIDs = Set(try await database.rows("SELECT id FROM diagnostic_sessions;").compactMap { $0["id"] ?? nil })
         var commands: [SQLiteCommand] = []
         for url in entries {
             guard
@@ -163,6 +168,7 @@ public actor DiagnosticsStore {
                     PersistenceJSON.string(object["id"]) ?? url.deletingPathExtension().lastPathComponent
                 )
             else { continue }
+            guard !existingIDs.contains(id) else { continue }
             object["id"] = id
             let savedAt = PersistenceJSON.string(object["savedAt"]) ?? "1970-01-01T00:00:00.000Z"
             guard

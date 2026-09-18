@@ -1,6 +1,8 @@
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Only displays the JPEG already validated/prepared by Media; original
 /// PDF/ImageIO parsing and page ownership remain outside the view layer.
 struct MediaPreviewView: View {
@@ -25,7 +27,7 @@ struct MediaPreviewView: View {
                             height: max(0, geometry.size.height - density.panelPadding * 2))
                     }
                 }
-            }.buttonStyle(.plain).accessibilityLabel("放大场记单预览").accessibilityIdentifier("workspace.preview.enlarge").help("放大场记单预览")
+            }.buttonStyle(.plain).accessibilityLabel(L10n.tr("放大场记单预览")).accessibilityIdentifier("workspace.preview.enlarge").help(L10n.tr("放大场记单预览"))
             Divider()
             navigation.padding(.horizontal, 12).padding(.bottom, 12)
         }
@@ -35,7 +37,7 @@ struct MediaPreviewView: View {
         }
         .sheet(isPresented: $showsLightbox) {
             VStack {
-                HStack { navigation; Spacer(); Button("关闭预览") { showsLightbox = false }.keyboardShortcut(.cancelAction) }
+                HStack { navigation; Spacer(); Button(L10n.tr("关闭预览")) { showsLightbox = false }.keyboardShortcut(.cancelAction) }
                 LightTable { preview }
             }
             .padding(20).frame(minWidth: 720, minHeight: 480)
@@ -49,7 +51,7 @@ struct MediaPreviewView: View {
     @ViewBuilder private var preview: some View {
         if let image = previewImage {
             Image(nsImage: image).resizable().scaledToFit()
-                .accessibilityLabel("场记单第 \(pageIndex + 1) 页，共 \(document.pages.count) 页")
+                .accessibilityLabel(L10n.tr("场记单第 {0} 页，共 {1} 页", [String(describing: pageIndex + 1), String(describing: document.pages.count)]))
         }
     }
 
@@ -60,9 +62,9 @@ struct MediaPreviewView: View {
 
     private var navigation: some View {
         HStack {
-            Button("上一页", systemImage: "chevron.left", action: previous).labelStyle(.iconOnly).help("上一页").accessibilityIdentifier("workspace.preview.previous").disabled(pageIndex == 0)
+            Button(L10n.tr("上一页"), systemImage: "chevron.left", action: previous).labelStyle(.iconOnly).help(L10n.tr("上一页")).accessibilityIdentifier("workspace.preview.previous").disabled(pageIndex == 0)
             Text("\(pageIndex + 1) / \(document.pages.count)").monospacedDigit()
-            Button("下一页", systemImage: "chevron.right", action: next).labelStyle(.iconOnly).help("下一页").accessibilityIdentifier("workspace.preview.next").disabled(pageIndex + 1 >= document.pages.count)
+            Button(L10n.tr("下一页"), systemImage: "chevron.right", action: next).labelStyle(.iconOnly).help(L10n.tr("下一页")).accessibilityIdentifier("workspace.preview.next").disabled(pageIndex + 1 >= document.pages.count)
         }
     }
 

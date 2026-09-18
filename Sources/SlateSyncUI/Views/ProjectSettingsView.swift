@@ -1,6 +1,8 @@
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct ProjectSettingsView: View {
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ProjectSettingsModel
@@ -24,27 +26,27 @@ public struct ProjectSettingsView: View {
         Group {
             if model.project != nil {
                 Form {
-                    Section("项目") {
-                        TextField("名称", text: $model.name)
+                    Section(L10n.tr("项目")) {
+                        TextField(L10n.tr("名称"), text: $model.name)
                             .accessibilityIdentifier("project.settings.name")
-                        TextField("描述", text: $model.description, axis: .vertical)
+                        TextField(L10n.tr("描述"), text: $model.description, axis: .vertical)
                             .lineLimit(2...5)
                             // Vertical Form fields need an explicit accessible
                             // name because AppKit exposes the title separately.
-                            .accessibilityLabel("描述")
+                            .accessibilityLabel(L10n.tr("描述"))
                     }
-                    Section("识别上下文") {
+                    Section(L10n.tr("识别上下文")) {
                         Picker("Provider", selection: providerBinding) {
-                            Text("请选择").tag("")
+                            Text(L10n.tr("请选择")).tag("")
                             if let unavailableProviderID {
-                                Text("不可用：\(unavailableProviderID)").tag(unavailableProviderID)
+                                Text(L10n.tr("不可用：{0}", [String(describing: unavailableProviderID)])).tag(unavailableProviderID)
                             }
-                            ForEach(recognition.providers, id: \.id) { Text($0.label).tag($0.id) }
+                            ForEach(recognition.providers, id: \.id) { Text(L10n.providerLabel($0)).tag($0.id) }
                         }
-                        Picker("模型", selection: optionalBinding(\.modelId)) {
-                            Text("请选择").tag("")
+                        Picker(L10n.tr("模型"), selection: optionalBinding(\.modelId)) {
+                            Text(L10n.tr("请选择")).tag("")
                             if let unavailableModelID {
-                                Text("不可用：\(unavailableModelID)").tag(unavailableModelID)
+                                Text(L10n.tr("不可用：{0}", [String(describing: unavailableModelID)])).tag(unavailableModelID)
                             }
                             ForEach(
                                 recognition.availableModels(
@@ -53,26 +55,26 @@ public struct ProjectSettingsView: View {
                             ) { Text($0.label).tag($0.id) }
                         }
                         if unavailableProviderID != nil || unavailableModelID != nil {
-                            LabeledContent("已保存的识别选项不可用", value: "请选择可用项或先在全局设置中完成配置")
+                            LabeledContent(L10n.tr("已保存的识别选项不可用"), value: L10n.tr("请选择可用项或先在全局设置中完成配置"))
                         }
-                        Picker("精度", selection: $model.settings.accuracyMode) {
-                            Text("标准").tag(ProjectSettings.AccuracyMode.standard)
-                            Text("高精度").tag(ProjectSettings.AccuracyMode.high)
+                        Picker(L10n.tr("精度"), selection: $model.settings.accuracyMode) {
+                            Text(L10n.tr("标准")).tag(ProjectSettings.AccuracyMode.standard)
+                            Text(L10n.tr("高精度")).tag(ProjectSettings.AccuracyMode.high)
                         }
-                        Picker("场记版式（Scenario）", selection: optionalBinding(\.scenarioId)) {
-                            Text("自动匹配").tag("")
+                        Picker(L10n.tr("场记版式（Scenario）"), selection: optionalBinding(\.scenarioId)) {
+                            Text(L10n.tr("自动匹配")).tag("")
                             ForEach(model.scenarios, id: \.id) { Text($0.label).tag($0.id) }
                         }
-                        TextField("自定义提示词", text: $model.settings.customPrompt, axis: .vertical)
+                        TextField(L10n.tr("自定义提示词"), text: $model.settings.customPrompt, axis: .vertical)
                             .lineLimit(3...8)
-                            .accessibilityLabel("自定义提示词")
+                            .accessibilityLabel(L10n.tr("自定义提示词"))
                     }
-                    Section("Resolve 格式") {
-                        TextField("场", text: $model.settings.resolve.fieldFormats.scene)
-                        TextField("镜", text: $model.settings.resolve.fieldFormats.shot)
-                        TextField("条", text: $model.settings.resolve.fieldFormats.take)
-                        TextField("好条标记", text: $model.settings.resolve.comments.goodTake)
-                        TextField("保条标记", text: $model.settings.resolve.comments.holdTake)
+                    Section(L10n.tr("Resolve 格式")) {
+                        TextField(L10n.tr("场"), text: $model.settings.resolve.fieldFormats.scene)
+                        TextField(L10n.tr("镜"), text: $model.settings.resolve.fieldFormats.shot)
+                        TextField(L10n.tr("条"), text: $model.settings.resolve.fieldFormats.take)
+                        TextField(L10n.tr("好条标记"), text: $model.settings.resolve.comments.goodTake)
+                        TextField(L10n.tr("保条标记"), text: $model.settings.resolve.comments.holdTake)
                     }
                 }
                 // Keep long project forms scrollable at the minimum height.
@@ -83,22 +85,22 @@ public struct ProjectSettingsView: View {
                 // A project already exists while its options are loading;
                 // avoid flashing the unrelated "no open project" empty state.
                 if case .failed = model.operation {
-                    ContentUnavailableView("无法读取项目设置", systemImage: "exclamationmark.triangle")
+                    ContentUnavailableView(L10n.tr("无法读取项目设置"), systemImage: "exclamationmark.triangle")
                         .tint(Color.secondary)
                 } else {
-                    ProgressView("正在读取项目设置…")
+                    ProgressView(L10n.tr("正在读取项目设置…"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
                 ContentUnavailableView(
-                    "未打开项目", systemImage: "slider.horizontal.3", description: Text("请先从项目库打开一个活跃项目。"))
+                    L10n.tr("未打开项目"), systemImage: "slider.horizontal.3", description: Text(L10n.tr("请先从项目库打开一个活跃项目。")))
                     .tint(Color.secondary)
             }
         }
-        .navigationTitle("项目设置")
+        .navigationTitle(L10n.tr("项目设置"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("保存", systemImage: "square.and.arrow.down") { Task { await model.save() } }
+                Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") { Task { await model.save() } }
                     .slatePrimaryActionStyle()
                     .disabled(model.project == nil || model.operation.isRunning)
             }
@@ -106,7 +108,7 @@ public struct ProjectSettingsView: View {
         .safeAreaInset(edge: .bottom) {
             if case .failed(let error) = model.operation {
                 SlateStatusBar(message: error.message, tone: .error) {
-                    Button(model.project == nil ? "重试读取" : "重试保存") {
+                    Button(model.project == nil ? L10n.tr("重试读取") : L10n.tr("重试保存")) {
                         Task {
                             if model.project == nil {
                                 await model.load(projectID: projectID)

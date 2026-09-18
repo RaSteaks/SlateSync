@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// The narrow window-close half of the lifecycle adapter. SwiftUI onDisappear
 /// runs after a window has already closed and cannot veto a failed save. This
 /// zero-size probe only locates its own window; it creates no window or UI.
@@ -156,5 +158,5 @@ private struct MainThreadForwardingTarget: Sendable {
 
 private enum WindowCloseFailure: LocalizedError {
     case composition
-    var errorDescription: String? { "请先完成正在输入的文字，再关闭窗口" }
+    var errorDescription: String? { L10n.tr("请先完成正在输入的文字，再关闭窗口") }
 }

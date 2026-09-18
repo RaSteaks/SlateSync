@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct SidebarView: View {
     @Environment(\.slateSyncDensity) private var density
     // Same persisted keys as AppRootView/Settings; both owners observe the
@@ -8,21 +10,37 @@ public struct SidebarView: View {
     @AppStorage("appearance") private var appearancePreference = "system"
     @AppStorage("density") private var densityPreference = "comfortable"
     @Binding private var selection: SidebarDestination
+    private let currentProjectName: String?
 
-    public init(selection: Binding<SidebarDestination>) {
+    public init(selection: Binding<SidebarDestination>, currentProjectName: String? = nil) {
         _selection = selection
+        self.currentProjectName = currentProjectName
     }
 
     public var body: some View {
         List(selection: $selection) {
-            Section("资源") {
+            Section(L10n.tr("资源")) {
                 sidebarRow(.projects)
             }
-            Section("当前项目") {
+            Section {
                 sidebarRow(.workspace)
                 sidebarRow(.projectSettings)
+            } header: {
+                HStack(spacing: 8) {
+                    Text(L10n.tr("当前项目"))
+                    Spacer(minLength: 8)
+                    if let currentProjectName {
+                        // Keep the project context beside the group label while
+                        // preserving the native sidebar header's compact height.
+                        Text(currentProjectName)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(currentProjectName)
+                            .accessibilityIdentifier("sidebar.currentProjectName")
+                    }
+                }
             }
-            Section("支持") {
+            Section(L10n.tr("支持")) {
                 sidebarRow(.logs)
                 sidebarRow(.help)
             }
@@ -42,7 +60,7 @@ public struct SidebarView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("SlateSync").font(.headline)
-                    Text("场记整理工作台").font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.tr("场记整理工作台")).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -51,7 +69,7 @@ public struct SidebarView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 12) {
                 SettingsLink {
-                    Label("全局设置", systemImage: "gearshape")
+                    Label(L10n.tr("全局设置"), systemImage: "gearshape")
                 }
                 .buttonStyle(.borderless)
                 Spacer(minLength: 8)
@@ -63,8 +81,8 @@ public struct SidebarView: View {
                         .frame(width: 20)
                 }
                 .buttonStyle(.borderless)
-                .help("外观：\(appearanceTitle)")
-                .accessibilityLabel("外观：\(appearanceTitle)")
+                .help(L10n.tr("外观：{0}", [String(describing: appearanceTitle)]))
+                .accessibilityLabel(L10n.tr("外观：{0}", [String(describing: appearanceTitle)]))
                 .accessibilityIdentifier("sidebar.appearance")
                 Button {
                     densityPreference = densityPreference == "compact" ? "comfortable" : "compact"
@@ -74,8 +92,8 @@ public struct SidebarView: View {
                         .frame(width: 20)
                 }
                 .buttonStyle(.borderless)
-                .help("界面密度：\(densityPreference == "compact" ? "紧凑" : "舒适")")
-                .accessibilityLabel("界面密度：\(densityPreference == "compact" ? "紧凑" : "舒适")")
+                .help(L10n.tr("界面密度：{0}", [String(describing: densityPreference == "compact" ? L10n.tr("紧凑") : L10n.tr("舒适"))]))
+                .accessibilityLabel(L10n.tr("界面密度：{0}", [String(describing: densityPreference == "compact" ? L10n.tr("紧凑") : L10n.tr("舒适"))]))
                 .accessibilityIdentifier("sidebar.density")
             }
             .padding(density.panelPadding)
@@ -97,9 +115,9 @@ public struct SidebarView: View {
 
     private var appearanceTitle: String {
         switch appearancePreference {
-        case "light": "浅色"
-        case "dark": "深色"
-        default: "跟随系统"
+        case "light": L10n.tr("浅色")
+        case "dark": L10n.tr("深色")
+        default: L10n.tr("跟随系统")
         }
     }
 

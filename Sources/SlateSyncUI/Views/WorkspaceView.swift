@@ -2,6 +2,8 @@ import SlateSyncDomain
 import SwiftUI
 import UniformTypeIdentifiers
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// A route hint for Help shortcuts and status-bar actions. The workspace
 /// keeps ownership of its segmented selection; the hint only chooses the
 /// initial/target section and never changes task data.
@@ -20,6 +22,8 @@ public enum WorkspaceSection: String, CaseIterable, Identifiable, Hashable, Send
     case csv = "Resolve CSV"
 
     public var id: String { rawValue }
+    // Persisted section identity stays unchanged across interface languages.
+    public var title: String { L10n.message(rawValue) }
 }
 
 public struct WorkspaceView: View {
@@ -57,6 +61,10 @@ public struct WorkspaceView: View {
         }
     }
     @State private var section: WorkspaceSection
+    // A native segmented Picker must read back its new value synchronously.
+    // Keep that feedback separate from the page, which stays mounted until
+    // the editor/save barrier succeeds; rapid clicks share the same barrier.
+    @State private var pendingSection: WorkspaceSection?
     @State private var providerID = ""
     @State private var modelID = ""
     @State private var scenarioID = ""
@@ -113,42 +121,42 @@ public struct WorkspaceView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(WorkspaceEditorProbe(boundary: editorBoundary).frame(width: 0, height: 0))
-        .navigationTitle("工作台")
+        .navigationTitle(L10n.tr("工作台"))
         .safeAreaInset(edge: .bottom) {
             autosaveBanner
             if let layoutError {
                 SlateStatusBar(message: layoutError, tone: .warning) {
                     if entryPoint != .input {
-                        Button("重试") { routeToEntryPoint(entryPoint) }
+                        Button(L10n.tr("重试")) { routeToEntryPoint(entryPoint) }
                     }
-                    Button("关闭") { self.layoutError = nil }
+                    Button(L10n.tr("关闭")) { self.layoutError = nil }
                 }
             }
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button(showsTasks ? "隐藏任务列表" : "显示任务列表", systemImage: "sidebar.left") {
+                Button(showsTasks ? L10n.tr("隐藏任务列表") : L10n.tr("显示任务列表"), systemImage: "sidebar.left") {
                     changeLayout { showsTasks.toggle() }
                 }
                 .tint(Color.secondary)
-                .help("显示或隐藏当前项目的任务")
+                .help(L10n.tr("显示或隐藏当前项目的任务"))
                 .accessibilityIdentifier("workspace.tasks.toggle")
             }
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("保存", systemImage: "square.and.arrow.down") {
+                Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") {
                     Task { try? await workspace.flush() }
                 }
                 .tint(Color.secondary)
                 // The File menu owns the single ⌘S registration; this toolbar
                 // button invokes the same workspace owner without competing.
-                Button("开始识别", systemImage: "viewfinder") { startRecognition() }
+                Button(L10n.tr("开始识别"), systemImage: "viewfinder") { startRecognition() }
                     .slatePrimaryActionStyle()
                     .labelStyle(.titleAndIcon)
-                    .help(recognitionUnavailableReason ?? "识别当前场记单")
+                    .help(recognitionUnavailableReason ?? L10n.tr("识别当前场记单"))
                     .disabled(!canRecognize || recognition.operation.isRunning)
                     .accessibilityIdentifier(AccessibilityID.recognize)
                 if recognition.operation.isRunning {
-                    Button("取消识别", systemImage: "xmark.circle") { recognition.cancel() }
+                    Button(L10n.tr("取消识别"), systemImage: "xmark.circle") { recognition.cancel() }
                         .tint(Color.secondary)
                         .accessibilityIdentifier(AccessibilityID.recognitionCancel)
                 }
@@ -249,16 +257,16 @@ public struct WorkspaceView: View {
             // A stronger task heading anchors all three work pages without
             // replacing their native segmented navigation or editor identity.
             SlatePageHeading(
-                title: workspace.selectedTask?.filename ?? "当前任务",
-                subtitle: workspace.selectedTaskID == nil ? "新建任务或导入场记单以开始" : "导入场记 · 校对结果 · 整理 Resolve CSV",
+                title: workspace.selectedTask?.filename ?? L10n.tr("当前任务"),
+                subtitle: workspace.selectedTaskID == nil ? L10n.tr("新建任务或导入场记单以开始") : L10n.tr("导入场记 · 校对结果 · 整理 Resolve CSV"),
                 symbol: "doc.viewfinder"
             )
             // A container identifier propagates to every HStack child on
             // macOS; scope the heading identifier to the actual heading.
             .accessibilityIdentifier(AccessibilityID.workspaceHeading)
             HStack(spacing: 12) {
-                Picker("工作区", selection: sectionBinding) {
-                    ForEach(WorkspaceSection.allCases) { Text($0.rawValue).tag($0) }
+                Picker(L10n.tr("工作区"), selection: sectionBinding) {
+                    ForEach(WorkspaceSection.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .frame(maxWidth: 360)
@@ -284,17 +292,17 @@ public struct WorkspaceView: View {
                 // Keep the selected section in the value and announce unread
                 // sections as a hint; replacing the value with only the dot
                 // message hides the Picker's current selection from VoiceOver.
-                .accessibilityValue(section.rawValue)
+                .accessibilityValue((pendingSection ?? section).title)
                 .accessibilityHint(pendingSectionsAccessibilityHint)
                 Spacer(minLength: 0)
                 if section == .input {
-                    Button("识别配置", systemImage: "slider.horizontal.3") {
+                    Button(L10n.tr("识别配置"), systemImage: "slider.horizontal.3") {
                         changeLayout { showsConfiguration = !(showsConfiguration ?? (availableWidth >= 900)) }
                     }
                     .tint(Color.secondary)
                     .accessibilityIdentifier("workspace.configuration.toggle")
                 } else if section == .result {
-                    Toggle("原稿对照", isOn: originalBinding)
+                    Toggle(L10n.tr("原稿对照"), isOn: originalBinding)
                         .toggleStyle(.button)
                         .disabled(media.document == nil)
                         .accessibilityIdentifier("workspace.original.toggle")
@@ -330,18 +338,18 @@ public struct WorkspaceView: View {
                 VStack(spacing: 0) {
                     HStack {
                         SlatePanelHeading(
-                            title: "场记单", subtitle: media.document?.filename ?? "支持 PDF 和图像，也可拖入文件")
-                        Button("选择 PDF 或图像…") { presentImport(.media) }
+                            title: L10n.tr("场记单"), subtitle: media.document?.filename ?? L10n.tr("支持 PDF 和图像，也可拖入文件"))
+                        Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
                             .disabled(!media.canAcceptInput || workspace.projectID == nil)
                     }.padding(density.panelPadding)
                     if media.operation.isRunning {
-                        SlateStatusBar(message: "正在准备场记单…", busy: true) {
-                            Button("取消准备", role: .cancel) { media.cancel() }
+                        SlateStatusBar(message: L10n.tr("正在准备场记单…"), busy: true) {
+                            Button(L10n.tr("取消准备"), role: .cancel) { media.cancel() }
                         }
                     }
                     if case .failed(let error) = media.operation {
                         SlateStatusBar(message: error.message, tone: .error) {
-                            Button("重新选择…") { presentImport(.media) }
+                            Button(L10n.tr("重新选择…")) { presentImport(.media) }
                         }
                     }
                     Group {
@@ -349,10 +357,10 @@ public struct WorkspaceView: View {
                             MediaPreviewView(document: document, pageIndex: $media.pageIndex)
                         } else {
                             SlateEmptyState(
-                                title: "导入场记单", symbol: "doc.viewfinder",
-                                message: "选择或拖入 PDF、图像，然后配置识别。"
+                                title: L10n.tr("导入场记单"), symbol: "doc.viewfinder",
+                                message: L10n.tr("选择或拖入 PDF、图像，然后配置识别。")
                             ) {
-                                Button("选择 PDF 或图像…") { presentImport(.media) }
+                                Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
                                     .disabled(!media.canAcceptInput || workspace.projectID == nil)
                             }
                         }
@@ -411,9 +419,9 @@ public struct WorkspaceView: View {
                 LeaderProgress(phaseText: progressPhaseFallback)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(recognition.progress?.message ?? "正在识别场记单…")
+                Text(recognition.progress.map { L10n.message($0.message) } ?? L10n.tr("正在识别场记单…"))
                     .font(.callout).lineLimit(2)
-                Text("输入页在识别期间暂停编辑")
+                Text(L10n.tr("输入页在识别期间暂停编辑"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -428,33 +436,33 @@ public struct WorkspaceView: View {
 
     private var progressPhaseFallback: String {
         let phase = recognition.progress?.phase ?? ""
-        return phase.isEmpty ? "识别中" : phase
+        return phase.isEmpty ? L10n.tr("识别中") : phase
     }
 
     private var configurationPanel: some View {
         VStack(spacing: 0) {
             HStack {
-                SlatePanelHeading(title: "识别配置")
-                Button("收起", systemImage: "chevron.right") {
+                SlatePanelHeading(title: L10n.tr("识别配置"))
+                Button(L10n.tr("收起"), systemImage: "chevron.right") {
                     changeLayout { showsConfiguration = false }
                 }
                 .tint(Color.secondary)
-                .help("收起识别配置，扩大预览区域")
+                .help(L10n.tr("收起识别配置，扩大预览区域"))
                     .accessibilityIdentifier("workspace.configuration.close")
             }.padding(density.panelPadding)
             Form {
                 Section {
-                    Picker("服务商", selection: providerSelection) {
-                        Text("请选择").tag("")
+                    Picker(L10n.tr("服务商"), selection: providerSelection) {
+                        Text(L10n.tr("请选择")).tag("")
                         if unavailableProvider {
-                            Text("不可用：\(providerID)").tag(providerID)
+                            Text(L10n.tr("不可用：{0}", [String(describing: providerID)])).tag(providerID)
                         }
-                        ForEach(recognition.providers, id: \.id) { Text($0.label).tag($0.id) }
+                        ForEach(recognition.providers, id: \.id) { Text(L10n.providerLabel($0)).tag($0.id) }
                     }
-                    Picker("模型", selection: modelSelection) {
-                        Text("请选择").tag("")
+                    Picker(L10n.tr("模型"), selection: modelSelection) {
+                        Text(L10n.tr("请选择")).tag("")
                         if unavailableModel {
-                            Text("不可用：\(modelID)").tag(modelID)
+                            Text(L10n.tr("不可用：{0}", [String(describing: modelID)])).tag(modelID)
                         }
                         ForEach(recognition.availableModels(providerID: providerID), id: \.id) {
                             Text($0.label).tag($0.id)
@@ -462,25 +470,25 @@ public struct WorkspaceView: View {
                     }
                     if unavailableProvider || unavailableModel || providerID.isEmpty || modelID.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("请选择可用项，或先配置服务商。")
+                            Text(L10n.tr("请选择可用项，或先配置服务商。"))
                                 .font(.caption).foregroundStyle(.secondary)
-                            SettingsLink { Text("打开全局设置") }
+                            SettingsLink { Text(L10n.tr("打开全局设置")) }
                         }
                     }
                     if case .failed(let error) = recognition.optionsOperation {
-                        LabeledContent("选项读取失败") {
+                        LabeledContent(L10n.tr("选项读取失败")) {
                             HStack {
-                                Text(error.message)
-                                Button("重试") { Task { await recognition.loadOptions() } }
+                                Text(L10n.message(error.message))
+                                Button(L10n.tr("重试")) { Task { await recognition.loadOptions() } }
                             }
                         }
                     }
-                    Picker("精度", selection: accuracySelection) {
-                        Text("标准").tag(ProjectSettings.AccuracyMode.standard)
-                        Text("高精度").tag(ProjectSettings.AccuracyMode.high)
+                    Picker(L10n.tr("精度"), selection: accuracySelection) {
+                        Text(L10n.tr("标准")).tag(ProjectSettings.AccuracyMode.standard)
+                        Text(L10n.tr("高精度")).tag(ProjectSettings.AccuracyMode.high)
                     }
-                    Picker("场记版式（Scenario）", selection: scenarioSelection) {
-                        Text("自动匹配").tag("")
+                    Picker(L10n.tr("场记版式（Scenario）"), selection: scenarioSelection) {
+                        Text(L10n.tr("自动匹配")).tag("")
                         ForEach(workspace.scenarios, id: \.id) { Text($0.label).tag($0.id) }
                     }
                     VStack(alignment: .leading, spacing: 12) {
@@ -492,18 +500,18 @@ public struct WorkspaceView: View {
                             HStack {
                                 Image(systemName: showsAdvanced ? "chevron.down" : "chevron.right")
                                     .font(.caption).accessibilityHidden(true)
-                                Text("高级设置")
+                                Text(L10n.tr("高级设置"))
                                 Spacer()
                             }.contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("高级设置")
-                        .accessibilityValue(showsAdvanced ? "已展开" : "已收起")
+                        .accessibilityLabel(L10n.tr("高级设置"))
+                        .accessibilityValue(showsAdvanced ? L10n.tr("已展开") : L10n.tr("已收起"))
                         .accessibilityIdentifier("workspace.advanced.toggle")
                         if showsAdvanced {
-                            TextField("自定义提示词", text: $workspace.customPrompt, axis: .vertical)
+                            TextField(L10n.tr("自定义提示词"), text: $workspace.customPrompt, axis: .vertical)
                                 .lineLimit(3...8)
-                                .accessibilityLabel("自定义提示词")
+                                .accessibilityLabel(L10n.tr("自定义提示词"))
                                 .accessibilityIdentifier(AccessibilityID.workspaceCustomPrompt)
                         }
                     }
@@ -519,16 +527,16 @@ public struct WorkspaceView: View {
             Divider()
             HStack {
                 SlatePanelHeading(
-                    title: "本地场记 CSV",
+                    title: L10n.tr("本地场记 CSV"),
                     subtitle: recognition.slateCSVRecords.isEmpty
-                        ? "已有结构化场记时，可直接生成结果"
-                        : "\(recognition.slateCSVFilename ?? "场记 CSV") · \(recognition.slateCSVRecords.count) 条"
+                        ? L10n.tr("已有结构化场记时，可直接生成结果")
+                        : L10n.tr("{0} · {1} 条", [String(describing: recognition.slateCSVFilename ?? L10n.tr("场记 CSV")), String(describing: recognition.slateCSVRecords.count)])
                 )
-                Menu("CSV 操作", systemImage: "tablecells") {
-                    Button("载入场记 CSV…") { presentImport(.slateCSV) }
+                Menu(L10n.tr("CSV 操作"), systemImage: "tablecells") {
+                    Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
                         .disabled(workspace.selectedTaskID == nil)
                     if !recognition.slateCSVRecords.isEmpty {
-                        Button("从场记 CSV 生成结果") {
+                        Button(L10n.tr("从场记 CSV 生成结果")) {
                             recognition.generateLocalRecords(
                                 flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
                                 taskID: workspace.selectedTaskID)
@@ -543,19 +551,19 @@ public struct WorkspaceView: View {
 
     private var metadataPanel: some View {
         VStack(alignment: .leading) {
-            DisclosureGroup(metadata.operation.isRunning ? "场记元数据 · 扫描中…" : "场记元数据 · 扫描与回填") {
-                Button("选择目录并扫描…") { presentImport(.metadata) }
+            DisclosureGroup(metadata.operation.isRunning ? L10n.tr("场记元数据 · 扫描中…") : L10n.tr("场记元数据 · 扫描与回填")) {
+                Button(L10n.tr("选择目录并扫描…")) { presentImport(.metadata) }
                     .disabled(workspace.selectedTaskID == nil || csv.table == nil)
                 if case .failed(let error) = metadata.operation {
-                    Text(error.message).foregroundStyle(SlateSyncTheme.danger)
+                    Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger)
                 }
                 if metadata.operation.isRunning {
-                    Button("取消扫描", role: .cancel) { metadata.cancel() }
+                    Button(L10n.tr("取消扫描"), role: .cancel) { metadata.cancel() }
                 }
                 if let result = metadata.result {
-                    LabeledContent("已读取", value: "\(result.metadata.count) 条")
-                    LabeledContent("警告", value: "\(result.warnings.count) 条")
-                    LabeledContent("缺少素材", value: "\(result.missingKeys.count) 条")
+                    LabeledContent(L10n.tr("已读取"), value: L10n.tr("{0} 条", [String(describing: result.metadata.count)]))
+                    LabeledContent(L10n.tr("警告"), value: L10n.tr("{0} 条", [String(describing: result.warnings.count)]))
+                    LabeledContent(L10n.tr("缺少素材"), value: L10n.tr("{0} 条", [String(describing: result.missingKeys.count)]))
                     if !result.missingKeys.isEmpty {
                         Text(result.missingKeys.prefix(8).joined(separator: "、"))
                             .font(.caption.monospaced())
@@ -567,11 +575,11 @@ public struct WorkspaceView: View {
                     // so the disclosure never grows a second scroller.
                     ForEach(result.warnings.prefix(6), id: \.self) { warning in
                         WarnRow(severity: .warning) {
-                            Text(warning).font(.caption).lineLimit(2)
+                            Text(L10n.message(warning)).font(.caption).lineLimit(2)
                         }
                     }
                     if result.warnings.count > 6 {
-                        Text("其余 \(result.warnings.count - 6) 条警告已记录在日志中。")
+                        Text(L10n.tr("其余 {0} 条警告已记录在日志中。", [String(describing: result.warnings.count - 6)]))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -591,9 +599,9 @@ public struct WorkspaceView: View {
             let circled = records.filter { $0.takeStatus == .passed || $0.takeStatus == .hold }.count
             let struck = records.filter { $0.takeStatus == .rejected }.count
             HStack(spacing: 16) {
-                takeMarkCount(mark: TakeMark(phase: .circled), label: "过 / 保", count: circled)
-                takeMarkCount(mark: TakeMark(phase: .struck), label: "废条", count: struck)
-                takeMarkCount(mark: TakeMark(phase: .pending), label: "待定", count: records.count - circled - struck)
+                takeMarkCount(mark: TakeMark(phase: .circled), label: L10n.tr("过 / 保"), count: circled)
+                takeMarkCount(mark: TakeMark(phase: .struck), label: L10n.tr("废条"), count: struck)
+                takeMarkCount(mark: TakeMark(phase: .pending), label: L10n.tr("待定"), count: records.count - circled - struck)
                 Spacer(minLength: 0)
             }
             .font(.caption).foregroundStyle(.secondary)
@@ -628,8 +636,8 @@ public struct WorkspaceView: View {
                 if let document = media.document {
                     VStack(spacing: 0) {
                         HStack {
-                            SlatePanelHeading(title: "原稿对照", subtitle: "翻页仅切换原稿，不改变结果选择")
-                            Button("关闭", systemImage: "xmark") { changeLayout { showsOriginal = false } }
+                            SlatePanelHeading(title: L10n.tr("原稿对照"), subtitle: L10n.tr("翻页仅切换原稿，不改变结果选择"))
+                            Button(L10n.tr("关闭"), systemImage: "xmark") { changeLayout { showsOriginal = false } }
                                 .tint(Color.secondary)
                                 .accessibilityIdentifier("workspace.original.close")
                         }.padding(density.panelPadding)
@@ -648,13 +656,13 @@ public struct WorkspaceView: View {
     }
 
     private var recognitionUnavailableReason: String? {
-        if workspace.projectID == nil { return "请先从项目库打开项目。" }
-        if workspace.selectedTaskID == nil { return "请选择任务，或导入场记单自动创建任务。" }
-        if media.operation.isRunning { return "场记单准备完成后即可识别。" }
-        if media.document == nil { return "请先导入 PDF 或图像；本地 CSV 可直接生成结果。" }
-        if providerID.isEmpty || modelID.isEmpty { return "请在识别配置中选择服务商和模型。" }
+        if workspace.projectID == nil { return L10n.tr("请先从项目库打开项目。") }
+        if workspace.selectedTaskID == nil { return L10n.tr("请选择任务，或导入场记单自动创建任务。") }
+        if media.operation.isRunning { return L10n.tr("场记单准备完成后即可识别。") }
+        if media.document == nil { return L10n.tr("请先导入 PDF 或图像；本地 CSV 可直接生成结果。") }
+        if providerID.isEmpty || modelID.isEmpty { return L10n.tr("请在识别配置中选择服务商和模型。") }
         if !recognition.canRecognize(providerID: providerID, modelID: modelID) {
-            return "识别配置不可用，请选择可用模型或打开全局设置配置服务商。"
+            return L10n.tr("识别配置不可用，请选择可用模型或打开全局设置配置服务商。")
         }
         return nil
     }
@@ -685,6 +693,9 @@ public struct WorkspaceView: View {
         var succeeded = false
         Task {
             defer {
+                // Success has published the destination; failure restores the
+                // original selection without unmounting its unsaved editor.
+                pendingSection = nil
                 changingLayout = false
                 if succeeded, let pendingEntryPoint {
                     self.pendingEntryPoint = nil
@@ -696,22 +707,29 @@ public struct WorkspaceView: View {
                 try await workspace.flush()
                 layoutError = nil
                 update()
+                // A tab click can arrive during any layout save, including
+                // sidebar/configuration/original toggles. Apply the last click
+                // only after that same editor barrier succeeds.
+                if let pendingSection { visit(pendingSection) }
                 succeeded = true
-            } catch { layoutError = "请完成当前编辑并重试：\(error.localizedDescription)" }
+            } catch { layoutError = L10n.tr("请完成当前编辑并重试：{0}", [String(describing: error.localizedDescription)]) }
         }
     }
 
     private var sectionBinding: Binding<WorkspaceSection> {
         Binding(
-            get: { section },
+            get: { pendingSection ?? section },
             set: { destination in
-                changeLayout { visit(destination) }
+                guard destination != (pendingSection ?? section) else { return }
+                pendingSection = destination
+                guard !changingLayout else { return }
+                changeLayout {}
             })
     }
 
     private var pendingSectionsAccessibilityHint: String {
         let pending = WorkspaceSection.allCases.filter { unseenSections.contains($0) }
-        return pending.isEmpty ? "" : pending.map { "\($0.rawValue)有新内容" }.joined(separator: "、")
+        return pending.isEmpty ? "" : pending.map { L10n.tr("{0}有新内容", [String(describing: $0.title)]) }.joined(separator: "、")
     }
 
     private func visit(_ destination: WorkspaceSection) {
@@ -737,8 +755,8 @@ public struct WorkspaceView: View {
 
     @ViewBuilder private var autosaveBanner: some View {
         if let error = workspace.autosaveError {
-            SlateStatusBar(message: "自动保存失败：\(error.message)", tone: .error) {
-                Button("重试") { Task { await workspace.retryAutosave() } }
+            SlateStatusBar(message: L10n.tr("自动保存失败：{0}", [String(describing: L10n.message(error.message))]), tone: .error) {
+                Button(L10n.tr("重试")) { Task { await workspace.retryAutosave() } }
             }
         }
     }
@@ -880,23 +898,23 @@ private struct RecognitionResultView: View {
         if !model.editableRecords.isEmpty {
             EditableCSVTableRepresentable(
                 tableID: model.resultTableID, table: model.resultTable, revision: 0,
-                accessibilityLabel: "可编辑识别结果",
+                accessibilityLabel: L10n.tr("可编辑识别结果"),
                 onCommit: { model.receiveResult($0, commit: workspace.stageEditedRecords) },
                 editorRegistration: { model.flushEditor = $0 }
             )
             .disabled(model.operation.isRunning)
 
         } else if case .failed(let error) = model.operation {
-            SlateEmptyState(title: "识别失败", symbol: "exclamationmark.triangle", message: error.message) {
-                Button("返回输入检查配置", action: onInput)
+            SlateEmptyState(title: L10n.tr("识别失败"), symbol: "exclamationmark.triangle", message: error.message) {
+                Button(L10n.tr("返回输入检查配置"), action: onInput)
             }
         } else {
             // Empty results return through the same guarded tab transition.
             SlateEmptyState(
-                title: "暂无识别结果", symbol: "text.viewfinder",
-                message: "请先在输入页选择场记单并开始识别。"
+                title: L10n.tr("暂无识别结果"), symbol: "text.viewfinder",
+                message: L10n.tr("请先在输入页选择场记单并开始识别。")
             ) {
-                Button("前往输入", action: onInput)
+                Button(L10n.tr("前往输入"), action: onInput)
             }
         }
     }

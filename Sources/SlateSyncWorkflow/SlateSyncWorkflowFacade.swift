@@ -243,6 +243,11 @@ public actor SlateSyncWorkflowFacade:
 
     public func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData {
         try requireExternalOperations()
+        // Validate ownership before any credential, OCR or Provider work. The
+        // native entry point never creates a second task for a completed run;
+        // the row-only probe avoids loading its potentially large media payload.
+        let taskID = try NativeRecognitionPersistence.requireTaskID(request.taskID)
+        try await library.projectRuntime().requireTaskExists(projectID: request.projectID, taskID: taskID)
         await runtime.keychainStore.beginUserOperation(providerID: request.providerID)
         let cancellationTicket = recognitionCancellations.ticket(for: request.projectID)
         try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
@@ -294,6 +299,19 @@ public actor SlateSyncWorkflowFacade:
 
     public func globalSettings() async throws -> GlobalSettingsProjection {
         try await globalSettings(restartRequired: false)
+    }
+
+    /// Probe the editor's effective configuration without saving its draft or
+    /// replacing the recognition coordinator currently serving a project.
+    public func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
+        let resolved = await runtime.resolveSettingsDraft(values)
+        let resourcePaths = try OCRRuntimePaths(
+            resources: Self.paddleResources(), python: URL(fileURLWithPath: "/usr/bin/python3"),
+            workingDirectory: runtime.locator.url,
+            modelCache: runtime.locator.url.appending(path: "paddle-models"), environment: [:])
+        return try await OCREnvironmentChecker().check(
+            values: resolved, directory: runtime.locator.url, runnerURL: resourcePaths.runner,
+            environment: ProcessInfo.processInfo.environment)
     }
 
     private func globalSettings(restartRequired: Bool) async throws -> GlobalSettingsProjection {
@@ -647,22 +665,25 @@ public actor SlateSyncWorkflowFacade:
         let cache = root.appending(path: "paddle-models", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        let resources: OCRRuntimePaths.Resources
-        if let bundleRoot = Bundle.main.resourceURL?.appending(path: "PaddleOCR", directoryHint: .isDirectory),
-           FileManager.default.isReadableFile(atPath: bundleRoot.appending(path: "paddleocr_runner.py").path) {
-            // The folder reference preserves one canonical PaddleOCR subtree
-            // in the bundle; runtime/cache paths remain outside Resources.
-            resources = .bundle(bundleRoot)
-        } else {
-            resources = .development(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-        }
         return try OCRRuntimePaths(
-            resources: resources,
+            resources: paddleResources(),
             python: URL(fileURLWithPath: rawPython),
             workingDirectory: work,
             modelCache: cache,
             environment: ProcessInfo.processInfo.environment
         )
+    }
+
+    /// Diagnostics and inference must inspect the same bundled/development runner.
+    private nonisolated static func paddleResources() -> OCRRuntimePaths.Resources {
+        if let bundleRoot = Bundle.main.resourceURL?.appending(path: "PaddleOCR", directoryHint: .isDirectory),
+           FileManager.default.isReadableFile(atPath: bundleRoot.appending(path: "paddleocr_runner.py").path) {
+            // The folder reference preserves one canonical PaddleOCR subtree
+            // in the bundle; runtime/cache paths remain outside Resources.
+            return .bundle(bundleRoot)
+        } else {
+            return .development(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        }
     }
 
     private func resetRecognition() async throws {

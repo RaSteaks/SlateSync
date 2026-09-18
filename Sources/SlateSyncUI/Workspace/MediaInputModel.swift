@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Window-owned media preparation survives route changes. Each selection owns
 /// one awaited task and a paired security scope; a late decode can only release
 /// its own resources. Persisted tasks restore through the same Media façade.
@@ -40,7 +42,7 @@ public final class MediaInputModel {
             return
         }
         replace(persist: false) { [service] in
-            try await service.restoreInput(groups: groups, filename: value?.filename ?? "场记单")
+            try await service.restoreInput(groups: groups, filename: value?.filename ?? L10n.tr("场记单"))
         }
     }
 
@@ -60,7 +62,7 @@ public final class MediaInputModel {
         let request = generation
         let previous = task
         previous?.cancel()
-        operation = .running(label: "正在准备场记单…")
+        operation = .running(label: L10n.tr("正在准备场记单…"))
         task = Task { [weak self] in
             await previous?.value
             guard let self, request == generation, !Task.isCancelled else { return }
@@ -71,7 +73,7 @@ public final class MediaInputModel {
                 document = value
                 pageIndex = 0
                 if persist { onPrepared?(value) }
-                operation = .succeeded(message: "已准备 \(value.pages.count) 页")
+                operation = .succeeded(message: L10n.tr("已准备 {0} 页", [String(describing: value.pages.count)]))
             } catch {
                 guard request == generation else { return }
                 operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))

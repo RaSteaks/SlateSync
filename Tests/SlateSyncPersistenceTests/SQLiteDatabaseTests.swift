@@ -4,6 +4,23 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class SQLiteDatabaseTests: XCTestCase {
+    func testBootstrapRestoresMissingIndexWithoutLosingTasks() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("schema-repair")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try SQLiteDatabase(url: root.appending(path: "project.sqlite"))
+        try await SQLiteV1.bootstrapProject(database)
+        try await database.execute("INSERT INTO tasks VALUES ('kept', '{}', 'created', 'updated');")
+        // Existing projects must repair missing schema objects, while complete
+        // schemas keep their no-write fast path (covered by encrypted reopen).
+        try await database.executeScript("DROP INDEX tasks_created_at_idx;")
+        try await SQLiteV1.bootstrapProject(database)
+        let index = try await database.scalar("SELECT name FROM sqlite_master WHERE name = 'tasks_created_at_idx';")
+        let task = try await database.scalar("SELECT id FROM tasks;")
+        XCTAssertEqual(index, "tasks_created_at_idx")
+        XCTAssertEqual(task, "kept")
+        try await database.close()
+    }
+
     func testV1SchemaPragmasIndexesAndForeignKeyRemainExact() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("schema")
         defer { try? FileManager.default.removeItem(at: root) }

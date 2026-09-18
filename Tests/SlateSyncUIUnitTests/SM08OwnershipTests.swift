@@ -11,6 +11,32 @@ import CryptoKit
 import Synchronization
 
 final class SM08OwnershipTests: XCTestCase {
+    @MainActor
+    func testLocalCompletionRefreshesOriginalTaskRowAndSearchProjection() async throws {
+        let service = WorkspaceFake(rowCount: 0)
+        let workspace = WorkspaceModel(service: service)
+        try await workspace.activate(projectID: "p1")
+        let id = try XCTUnwrap(workspace.selectedTaskID)
+        let originalIDs = workspace.tasks.map(\.id)
+        workspace.searchText = "本地完成.csv"
+        XCTAssertTrue(workspace.filteredTasks.isEmpty)
+        // A local result completes the selected draft without a list reload
+        // or a second row. Subsequent edits keep the same completed identity.
+        workspace.stageLocalRecords([.init(id: "row", scene: "1")], filename: "本地完成.csv")
+        XCTAssertEqual(workspace.tasks.map(\.id), originalIDs)
+        XCTAssertEqual(workspace.selectedTaskID, id)
+        XCTAssertEqual(workspace.filteredTasks.first?.id, id)
+        XCTAssertEqual(workspace.filteredTasks.first?.status, "completed")
+        XCTAssertEqual(workspace.filteredTasks.first?.recordCount, 1)
+        XCTAssertEqual(workspace.selectableTasks, workspace.filteredTasks)
+        workspace.customPrompt = "完成后的修改"
+        try await workspace.flush()
+        let saved = await service.savedTasks.last
+        XCTAssertEqual(saved?.id, id)
+        XCTAssertEqual(saved?.status, "completed")
+        try await workspace.close()
+    }
+
     func testAutosaveFlushWritesOnlyLatestImmutableSnapshot() async throws {
         let probe = AutosaveProbe()
         let autosave = WorkspaceAutosave(delay: .seconds(30)) { projectID, taskID, snapshot in
@@ -690,6 +716,28 @@ final class SM08OwnershipTests: XCTestCase {
         let saved = await workspaceService.savedEditedRecords
         XCTAssertEqual(saved.last?.first?.description, "中文 IME 校对")
         XCTAssertEqual(saved.last?.first?.takeStatus, .passed)
+    }
+
+    @MainActor
+    func testTaskSearchProjectionRefreshesAcrossReloadAndSelection() async throws {
+        let workspace = WorkspaceModel(service: WorkspaceFake(rowCount: 0, taskCount: 1_000))
+        try await workspace.activate(projectID: "p1")
+        XCTAssertEqual(workspace.selectableTasks.count, 1_000)
+        workspace.searchText = " 场记单 42.PDF \n"
+        XCTAssertEqual(workspace.filteredTasks.count, 10)
+        let expected = workspace.filteredTasks
+        try await workspace.selectTask("t42")
+        XCTAssertEqual(workspace.filteredTasks, expected)
+        try await workspace.reloadTasks()
+        XCTAssertEqual(workspace.filteredTasks, expected)
+        workspace.searchText = "no matches"
+        XCTAssertTrue(workspace.selectableTasks.isEmpty)
+        workspace.searchText = "  "
+        XCTAssertEqual(workspace.filteredTasks.count, 1_000)
+        // Search remains valid when a project activation republishes the list.
+        workspace.searchText = "t999"
+        try await workspace.activate(projectID: "p2")
+        XCTAssertEqual(workspace.selectableTasks.compactMap(\.id), ["t999"])
     }
 
     @MainActor

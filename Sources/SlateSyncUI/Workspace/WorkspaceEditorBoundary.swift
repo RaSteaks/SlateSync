@@ -2,6 +2,8 @@ import AppKit
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Window-local probe covers SwiftUI text fields as well as the CSV bridge.
 /// It owns no window; changing layout first refuses marked text, then lets the
 /// native field editor publish committed text before the existing store flush.
@@ -12,10 +14,10 @@ final class WorkspaceEditorBoundary {
     func prepare() throws {
         guard let window else { return }
         if let editor = window.firstResponder as? NSTextView, editor.hasMarkedText() {
-            throw SlateSyncError(code: "EDIT_COMPOSITION", message: "请先完成当前文字输入，再切换布局")
+            throw SlateSyncError(code: "EDIT_COMPOSITION", message: L10n.tr("请先完成当前文字输入，再切换布局"))
         }
         guard window.makeFirstResponder(nil) else {
-            throw SlateSyncError(code: "EDIT_FOCUS", message: "请先完成当前编辑，再切换布局")
+            throw SlateSyncError(code: "EDIT_FOCUS", message: L10n.tr("请先完成当前编辑，再切换布局"))
         }
     }
 }

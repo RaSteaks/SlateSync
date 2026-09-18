@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Metadata directory scans are generation-bound so a late directory result
 /// cannot replace the snapshot chosen by a newer file-panel action.
 @MainActor @Observable
@@ -24,7 +26,7 @@ public final class MetadataScanModel {
         previous?.cancel()
         generation += 1
         let request = generation
-        operation = .running(label: "正在扫描场记元数据…")
+        operation = .running(label: L10n.tr("正在扫描场记元数据…"))
         scanTask = Task { [weak self] in
             guard let self else { return }
             // Superseding scans remain in an awaited chain until their
@@ -41,7 +43,7 @@ public final class MetadataScanModel {
                 guard request == generation, !Task.isCancelled else { return }
                 result = value
                 onResult?(value, directory.lastPathComponent)
-                operation = .succeeded(message: "已读取 \(value.metadata.count) 条元数据")
+                operation = .succeeded(message: L10n.tr("已读取 {0} 条元数据", [String(describing: value.metadata.count)]))
             } catch is CancellationError {
                 guard request == generation else { return }
                 operation = .canceled

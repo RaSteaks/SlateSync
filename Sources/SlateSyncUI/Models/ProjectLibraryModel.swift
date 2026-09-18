@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Project Library projection and operation owner. Destructive actions are
 /// single-flight and refresh from the service rather than predicting database
 /// state in the view.
@@ -53,7 +55,7 @@ public final class ProjectLibraryModel {
     public func load() async {
         loadGeneration += 1
         let generation = loadGeneration
-        operation = .running(label: "正在读取项目库…")
+        operation = .running(label: L10n.tr("正在读取项目库…"))
         error = nil
         do {
             let snapshot = try await service.projectLibrary()
@@ -77,11 +79,11 @@ public final class ProjectLibraryModel {
     public func createProject() async -> ProjectSummary? {
         let name = createName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            error = .init(code: "PROJECT_NAME_REQUIRED", message: "请输入项目名称")
+            error = .init(code: "PROJECT_NAME_REQUIRED", message: L10n.tr("请输入项目名称"))
             return nil
         }
         guard !operation.isRunning else { return nil }
-        operation = .running(label: "正在创建项目…")
+        operation = .running(label: L10n.tr("正在创建项目…"))
         error = nil
         do {
             try await workspaceBarrier()
@@ -97,7 +99,7 @@ public final class ProjectLibraryModel {
             createDescription = ""
             showsCreateSheet = false
             selection = project.id
-            operation = .succeeded(message: "项目已创建")
+            operation = .succeeded(message: L10n.tr("项目已创建"))
             return project.summary
         } catch {
             self.error = ProductPrivacy.error(error)
@@ -107,13 +109,13 @@ public final class ProjectLibraryModel {
     }
 
     public func archive(_ project: ProjectSummary) async {
-        await perform(label: "正在归档…", success: "项目已归档") {
+        await perform(label: L10n.tr("正在归档…"), success: L10n.tr("项目已归档")) {
             _ = try await self.service.archiveProject(id: project.id)
         }
     }
 
     public func restore(_ project: ProjectSummary) async {
-        await perform(label: "正在恢复…", success: "项目已恢复") {
+        await perform(label: L10n.tr("正在恢复…"), success: L10n.tr("项目已恢复")) {
             _ = try await self.service.restoreProject(id: project.id)
         }
     }
@@ -126,44 +128,44 @@ public final class ProjectLibraryModel {
     public func confirmDeletion() async {
         guard let project = projectPendingDeletion,
               deletionConfirmation == project.name else {
-            error = .init(code: "PROJECT_DELETE_CONFIRMATION", message: "请逐字输入项目名称")
+            error = .init(code: "PROJECT_DELETE_CONFIRMATION", message: L10n.tr("请逐字输入项目名称"))
             return
         }
-        await perform(label: "正在永久删除…", success: "项目已永久删除") {
+        await perform(label: L10n.tr("正在永久删除…"), success: L10n.tr("项目已永久删除")) {
             try await self.service.deleteProject(id: project.id)
         }
         if error == nil { projectPendingDeletion = nil }
     }
 
     public func importProject(from url: URL) async {
-        await perform(label: "正在导入项目…", success: "项目已导入") {
+        await perform(label: L10n.tr("正在导入项目…"), success: L10n.tr("项目已导入")) {
             _ = try await self.service.importProject(from: url)
         }
     }
 
     public func export(_ project: ProjectSummary, to url: URL) async {
-        await perform(label: "正在导出项目…", success: "项目已导出") {
+        await perform(label: L10n.tr("正在导出项目…"), success: L10n.tr("项目已导出")) {
             let result = try await self.service.exportProject(id: project.id, to: url)
             if result.canceled { throw CancellationError() }
         }
     }
 
     public func exportLibrary(to url: URL) async {
-        await perform(label: "正在导出项目库…", success: "项目库已导出") {
+        await perform(label: L10n.tr("正在导出项目库…"), success: L10n.tr("项目库已导出")) {
             let result = try await self.service.exportLibrary(to: url)
             if result.canceled { throw CancellationError() }
         }
     }
 
     public func importLibrary(from url: URL) async {
-        await performRestartRequired(label: "正在切换项目库…") {
+        await performRestartRequired(label: L10n.tr("正在切换项目库…")) {
             let result = try await self.service.importLibrary(from: url)
             if result.canceled { throw CancellationError() }
         }
     }
 
     public func relocateLibrary(to url: URL) async {
-        await performRestartRequired(label: "正在移动项目库…") {
+        await performRestartRequired(label: L10n.tr("正在移动项目库…")) {
             let result = try await self.service.relocateLibrary(to: url)
             if result.canceled { throw CancellationError() }
         }
@@ -172,10 +174,10 @@ public final class ProjectLibraryModel {
     public func renameLibrary() async {
         let name = libraryNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            error = .init(code: "LIBRARY_NAME_REQUIRED", message: "请输入项目库名称")
+            error = .init(code: "LIBRARY_NAME_REQUIRED", message: L10n.tr("请输入项目库名称"))
             return
         }
-        await performRestartRequired(label: "正在重命名…") {
+        await performRestartRequired(label: L10n.tr("正在重命名…")) {
             let result = try await self.service.renameLibrary(to: name)
             if result.canceled { throw CancellationError() }
         }
@@ -228,7 +230,7 @@ public final class ProjectLibraryModel {
             }
             if let mutationCoordinator { try await mutationCoordinator(mutation) }
             else { try await mutation() }
-            operation = .succeeded(message: "项目库位置已保存，请重启 SlateSync")
+            operation = .succeeded(message: L10n.tr("项目库位置已保存，请重启 SlateSync"))
         } catch is CancellationError {
             operation = .canceled
         } catch {

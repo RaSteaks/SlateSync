@@ -68,6 +68,20 @@ public actor ProjectTaskStore {
         return try PersistenceJSON.data(from: text, errorCode: "TASK_INVALID")
     }
 
+    /// Validate row ownership without materializing the task's media and
+    /// recognition payload. Native recognition uses this before external work.
+    public func requireTaskExists(_ id: String) async throws {
+        try await bootstrap()
+        let taskID = try PersistenceIdentifiers.task(id)
+        let row = try await database.rows(
+            "SELECT 1 AS present FROM tasks WHERE id = ? LIMIT 1;",
+            bindings: [taskID]
+        ).first
+        guard row != nil else {
+            throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+        }
+    }
+
     public func updateTask(_ id: String, patch: Data) async throws -> String {
         let taskID = try PersistenceIdentifiers.task(id)
         let existing = try PersistenceJSON.object(
@@ -186,6 +200,12 @@ public actor ProjectTaskStore {
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension.lowercased() == "json" }
+        // No legacy files means there is no reason to materialize every row ID.
+        guard !entries.isEmpty else { return }
+        // SQLite is authoritative. Existing tasks need neither full-payload
+        // serialization nor INSERT OR IGNORE / encrypted snapshot replacement.
+        // Still inspect embedded IDs: legacy filenames may not match them.
+        let existingIDs = Set(try await database.rows("SELECT id FROM tasks;").compactMap { $0["id"] ?? nil })
         var commands: [SQLiteCommand] = []
         for url in entries {
             // One malformed legacy snapshot must not prevent project startup.
@@ -196,6 +216,7 @@ public actor ProjectTaskStore {
                     PersistenceJSON.string(object["id"]) ?? url.deletingPathExtension().lastPathComponent
                 )
             else { continue }
+            guard !existingIDs.contains(id) else { continue }
             object["id"] = id
             let createdAt = PersistenceJSON.string(object["createdAt"]) ?? "1970-01-01T00:00:00.000Z"
             let updatedAt = PersistenceJSON.string(object["updatedAt"]) ?? createdAt

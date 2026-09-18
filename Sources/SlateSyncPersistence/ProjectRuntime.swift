@@ -48,6 +48,14 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
         return try await context.tasks.loadTask(taskID)
     }
 
+    /// Keep existence validation inside the project lease while selecting only
+    /// a constant, so large task payloads never cross the persistence boundary.
+    public func requireTaskExists(projectID: String, taskID: String) async throws {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        try await context.tasks.requireTaskExists(taskID)
+    }
+
     public func saveTask(projectID: String, taskID: String?, payload: Data) async throws -> String {
         let context = try await acquire(projectID)
         defer { release(projectID) }

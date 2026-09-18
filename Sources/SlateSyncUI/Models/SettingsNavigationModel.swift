@@ -1,6 +1,8 @@
 import Foundation
 import Observation
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// The stable categories shared by Help and the native Settings scene. The
 /// raw values are internal route identifiers, not localized view titles.
 public enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
@@ -14,11 +16,11 @@ public enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Send
 
     public var title: String {
         switch self {
-        case .general: "通用"
+        case .general: L10n.tr("通用")
         case .providers: "Provider"
-        case .recognition: "识别"
+        case .recognition: L10n.tr("识别")
         case .ocr: "OCR"
-        case .advanced: "高级"
+        case .advanced: L10n.tr("高级")
         }
     }
 }

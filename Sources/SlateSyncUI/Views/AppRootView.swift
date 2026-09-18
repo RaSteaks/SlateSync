@@ -1,6 +1,8 @@
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct AppRootView: View {
     // Each window starts with visible navigation, independent of AppKit's
     // saved split-view geometry from another project or test launch.
@@ -59,7 +61,7 @@ public struct AppRootView: View {
 
     public var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: routeBinding)
+            SidebarView(selection: routeBinding, currentProjectName: currentProjectName)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
         } detail: {
             detail
@@ -81,29 +83,29 @@ public struct AppRootView: View {
                         .accessibilityHidden(true)
                     ProjectOpeningProgressPanel(
                         projectName: name,
-                        stage: workspace.activationStage ?? "正在保存项目设置…"
+                        stage: workspace.activationStage ?? L10n.tr("正在保存项目设置…")
                     )
                     .padding(24)
                 }
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if termination.restartRequired { Text("项目库已更新，请退出并重新打开 SlateSync。").padding(12) }
+            if termination.restartRequired { Text(L10n.tr("项目库已更新，请退出并重新打开 SlateSync。")).padding(12) }
             // Recognition remains window-owned across Library/Logs/Help routes.
             // Its status and recovery message must not disappear with a tab.
             if recognition.operation.isRunning {
-                SlateStatusBar(message: recognition.progress?.message ?? "正在处理场记…", busy: true) {
-                    Button("取消") { recognition.cancel() }
+                SlateStatusBar(message: recognition.progress?.message ?? L10n.tr("正在处理场记…"), busy: true) {
+                    Button(L10n.tr("取消")) { recognition.cancel() }
                 }
             } else if case .failed(let error) = recognition.operation {
                 SlateStatusBar(message: error.message, tone: .error) {
-                    SettingsLink { Text("检查识别配置") }
+                    SettingsLink { Text(L10n.tr("检查识别配置")) }
                 }
             } else if case .succeeded(let message) = recognition.operation, canViewRecognitionResult {
                 // Completion never steals focus or seizes the current page;
                 // the status bar only offers the route to the new results.
                 SlateStatusBar(message: message, tone: .success) {
-                    Button("查看识别结果") {
+                    Button(L10n.tr("查看识别结果")) {
                         workspaceEntryPoint = .result
                         if session.route != .workspace {
                             Task { await session.navigate(to: .workspace) }
@@ -194,6 +196,18 @@ public struct AppRootView: View {
         )
     }
 
+    private var currentProjectName: String? {
+        guard let projectID = session.projectID else { return nil }
+        // A saved settings rename is newer than the library projection. The
+        // ID guard prevents another project's retained draft from leaking into
+        // the current window while its settings view is being replaced.
+        if let project = projectSettings.project, project.id == projectID {
+            return project.name
+        }
+        return (projects.activeProjects + projects.archivedProjects)
+            .first(where: { $0.id == projectID })?.name
+    }
+
     private var canViewRecognitionResult: Bool {
         guard let taskID = session.taskID else { return false }
         return recognition.resultTaskID == taskID && !recognition.editableRecords.isEmpty
@@ -244,13 +258,13 @@ public struct AppRootView: View {
     @ViewBuilder private var sessionError: some View {
         if let error = session.navigationError {
             SlateStatusBar(message: error.message, tone: .error) {
-                Button("重试保存") { Task { await workspace.retryAutosave() } }
-                Button("关闭") { session.clearError() }
+                Button(L10n.tr("重试保存")) { Task { await workspace.retryAutosave() } }
+                Button(L10n.tr("关闭")) { session.clearError() }
             }
         } else if let error = termination.error {
             // Close/quit errors belong to termination, not to autosave retry.
             SlateStatusBar(message: error.message, tone: .error) {
-                Button("关闭") { termination.clearError() }
+                Button(L10n.tr("关闭")) { termination.clearError() }
             }
         }
     }
@@ -265,12 +279,12 @@ struct ProjectOpeningProgressPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("正在打开项目").font(.headline)
+                Text(L10n.tr("正在打开项目")).font(.headline)
                 Text(projectName).font(.subheadline).foregroundStyle(.secondary)
                     .lineLimit(1).help(projectName)
             }
             ProgressView().progressViewStyle(.linear)
-                .accessibilityLabel("正在打开项目")
+                .accessibilityLabel(L10n.tr("正在打开项目"))
             Text(stage).font(.callout).foregroundStyle(.secondary)
                 .lineLimit(2).frame(minHeight: 34, alignment: .topLeading)
         }

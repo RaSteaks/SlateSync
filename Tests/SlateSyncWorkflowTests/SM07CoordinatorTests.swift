@@ -1,6 +1,7 @@
 import Foundation
 import SlateSyncDomain
 import SlateSyncMedia
+import SlateSyncPersistence
 @testable import SlateSyncWorkflow
 import XCTest
 
@@ -115,7 +116,7 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
         transport: SM07CoordinatorTransport,
         preparation: SM07CoordinatorPreparation,
         ocr: SM07CoordinatorOCR,
-        persistence: SM07RecognitionPersistence? = nil,
+        persistence: (any RecognitionPersistence)? = nil,
         limiter: RecognitionLimiter? = nil
     ) -> RecognitionCoordinator {
         let registry = ProviderRegistry()
@@ -146,6 +147,69 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
             settings: .init(providerId: "openai", modelId: "openai/gpt-4o-mini", accuracyMode: .standard),
             legacyRequest: legacy
         )
+    }
+
+    func testNativeRecognitionAndRerunUpdateOnePersistedDraft() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "recognition-identity-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try ProjectLibraryStore(applicationSupportRoot: root)
+        let project = try await library.createProject(name: "任务状态回归", description: "")
+        let storage = ProjectRuntime(library: library)
+        let draft = TaskData(status: "draft", filename: "fixture.jpg", imageDataGroups: [["retained-media"]])
+        let id = try await storage.saveTask(
+            projectID: project.id, taskID: "requested-task", payload: JSONEncoder().encode(draft)
+        )
+        let original = try JSONDecoder().decode(TaskData.self, from: await storage.loadTask(projectID: project.id, taskID: id))
+        let coordinator = runtime(
+            transport: SM07CoordinatorTransport(), preparation: SM07CoordinatorPreparation(),
+            ocr: SM07CoordinatorOCR(), persistence: NativeRecognitionPersistence(runtime: storage)
+        )
+        // Run the real coordinator + SQLite adapter twice; mock only media and
+        // Provider transport so this regression never consumes API credits.
+        for _ in 0..<2 {
+            let result = try await coordinator.recognize(request(projectID: project.id))
+            XCTAssertEqual(result.taskId, id)
+            let rows = try await storage.listTaskItems(projectID: project.id)
+            XCTAssertEqual(rows.count, 1)
+            XCTAssertEqual(rows.first?.id, id)
+            XCTAssertEqual(rows.first?.status, "completed")
+            XCTAssertEqual(rows.first?.recordCount, 1)
+        }
+        await coordinator.close()
+        try await storage.close()
+        let reopened = ProjectRuntime(library: library)
+        let rows = try await reopened.listTaskItems(projectID: project.id)
+        XCTAssertEqual(rows.count, 1, "Compatibility snapshots must not resurrect the draft on reopen")
+        let saved = try JSONDecoder().decode(TaskData.self, from: await reopened.loadTask(projectID: project.id, taskID: id))
+        XCTAssertEqual(saved.status, "completed")
+        XCTAssertEqual(saved.createdAt, original.createdAt)
+        XCTAssertEqual(saved.imageDataGroups, draft.imageDataGroups)
+        try await reopened.close()
+        try await library.close()
+    }
+
+    func testNativeRecognitionWithoutExistingIdentityCannotCreateCompletedTask() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "recognition-missing-id-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try ProjectLibraryStore(applicationSupportRoot: root)
+        let project = try await library.createProject(name: "缺失任务回归", description: "")
+        let storage = ProjectRuntime(library: library)
+        let adapter = NativeRecognitionPersistence(runtime: storage)
+        let payload = try JSONEncoder().encode(TaskData(status: "completed", filename: "fixture.jpg"))
+        // Missing/blank IDs and deleted tasks must all fail closed instead of
+        // silently inserting a completed copy under a fresh generated ID.
+        for id: String? in [nil, "", "  ", "deleted-task"] {
+            do {
+                _ = try await adapter.saveTask(projectID: project.id, taskID: id, payload: payload)
+                XCTFail("Recognition must update an existing task")
+            } catch {
+                XCTAssertEqual((error as? SlateSyncError)?.code, id == "deleted-task" ? "ENOENT" : "RECOGNITION_TASK_REQUIRED")
+            }
+        }
+        let rows = try await storage.listTaskItems(projectID: project.id)
+        XCTAssertTrue(rows.isEmpty)
+        try await storage.close()
+        try await library.close()
     }
 
     func testFLW01FLW03FLW04FLW06FLW08FLW09FLW10RES01EndToEndPersistenceAndProgress() async throws {
