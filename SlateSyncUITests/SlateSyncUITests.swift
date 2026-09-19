@@ -440,6 +440,14 @@ final class SlateSyncUITests: XCTestCase {
         // Window ordering can change during native resize activation. Keep
         // the Settings identity instead of reevaluating a firstMatch query.
         let settingsWindow = app.windows["com_apple_SwiftUI_Settings_window"]
+        // Packaged Release launches can leave the newly created Settings
+        // window behind the app until activation is restored explicitly.
+        app.activate()
+        // Focus the title bar before the first edge drag; the packaged app can
+        // expose the settings sheet without making it the key resize target.
+        settingsWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: 16))
+            .click()
         resize(settingsWindow, to: CGSize(width: 700, height: 540))
         XCTAssertTrue(appearance.isHittable)
         resize(settingsWindow, to: CGSize(width: 780, height: 620))

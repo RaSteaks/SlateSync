@@ -61,7 +61,8 @@ xcrun xcresulttool get test-results summary --path "${smoke_root}/Packaged.xcres
 python3 - "${result_dir}/packaged_ui_summary.json" <<'PY'
 import json,sys
 for failure in json.load(open(sys.argv[1])).get('testFailures', []):
-    print('Packaged XCTest failure: '+failure['failureText'])
+    identifier = failure.get('testIdentifierString', failure.get('testName', 'unknown test'))
+    print(f'Packaged XCTest failure [{identifier}]: {failure["failureText"]}')
 PY
 gate_validate_xcode_test_summary "${result_dir}/packaged_ui_summary.json"
 (( smoke_status == 0 )) || exit "$smoke_status"
