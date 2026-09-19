@@ -329,7 +329,7 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertTrue(csvTab.waitForExistence(timeout: 5))
         csvTab.click()
         app.buttons["导入 CSV…"].firstMatch.click()
-        choosePanelPath(input.path, app: app)
+        choosePanelPath(input.path, operation: .openFile, app: app)
         // Retained Worker fail-closed boundary (public/resolve-csv.js
         // export-resolve): the frozen legacy record carries no 卷号/视频码, so
         // its material key is missing-key, matchedRecordCount stays 0 and no
@@ -369,7 +369,7 @@ final class SlateSyncUITests: XCTestCase {
         let confirmWarnings = app.sheets.buttons["仍要导出 CSV"].firstMatch
         XCTAssertTrue(confirmWarnings.waitForExistence(timeout: 8))
         confirmWarnings.click()
-        choosePanelPath(outputDirectory.path, app: app)
+        choosePanelPath(outputDirectory.path, operation: .saveDirectory, app: app)
         let exported = outputDirectory.appending(path: "source_场记已回填.csv")
         expectation(
             for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: exported.path) },
@@ -409,7 +409,7 @@ final class SlateSyncUITests: XCTestCase {
         app.buttons["打开"].firstMatch.click()
         XCTAssertTrue(app.buttons["task.create"].firstMatch.waitForExistence(timeout: 8))
         app.buttons["选择 PDF 或图像…"].firstMatch.click()
-        choosePanelPath(pdfURL.path, app: app)
+        choosePanelPath(pdfURL.path, operation: .openFile, app: app)
         XCTAssertTrue(app.buttons["workspace.preview.next"].waitForExistence(timeout: 10))
         app.buttons["workspace.preview.next"].click()
         XCTAssertTrue(app.staticTexts["2 / 2"].waitForExistence(timeout: 5))
@@ -459,7 +459,7 @@ final class SlateSyncUITests: XCTestCase {
         app.buttons["打开"].firstMatch.click()
         XCTAssertTrue(app.buttons["task.create"].firstMatch.waitForExistence(timeout: 8))
         app.buttons["选择 PDF 或图像…"].firstMatch.click()
-        choosePanelPath(mediaURL.path, app: app)
+        choosePanelPath(mediaURL.path, operation: .openFile, app: app)
         XCTAssertTrue(app.buttons["workspace.preview.enlarge"].waitForExistence(timeout: 10))
 
         let main = app.windows.firstMatch
@@ -647,38 +647,291 @@ final class SlateSyncUITests: XCTestCase {
         if !app.textFields["workspace.custom-prompt"].exists { advanced.click() }
     }
 
+    private enum PanelOperation: String {
+        case openFile
+        case saveDirectory
+
+        var panelIdentifier: String {
+            switch self {
+            case .openFile:
+                return "open-panel"
+            case .saveDirectory:
+                return "save-panel"
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .openFile:
+                return "打开文件"
+            case .saveDirectory:
+                return "选择保存目录"
+            }
+        }
+    }
+
+    private enum PanelWaitStage: String {
+        case panelAppeared = "面板出现"
+        case goToWindowAppeared = "路径导航面板出现"
+        case pathFieldAppeared = "路径字段出现"
+        case pathNavigationCompleted = "路径导航完成"
+        case confirmationReady = "确认按钮可操作"
+        case panelClosed = "面板关闭"
+    }
+
+    // System panels can be delayed by the test host or by asynchronous export
+    // preparation. Keep every panel state transition bounded without adding a
+    // fixed sleep or changing the application's performance policy.
+    private static let panelWaitTimeout: TimeInterval = 20
+
     @MainActor
-    private func choosePanelPath(_ path: String, app: XCUIApplication) {
-        // Export builds its data asynchronously before presenting NSSavePanel.
-        // Wait for the actual panel action before requesting Go to Folder.
-        // NSSavePanel exposes its localized title separately from AX label.
-        // Its system identifier is shared by open and save confirmation.
-        let confirmation = app.buttons["OKButton"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: 8))
+    private func choosePanelPath(_ path: String, operation: PanelOperation, app: XCUIApplication) {
+        app.activate()
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        // NSSavePanel and NSOpenPanel expose stable, different AX identifiers;
+        // keeping the query scoped prevents a same-named Touch Bar control from
+        // satisfying the confirmation lookup.
+        let panel = app.sheets[operation.panelIdentifier].firstMatch
+        let confirmation = panel.buttons["OKButton"].firstMatch
+        guard waitForPanelState(
+            { panel.exists },
+            operation: operation,
+            stage: .panelAppeared,
+            path: path,
+            startedAt: startedAt,
+            app: app,
+            panel: panel,
+            confirmation: confirmation
+        ) else { return }
+
         app.typeKey("g", modifierFlags: [.command, .shift])
-        // Resolve the actual system Go sheet and path field, not an assumed
-        // control type or focus. Replace any previously remembered location.
-        let goSheet = app.sheets["GoToWindow"]
-        XCTAssertTrue(goSheet.waitForExistence(timeout: 5))
-        let location = app.textFields["PathTextField"]
-        XCTAssertTrue(location.waitForExistence(timeout: 5))
+        // GoToWindow is a system child sheet. The path field is deliberately
+        // queried from that sheet instead of from the application root, where
+        // another PathTextField can force a larger accessibility snapshot.
+        let goToWindow = app.sheets["GoToWindow"].firstMatch
+        guard waitForPanelState(
+            { goToWindow.exists },
+            operation: operation,
+            stage: .goToWindowAppeared,
+            path: path,
+            startedAt: startedAt,
+            app: app,
+            panel: panel,
+            confirmation: confirmation,
+            goToWindow: goToWindow
+        ) else { return }
+        let location = goToWindow.textFields["PathTextField"].firstMatch
+        guard waitForPanelState(
+            { location.exists },
+            operation: operation,
+            stage: .pathFieldAppeared,
+            path: path,
+            startedAt: startedAt,
+            app: app,
+            panel: panel,
+            confirmation: confirmation,
+            goToWindow: goToWindow,
+            location: location
+        ) else { return }
+
         location.click()
         location.typeKey("a", modifierFlags: .command)
         location.typeText(path)
         XCTAssertEqual(location.value as? String, path)
-        // Submit through the field whose value was verified, so XCTest routes
-        // Return to the remote Go panel rather than the application's window.
+        // Submit through the verified field so Return is delivered to the
+        // system navigation sheet rather than to the application window.
         location.typeKey(.return, modifierFlags: [])
-        expectation(for: NSPredicate { _, _ in !goSheet.exists }, evaluatedWith: app)
-        waitForExpectations(timeout: 8)
-        // On macOS 15, Return for an exact file path can also accept the open
-        // panel. Both paths must end with a dismissed panel; the caller still
-        // verifies imported data or exact exported bytes before proceeding.
-        expectation(for: NSPredicate { _, _ in !confirmation.exists || confirmation.isEnabled }, evaluatedWith: app)
-        waitForExpectations(timeout: 8)
-        if confirmation.exists { confirmation.click() }
-        expectation(for: NSPredicate { _, _ in !confirmation.exists }, evaluatedWith: app)
-        waitForExpectations(timeout: 8)
+        guard waitForPanelState(
+            { !goToWindow.exists },
+            operation: operation,
+            stage: .pathNavigationCompleted,
+            path: path,
+            startedAt: startedAt,
+            app: app,
+            panel: panel,
+            confirmation: confirmation,
+            goToWindow: goToWindow,
+            location: location
+        ) else { return }
+
+        // On macOS, an exact file path can accept an open panel immediately.
+        // Hand that already-complete state to the caller, but still make the
+        // target panel closure an explicit bounded state check.
+        if !panel.exists {
+            guard waitForPanelState(
+                { !panel.exists },
+                operation: operation,
+                stage: .panelClosed,
+                path: path,
+                startedAt: startedAt,
+                app: app,
+                panel: panel,
+                confirmation: confirmation,
+                goToWindow: goToWindow,
+                location: location
+            ) else { return }
+            return
+        }
+
+        // If the open panel is still present, wait for a real actionable
+        // button. Panel closure also completes this wait, but only because the
+        // target panel itself disappeared—not because the button is absent.
+        guard waitForPanelState(
+            {
+                !panel.exists
+                    || (confirmation.exists && confirmation.isEnabled && confirmation.isHittable)
+            },
+            operation: operation,
+            stage: .confirmationReady,
+            path: path,
+            startedAt: startedAt,
+            app: app,
+            panel: panel,
+            confirmation: confirmation,
+            goToWindow: goToWindow,
+            location: location
+        ) else { return }
+        if !panel.exists {
+            guard waitForPanelState(
+                { !panel.exists },
+                operation: operation,
+                stage: .panelClosed,
+                path: path,
+                startedAt: startedAt,
+                app: app,
+                panel: panel,
+                confirmation: confirmation,
+                goToWindow: goToWindow,
+                location: location
+            ) else { return }
+            return
+        }
+        guard confirmation.exists && confirmation.isEnabled && confirmation.isHittable else {
+            failPanelInteraction(
+                operation: operation,
+                stage: .confirmationReady,
+                path: path,
+                startedAt: startedAt,
+                app: app,
+                panel: panel,
+                confirmation: confirmation,
+                goToWindow: goToWindow,
+                location: location
+            )
+            return
+        }
+        confirmation.click()
+
+        // A single click is sufficient; completion is defined by the target
+        // panel closing, never by the confirmation button disappearing.
+        guard waitForPanelState(
+            { !panel.exists },
+            operation: operation,
+            stage: .panelClosed,
+            path: path,
+            startedAt: startedAt,
+            app: app,
+            panel: panel,
+            confirmation: confirmation,
+            goToWindow: goToWindow,
+            location: location
+        ) else { return }
+    }
+
+    @MainActor
+    @discardableResult
+    private func waitForPanelState(
+        _ condition: @escaping () -> Bool,
+        operation: PanelOperation,
+        stage: PanelWaitStage,
+        path: String,
+        startedAt: TimeInterval,
+        app: XCUIApplication,
+        panel: XCUIElement,
+        confirmation: XCUIElement,
+        goToWindow: XCUIElement? = nil,
+        location: XCUIElement? = nil
+    ) -> Bool {
+        let expectation = expectation(
+            for: NSPredicate { _, _ in condition() },
+            evaluatedWith: app
+        )
+        let result = XCTWaiter().wait(for: [expectation], timeout: Self.panelWaitTimeout)
+        guard result == .completed else {
+            failPanelInteraction(
+                operation: operation,
+                stage: stage,
+                path: path,
+                startedAt: startedAt,
+                app: app,
+                panel: panel,
+                confirmation: confirmation,
+                goToWindow: goToWindow,
+                location: location
+            )
+            return false
+        }
+        return true
+    }
+
+    @MainActor
+    private func failPanelInteraction(
+        operation: PanelOperation,
+        stage: PanelWaitStage,
+        path: String,
+        startedAt: TimeInterval,
+        app: XCUIApplication,
+        panel: XCUIElement,
+        confirmation: XCUIElement,
+        goToWindow: XCUIElement? = nil,
+        location: XCUIElement? = nil
+    ) {
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+        let state = [
+            "operation=\(operation.rawValue) (\(operation.displayName))",
+            "stage=\(stage.rawValue)",
+            "elapsedSeconds=\(String(format: "%.3f", elapsed))",
+            "requestedPath=\(path)",
+            "applicationState=\(String(describing: app.state))",
+            "windowCount=\(app.windows.count)",
+            describePanelElement("panel", panel),
+            describePanelElement("confirmation", confirmation),
+            describePanelElement("GoToWindow", goToWindow),
+            describePanelElement("PathTextField", location),
+        ].joined(separator: "\n")
+
+        let stateAttachment = XCTAttachment(string: state)
+        stateAttachment.name = "Panel-\(operation.rawValue)-\(stage.rawValue)-state"
+        stateAttachment.lifetime = .keepAlways
+        add(stateAttachment)
+
+        let treeAttachment = XCTAttachment(string: app.debugDescription)
+        treeAttachment.name = "Panel-\(operation.rawValue)-\(stage.rawValue)-accessibility-tree"
+        treeAttachment.lifetime = .keepAlways
+        add(treeAttachment)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Panel-\(operation.rawValue)-\(stage.rawValue)-screenshot"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        XCTFail(
+            "文件面板交互超时：操作=\(operation.displayName)，阶段=\(stage.rawValue)，"
+                + "耗时=\(String(format: "%.3f", elapsed))s"
+        )
+    }
+
+    @MainActor
+    private func describePanelElement(_ name: String, _ element: XCUIElement?) -> String {
+        guard let element else { return "\(name): unavailable" }
+        return [
+            "\(name).exists=\(element.exists)",
+            "\(name).enabled=\(element.isEnabled)",
+            "\(name).hittable=\(element.isHittable)",
+            "\(name).label=\(element.label.debugDescription)",
+            "\(name).value=\(String(describing: element.value))",
+            "\(name).frame=\(element.frame)",
+        ].joined(separator: " ")
     }
 
     @MainActor

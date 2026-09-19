@@ -1,5 +1,13 @@
 # SlateSync 当前项目方案
 
+## 2026-09-19 文件选择面板 UI 测试稳定性修复
+
+- CSV 导入/编辑/导出/重开仍是强制 UI 验收；本轮只修复 XCTest 与系统文件面板的交互同步，不修改 CSV 业务逻辑、性能策略或通过自动重跑掩盖失败。
+- `SlateSyncUITests.swift` 的共享路径辅助方法显式区分打开文件与选择保存目录，分别定位 `open-panel` / `save-panel`；确认按钮限定在目标面板内，`PathTextField` 限定在 `GoToWindow` 内。面板出现、路径导航完成、确认可操作和面板关闭均使用 20 秒有界状态等待；完整路径使打开面板自动关闭时直接交由调用方验证导入结果。
+- 超时只在失败路径完整采集操作类型、失败阶段、耗时、面板/按钮状态、辅助功能树和截图。CI 失败诊断使用 `xcresulttool export attachments --only-failures` 同时导出普通 Test Plan 与打包版 `Packaged.xcresult` 的失败附件。
+- 验证顺序：先构建 UI 测试目标，再在独立临时目录连续三次定向验证 CSV 与 PDF/图片/中文及空格路径场景，保留无效导出拒绝、精确字节、源文件不变和重开任务数量断言；解除 runner 环境阻塞后再执行一次完整功能 CI。若本机再次出现 automation mode 初始化超时，只记录环境阻塞，不宣称 UI 通过、不重复重跑。
+- 已完成严格 SwiftPM 构建、Xcode UI 测试目标 `build-for-testing`、Resolve CSV 定向单元测试 20/20、Git diff、CI/Release 合约与 Gate 自测；本机首次定向 CSV UI 用例在测试运行器 automation 初始化阶段以退出码 133 结束且未生成可读 `.xcresult`，因此按环境阻塞记录，未将 UI 或完整功能 CI 宣称为通过，也未重复运行。
+
 ## 2026-09-19 CI 策略：功能门禁与非阻塞性能报告
 
 - 按用户明确决定，将开发分支合并检查与性能预算分开：保留原 `native-test` 检查名称，调用 `phase_gate.sh SM-09 --functional`；构建、全部功能/数据断言、资源释放与虚拟化限制、Xcode UI、归档及打包仍阻塞合并。
