@@ -852,9 +852,14 @@ final class SlateSyncUITests: XCTestCase {
         goToWindow: XCUIElement? = nil,
         location: XCUIElement? = nil
     ) -> Bool {
-        let expectation = expectation(
-            for: NSPredicate { _, _ in condition() },
-            evaluatedWith: app
+        // Keep this expectation out of XCTestCase's shared expectation list.
+        // The test methods still use `waitForExpectations` for file results and
+        // window counts after this helper returns; registering an expectation
+        // here and waiting on it through a separate XCTWaiter makes XCTest 26
+        // try to wait on the same expectation a second time.
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in condition() },
+            object: app
         )
         let result = XCTWaiter().wait(for: [expectation], timeout: Self.panelWaitTimeout)
         guard result == .completed else {
