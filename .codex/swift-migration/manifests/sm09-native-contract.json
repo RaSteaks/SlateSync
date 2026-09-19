@@ -197,7 +197,7 @@
     "SlateSyncUIUnitTests.SM08OwnershipTests/testCredentialRefreshRetainsUnrelatedSettingsDraft",
     "SlateSyncUIUnitTests.SM08OwnershipTests/testFiveSampleProjectAndTaskNativeListScale",
     "SlateSyncUIUnitTests.SM08OwnershipTests/testFocusedNewTaskRequiresVisibleWorkspaceRoute",
-    "SlateSyncUIUnitTests.SM08OwnershipTests/testHelpIsFrozenToSixOfflineSearchableSections",
+    "SlateSyncUIUnitTests.SM08OwnershipTests/testHelpIsFrozenToSevenOfflineSearchableSections",
     "SlateSyncUIUnitTests.SM08OwnershipTests/testInputAdmissionBlocksPickerAndDropDuringRecognition",
     "SlateSyncUIUnitTests.SM08OwnershipTests/testInvalidSettingsNeverReachTolerantPersistence",
     "SlateSyncUIUnitTests.SM08OwnershipTests/testLateProjectOpenCannotOverrideNewerHelpNavigation",
