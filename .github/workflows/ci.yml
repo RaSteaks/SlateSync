@@ -1,82 +1,41 @@
-name: Native macOS CI
-
+name: CSV performance diagnostic
 on:
-  push:
-    branches: [swift-rewrite]
-  pull_request:
-    branches: [swift-rewrite]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
-  native-test:
-    name: Swift, Xcode and local package validation
+  csv-profile:
     runs-on: macos-26
+    timeout-minutes: 15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    # A full compatibility Gate measured about seven minutes locally. The
-    # native path keeps a 30-minute ceiling for cold caches, UI startup, the
-    # Universal archive, DMG mount verification, and cleanup (CARRY-02).
-    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Provenance and cutover ancestry must be available on cold runners.
-          fetch-depth: 0
-
-      - name: Verify pinned Apple toolchain
+      - uses: actions/checkout@v4
+      - name: Build isolated CSV test
+        run: swift test --configuration release --filter testForegroundCSVMeetsDisplayCadenceBudget
+      - name: Measure and sample CSV scrolling
+        shell: bash
         run: |
-          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
-          grep -Fx 'Xcode 26.3' "$RUNNER_TEMP/xcode-version.txt"
-          grep -Fx 'Build version 17C529' "$RUNNER_TEMP/xcode-version.txt"
-          swift --version
-          sw_vers
-
-      - name: Install Gate dependencies
-        # Gate scripts require ripgrep for source and log validation.
-        run: |
-          if ! command -v rg >/dev/null 2>&1; then
-            brew install ripgrep
-          fi
-          rg --version
-
-      - name: Run strict Swift build
-        run: swift build -Xswiftc -warnings-as-errors
-
-      - name: Run shared native SM-09 Gate
-        env:
-          SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
-        run: ./script/phase_gate.sh SM-09
-
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-ci-diagnostics
-          path: |
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/*-manifest.json
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload native Gate evidence
+          mkdir -p "$RUNNER_TEMP/csv-profile"
+          any_failed=0
+          for round in 1 2 3; do
+            SLATESYNC_SM08_FOREGROUND_GATE=1 SLATESYNC_SM08_METRICS_DIR="$RUNNER_TEMP/csv-profile/round-$round" swift test --skip-build --configuration release --filter testForegroundCSVMeetsDisplayCadenceBudget > "$RUNNER_TEMP/csv-profile/round-$round.log" 2>&1 &
+            csv_test_pid=$!
+            csv_pid=""
+            for attempt in {1..40}; do
+              csv_pid=$(pgrep -f '/SlateSyncPackageTests.xctest/Contents/MacOS/SlateSyncPackageTests' | head -n 1) || true
+              if [ -n "$csv_pid" ]; then break; fi
+              sleep 0.1
+            done
+            if [ -n "$csv_pid" ]; then
+              sleep 2
+              sample "$csv_pid" 3 1 -file "$RUNNER_TEMP/csv-profile/round-$round-sample.txt" || true
+            fi
+            wait "$csv_test_pid" || any_failed=1
+          done
+          exit "$any_failed"
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: native-ci-evidence
-          path: |
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/SUMMARY.md
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
-            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
-          if-no-files-found: ignore
-          retention-days: 14
+          name: csv-profile
+          path: ${{ runner.temp }}/csv-profile

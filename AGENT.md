@@ -1,3 +1,7 @@
+# Temporary CSV performance diagnostic
+
+This disposable branch runs the existing foreground test three times on the hosted macOS 26 runner and captures process samples. It does not change acceptance budgets or publish an application.
+
 # SlateSync 当前项目方案
 
 ## 2026-09-19 macOS 26 UI 自动化复验
