@@ -1,41 +1,33 @@
-name: CSV performance diagnostic
+name: CSV performance comparison
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  csv-profile:
+  csv-compare:
     runs-on: macos-26
     timeout-minutes: 15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
-      - name: Build isolated CSV test
-        run: swift test --configuration release --filter testForegroundCSVMeetsDisplayCadenceBudget
-      - name: Measure and sample CSV scrolling
+      - name: Compare on the same hosted runner
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/csv-profile"
+          mkdir -p "$RUNNER_TEMP/csv-compare"
           any_failed=0
-          for round in 1 2 3; do
-            SLATESYNC_SM08_FOREGROUND_GATE=1 SLATESYNC_SM08_METRICS_DIR="$RUNNER_TEMP/csv-profile/round-$round" swift test --skip-build --configuration release --filter testForegroundCSVMeetsDisplayCadenceBudget > "$RUNNER_TEMP/csv-profile/round-$round.log" 2>&1 &
-            csv_test_pid=$!
-            csv_pid=""
-            for attempt in {1..40}; do
-              csv_pid=$(pgrep -f '/SlateSyncPackageTests[.]xctest' | head -n 1) || true
-              if [ -n "$csv_pid" ]; then break; fi
-              sleep 0.1
-            done
-            if [ -n "$csv_pid" ]; then
-              sleep 2
-              sample "$csv_pid" 3 1 -file "$RUNNER_TEMP/csv-profile/round-$round-sample.txt" || true
+          for variant in baseline borderless; do
+            if [ "$variant" = borderless ]; then
+              python3 -c 'from pathlib import Path; p=Path("Sources/SlateSyncUI/CSV/EditableCSVTableRepresentable.swift"); s=p.read_text(); p.write_text(s.replace("field.isBordered = false", "field.isBordered = false\n                field.isBezeled = false\n                field.maximumNumberOfLines = 1"))'
             fi
-            wait "$csv_test_pid" || any_failed=1
+            swift test --configuration release --filter testForegroundCSVMeetsDisplayCadenceBudget
+            for round in 1 2 3; do
+              SLATESYNC_SM08_FOREGROUND_GATE=1 SLATESYNC_SM08_METRICS_DIR="$RUNNER_TEMP/csv-compare/$variant-$round" swift test --skip-build --configuration release --filter testForegroundCSVMeetsDisplayCadenceBudget > "$RUNNER_TEMP/csv-compare/$variant-$round.log" 2>&1 || any_failed=1
+            done
           done
           exit "$any_failed"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: csv-profile
-          path: ${{ runner.temp }}/csv-profile
+          name: csv-compare
+          path: ${{ runner.temp }}/csv-compare
