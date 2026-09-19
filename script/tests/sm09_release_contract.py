@@ -151,11 +151,11 @@ def validate_gate_package_retention(source: str) -> None:
         "package evidence postcondition is not mandatory",
     )
     for name in (
-        "SlateSync-1.0.0-macOS-universal.zip",
-        "SlateSync-1.0.0-macOS-universal.dmg",
+        "SlateSync-1.1.0-macOS-universal.zip",
+        "SlateSync-1.1.0-macOS-universal.dmg",
         "SHA256SUMS",
-        "SlateSync-1.0.0-manifest.json",
-        "SlateSync-1.0.0-release-notes.md",
+        "SlateSync-1.1.0-manifest.json",
+        "SlateSync-1.1.0-release-notes.md",
     ):
         require(name in source, f"retained package evidence is not checked: {name}")
 

@@ -374,7 +374,7 @@ sm09_package_artifacts_check() {
   # this unique, ignored Gate result directory for CI upload and review.
   ./script/package_release.sh \
     "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" \
-    "$package_output" 1.0.0 1 || package_status=$?
+    "$package_output" 1.1.0 2 || package_status=$?
   if (( package_status == 0 )); then
     /usr/bin/ditto "$package_output" "${result_dir}/artifacts" || package_status=$?
   fi
@@ -385,11 +385,11 @@ sm09_package_artifacts_check() {
 sm09_package_artifacts_evidence_check() {
   local name
   for name in \
-    SlateSync-1.0.0-macOS-universal.zip \
-    SlateSync-1.0.0-macOS-universal.dmg \
+    SlateSync-1.1.0-macOS-universal.zip \
+    SlateSync-1.1.0-macOS-universal.dmg \
     SHA256SUMS \
-    SlateSync-1.0.0-manifest.json \
-    SlateSync-1.0.0-release-notes.md; do
+    SlateSync-1.1.0-manifest.json \
+    SlateSync-1.1.0-release-notes.md; do
     [[ -s "${result_dir}/artifacts/${name}" ]] || {
       print -u2 -r -- "missing retained package evidence: ${name}"
       return 1
@@ -659,7 +659,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
   if [[ "$phase" == "SM-09" ]]; then
     run_check sm09_archive_bundle_audit true "Archive hardened runtime、entitlements、依赖和资源审计通过" \
       ./script/verify_bundle.sh \
-        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.0.0 1 adhoc
+        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.1.0 2 adhoc
     run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
       sm09_package_artifacts_gate_check
     run_check sm09_packaged_ui true "ZIP 内 Release app 使用临时 Library 完成界面与退出重开回归" \

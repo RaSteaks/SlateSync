@@ -307,7 +307,7 @@ swift build -Xswiftc -warnings-as-errors
 ### 构建 Release 与归档
 
 ```sh
-./script/archive_release.sh /private/tmp/SlateSync-release 1.0.0 1
+./script/archive_release.sh /private/tmp/SlateSync-release 1.1.0 2
 ```
 
 脚本会在仓库外的新目录中生成 Universal `SlateSync.xcarchive`，并验证最低 macOS 版本、
@@ -319,7 +319,7 @@ swift build -Xswiftc -warnings-as-errors
 ```sh
 ./script/package_release.sh \
   /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app \
-  /private/tmp/SlateSync-artifacts 1.0.0 1
+  /private/tmp/SlateSync-artifacts 1.1.0 2
 ```
 
 ZIP 和 DMG 来自同一个已审计的 app，并会经过解压、只读挂载、签名和 bundle lineage 回验。输出

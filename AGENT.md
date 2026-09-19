@@ -1,5 +1,11 @@
 # SlateSync 当前项目方案
 
+## 2026-09-20 Swift 原生版本小版本更新
+
+- Swift 架构当前应用版本从 `1.0.0` 提升到 `1.1.0`，`MARKETING_VERSION` 在 Debug/Release 保持一致。
+- `CFBundleVersion` / `CURRENT_PROJECT_VERSION` 从 `1` 递增到 `2`，满足发布链路的单调构建号约束；同步 release workflow、Gate、打包 smoke、发布测试夹具和 README 示例。
+- 历史迁移与验收证据中的 `1.0.0/1` 作为历史基线保留，不回写历史 manifest、review 或封存决策。
+
 ## 2026-09-16 未跟踪资料归档
 
 - 将历史 UI HTML 原型归入 docs/ui-redesign-assets，保留两份 UI 工作记录和测试项目库截图；增加历史证据范围说明，不将未随仓库保留的日志当作当前验证。

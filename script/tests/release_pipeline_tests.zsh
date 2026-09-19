@@ -44,8 +44,8 @@ create_app() {
 <key>CFBundleDisplayName</key><string>SlateSync</string>
 <key>CFBundleIdentifier</key><string>com.slatesync.app</string>
 <key>CFBundleName</key><string>SlateSync</string>
-<key>CFBundleShortVersionString</key><string>1.0.0</string>
-<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>1.1.0</string>
+<key>CFBundleVersion</key><string>2</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 </dict></plist>
 PLIST
@@ -117,48 +117,48 @@ export PATH="${fake_bin}:${PATH}"
 app="${fixture_root}/valid/SlateSync.app"
 create_app "$app"
 export MOCK_SOURCE_APP="$app"
-assert_success "valid audited bundle" "${project_root}/script/verify_bundle.sh" "$app" 1.0.0 1 adhoc
+assert_success "valid audited bundle" "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 adhoc
 
 assert_failure "single architecture is rejected" env MOCK_ARCHS=arm64 \
-  "${project_root}/script/verify_bundle.sh" "$app" 1.0.0 1 adhoc
+  "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 adhoc
 assert_failure "signature failure is rejected" env MOCK_SIGNATURE_FAIL=1 \
-  "${project_root}/script/verify_bundle.sh" "$app" 1.0.0 1 adhoc
+  "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 adhoc
 assert_failure "missing hardened runtime is rejected" env MOCK_HARDENED_MISSING=1 \
-  "${project_root}/script/verify_bundle.sh" "$app" 1.0.0 1 adhoc
+  "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 adhoc
 
 bad_resource="${fixture_root}/bad-resource/SlateSync.app"
 /usr/bin/ditto "$app" "$bad_resource"
 print 'drift' >> "${bad_resource}/Contents/Resources/PaddleOCR/requirements-ocr.txt"
-assert_failure "resource drift is rejected" "${project_root}/script/verify_bundle.sh" "$bad_resource" 1.0.0 1 adhoc
+assert_failure "resource drift is rejected" "${project_root}/script/verify_bundle.sh" "$bad_resource" 1.1.0 2 adhoc
 
 symlink_app="${fixture_root}/symlink/SlateSync.app"
 /usr/bin/ditto "$app" "$symlink_app"
 ln -s /tmp "${symlink_app}/Contents/Resources/escape"
-assert_failure "bundle symlink is rejected" "${project_root}/script/verify_bundle.sh" "$symlink_app" 1.0.0 1 adhoc
+assert_failure "bundle symlink is rejected" "${project_root}/script/verify_bundle.sh" "$symlink_app" 1.1.0 2 adhoc
 
 renderer_app="${fixture_root}/renderer/SlateSync.app"
 /usr/bin/ditto "$app" "$renderer_app"
 print '<html></html>' > "${renderer_app}/Contents/Resources/index.html"
-assert_failure "renderer residue is rejected" "${project_root}/script/verify_bundle.sh" "$renderer_app" 1.0.0 1 adhoc
+assert_failure "renderer residue is rejected" "${project_root}/script/verify_bundle.sh" "$renderer_app" 1.1.0 2 adhoc
 
 package_output="${fixture_root}/artifacts"
 assert_success "ZIP and DMG round-trip" \
-  "${project_root}/script/package_release.sh" "$app" "$package_output" 1.0.0 1
-assert_success "package manifest and checksums are complete" test -s "${package_output}/SlateSync-1.0.0-manifest.json"
-assert_success "package notes are bilingual" rg -q '本地验证候选包' "${package_output}/SlateSync-1.0.0-release-notes.md"
+  "${project_root}/script/package_release.sh" "$app" "$package_output" 1.1.0 2
+assert_success "package manifest and checksums are complete" test -s "${package_output}/SlateSync-1.1.0-manifest.json"
+assert_success "package notes are bilingual" rg -q '本地验证候选包' "${package_output}/SlateSync-1.1.0-release-notes.md"
 assert_failure "concurrent output is rejected" \
-  "${project_root}/script/package_release.sh" "$app" "$package_output" 1.0.0 1
+  "${project_root}/script/package_release.sh" "$app" "$package_output" 1.1.0 2
 assert_failure "empty version is rejected" \
   "${project_root}/script/package_release.sh" "$app" "${fixture_root}/empty-version" '' 1
 
 mount_failure="${fixture_root}/mount-failure"
 assert_failure "mount failure propagates" env MOCK_MOUNT_FAIL=1 \
-  "${project_root}/script/package_release.sh" "$app" "$mount_failure" 1.0.0 1
+  "${project_root}/script/package_release.sh" "$app" "$mount_failure" 1.1.0 2
 assert_success "mount failure removes partial output" test ! -e "$mount_failure"
 
 create_failure="${fixture_root}/create-failure"
 assert_failure "DMG creation failure propagates" env MOCK_CREATE_FAIL=1 \
-  "${project_root}/script/package_release.sh" "$app" "$create_failure" 1.0.0 1
+  "${project_root}/script/package_release.sh" "$app" "$create_failure" 1.1.0 2
 assert_success "DMG failure removes partial output" test ! -e "$create_failure"
 
 print "Release pipeline tests: ${passed} passed, ${failed} failed"

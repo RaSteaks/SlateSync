@@ -20,8 +20,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 mkdir "${smoke_root}/consumer"
-ditto -x -k "${result_dir}/artifacts/SlateSync-1.0.0-macOS-universal.zip" "${smoke_root}/consumer"
-"${script_dir}/verify_bundle.sh" "$app" 1.0.0 1 adhoc
+ditto -x -k "${result_dir}/artifacts/SlateSync-1.1.0-macOS-universal.zip" "${smoke_root}/consumer"
+"${script_dir}/verify_bundle.sh" "$app" 1.1.0 2 adhoc
 # Build only the test harness. XCUIApplication(url:) explicitly launches the
 # extracted app, so XCTest cannot silently substitute the development build.
 # Sign the isolated harness explicitly; clean CI runners have no local identity.
