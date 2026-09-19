@@ -23,7 +23,7 @@ jobs:
             csv_test_pid=$!
             csv_pid=""
             for attempt in {1..40}; do
-              csv_pid=$(pgrep -f '/SlateSyncPackageTests.xctest/Contents/MacOS/SlateSyncPackageTests' | head -n 1) || true
+              csv_pid=$(pgrep -f '/SlateSyncPackageTests[.]xctest' | head -n 1) || true
               if [ -n "$csv_pid" ]; then break; fi
               sleep 0.1
             done
