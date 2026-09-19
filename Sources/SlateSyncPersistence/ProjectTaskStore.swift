@@ -40,19 +40,8 @@ public actor ProjectTaskStore {
         object["createdAt"] = PersistenceJSON.string(object["createdAt"]) ?? now
         object["updatedAt"] = now
         let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
-        let text = try PersistenceJSON.string(from: data, errorCode: "TASK_INVALID")
-        try await database.execute(
-            """
-            INSERT INTO tasks (id, data_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              data_json = excluded.data_json,
-              created_at = excluded.created_at,
-              updated_at = excluded.updated_at;
-            """,
-            bindings: [id, text, object["createdAt"] as? String, now]
-        )
-        try writer.writeAtomically(data, to: snapshotURL(id), permissions: 0o600)
+        // The database owner keeps the row and snapshot under one mutation lock.
+        try await database.saveTaskSnapshot(id, data: data, snapshotURL: snapshotURL(id), writer: writer)
         return id
     }
 
@@ -83,20 +72,11 @@ public actor ProjectTaskStore {
     }
 
     public func updateTask(_ id: String, patch: Data) async throws -> String {
+        try await bootstrap()
         let taskID = try PersistenceIdentifiers.task(id)
-        let existing = try PersistenceJSON.object(
-            from: await loadTask(taskID),
-            errorCode: "TASK_INVALID"
-        )
-        let changes = try PersistenceJSON.object(from: patch, errorCode: "TASK_INVALID")
-        var merged = existing
-        for (key, value) in changes { merged[key] = value }
-        merged["id"] = taskID
-        merged["createdAt"] = existing["createdAt"]
-        return try await saveTask(
-            PersistenceJSON.data(from: merged, errorCode: "TASK_INVALID"),
-            taskID: taskID
-        )
+        // Atomic shallow merge preserves unknown fields and explicit JSON nulls.
+        try await database.patchTask(taskID, patch: patch, snapshotURL: snapshotURL(taskID), writer: writer)
+        return taskID
     }
 
     public func listTasks() async throws -> [TaskListItem] {
@@ -150,18 +130,9 @@ public actor ProjectTaskStore {
     public func deleteTask(_ id: String) async throws {
         try await bootstrap()
         let taskID = try PersistenceIdentifiers.task(id)
-        // Recoverable deletion: a failed snapshot removal or a failed row
-        // delete must leave the record fully intact after a restart, so a
-        // snapshot error is surfaced, never swallowed with `try?`.
-        try await SnapshotDeletion.deleteRowAndSnapshot(
-            database: database,
-            table: "tasks",
-            id: taskID,
-            snapshotURL: snapshotURL(taskID),
-            notFoundMessage: "任务不存在",
-            remover: remover,
-            writer: writer
-        )
+        // Share the same cross-store lock as save/patch so a late compatibility
+        // snapshot cannot make an acknowledged deletion reappear on reopening.
+        try await database.deleteTaskSnapshot(taskID, snapshotURL: snapshotURL(taskID), writer: writer, remover: remover)
     }
 
     public func close() async throws {

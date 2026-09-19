@@ -447,10 +447,15 @@ public enum ProjectLibraryTransfer {
                 }
             }
             let metaRows = try await database.rows("SELECT key, value FROM project_meta;")
-            let metadata = Dictionary(uniqueKeysWithValues: metaRows.compactMap { row -> (String, String)? in
-                guard let key = row["key"] ?? nil, let value = row["value"] ?? nil else { return nil }
-                return (key, value)
-            })
+            // External SQLite schemas may omit the expected primary key.
+            // Treat duplicates as an invalid package, never a Dictionary trap.
+            var metadata: [String: String] = [:]
+            for row in metaRows {
+                guard let key = row["key"] ?? nil, let value = row["value"] ?? nil,
+                      metadata.updateValue(value, forKey: key) == nil else {
+                    throw transferError("INVALID_PROJECT_PACKAGE", "项目数据库资料包含重复键或空值")
+                }
+            }
             let required = ["project_id", "library_id", "name", "description", "settings", "created_at", "updated_at", "archived_at", "schema_version"]
             guard required.allSatisfy({ metadata[$0] != nil }),
                   metadata["project_id"] == expected.id,

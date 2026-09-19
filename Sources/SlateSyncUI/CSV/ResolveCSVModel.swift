@@ -117,11 +117,9 @@ public final class ResolveCSVModel {
         return try await service.encodeResolveCSV(table)
     }
 
-    /// Canonical merged export, frozen from the retained Worker's
-    /// `export-resolve`: the merge starts from the retained raw table so the
-    /// latest recognition records win over the staged preview, manual sparse
-    /// edits are applied last byte-for-byte, and the whole table is encoded
-    /// with canonicalized field widths and Comments. An empty recognition
+    /// Export re-merges the retained raw table using the latest recognition.
+    /// Only matched values are normalized; manual sparse edits apply last and
+    /// encoding preserves them and every unmatched cell. An empty recognition
     /// list is never exportable (`CSV_NO_EXPORT`).
     public func exportData(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async throws -> Data {
         try flushEditor?()

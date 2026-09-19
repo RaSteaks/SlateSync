@@ -4,6 +4,30 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectLibraryTransferTests: XCTestCase {
+    func testDuplicateExternalMetadataReturnsInvalidPackageWithoutTrapping() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("duplicate-package-meta")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try ProjectLibraryStore(libraryRoot: root.appending(path: "Source.slatesync-library"))
+        let project = try await library.createProject(name: "Duplicate metadata", description: "")
+        let package = root.appending(path: "Review.slatesync-project")
+        _ = try await library.exportProject(project.id, to: package)
+        try await library.close()
+        // An external schema may be internally consistent without a UNIQUE
+        // constraint. This previously crashed inside Dictionary construction.
+        let database = try SQLiteDatabase(url: package.appending(path: "project.sqlite"), mode: .readWriteExisting)
+        try await database.executeScript("""
+            CREATE TABLE copied_meta AS SELECT * FROM project_meta;
+            DROP TABLE project_meta;
+            ALTER TABLE copied_meta RENAME TO project_meta;
+            INSERT INTO project_meta SELECT * FROM project_meta WHERE key = 'name';
+            """)
+        try await database.close()
+        do {
+            _ = try await ProjectLibraryTransfer.validateProjectPackage(at: package)
+            XCTFail("Duplicate metadata must be rejected")
+        } catch { XCTAssertEqual((error as? SlateSyncError)?.code, "INVALID_PROJECT_PACKAGE") }
+    }
+
     func testArchivedProjectPackageKeepsArchiveStateAcrossImport() async throws {
         let container = try PersistenceTestSupport.temporaryRoot("project-transfer-archive")
         defer { try? FileManager.default.removeItem(at: container) }

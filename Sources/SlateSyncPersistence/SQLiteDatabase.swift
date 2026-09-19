@@ -170,6 +170,88 @@ public actor SQLiteDatabase {
         }
     }
 
+    /// Keep row and compatibility-snapshot mutations ordered across store
+    /// instances too. The outer lock spans SQLite commit and the file write;
+    /// otherwise a delayed patch snapshot could resurrect a concurrent delete.
+    private func withTaskSnapshotLock<Value>(_ action: () throws -> Value) throws -> Value {
+        try CrossProcessFileLock.withExclusiveLock(
+            at: URL(fileURLWithPath: snapshotURL.path + ".tasks.lock.tmp"), action)
+    }
+
+    func saveTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
+        try withTaskSnapshotLock {
+            let object = try PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
+            _ = try execute("""
+                INSERT INTO tasks (id, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json,
+                  created_at = excluded.created_at, updated_at = excluded.updated_at;
+                """, bindings: [id, String(decoding: data, as: UTF8.self),
+                    object["createdAt"] as? String, object["updatedAt"] as? String])
+            try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+        }
+    }
+
+    func deleteTaskSnapshot(_ id: String, snapshotURL: URL, writer: any AtomicFileWriting, remover: any FileRemoving) throws {
+        try withTaskSnapshotLock {
+            guard try !rows("SELECT 1 FROM tasks WHERE id = ?;", bindings: [id]).isEmpty else {
+                throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+            }
+            let original = try? LocalProjectEncryption.read(from: snapshotURL)
+            do { try remover.removeItem(at: snapshotURL) }
+            catch let error as CocoaError where error.code == .fileNoSuchFile { }
+            do {
+                guard try execute("DELETE FROM tasks WHERE id = ?;", bindings: [id]) > 0 else {
+                    throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+                }
+            } catch {
+                if let original { try? writer.writeAtomically(original, to: snapshotURL, permissions: 0o600) }
+                throw error
+            }
+        }
+    }
+
+    /// A task patch is one read/modify/UPDATE transaction, also inside the
+    /// encrypted snapshot lock. No actor suspension or upsert can lose another
+    /// writer's fields or resurrect a task deleted before this transaction.
+    func patchTask(_ id: String, patch: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
+        try withTaskSnapshotLock {
+            let data = try patchTaskData(id, patch: patch)
+            try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+        }
+    }
+
+    private func patchTaskData(_ id: String, patch: Data) throws -> Data {
+        try withEncryptedSnapshot(writing: true) { database in
+            let handle = try database.openHandle()
+            try Self.executeScript(handle, sql: "BEGIN IMMEDIATE;")
+            do {
+                guard let text = try database.rowsUnlocked(
+                    "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]
+                ).first?["data_json"] ?? nil else {
+                    throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+                }
+                var object = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
+                let createdAt = object["createdAt"]
+                let changes = try PersistenceJSON.object(from: patch, errorCode: "TASK_INVALID")
+                for (key, value) in changes { object[key] = value }
+                let now = PersistenceJSON.timestamp()
+                object["id"] = id
+                object["createdAt"] = createdAt
+                object["updatedAt"] = now
+                let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
+                _ = try database.executeUnlocked(
+                    "UPDATE tasks SET data_json = ?, updated_at = ? WHERE id = ?;",
+                    bindings: [String(decoding: data, as: UTF8.self), now, id]
+                )
+                try Self.executeScript(handle, sql: "COMMIT;")
+                return data
+            } catch {
+                try? Self.executeScript(handle, sql: "ROLLBACK;")
+                throw error
+            }
+        }
+    }
+
     public func rows(_ sql: String, bindings: [String?] = []) throws -> [[String: String?]] {
         try withEncryptedSnapshot(writing: false) { database in try database.rowsUnlocked(sql, bindings: bindings) }
     }

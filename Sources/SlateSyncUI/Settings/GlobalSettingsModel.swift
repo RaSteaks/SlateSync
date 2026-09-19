@@ -352,6 +352,11 @@ public final class GlobalSettingsModel {
             )
             guard providerRequests[providerID] == request else { return }
             discoveryResults[providerID] = result
+            // Publish the shared catalog revision so already-open workspaces
+            // refresh their model pickers without discarding Settings drafts.
+            let refreshed = try await service.globalSettings()
+            guard providerRequests[providerID] == request else { return }
+            refreshPreservingDraft(refreshed)
             providerOperations[providerID] = .succeeded(message: L10n.tr("发现 {0} 个可用模型", [String(describing: result.visionModelCount)]))
         } catch {
             guard providerRequests[providerID] == request else { return }

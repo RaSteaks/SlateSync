@@ -1,5 +1,14 @@
 # SlateSync 当前项目方案
 
+## 2026-09-19 全量 Review 五项修复
+
+- Resolve CSV 仅规范化成功匹配的识别字段，取消合并与正常编码中的全表改写；未匹配、冲突、不完整行保留原有内容，人工稀疏编辑在最终导出中原样保留。更新旧兼容字节期望，明确本次优先保障数据保留而非复刻旧版破坏性规范化。
+- 外部项目包的 project_meta 逐项检查唯一键与非空值，重复键返回 INVALID_PROJECT_PACKAGE，不再触发 Dictionary fatal error。
+- 设置投影、模型发现和识别协调器共用单一 ProviderRegistry，并合并动态模型到工作台列表；发现后发布界面 revision。能力验证原位更新相同版本 Provider 的资格，失败会撤销资格，保留无关发现结果且不取消其他窗口识别。配置/凭据修改仍失效旧资格，发现结果以 generation 拒绝迟到响应。
+- 任务 patch 的读取、浅合并和 UPDATE 在 SQLite 事务及加密快照锁内一次完成；保留任务 ID、创建时间、未知字段和显式 null，缺失行不 upsert。任务保存、patch、删除共用跨连接锁，覆盖 SQLite 提交与兼容 JSON 写入/删除，避免迟到快照复活删除记录。
+- 增加临时目录中的明文/加密跨连接 30 字段并发更新、删除后 patch 拒绝与重开、畸形项目包拒绝、CSV 保护及真实 façade 离线模型发现/验证/识别回归。不使用真实 Provider、钥匙串凭据或业务项目。
+- 验证：完整 `swift test` 共 383 项，2 项按环境跳过，0 失败；`swift build -Xswiftc -warnings-as-errors`、本地化审计（637 调用点 / 1005 条资源）及 `git diff --check` 通过。跳过项为真实 Paddle 环境与前台显示节奏测试；未执行 GUI/发布 Gate。
+
 ## 2026-09-18 评审问题修复
 
 - 原生识别开始前的任务所有权校验改为 SQLite 行存在性查询，只读取常量而不加载可能包含大图片与识别结果的完整任务 JSON；查询仍在 `ProjectRuntime` 项目租约内完成，缺失任务保持 `ENOENT` 语义。

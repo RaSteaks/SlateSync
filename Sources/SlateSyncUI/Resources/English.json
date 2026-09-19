@@ -938,6 +938,7 @@
   "项目数据库格式在迁移期间发生变化": "The project database format changed during migration.",
   "项目数据库正在使用或损坏，请关闭其他 SlateSync 后重试": "The project database is in use or damaged. Close other SlateSync instances and retry.",
   "项目数据库缺少 {0} 表": "The project database is missing the {0} table.",
+  "项目数据库资料包含重复键或空值": "Project database metadata contains duplicate keys or null values",
   "项目数据库资料与清单不一致": "The project database does not match the manifest.",
   "项目数据解密校验失败，文件可能损坏；原文件未被覆盖": "Project data authentication failed; the file may be damaged. The original file was not overwritten.",
   "项目正在删除": "The project is being deleted.",

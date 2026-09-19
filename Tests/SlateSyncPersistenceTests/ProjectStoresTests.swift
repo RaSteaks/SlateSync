@@ -4,6 +4,48 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectStoresTests: XCTestCase {
+    func testConcurrentTaskPatchesPreserveEveryFieldAcrossConnections() async throws {
+        for encrypted in [false, true] {
+            let root = try PersistenceTestSupport.temporaryRoot("atomic-task-patches")
+            defer { try? FileManager.default.removeItem(at: root) }
+            if encrypted { try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend()) }
+            let first = try ProjectTaskStore(projectDirectory: root)
+            _ = try await first.saveTask(Data(#"{"createdAt":"2020-01-01T00:00:00.000Z","nested":{"keep":1}}"#.utf8), taskID: "task")
+            let second = try ProjectTaskStore(projectDirectory: root)
+            _ = try await second.listTasks()
+            // Independent database actors exercise SQLite transactions and the
+            // encrypted cross-process lock, not only a store's actor executor.
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for index in 0..<30 {
+                    let store = index.isMultiple(of: 2) ? first : second
+                    group.addTask {
+                        _ = try await store.updateTask("task", patch: Data("{\"field\(index)\":\(index)}".utf8))
+                    }
+                }
+                try await group.waitForAll()
+            }
+            _ = try await first.updateTask("task", patch: Data(#"{"id":"wrong","createdAt":"wrong","nested":null}"#.utf8))
+            let bytes = try await first.loadTask("task")
+            let object = try PersistenceTestSupport.jsonObject(bytes)
+            for index in 0..<30 { XCTAssertEqual(object["field\(index)"] as? Int, index) }
+            XCTAssertEqual(object["id"] as? String, "task")
+            XCTAssertEqual(object["createdAt"] as? String, "2020-01-01T00:00:00.000Z")
+            XCTAssertTrue(object["nested"] is NSNull)
+            XCTAssertEqual(try LocalProjectEncryption.read(from: root.appending(path: "tasks/task.json")), bytes)
+            try await first.deleteTask("task")
+            do {
+                _ = try await second.updateTask("task", patch: Data(#"{"status":"completed"}"#.utf8))
+                XCTFail("A patch must not recreate a deleted task")
+            } catch { XCTAssertEqual((error as? SlateSyncError)?.code, "ENOENT") }
+            try await first.close()
+            try await second.close()
+            let reopened = try ProjectTaskStore(projectDirectory: root)
+            let remaining = try await reopened.listTasks()
+            XCTAssertTrue(remaining.isEmpty)
+            try await reopened.close()
+        }
+    }
+
     func testReopeningEncryptedDiagnosticsDoesNotRewriteAndImportsMissingSnapshots() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("diagnostics-reopen")
         defer { try? FileManager.default.removeItem(at: root) }

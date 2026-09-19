@@ -132,17 +132,40 @@ public actor ProviderRegistry {
         throw RecognitionFailure.unsupportedModel
     }
 
-    public func register(_ models: [ResolvedModel], providerID: String, revision: Int?) {
+    public func register(_ models: [ResolvedModel], providerID: String, revision: Int?, generation expected: Int? = nil) {
         // The caller's revision is checked after every discovery/probe await;
         // a late response from an edited provider cannot replace live state.
-        let currentRevision = (try? descriptor(providerID: providerID).revision) ?? nil
-        guard currentRevision == revision else { return }
+        // Built-ins have no revision, so configuration/probe generations also
+        // fence responses from an old endpoint or superseded capability state.
+        guard expected == nil || expected == generation,
+              let current = try? descriptor(providerID: providerID),
+              current.revision == revision else { return }
         var byID: [String: ResolvedModel] = [:]
         for model in models where model.providerID == providerID && model.isUsable {
             byID[model.publicID] = model
             byID[model.apiID] = byID[model.apiID] ?? model
         }
         registrations[providerID] = Registration(revision: revision, models: byID)
+    }
+
+    /// Capability-only changes keep other providers' discovered models alive.
+    /// Replace the targeted model's eligibility, including negative probe results.
+    public func refreshCapabilities(_ provider: CustomProviderConfiguration) {
+        guard let index = customProviders.firstIndex(where: {
+            $0.id == provider.id && $0.revision == provider.revision && $0.baseUrl == provider.baseUrl
+        }) else { return }
+        customProviders[index] = provider
+        generation += 1
+        var models = registrations[provider.id]?.models ?? [:]
+        for (id, verification) in provider.capabilityCache ?? [:] where verification.revision == provider.revision {
+            models = models.filter { $0.value.apiID != id }
+            if verification.status == .verified {
+                models[id] = ResolvedModel(publicID: id, apiID: id, providerID: provider.id,
+                    label: id, imageDetail: provider.imageDetail, jsonMode: provider.jsonMode,
+                    capabilityStatus: .verified, revision: provider.revision)
+            }
+        }
+        registrations[provider.id] = Registration(revision: provider.revision, models: models)
     }
 
     public func invalidate(providerID: String? = nil) {
@@ -191,6 +214,16 @@ public actor ProviderRegistry {
                     capabilityMessage: bounded(verification?.message, limit: 500),
                     capabilityCheckedAt: bounded(verification?.checkedAt, limit: 80)
                 ))
+            }
+        }
+        // Discovery registrations must reach the same picker projection used
+        // by recognition. Deduplication below folds public/API aliases together.
+        for registration in registrations.values {
+            for model in registration.models.values {
+                values.append(ModelData(id: model.publicID, label: model.label,
+                    description: "", providers: [model.providerID], imageDetail: model.imageDetail,
+                    apiId: model.apiID, discovered: true, verifiedAvailable: model.isUsable,
+                    capabilityStatus: model.capabilityStatus))
             }
         }
         // Physical API identity, not the compatibility alias, controls public

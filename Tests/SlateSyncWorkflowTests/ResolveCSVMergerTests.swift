@@ -20,9 +20,12 @@ final class ResolveCSVMergerTests: XCTestCase {
             comments: ResolveComments(goodTake: "YES", holdTake: "HOLD"),
             edits: [.init(rowIndex: 0, columnIndex: 5, value: "edited note")]
         )
-        let merged = try await engine.encode(result.table, fieldFormats: .init(), comments: ResolveComments(goodTake: "YES", holdTake: "HOLD"), canonicalizeComments: true)
-        XCTAssertEqual(merged.count, 196)
-        XCTAssertEqual(sha256(merged), "c601ab2c779b2b4d474966fef727bb9225cb9c011e61b4f4de282fe4e1a89ab3")
+        // Updated byte oracle preserves the unmatched row's three "keep" cells.
+        // Matched cells still use the requested widths and status markers.
+        let merged = try await engine.encode(result.table)
+        XCTAssertEqual(result.table.rows[2][1...3], ["keep", "keep", "keep"])
+        XCTAssertEqual(merged.count, 208)
+        XCTAssertEqual(sha256(merged), "1349b0603b92942e7fd4ed56b27b526f49ff5bc0844e2b2bd6db2f145c7bdb79")
         XCTAssertEqual(result.matchedRecordCount, 2)
         XCTAssertEqual(result.unrecognizedMaterials, ["A001C999"])
         // Export review must include records that the merger skipped, not just

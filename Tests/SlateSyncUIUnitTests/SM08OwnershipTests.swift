@@ -581,7 +581,11 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertNil(model.customProviders.last?.capabilityCache)
         XCTAssertEqual(model.customProviders.last?.manualModelIds, ["vision-test", "vision-backup"])
 
+        let revisionBeforeDiscovery = model.revision
         await model.discover(providerID: "custom-test")
+        // Existing workspaces observe this token to refresh their model picker.
+        XCTAssertGreaterThan(model.revision, revisionBeforeDiscovery)
+        XCTAssertEqual(model.customProviders.last?.name, "本地接口 2")
         XCTAssertEqual(model.discoveryResults["custom-test"]?.models.map(\.id), ["vision-test"])
         await model.probe(providerID: "custom-test", modelIDs: ["vision-test"])
         let discoveryCount = await service.discoveryCount

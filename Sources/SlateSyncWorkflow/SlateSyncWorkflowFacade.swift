@@ -44,6 +44,10 @@ public actor SlateSyncWorkflowFacade:
     private let logs: LocalLogStore
     private let paddleInstaller: PaddleOCRInstallerService
     private let allowsExternalOperations: Bool
+    // All consumers share model eligibility; transports keep independent lifetimes.
+    private var sharedRegistry: ProviderRegistry?
+    private var registryBuild: Task<ProviderRegistry, Error>?
+    private let providerTransportFactory: @Sendable () -> any ProviderHTTPTransporting
     private var recognition: RecognitionCoordinator?
     private var settingsProviders: SettingsProviderRuntime?
     private var recognitionBuild: Task<RecognitionCoordinator, Error>?
@@ -56,7 +60,7 @@ public actor SlateSyncWorkflowFacade:
 
     private struct SettingsProviderRuntime {
         let registry: ProviderRegistry
-        let transport: URLSessionProviderTransport
+        let transport: any ProviderHTTPTransporting
         let discovery: ModelDiscoveryService
         let probe: ModelCapabilityProbeService
     }
@@ -67,7 +71,8 @@ public actor SlateSyncWorkflowFacade:
         sm05: SM05WorkflowServices = SM05WorkflowServices(),
         logs: LocalLogStore,
         paddleInstaller: PaddleOCRInstallerService,
-        allowsExternalOperations: Bool = true
+        allowsExternalOperations: Bool = true,
+        providerTransportFactory: (@Sendable () -> any ProviderHTTPTransporting)? = nil
     ) {
         self.library = library
         self.runtime = runtime
@@ -75,6 +80,9 @@ public actor SlateSyncWorkflowFacade:
         self.logs = logs
         self.paddleInstaller = paddleInstaller
         self.allowsExternalOperations = allowsExternalOperations
+        self.providerTransportFactory = providerTransportFactory ?? {
+            URLSessionProviderTransport(credentials: runtime.keychainStore)
+        }
     }
 
     /// Isolated app launches can exercise persistence and UI without reaching
@@ -317,11 +325,7 @@ public actor SlateSyncWorkflowFacade:
     private func globalSettings(restartRequired: Bool) async throws -> GlobalSettingsProjection {
         let runtimeSnapshot = await runtime.bootstrap()
         let config = try await runtime.globalConfigStore.load()
-        let registry = ProviderRegistry(
-            settings: runtimeSnapshot.configuration.values,
-            customProviders: config.customProviders,
-            credentials: runtime.keychainStore
-        )
+        let registry = try await modelRegistry()
         // Query attributes once, never secrets, while building settings state.
         var credentialStatuses: [String: CredentialStatus] = [:]
         for id in Set(ProviderCatalog.definitions.map(\.id) + config.customProviders.map(\.id)) {
@@ -367,8 +371,9 @@ public actor SlateSyncWorkflowFacade:
         let previousPath = await runtime.currentSnapshot().configuration.values[.slateSyncConfigPath] ?? ""
         try await resetRecognition()
         await resetSettingsProviders()
-        _ = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
+        let saved = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
         let snapshot = await runtime.refreshConfiguration()
+        try await modelRegistry().replace(settings: snapshot.configuration.values, customProviders: saved.customProviders)
         await record(.info, category: "settings", event: "saved", message: "全局设置已保存")
         let nextPath = snapshot.configuration.values[.slateSyncConfigPath] ?? ""
         return try await globalSettings(restartRequired: previousPath != nextPath)
@@ -378,6 +383,8 @@ public actor SlateSyncWorkflowFacade:
         try await resetRecognition()
         await resetSettingsProviders()
         try await runtime.setProviderKey(value, for: providerID)
+        // Credentials invalidate eligibility even when the endpoint is unchanged.
+        await sharedRegistry?.invalidate(providerID: providerID)
         await record(.info, category: "settings", event: "credential-updated", message: "Provider 凭据状态已更新")
     }
 
@@ -490,14 +497,8 @@ public actor SlateSyncWorkflowFacade:
     /// Discovery and probe across multiple Provider rows share one retained
     /// transport; reset also joins construction suspended in config loading.
     private func makeSettingsProviderRuntime() async throws -> SettingsProviderRuntime {
-        let snapshot = await runtime.bootstrap()
-        let config = try await runtime.globalConfigStore.load()
-        let registry = ProviderRegistry(
-            settings: snapshot.configuration.values,
-            customProviders: config.customProviders,
-            credentials: runtime.keychainStore
-        )
-        let transport = URLSessionProviderTransport(credentials: runtime.keychainStore)
+        let registry = try await modelRegistry()
+        let transport = providerTransportFactory()
         let client = ProviderRecognitionClient(transport: transport)
         let discovery = ModelDiscoveryService(registry: registry, transport: transport)
         let probe = ModelCapabilityProbeService(
@@ -539,7 +540,6 @@ public actor SlateSyncWorkflowFacade:
 
     private static func closeSettingsProviderRuntime(_ value: SettingsProviderRuntime) async {
         await value.probe.close()
-        await value.discovery.invalidate()
         await value.transport.close()
     }
 
@@ -582,6 +582,35 @@ public actor SlateSyncWorkflowFacade:
             customProviders: providers
         )
         _ = await runtime.refreshConfiguration()
+        // Publish into the registry already retained by active coordinators;
+        // do not cancel another window's recognition to refresh capabilities.
+        try await modelRegistry().refreshCapabilities(providers[index])
+    }
+
+    /// Join concurrent first-use requests so Settings and recognition cannot
+    /// construct separate catalogs while configuration I/O is suspended.
+    func modelRegistry() async throws -> ProviderRegistry {
+        if let sharedRegistry { return sharedRegistry }
+        let build: Task<ProviderRegistry, Error>
+        if let registryBuild { build = registryBuild }
+        else {
+            build = Task { [runtime] in
+                let snapshot = await runtime.bootstrap()
+                let config = try await runtime.globalConfigStore.load()
+                return ProviderRegistry(settings: snapshot.configuration.values,
+                    customProviders: config.customProviders, credentials: runtime.keychainStore)
+            }
+            registryBuild = build
+        }
+        do {
+            let registry = try await build.value
+            sharedRegistry = registry
+            registryBuild = nil
+            return registry
+        } catch {
+            registryBuild = nil
+            throw error
+        }
     }
 
     private func recognitionCoordinator() async throws -> RecognitionCoordinator {
@@ -613,13 +642,8 @@ public actor SlateSyncWorkflowFacade:
 
     private func makeRecognitionCoordinator() async throws -> RecognitionCoordinator {
         let snapshot = await runtime.bootstrap()
-        let config = try await runtime.globalConfigStore.load()
-        let registry = ProviderRegistry(
-            settings: snapshot.configuration.values,
-            customProviders: config.customProviders,
-            credentials: runtime.keychainStore
-        )
-        let transport = URLSessionProviderTransport(credentials: runtime.keychainStore)
+        let registry = try await modelRegistry()
+        let transport = providerTransportFactory()
         let client = ProviderRecognitionClient(transport: transport)
         let projectRuntime = try await library.projectRuntime()
         let values = snapshot.configuration.values
