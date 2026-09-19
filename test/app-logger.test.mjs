@@ -6,6 +6,12 @@ import test from "node:test";
 
 import { createAppLogger, parseLogLine } from "../lib/app-logger.mjs";
 
+// The Electron main process logs app.getVersion(); keep this fixture sourced
+// from the same package metadata so release bumps do not stale the parser test.
+const { version: appVersion } = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+);
+
 // The logger owns no global state, so every test builds a fresh instance in
 // its own temp directory (mirroring the isolated userData rule).
 async function createTempRoot() {
@@ -24,7 +30,7 @@ test("writes human-readable daily log files with structured meta that parses bac
   const root = await createTempRoot();
   try {
     const logger = createAppLogger(root, { now: fixedClock("2026-08-26T10:00:00") });
-    logger.info("app", "SlateSync 0.1.0 启动（darwin）");
+    logger.info("app", `SlateSync ${appVersion} 启动（darwin）`);
     logger.info("recognition", "正在主识别第 3/8 页", {
       phase: "primary",
       percent: 45,
@@ -41,7 +47,7 @@ test("writes human-readable daily log files with structured meta that parses bac
     const content = await readFile(join(root, "logs", "slatesync-2026-08-26.log"), "utf8");
     const lines = content.split("\n").filter(Boolean);
     assert.equal(lines.length, 4);
-    assert.match(lines[0], /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[INFO\] \[app\] SlateSync 0\.1\.0 启动（darwin）$/);
+    assert.match(lines[0], new RegExp(`^\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\] \\[INFO\\] \\[app\\] SlateSync ${appVersion.replaceAll(".", "\\.")} 启动（darwin）$`));
     assert.match(lines[1], /\[INFO\] \[recognition\] 正在主识别第 3\/8 页 · phase=primary · percent=45 · completed=3 · total=8 · pageNumber=3$/);
     assert.match(lines[2], /\[WARN\] \[recognition\] 本地 OCR 不可用$/);
     assert.match(lines[3], /\[ERROR\] \[app\] 初始化失败 · error="boom happened"$/);
