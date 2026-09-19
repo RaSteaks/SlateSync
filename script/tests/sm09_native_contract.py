@@ -17,6 +17,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFESTS = ROOT / '.codex/swift-migration/manifests'
+PERFORMANCE_ONLY_TESTS = frozenset({'SlateSyncUIUnitTests.SM08NativeSurfaceTests/testForegroundCSVMeetsDisplayCadenceBudget'})
+
 BASE = '52b2a78f6619145b0999bdccf588d83a95349e7c'
 
 
@@ -213,11 +215,12 @@ def pass_line(log, reference):
     return lines[-1]
 
 
-def validate_metrics(name, value, budget):
+def validate_metrics(name, value, budget, enforce_timing=True):
     require(value.get('fixtureRows', 10000) == 10000, 'CSV fixture size drift')
     if name == 'native-csv-foreground.json':
         require(value['displayBacked'] is True, 'offscreen cadence is not display evidence')
-        require(value['scrollFramesPerSecond'] >= budget['csv10000']['minimumScrollFPS'], 'scroll FPS budget')
+        if enforce_timing:
+            require(value['scrollFramesPerSecond'] >= budget['csv10000']['minimumScrollFPS'], 'scroll FPS budget')
         return
     require(value['warmups'] == budget['warmups'] and value['samples'] == budget['samples'], 'sample count drift')
     pairs = {
@@ -230,12 +233,14 @@ def validate_metrics(name, value, budget):
         require(value['projects'] == 500 and value['tasks'] == 1000, 'scale fixture drift')
     for key, group, bound in pairs[name]:
         require(len(value[key]) == budget['samples'], f'missing samples: {key}')
-        require(max(value[key]) <= budget[group][bound], f'budget exceeded: {key}')
+        # Functional CI still enforces sample/fixture shape, virtualization and memory.
+        if enforce_timing or not bound.endswith('MsP95'):
+            require(max(value[key]) <= budget[group][bound], f'budget exceeded: {key}')
     if name == 'native-csv-scale.json':
         require(value['retainedResidentBytes'] <= budget['csv10000']['retainedResidentDeltaBytes'], 'retained memory budget')
 
 
-def validate_execution(result_dir, contract):
+def validate_execution(result_dir, contract, functional=False):
     swift = (result_dir / 'swift_test.log').read_text()
     xcode = (result_dir / 'xcode_test_plan_xcodebuild.log').read_text()
     summary = document(result_dir / 'xcode_test_summary.json')
@@ -245,8 +250,10 @@ def validate_execution(result_dir, contract):
     # opening a legacy Library and exporting CSV must execute, not only compile.
     pass_line(xcode, 'SlateSyncUITests.SlateSyncUITests/testLegacyLibraryCSVExportAndReopenInDeliveredApp')
     pass_line(swift, 'SlateSyncPersistenceTests.SM09LegacyPackageTests/testFrozenLegacyPackagesImportEditReopenAndExportWithoutSourceMutation')
+    deferred = PERFORMANCE_ONLY_TESTS if functional else frozenset()
     for reference in contract['requiredSwiftTests']:
-        pass_line(swift, reference)
+        if reference not in deferred:
+            pass_line(swift, reference)
     require(re.search(r'SM06_RESOURCES .*active=0 pending=0 processes=0', swift), 'media owners did not drain')
     require(re.search(r'SM06_VISION_SMOKE .*revision=[1-9]', swift), 'native Vision evidence missing')
     plan = json.loads(read('Tests/SlateSyncUIUnitTests/Fixtures/SM09/sm09-native-evidence-plan.json'))
@@ -255,8 +262,10 @@ def validate_execution(result_dir, contract):
     budget = json.loads(read('Tests/SlateSyncUIUnitTests/Fixtures/SM08/performance-budget.json'))
     artifacts = {}
     for name in ['real-sqlite-scale.json', 'native-project-task-scale.json', 'native-csv-scale.json', 'native-csv-foreground.json']:
+        if functional and name == 'native-csv-foreground.json':
+            continue
         value = document(result_dir / 'sm08-metrics' / name)
-        validate_metrics(name, value, budget)
+        validate_metrics(name, value, budget, enforce_timing=not functional)
         artifacts[name] = value
     # Each acceptance owns its observations and source hashes, preserving all
     # 45 interaction/measurement mappings rather than only static ID names.
@@ -264,15 +273,23 @@ def validate_execution(result_dir, contract):
     acceptance = {}
     for key, item in plan.items():
         log = xcode if item['runner'] == 'xcode' else swift
-        acceptance[key] = {'result': 'PASS', 'expected': item['expected'],
-                           'executedTests': {ref: pass_line(log, ref) for ref in item['tests']},
-                           'metrics': {name: artifacts[name] for name in item.get('metrics', [])}}
+        deferred_tests = [ref for ref in item['tests'] if ref in deferred]
+        acceptance[key] = {
+            'result': 'FUNCTIONAL_ONLY' if functional and (deferred_tests or item.get('metrics')) else 'PASS',
+            'expected': item['expected'],
+            'executedTests': {ref: pass_line(log, ref) for ref in item['tests'] if ref not in deferred},
+            'deferredTests': deferred_tests,
+            'metrics': {name: artifacts[name] for name in item.get('metrics', [])
+                        if not functional or name != 'native-csv-foreground.json'}}
     report = {'schemaVersion': 1, 'phase': 'SM-09', 'commit': git('rev-parse','HEAD').decode().strip(),
+              'scope': 'functional' if functional else 'full',
+              'performancePolicy': 'advisory' if functional else 'required',
+              'completeAcceptance': not functional,
               'sourceInputs': inputs, 'acceptance': acceptance}
     (result_dir / 'native-evidence.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
 
 
-def run(result_dir=None, before_removal=False):
+def run(result_dir=None, before_removal=False, functional=False):
     contract = document(MANIFESTS / 'sm09-native-contract.json')
     cutover = document(MANIFESTS / 'sm09-cutover.json')
     seal_bytes = (MANIFESTS/'sm09-final-pre-cutover.json').read_bytes()
@@ -295,8 +312,9 @@ def run(result_dir=None, before_removal=False):
     if not before_removal:
         validate_tree(cutover)
     if result_dir:
-        validate_execution(result_dir, contract)
-    print('SM-09 native provenance, fixtures, ownership and acceptance: PASS')
+        validate_execution(result_dir, contract, functional=functional)
+    print('SM-09 native functional coverage (timing advisory): PASS' if functional else
+          'SM-09 native provenance, fixtures, ownership and acceptance: PASS')
 
 
 class ContractTests(unittest.TestCase):
@@ -364,8 +382,9 @@ if __name__ == '__main__':
     parser.add_argument('--result-dir', type=Path)
     parser.add_argument('--before-removal', action='store_true')
     parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--functional', action='store_true', help='Validate merge coverage; defer timing budgets explicitly')
     args = parser.parse_args()
     if args.self_test:
         result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(ContractTests))
         raise SystemExit(0 if result.wasSuccessful() else 1)
-    run(args.result_dir, args.before_removal)
+    run(args.result_dir, args.before_removal, args.functional)

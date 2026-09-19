@@ -1,5 +1,13 @@
 # SlateSync 当前项目方案
 
+## 2026-09-19 CI 策略：功能门禁与非阻塞性能报告
+
+- 按用户明确决定，将开发分支合并检查与性能预算分开：保留原 `native-test` 检查名称，调用 `phase_gate.sh SM-09 --functional`；构建、全部功能/数据断言、资源释放与虚拟化限制、Xcode UI、归档及打包仍阻塞合并。
+- 功能模式只委托耗时预算，不删除混合测试中的业务断言；CSV 前台 FPS 用例由独立 `performance` 任务执行。该任务以 strict 模式运行原生表格、列表、SQLite 加载及 10k CSV 性能用例，原阈值不改，失败输出 warning、JSON、日志与 GitHub Summary，步骤和任务均非阻塞。
+- 默认无参数的阶段 Gate 与 release workflow 保持完整严格验收。功能报告显式标注 scope=functional、performancePolicy=advisory、approvable=false；原生验收证据区分 FUNCTIONAL_ONLY 和委托用例，不制造完整 SM-09/发布批准。正常功能模式 PASS 返回 0；业务失败、环境阻塞和 dirty 诊断仍各自返回非零。
+- 取消上一轮尚未提交的“全部性能继续阻塞但独立进程执行”方案，改用上述明确的门禁政策。添加策略回归：严格/功能预算区别、功能覆盖遗漏仍失败、无测试/无指标不能宣称性能 PASS、报告保留失败码，以及禁止主任务或 release 偷变成 advisory。
+- 验证：功能模式完整 Swift 套件 387 项（2 项环境跳过）0 失败；135 项 Gate helper 自测、7 项策略边界测试、8 项 release contract 负例与原生功能静态契约通过。独立性能报告实际运行通过，生成 4 类指标 JSON、完整日志和 Summary；失败/无测试结果的报告路径通过 mock 验证，不把失败包装为 PASS。
+
 ## 2026-09-19 完整 UI 通过后的运行预算与诊断
 
 - 运行 `35435508999` 的 Xcode Test Plan 已 15/15 通过，确认弹窗、设置缩放与完整外观/密度矩阵修正有效。归档、审计与 ZIP/DMG 也已通过，但打包后的完整 UI 矩阵尚未结束即触及原 30 分钟上限。

@@ -81,8 +81,10 @@ final class SM08NativeSurfaceTests: XCTestCase {
             harness.unmount()
             drainDeferredAppKitWork()
         }
-        XCTAssertLessThanOrEqual(renderMS.max() ?? .infinity, 1200)
-        XCTAssertLessThanOrEqual(editMS.max() ?? .infinity, 100)
+        if PerformancePolicy.enforcesTiming {
+            XCTAssertLessThanOrEqual(renderMS.max() ?? .infinity, 1200)
+            XCTAssertLessThanOrEqual(editMS.max() ?? .infinity, 100)
+        }
         XCTAssertLessThanOrEqual(footprintDeltas.max() ?? .max, 134_217_728)
         // Dedicated scope has no test-local strong native reference.
         var released: WeakCSVReferences?
