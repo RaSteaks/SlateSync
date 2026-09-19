@@ -21,6 +21,9 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
     private var activeLeases: [String: Int] = [:]
     private var leaseWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
+    // Internal synchronization is used by persistence race tests to observe
+    // ownership publication without relying on scheduler-sensitive sleeps.
+    private var transitionStartWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private var refusesNewOperations = false
     private var closeTask: Task<Void, any Error>?
 
@@ -340,6 +343,19 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
             throw SlateSyncError(code: "PROJECT_DELETING", message: "项目正在删除或关闭")
         }
         deletingProjects.insert(projectID)
+        let waiters = transitionStartWaiters.removeValue(forKey: projectID) ?? []
+        for waiter in waiters { waiter.resume() }
+    }
+
+    /// Test-only observation point for a terminal-operation race. This stays
+    /// internal so production callers cannot coordinate behavior around a
+    /// timing detail; tests use it to wait for the ownership marker itself.
+    internal func waitForProjectTransitionStart(_ projectID: String) async throws {
+        let id = try PersistenceIdentifiers.project(projectID)
+        guard !deletingProjects.contains(id) else { return }
+        await withCheckedContinuation { continuation in
+            transitionStartWaiters[id, default: []].append(continuation)
+        }
     }
 
     private func endProjectTransition(_ projectID: String) {
