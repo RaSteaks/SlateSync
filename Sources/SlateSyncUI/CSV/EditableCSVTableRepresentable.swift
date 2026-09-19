@@ -267,6 +267,12 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 field = NSTextField()
                 field.identifier = identifier
                 field.isBordered = false
+                // Table cells do not need the standalone text-input bezel's
+                // appearance layers. Limit display layout to the fixed-height
+                // row without single-line editing mode, which would strip
+                // pasted newlines from the original CSV value.
+                field.isBezeled = false
+                field.maximumNumberOfLines = 1
                 field.drawsBackground = false
                 field.lineBreakMode = .byTruncatingTail
                 field.delegate = self

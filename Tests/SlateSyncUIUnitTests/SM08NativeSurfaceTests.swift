@@ -216,6 +216,29 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertTrue(field.isSelectable)
     }
 
+    func testBorderlessCellPreservesMultilineEditing() async throws {
+        // Display sizing must not become the text system's single-line mode:
+        // embedded CSV newlines remain editable and cross the commit boundary.
+        var input = fixtureTable()
+        input.rows[0][0] = "原始\n第二行"
+        let harness = CSVHarness(table: input)
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        let field = try XCTUnwrap(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTextField)
+        XCTAssertFalse(field.isBezeled)
+        XCTAssertEqual(field.maximumNumberOfLines, 1)
+        XCTAssertFalse(field.cell?.usesSingleLineMode ?? true)
+        XCTAssertEqual(field.stringValue, "原始\n第二行")
+        field.selectText(nil)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        let coordinator = try XCTUnwrap(field.delegate as? EditableCSVTableRepresentable.Coordinator)
+        coordinator.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: field))
+        editor.insertText("校对\n保留", replacementRange: NSRange(location: 0, length: editor.string.utf16.count))
+        try coordinator.flushEdit()
+        XCTAssertEqual(harness.commits.last?.value, "校对\n保留")
+    }
+
     func testForegroundCSVMeetsDisplayCadenceBudget() async throws {
         guard ProcessInfo.processInfo.environment["SLATESYNC_SM08_FOREGROUND_GATE"] == "1" else {
             throw XCTSkip("display-backed cadence runs only in the authorized SM-08 foreground Gate")

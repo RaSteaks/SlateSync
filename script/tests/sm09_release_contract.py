@@ -113,7 +113,7 @@ def validate_workflows(ci: str, release: str) -> None:
         combined.count("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer") == 2,
         "Xcode selection drift",
     )
-    require(combined.count("timeout-minutes: 30") == 2, "CARRY-02 timeout drift")
+    require(combined.count("timeout-minutes: 45") == 2, "native Gate execution budget drift")
     forbidden = re.compile(
         r"actions/setup-node|\bnpm\b|\bnpx\b|\bnode\b|electron-builder|\bgh\s+release\b|"
         r"CSC_LINK|APPLE_APP_SPECIFIC_PASSWORD|notarytool",
