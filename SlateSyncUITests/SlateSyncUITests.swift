@@ -354,10 +354,15 @@ final class SlateSyncUITests: XCTestCase {
         let table = app.tables["可编辑 Resolve CSV"].firstMatch
         let scene = table.textFields["第 1 行，Scene"].firstMatch
         XCTAssertTrue(scene.waitForExistence(timeout: 5))
-        scene.doubleClick()
-        scene.typeKey("a", modifierFlags: .command)
-        scene.typeText("087B")
-        scene.typeKey(.return, modifierFlags: [])
+        // Native row selection does not itself begin field editing. Return
+        // enters the first column; Tab follows the grid's existing keyboard route.
+        table.tableRows.firstMatch.click()
+        app.typeKey(.return, modifierFlags: [])
+        app.typeKey(.tab, modifierFlags: [])
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("087B")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertEqual(scene.value as? String, "087B")
         export.click()
         let confirmWarnings = app.buttons["仍要导出 CSV"].firstMatch
         XCTAssertTrue(confirmWarnings.waitForExistence(timeout: 8))
@@ -368,7 +373,9 @@ final class SlateSyncUITests: XCTestCase {
             for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: exported.path) },
             evaluatedWith: app)
         waitForExpectations(timeout: 8)
-        let expected = Data("File Name,Scene,Shot,Take\r\nA001C001.mov,087B,002,03\r\n".utf8)
+        // The merger adds the configured Comments column while leaving all
+        // existing unmatched cells untouched except the explicit Scene edit.
+        let expected = Data("File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,087B,002,03,\r\n".utf8)
         XCTAssertEqual(try Data(contentsOf: exported), expected)
         XCTAssertEqual(try Data(contentsOf: input), bytes)
         // The migrated library must still accept a brand-new task; creation
