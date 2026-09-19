@@ -154,13 +154,19 @@ def validate_source_boundaries():
     ui = '\n'.join(p.read_text() for p in ui_files)
     require(not re.search(r'URLSession|import SQLite3|import SlateSyncPersistence|Process\s*\(', ui), 'UI ownership violation')
     bridges = sorted(str(p.relative_to(ROOT)) for p in ui_files if re.search(r':\s*NSViewRepresentable', p.read_text()))
+    # The workbench adds only window-chrome and editor-boundary probes; neither
+    # owns a second data surface. Keep the allowlist exact for future bridges.
     require(bridges == ['Sources/SlateSyncUI/App/WindowLifecycleBridge.swift',
-                        'Sources/SlateSyncUI/CSV/EditableCSVTableRepresentable.swift'], 'AppKit bridge allowlist drift')
+                        'Sources/SlateSyncUI/CSV/EditableCSVTableRepresentable.swift',
+                        'Sources/SlateSyncUI/Components/WindowMinimumSize.swift',
+                        'Sources/SlateSyncUI/Workspace/WorkspaceEditorBoundary.swift'], 'AppKit bridge allowlist drift')
     commands = read('Sources/SlateSyncUI/App/FocusedActions.swift')
     require('NSApp.keyWindow?.performClose(nil)' in commands, 'current-window close missing')
     require(commands.count('.keyboardShortcut("s"') == 1, 'Save command ownership drift')
     app = read('SlateSyncApp/App/SlateSyncApp.swift')
-    for token in ['WindowGroup', 'Settings {', '.frame(minWidth: 960, minHeight: 600)',
+    # The minimum now includes measured native chrome instead of adding it to
+    # 600 points of content; assert the public outer-window contract.
+    for token in ['WindowGroup', 'Settings {', '.slateWindowMinimumSize(width: 960, height: 600)',
                   'guard let termination else { return .terminateCancel }']:
         require(token in app, f'App contract missing: {token}')
     logs = read('Sources/SlateSyncPersistence/LocalLogStore.swift')

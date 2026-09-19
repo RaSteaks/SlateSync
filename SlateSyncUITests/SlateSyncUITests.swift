@@ -348,35 +348,28 @@ final class SlateSyncUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(surfaced.waitForExistence(timeout: 8), "合并导出必须保留 CSV_NO_EXPORT 报错")
         XCTAssertFalse(FileManager.default.fileExists(atPath: outputDirectory.appending(path: "source.csv").path))
-        // Standalone export keeps the old <sheetTitle || 场记单>_场记识别.csv
-        // naming. The sealed v1 result carries no sheetTitle, so the fallback
-        // applies, and its unknown "remark" key stays outside the retained
-        // schema, leaving Comments empty.
-        // Narrow windows intentionally move secondary exports into a menu.
-        // Exercise the visible route instead of forcing a wide saved frame.
-        let standalone: XCUIElement
-        if app.buttons["独立导出…"].firstMatch.exists {
-            standalone = app.buttons["独立导出…"].firstMatch
-        } else {
-            app.popUpButtons["结果操作"].firstMatch.click()
-            standalone = app.menuItems["独立导出…"].firstMatch
-        }
-        expectation(for: NSPredicate { _, _ in standalone.exists && standalone.isEnabled }, evaluatedWith: app)
-        waitForExpectations(timeout: 8)
-        standalone.click()
+        // The workbench intentionally has one export route. A manual sparse
+        // edit makes this otherwise unmatched CSV exportable; assert the actual
+        // delivered file and raw-source preservation instead of a removed button.
+        let table = app.tables["可编辑 Resolve CSV"].firstMatch
+        let scene = table.textFields["第 1 行，Scene"].firstMatch
+        XCTAssertTrue(scene.waitForExistence(timeout: 5))
+        scene.doubleClick()
+        scene.typeKey("a", modifierFlags: .command)
+        scene.typeText("087B")
+        scene.typeKey(.return, modifierFlags: [])
+        export.click()
+        let confirmWarnings = app.buttons["仍要导出 CSV"].firstMatch
+        XCTAssertTrue(confirmWarnings.waitForExistence(timeout: 8))
+        confirmWarnings.click()
         choosePanelPath(outputDirectory.path, app: app)
-        let standaloneOutput = outputDirectory.appending(path: "场记单_场记识别.csv")
+        let exported = outputDirectory.appending(path: "source_场记已回填.csv")
         expectation(
-            for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: standaloneOutput.path) },
+            for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: exported.path) },
             evaluatedWith: app)
         waitForExpectations(timeout: 8)
-        // The retained standalone contract canonicalizes the legacy record
-        // {scene A001, shot 002, take 03} to scene width 3 and shot width 2,
-        // preserving the UTF-16LE BOM, CRLF and the final newline. The import
-        // source stays raw.
-        let expectedStandalone = Data(
-            "\u{FEFF}Scene,Shot,Take,Comments\r\n001,02,03,\r\n".data(using: .utf16LittleEndian)!)
-        XCTAssertEqual(try Data(contentsOf: standaloneOutput), expectedStandalone)
+        let expected = Data("File Name,Scene,Shot,Take\r\nA001C001.mov,087B,002,03\r\n".utf8)
+        XCTAssertEqual(try Data(contentsOf: exported), expected)
         XCTAssertEqual(try Data(contentsOf: input), bytes)
         // The migrated library must still accept a brand-new task; creation
         // persists it immediately, so the relaunch below sees both rows.
@@ -552,11 +545,15 @@ final class SlateSyncUITests: XCTestCase {
             : CGVector(dx: size.width - current.width, dy: size.height - current.height)
         corner.press(forDuration: 0.15, thenDragTo: corner.withOffset(delta))
         print("UI_RESIZE requested=\(size) actual=\(window.frame)")
-        XCTAssertEqual(window.frame.width, size.width, accuracy: 4)
+        // macOS constrains both dimensions on CI's 1024-point virtual display.
+        // Compare against its measured work area, preserving 960-point coverage;
+        // attachment names continue to report actual rather than requested size.
+        let screen = NSScreen.main!
+        let supportedWidth = min(size.width, screen.visibleFrame.width)
+        XCTAssertEqual(window.frame.width, supportedWidth, accuracy: 4)
         // macOS constrains normal windows to the current display's work area.
         // Keep the requested 900 pt target but record/verify the real clamp;
         // do not change the operator's Dock or display settings for a test.
-        let screen = NSScreen.main!
         let visibleBottom = screen.frame.maxY - screen.visibleFrame.minY
         let supportedHeight = min(size.height, visibleBottom - window.frame.minY)
         XCTAssertEqual(window.frame.height, supportedHeight, accuracy: 4)

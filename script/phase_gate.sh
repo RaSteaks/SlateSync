@@ -554,12 +554,14 @@ swift_test_check() {
     # SM-08/SM-09 的 Gate 显式获得前台授权：收集全部 scale JSON 于忽略的
     # Gate 工件目录并行使真实显示节奏（SM-09 的 sm08 技术回归要求该用例
     # 在日志中 PASS；WP-1 也明确不因进入 release 阶段跳过性能）。常规
-    # `swift test` 保持该面跳过。
+    # `swift test` 保持该面跳过。Gate 的完整套件使用交付配置 Release：
+    # Debug 的 -Onone 开销不应计入用户可见延迟预算；Debug 构建和 Xcode
+    # Test Plan 仍单独执行。所有用例、前台采样及原有性能阈值保持启用。
     mkdir -p "${result_dir}/sm08-metrics" || return 1
     SWIFTPM_MODULECACHE_OVERRIDE="${result_dir}/swift-module-cache" \
     CLANG_MODULE_CACHE_PATH="${result_dir}/swift-module-cache" \
     SLATESYNC_SM08_METRICS_DIR="${result_dir}/sm08-metrics" \
-      SLATESYNC_SM08_FOREGROUND_GATE=1 swift test
+      SLATESYNC_SM08_FOREGROUND_GATE=1 swift test --configuration release
   else
     swift test
   fi

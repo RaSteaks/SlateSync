@@ -194,6 +194,7 @@ public final class RecognitionModel {
             }
             let accessed = scopedURL?.startAccessingSecurityScopedResource() == true
             defer { if accessed { scopedURL?.stopAccessingSecurityScopedResource() } }
+            var terminalState: OperationState = .idle
             do {
                 try await flush()
                 try Task.checkCancellation()
@@ -210,13 +211,13 @@ public final class RecognitionModel {
                 editableRecords = value.result.records.map(EditableRecognitionRecord.init)
                 resultTaskID = request.taskID
                 resultTableID = UUID()
-                operation = .succeeded(message: L10n.tr("已识别 {0} 条场记", [String(describing: value.result.records.count)]))
+                terminalState = .succeeded(message: L10n.tr("已识别 {0} 条场记", [String(describing: value.result.records.count)]))
             } catch {
                 guard operationID == id else { return }
                 let wrapped = ProductPrivacy.error(error)
-                operation = error is CancellationError || wrapped.code == "RECOGNITION_CANCELED" ? .canceled : .failed(wrapped)
+                terminalState = error is CancellationError || wrapped.code == "RECOGNITION_CANCELED" ? .canceled : .failed(wrapped)
             }
-            await finishOperation(id)
+            await finishOperation(id, state: terminalState)
         }
     }
 
@@ -233,6 +234,7 @@ public final class RecognitionModel {
         operation = .running(label: L10n.tr("正在读取场记 CSV…"))
         resultTaskID = nil
         recognitionTask = Task { [self] in
+            var terminalState: OperationState = .idle
             do {
                 try await flush()
                 let records = try await local.decodeSlateCSV(data)
@@ -240,14 +242,14 @@ public final class RecognitionModel {
                 if operationID == id {
                     slateCSVRecords = records
                     slateCSVFilename = filename
-                    operation = .succeeded(message: L10n.tr("已载入 {0} 条本地场记", [String(describing: records.count)]))
+                    terminalState = .succeeded(message: L10n.tr("已载入 {0} 条本地场记", [String(describing: records.count)]))
                 }
             } catch {
                 if operationID == id {
-                    operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
+                    terminalState = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
                 }
             }
-            await finishOperation(id)
+            await finishOperation(id, state: terminalState)
         }
     }
 
@@ -267,6 +269,7 @@ public final class RecognitionModel {
         let records = slateCSVRecords
         let filename = slateCSVFilename ?? L10n.tr("场记 CSV")
         recognitionTask = Task { [self] in
+            var terminalState: OperationState = .idle
             do {
                 try await flush()
                 let value = await local.localSlateRecords(records)
@@ -278,20 +281,21 @@ public final class RecognitionModel {
                     editableRecords = value.enumerated().map { EditableRecognitionRecord($0.element, fallbackID: "slate-csv-\($0.offset)") }
                     resultTaskID = taskID
                     commit(value, filename)
-                    operation = .succeeded(message: L10n.tr("已生成 {0} 条本地结果", [String(describing: value.count)]))
+                    terminalState = .succeeded(message: L10n.tr("已生成 {0} 条本地结果", [String(describing: value.count)]))
                 }
             } catch {
                 if operationID == id {
-                    operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
+                    terminalState = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
                 }
             }
-            await finishOperation(id)
+            await finishOperation(id, state: terminalState)
         }
     }
 
     public func cancel() {
-        guard let projectID, let task = recognitionTask, cancelTask == nil else { return }
-        let id = operationID
+        // A worker can still be draining progress after relinquishing its ID.
+        // It no longer accepts cancellation, even before its terminal state is published.
+        guard let projectID, let task = recognitionTask, let id = operationID, cancelTask == nil else { return }
         operation = .running(label: L10n.tr("正在取消…"))
         // Cancel the captured task before awaiting the service; a cancellation
         // during flush must never start a new request after cancel returned.
@@ -400,7 +404,7 @@ public final class RecognitionModel {
         }
     }
 
-    private func finishOperation(_ id: UUID) async {
+    private func finishOperation(_ id: UUID, state: OperationState) async {
         guard operationID == id else { return }
         // Clear the identity first: from here on no late cancel, progress
         // event, or completion continuation may adopt this operation — e.g.
@@ -411,6 +415,9 @@ public final class RecognitionModel {
         await progressTask?.value
         progressTask = nil
         recognitionTask = nil
+        // Publish completion only after cleanup. An observer of success may
+        // immediately load another task or cancel; both must see released owners.
+        operation = state
     }
 
     private nonisolated static func isEligible(_ model: ModelData) -> Bool {

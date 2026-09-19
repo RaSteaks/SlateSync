@@ -63,6 +63,11 @@ def validate_resources(manifest: dict[str, object]) -> None:
         require(len(data) == entry["bytes"], f"resource byte count drift: {source}")
         require(hashlib.sha256(data).hexdigest() == entry["sha256"], f"resource hash drift: {source}")
 
+    # UI copy is a shipped resource too. Adding a locale or help file without
+    # updating the current release manifest must fail before archive/package.
+    ui_resources = {str(path.relative_to(ROOT)) for path in (ROOT / "Sources/SlateSyncUI/Resources").rglob("*") if path.is_file()}
+    require(ui_resources <= seen, f"untracked UI resources in release manifest: {sorted(ui_resources - seen)}")
+
     tracked = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
         check=True,
@@ -186,6 +191,15 @@ def run_self_tests() -> None:
         cases += 1
     else:
         raise AssertionError("resource hash negative fixture unexpectedly passed")
+
+    manifest = json.loads(read(".codex/swift-migration/manifests/sm09-native-resources.json"))
+    manifest["resources"] = [entry for entry in manifest["resources"] if entry["role"] != "english-localization"]
+    try:
+        validate_resources(manifest)
+    except AssertionError:
+        cases += 1
+    else:
+        raise AssertionError("missing localization resource unexpectedly passed")
 
     gate = read("script/phase_gate.sh")
     for mutated, expected in (

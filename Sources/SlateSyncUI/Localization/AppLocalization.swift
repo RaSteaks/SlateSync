@@ -85,18 +85,48 @@ public enum L10n {
     // Preserve authored text if the placeholder pattern ever becomes invalid.
     private static let placeholder = try? NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
 
-    private static func render(_ template: String, arguments: [String]) -> String {
-        guard let placeholder else { return template }
+    private struct TemplatePart: Sendable {
+        let literal: String
+        let argument: Int?
+    }
+
+    // Compile only bundled templates once. Virtualized rows repeatedly format
+    // the same labels; parsing them per cell allocates regex results and NSString
+    // substrings on the main thread. Unknown caller text is never cached.
+    private static let compiledTemplates: [String: [TemplatePart]] = {
+        let templates = Set(translations.keys).union(translations.values)
+            .union(singularForms.values.map(\.text))
+        return Dictionary(uniqueKeysWithValues: templates.filter { $0.contains("{") }.map {
+            ($0, compileTemplate($0))
+        })
+    }()
+
+    private static func compileTemplate(_ template: String) -> [TemplatePart] {
+        guard let placeholder else { return [.init(literal: template, argument: nil)] }
         let ns = template as NSString
-        var result = ""
+        var parts: [TemplatePart] = []
         var offset = 0
         for match in placeholder.matches(in: template, range: NSRange(location: 0, length: ns.length)) {
-            result += ns.substring(with: NSRange(location: offset, length: match.range.location - offset))
-            let index = Int(ns.substring(with: match.range(at: 1)))!
-            result += arguments.indices.contains(index) ? arguments[index] : ns.substring(with: match.range)
+            parts.append(.init(literal: ns.substring(with: NSRange(location: offset, length: match.range.location - offset)), argument: nil))
+            parts.append(.init(literal: ns.substring(with: match.range), argument: Int(ns.substring(with: match.range(at: 1)))))
             offset = NSMaxRange(match.range)
         }
-        result += ns.substring(from: offset)
+        parts.append(.init(literal: ns.substring(from: offset), argument: nil))
+        return parts
+    }
+
+    private static func render(_ template: String, arguments: [String]) -> String {
+        // Static labels need no interpolation. Missing/overflowing indices and
+        // placeholder-looking argument values remain verbatim, as before.
+        guard !arguments.isEmpty, template.contains("{") else { return template }
+        var result = ""
+        for part in compiledTemplates[template] ?? compileTemplate(template) {
+            if let index = part.argument, arguments.indices.contains(index) {
+                result += arguments[index]
+            } else {
+                result += part.literal
+            }
+        }
         return result
     }
 

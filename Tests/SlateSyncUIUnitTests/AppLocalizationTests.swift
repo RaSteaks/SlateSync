@@ -49,6 +49,28 @@ final class AppLocalizationTests: XCTestCase {
         XCTAssertEqual(L10n.message("Project 演示", language: .english), "Project 演示")
     }
 
+    func testCompiledTemplatesMatchReferenceInterpolation() throws {
+        // Compare every shipped template to independent regex interpolation,
+        // including missing args and values that must never be parsed twice.
+        let regex = try NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
+        for language in [AppLanguage.simplifiedChinese, .english] {
+            for (key, translation) in L10n.translations {
+                for arguments in [[], ["中文 {1} %@"], ["2", "{0}", "3"]] {
+                    let template = language == .english ? translation : key
+                    let expected = NSMutableString(string: template)
+                    for match in regex.matches(in: template, range: NSRange(location: 0, length: (template as NSString).length)).reversed() {
+                        let index = Int((template as NSString).substring(with: match.range(at: 1)))
+                        if let index, arguments.indices.contains(index) {
+                            expected.replaceCharacters(in: match.range, with: arguments[index])
+                        }
+                    }
+                    XCTAssertEqual(L10n.tr(key, arguments, language: language), expected as String, key)
+                }
+            }
+        }
+        XCTAssertEqual(L10n.tr("未知 {999999999999999999999999} {0}", ["保留 {1}"]), "未知 {999999999999999999999999} 保留 {1}")
+    }
+
     func testDiagnosticMatchingDoesNotReuseGeneralUITemplates() {
         for key in L10n.productMessagePatternKeys {
             XCTAssertNotNil(L10n.translations[key], "Dynamic product message is missing English copy: \(key)")
