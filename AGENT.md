@@ -2,6 +2,10 @@
 
 ## 当前任务
 
+2026-09-20：Electron 架构应用版本由 `0.2.1` 升级至 `1.1.0`；同步更新根目录
+`package.json`、`package-lock.json` 及活动兼容契约，并将架构发布 tag 统一为
+`v1.1.0-electron`；Swift 版本使用独立的 `v1.1.0-swift`。
+
 2026-09-20：Electron 应用版本由 `0.2.0` 补丁升级至 `0.2.1`；同步更新根目录
 `package.json`、`package-lock.json` 的顶层应用版本，保持 Electron 打包读取的
 应用元数据一致。
