@@ -485,6 +485,27 @@ assert_failure "approval gate skips other phase" gate_state_is_complete \
 assert_failure "approval gate fails closed on missing state file" gate_state_is_complete \
   "${fixture_root}/phase-state-missing.json" SM-03
 
+# A frozen candidate may run its own Gate without claiming old approval.
+cat > "${fixture_root}/review-ready.json" <<'JSON'
+{
+  "phase": "SM-09",
+  "lifecycleState": "REVIEW_READY",
+  "activePackage": ".codex/swift-migration/packages/SM-09.md",
+  "nextPackage": null,
+  "history": [{"lifecycleState": "COMPLETE"}]
+}
+JSON
+assert_success "REVIEW_READY accepts same-phase candidate" gate_validate_phase_state \
+  "${fixture_root}/review-ready.json" SM-09
+assert_failure "REVIEW_READY cannot admit successor" gate_validate_phase_state \
+  "${fixture_root}/review-ready.json" SM-10
+assert_failure "REVIEW_READY cannot satisfy earlier phase" gate_validate_phase_state \
+  "${fixture_root}/review-ready.json" SM-08
+assert_failure "historical COMPLETE does not approve current REVIEW_READY" gate_state_is_complete \
+  "${fixture_root}/review-ready.json" SM-09
+assert_failure "REVIEW_READY cannot reuse old Owner approval" gate_validate_approval_state \
+  "${fixture_root}/review-ready.json" HEAD "$project_root" SM-09
+
 assert_success "exact built executable command" slatesync_command_matches_executable \
   "/tmp/SlateSync.app/Contents/MacOS/SlateSync" \
   "/tmp/SlateSync.app/Contents/MacOS/SlateSync"
@@ -650,5 +671,29 @@ for scan_index in {1..5}; do
 done
 assert_equal "classifier unreadable log fails closed before missing-tool classification" FAIL \
   "$(gate_classify_failure "${fixture_root}/missing.log" 127 2>/dev/null)"
+# Exercise the real entry point with an isolated PATH, omitting only rg.
+# No Swift build or real Library access is possible after prerequisite failure.
+missing_bin="${fixture_root}/missing-bin"
+mkdir -p "$missing_bin"
+for dependency in git python3 swift xcodebuild xcrun lipo codesign open pgrep ps date mkdir tr cat; do
+  dependency_path="$(command -v "$dependency")"
+  [[ -n "$dependency_path" ]] && ln -s "$dependency_path" "${missing_bin}/${dependency}"
+done
+PATH="$missing_bin" /bin/zsh "${project_root}/script/phase_gate.sh" SM-09 \
+  --results-dir "${fixture_root}/missing-results" > "${fixture_root}/missing-entry.log" 2>&1
+assert_equal "missing rg entry fails" 1 "$?"
+missing_results=("${fixture_root}"/missing-results/SM-09/*/result.json(N))
+assert_equal "missing rg retains JSON" 1 "${#missing_results}"
+if (( ${#missing_results} == 1 )); then
+  assert_success "missing rg records unexecuted dependent checks" python3 - "${missing_results[1]}" <<'PYTEST'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+r = json.loads(p.read_text())
+assert r["overallResult"] == "FAIL" and not r["approvable"]
+assert [c["id"] for c in r["checks"]] == ["workspace_layout", "required_tools", "dependent_checks"]
+assert r["checks"][-1]["result"] == "NOT_RUN"
+assert "missing required tool: rg" in p.with_name("SUMMARY.md").read_text()
+PYTEST
+fi
 print -r -- "Gate helper tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

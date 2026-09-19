@@ -5,7 +5,9 @@ import XCTest
 
 /// Offline probes exercise real decision branches without a user's Python,
 /// Paddle installation, project data, credentials, or model downloads.
-final class OCREnvironmentCheckerTests: XCTestCase, @unchecked Sendable {
+// Isolate XCTest state while the injected runner keeps probe state in its actor.
+@MainActor
+final class OCREnvironmentCheckerTests: XCTestCase {
     private actor Runner: PaddleInstallerCommandRunning {
         var calls: [(URL, [String], [String: String], Duration)] = []
         let python: String

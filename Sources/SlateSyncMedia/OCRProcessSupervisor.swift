@@ -68,9 +68,9 @@ public actor OCRProcessSupervisor {
             if operation.isCanceled || error is CancellationError { throw MediaFailure.canceled }
             try deadline.check(clock: clock, operation: operation)
             let code = (error as? SlateSyncError)?.code ?? ""
-            // Only transport startup/exit/unsupported-server faults recover.
+            // Only confirmed transport interruption/startup/exit/unsupported-server faults recover.
             // Malformed evidence, cancellation and expired deadlines do not.
-            guard document != nil, ["OCR_PROCESS_START","OCR_PROCESS_EXIT","OCR_SERVER_UNSUPPORTED"].contains(code) else { throw error }
+            guard document != nil, ["OCR_PROCESS_START","OCR_PROCESS_EXIT","OCR_TRANSPORT_INTERRUPTED","OCR_SERVER_UNSUPPORTED"].contains(code) else { throw error }
             let fallback = makeProcess(server: false)
             worker = fallback
             do {

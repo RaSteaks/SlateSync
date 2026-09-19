@@ -71,7 +71,12 @@ run_check() {
   fi
 
   local result
-  result="$(gate_classify_failure "$log_path" "$command_status")"
+  # The prerequisite check must not invoke the scanner it just found missing.
+  if [[ "$check_id" == required_tools ]]; then
+    result=FAIL
+  else
+    result="$(gate_classify_failure "$log_path" "$command_status")"
+  fi
   if [[ "$result" == "BLOCKED_ENV" && -n "$evidence_path" ]]; then
     local replacement
     if replacement="$(gate_evidence_replacement \
@@ -107,13 +112,14 @@ workspace_layout_check() {
 }
 
 required_tools_check() {
-  local tool
+  local tool missing=0
   for tool in git rg python3 swift xcodebuild xcrun lipo codesign open pgrep ps /usr/libexec/PlistBuddy; do
     command -v "$tool" >/dev/null 2>&1 || {
       print -u2 -r -- "missing required tool: ${tool}"
-      return 127
+      missing=1
     }
   done
+  (( missing == 0 )) || return 127
 }
 
 sm01_foundation_contract_check() {
@@ -186,7 +192,7 @@ sm01_scope_contract_check() {
   # Compatibility inputs now live in the verified pre-cutover Git tree.
   # The native contract below validates their hashes and removal ancestry.
   # The Gate must accept both sides of a valid admission transition: the
-  # previous COMPLETE phase before approval and this COMPLETE phase afterward.
+  # previous COMPLETE phase, or this REVIEW_READY/PASS/COMPLETE phase.
   gate_validate_phase_state \
     .codex/swift-migration/CURRENT_STATE.json "$phase" || {
       print -u2 "CURRENT_STATE.json does not describe a valid ${phase} admission boundary"
@@ -514,6 +520,21 @@ print -r -- "Results: ${result_dir}"
 
 run_check workspace_layout true "必需工程、Scheme、Test Plan 与运行入口存在" workspace_layout_check
 run_check required_tools true "Swift/Xcode/Git 与产物检查工具可用" required_tools_check
+# Tool failures are terminal: dependent checks have no execution evidence.
+# Always retain a shell-written summary even when python3 itself is missing.
+if ! required_tools_check > "${result_dir}/missing-tools.log" 2>&1; then
+  approvable=false
+  record_check dependent_checks true NOT_RUN "缺少必需工具，后续检查未执行" ""
+  if command -v python3 >/dev/null 2>&1; then
+    write_result_artifacts FAIL || exit "$exit_blocked_environment"
+  fi
+  {
+    print -r -- "# ${phase} Gate: FAIL"
+    print -r -- "Required tools unavailable; dependent checks NOT_RUN; approvable=false."
+    cat "${result_dir}/missing-tools.log"
+  } > "${result_dir}/SUMMARY.md"
+  exit "$exit_fail"
+fi
 run_check clean_review_target true "审查目标的提交状态符合当前正式/诊断运行模式" clean_workspace_check
 run_check forbidden_items true "原生代码不存在冲突标记或禁止的不安全构造" forbidden_items_check
 run_check diff_integrity true "Git diff 不含空白错误" git diff --check

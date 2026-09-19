@@ -231,6 +231,13 @@ final class SM08NativeSurfaceTests: XCTestCase {
         let counter = DisplayLinkCounter()
         let displayLink = window.displayLink(target: counter, selector: #selector(DisplayLinkCounter.tick(_:)))
         displayLink.add(to: .main, forMode: .common)
+        // Measure the same visible window without scrolling before attributing
+        // low callback cadence to table rendering. A low baseline still fails.
+        let idleStarted = ContinuousClock.now
+        try await Task.sleep(for: .seconds(2))
+        let idleSeconds = idleStarted.duration(to: .now).seconds
+        let idleFrames = counter.frames
+        let idleFPS = Double(idleFrames) / idleSeconds
         let started = ContinuousClock.now
         // Alternate across the whole data set long enough to sample actual
         // WindowServer-backed presentation rather than layout-only timings.
@@ -241,17 +248,24 @@ final class SM08NativeSurfaceTests: XCTestCase {
         }
         displayLink.invalidate()
         let elapsedSeconds = started.duration(to: .now).seconds
-        let framesPerSecond = Double(counter.frames) / elapsedSeconds
-        XCTAssertGreaterThanOrEqual(framesPerSecond, 45)
+        let scrollFrames = counter.frames - idleFrames
+        let framesPerSecond = Double(scrollFrames) / elapsedSeconds
         try saveMetrics([
             "schemaVersion": 1,
             "fixtureRows": 10_000,
             "displayBacked": true,
-            "samples": counter.frames,
+            "samples": scrollFrames,
+            "idleFramesPerSecond": idleFPS,
+            "idleDurationSeconds": idleSeconds,
+            "displayMaximumFPS": window.screen?.maximumFramesPerSecond ?? 0,
+            "operatingSystem": ProcessInfo.processInfo.operatingSystemVersionString,
+            "displayEnvironmentQualified": idleFPS >= 45,
             "durationSeconds": elapsedSeconds,
             "scrollFramesPerSecond": framesPerSecond,
             "minimumScrollFPS": 45,
         ], named: "native-csv-foreground.json")
+        XCTAssertGreaterThanOrEqual(idleFPS, 45, "BLOCKED_ENV: idle display cadence below 45 FPS; foreground acceptance incomplete")
+        XCTAssertGreaterThanOrEqual(framesPerSecond, 45)
     }
 
     func testWindowCloseVetoRetainsWindowUntilRetrySucceeds() async throws {

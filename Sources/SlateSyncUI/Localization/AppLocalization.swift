@@ -82,9 +82,11 @@ public enum L10n {
         "识别完成，共 {0} 条记录": (0, "Recognition complete: {0} record")
     ]
 
-    private static let placeholder = try! NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
+    // Preserve authored text if the placeholder pattern ever becomes invalid.
+    private static let placeholder = try? NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
 
     private static func render(_ template: String, arguments: [String]) -> String {
+        guard let placeholder else { return template }
         let ns = template as NSString
         var result = ""
         var offset = 0
@@ -193,7 +195,7 @@ public enum L10n {
     /// format. Only their display is translated using complete, anchored authored
     /// message templates. Never call this on arbitrary project/document contents.
     private static let messagePatterns: [MessagePattern] = productMessagePatternKeys.compactMap { key in
-        guard translations[key] != nil else { return nil }
+        guard translations[key] != nil, let placeholder else { return nil }
         let ns = key as NSString
         let matches = placeholder.matches(in: key, range: NSRange(location: 0, length: ns.length))
         guard !matches.isEmpty else { return nil }

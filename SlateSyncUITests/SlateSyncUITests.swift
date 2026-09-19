@@ -669,9 +669,12 @@ final class SlateSyncUITests: XCTestCase {
         location.typeKey(.return, modifierFlags: [])
         expectation(for: NSPredicate { _, _ in !goSheet.exists }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
-        expectation(for: NSPredicate { _, _ in confirmation.exists && confirmation.isEnabled }, evaluatedWith: app)
+        // On macOS 15, Return for an exact file path can also accept the open
+        // panel. Both paths must end with a dismissed panel; the caller still
+        // verifies imported data or exact exported bytes before proceeding.
+        expectation(for: NSPredicate { _, _ in !confirmation.exists || confirmation.isEnabled }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
-        confirmation.click()
+        if confirmation.exists { confirmation.click() }
         expectation(for: NSPredicate { _, _ in !confirmation.exists }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
     }

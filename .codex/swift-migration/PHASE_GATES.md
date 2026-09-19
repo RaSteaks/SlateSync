@@ -9,6 +9,10 @@ and editing `CURRENT_STATE.json` does not manufacture evidence.
 `NOT_STARTED → IN_PROGRESS → REVIEW_READY → PASS | BLOCKED → COMPLETE`
 
 - `REVIEW_READY` means the implementation is frozen in a dedicated commit or PR.
+  Its same-phase Gate may run before PASS exists; approval freshness is
+  `NOT_APPLICABLE` until COMPLETE. REVIEW_READY never admits a successor phase.
+  Reopening an approved phase archives the old approval and verification, clears
+  current approval fields, and requires a new exact-commit Gate and Owner approval.
 - `PASS` means every required Gate check passed for that exact commit.
 - `BLOCKED` means at least one required check is `FAIL` or unresolved
   `BLOCKED_ENV`.
