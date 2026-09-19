@@ -364,7 +364,9 @@ final class SlateSyncUITests: XCTestCase {
         app.typeKey(.return, modifierFlags: [])
         XCTAssertEqual(scene.value as? String, "087B")
         export.click()
-        let confirmWarnings = app.buttons["仍要导出 CSV"].firstMatch
+        // Scope to the actual sheet: macOS 26 also exposes a same-named
+        // Touch Bar item that exists but cannot receive an ordinary click.
+        let confirmWarnings = app.sheets.buttons["仍要导出 CSV"].firstMatch
         XCTAssertTrue(confirmWarnings.waitForExistence(timeout: 8))
         confirmWarnings.click()
         choosePanelPath(outputDirectory.path, app: app)
@@ -530,40 +532,36 @@ final class SlateSyncUITests: XCTestCase {
 
     @MainActor
     private func resize(_ window: XCUIElement, to size: CGSize) {
-        // Drag the native resize corner; do not introduce production window-size
-        // hooks merely for screenshots. Assert actual size, not requested size.
-        // Leave room on the test display before requesting the wide size.
-        let title = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(
-            CGVector(dx: 0, dy: 16))
-        title.press(
-            forDuration: 0.15,
-            thenDragTo: title.withOffset(CGVector(dx: 24 - window.frame.minX, dy: 40 - window.frame.minY)))
-        let current = window.frame.size
-        // Shrink from the top-left: the bottom-right of a large window can
-        // overlap the magnifying Dock and drag a Dock item instead of resizing.
-        let shrinking = (size.width < current.width || size.height < current.height) && current.width > 1_000
-        let corner = window.coordinate(
-            withNormalizedOffset: shrinking ? CGVector(dx: 0, dy: 0) : CGVector(dx: 1, dy: 1)
-        )
-        .withOffset(shrinking ? CGVector(dx: 3, dy: 3) : CGVector(dx: -3, dy: -3))
-        let delta =
-            shrinking
-            ? CGVector(dx: current.width - size.width, dy: current.height - size.height)
-            : CGVector(dx: size.width - current.width, dy: size.height - current.height)
-        corner.press(forDuration: 0.15, thenDragTo: corner.withOffset(delta))
-        print("UI_RESIZE requested=\(size) actual=\(window.frame)")
-        // macOS constrains both dimensions on CI's 1024-point virtual display.
-        // Compare against its measured work area, preserving 960-point coverage;
-        // attachment names continue to report actual rather than requested size.
+        // The native size clamp uses the display's work-area SIZE, regardless
+        // of a window's temporary origin while dragging. Move it to that area's
+        // top-left first, keeping all resize handles clear of the Dock.
         let screen = NSScreen.main!
-        let supportedWidth = min(size.width, screen.visibleFrame.width)
-        XCTAssertEqual(window.frame.width, supportedWidth, accuracy: 4)
-        // macOS constrains normal windows to the current display's work area.
-        // Keep the requested 900 pt target but record/verify the real clamp;
-        // do not change the operator's Dock or display settings for a test.
-        let visibleBottom = screen.frame.maxY - screen.visibleFrame.minY
-        let supportedHeight = min(size.height, visibleBottom - window.frame.minY)
-        XCTAssertEqual(window.frame.height, supportedHeight, accuracy: 4)
+        let visible = screen.visibleFrame
+        let target = CGSize(width: min(size.width, visible.width), height: min(size.height, visible.height))
+        let origin = CGPoint(x: visible.minX, y: screen.frame.maxY - visible.maxY)
+        let title = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: 16))
+        title.press(forDuration: 0.15, thenDragTo: title.withOffset(
+            CGVector(dx: origin.x - window.frame.minX, dy: origin.y - window.frame.minY)))
+
+        // Tahoe's rounded corners are outside the resize hit region. Drag the
+        // middle of each straight edge separately; no app-side resize hook or
+        // display preference change is needed, and both dimensions are asserted.
+        if abs(window.frame.width - target.width) > 4 {
+            let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+                .withOffset(CGVector(dx: -1, dy: 0))
+            edge.press(forDuration: 0.15, thenDragTo: edge.withOffset(
+                CGVector(dx: target.width - window.frame.width, dy: 0)))
+        }
+        if abs(window.frame.height - target.height) > 4 {
+            let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
+                .withOffset(CGVector(dx: 0, dy: -1))
+            edge.press(forDuration: 0.15, thenDragTo: edge.withOffset(
+                CGVector(dx: 0, dy: target.height - window.frame.height)))
+        }
+        print("UI_RESIZE requested=\(size) supported=\(target) visible=\(visible) actual=\(window.frame)")
+        XCTAssertEqual(window.frame.width, target.width, accuracy: 4)
+        XCTAssertEqual(window.frame.height, target.height, accuracy: 4)
     }
 
     @MainActor
