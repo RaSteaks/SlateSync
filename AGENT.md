@@ -7,6 +7,7 @@
 - 超时只在失败路径完整采集操作类型、失败阶段、耗时、面板/按钮状态、辅助功能树和截图。CI 失败诊断使用 `xcresulttool export attachments --only-failures` 同时导出普通 Test Plan 与打包版 `Packaged.xcresult` 的失败附件。
 - 验证顺序：先构建 UI 测试目标，再在独立临时目录连续三次定向验证 CSV 与 PDF/图片/中文及空格路径场景，保留无效导出拒绝、精确字节、源文件不变和重开任务数量断言；解除 runner 环境阻塞后再执行一次完整功能 CI。若本机再次出现 automation mode 初始化超时，只记录环境阻塞，不宣称 UI 通过、不重复重跑。
 - 已完成严格 SwiftPM 构建、Xcode UI 测试目标 `build-for-testing`、Resolve CSV 定向单元测试 20/20、Git diff、CI/Release 合约与 Gate 自测；本机首次定向 CSV UI 用例在测试运行器 automation 初始化阶段以退出码 133 结束且未生成可读 `.xcresult`，因此按环境阻塞记录，未将 UI 或完整功能 CI 宣称为通过，也未重复运行。
+- 远端运行 `35448462078` 的失败附件确认：普通与打包 Test Plan 都只有 `testLegacyLibraryCSVExportAndReopenInDeliveredApp` 和 `testWorkspaceAppearanceDensityAndComparisonMatrix` 失败，根因是 `choosePanelPath` 用 `XCTestCase.expectation(for:evaluatedWith:)` 注册 expectation 后由独立 `XCTWaiter` 等待，后续 `waitForExpectations` 二次等待触发 XCTest 26 的 `API violation - expectations can only be waited on once`。改用未注册的 `XCTNSPredicateExpectation`；本机 CSV UI 定向 1/1 通过。矩阵定向继续执行时仅遇到本机 1512×873 显示环境的窗口高度缩放差异，不能作为该远端根因。
 
 ## 2026-09-19 CI 策略：功能门禁与非阻塞性能报告
 
