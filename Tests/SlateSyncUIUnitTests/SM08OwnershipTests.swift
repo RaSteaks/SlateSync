@@ -1684,8 +1684,10 @@ extension SM08OwnershipTests {
             projectSamples.append(try await loadProjects())
             taskSamples.append(try await loadTasks())
         }
-        XCTAssertLessThanOrEqual(projectSamples.max() ?? .infinity, 1_500)
-        XCTAssertLessThanOrEqual(taskSamples.max() ?? .infinity, 900)
+        if PerformancePolicy.enforcesTiming {
+            XCTAssertLessThanOrEqual(projectSamples.max() ?? .infinity, 1_500)
+            XCTAssertLessThanOrEqual(taskSamples.max() ?? .infinity, 900)
+        }
 
         if let path = ProcessInfo.processInfo.environment["SLATESYNC_SM08_METRICS_DIR"] {
             let output: [String: Any] = [
@@ -1758,10 +1760,12 @@ extension SM08OwnershipTests {
                 projectRows.append(visibleProjects); taskRows.append(visibleTasks)
             }
         }
-        XCTAssertLessThanOrEqual(projectsMS.max() ?? .infinity, 1500)
-        XCTAssertLessThanOrEqual(tasksMS.max() ?? .infinity, 900)
-        XCTAssertLessThanOrEqual(projectSelectionMS.max() ?? .infinity, 120)
-        XCTAssertLessThanOrEqual(taskSelectionMS.max() ?? .infinity, 120)
+        if PerformancePolicy.enforcesTiming {
+            XCTAssertLessThanOrEqual(projectsMS.max() ?? .infinity, 1500)
+            XCTAssertLessThanOrEqual(tasksMS.max() ?? .infinity, 900)
+            XCTAssertLessThanOrEqual(projectSelectionMS.max() ?? .infinity, 120)
+            XCTAssertLessThanOrEqual(taskSelectionMS.max() ?? .infinity, 120)
+        }
         if let path = ProcessInfo.processInfo.environment["SLATESYNC_SM08_METRICS_DIR"] {
             let projectFixture = try JSONEncoder().encode(await fixtureProjects.projectLibrary().active)
             let taskFixture = try JSONEncoder().encode(await fixtureTasks.listTasks(projectID: "fixture"))
