@@ -695,5 +695,8 @@ assert r["checks"][-1]["result"] == "NOT_RUN"
 assert "missing required tool: rg" in p.with_name("SUMMARY.md").read_text()
 PYTEST
 fi
+# Policy tests prove functional failures remain blocking and advisory results stay honest.
+assert_success "functional/advisory CI policy boundaries" python3 -B "${project_root}/script/tests/ci_policy_tests.py"
+
 print -r -- "Gate helper tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

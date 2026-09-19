@@ -265,6 +265,23 @@ python3 script/tests/sm09_coverage_tests.py
 python3 script/tests/sm09_inventory_tests.py
 ```
 
+### 合并 CI 与性能报告
+
+PR 和 `swift-rewrite` 的 CI 使用 `./script/phase_gate.sh SM-09 --functional`：
+构建、功能/数据断言、资源释放、原生 UI、归档与安装包验证仍为强制门禁。
+耗时预算由独立的 **Performance report (non-blocking)** 任务检查；原性能阈值不变，
+超标会产生告警，并上传 `native-performance-report`（日志、JSON 指标、汇总），但不阻塞合并。
+功能报告明确标注 `scope=functional`、`approvable=false`，不代表完整发布验收通过。
+
+本地运行相同的严格性能报告（指定新的或空的结果目录）：
+
+```sh
+python3 script/performance_report.py --results-dir /tmp/SlateSync-Performance
+```
+
+此命令失败时仍返回非零；非阻塞策略仅由 CI 工作流决定。默认完整 Gate 和 release workflow
+继续强制执行性能预算，适合发布前验收。
+
 运行当前原生迁移的完整 Gate：
 
 ```sh
@@ -275,9 +292,8 @@ python3 script/tests/sm09_inventory_tests.py
 Gate 会验证原生项目布局、Swift/Xcode 构建与测试、删除来源和冻结夹具、Release/Archive、
 Universal bundle、ZIP/DMG 回验、打包后的 UI 启动与退出重开，以及 CSV 性能预算。
 
-当前本地基线为：普通 Swift 测试 320 项执行、318 项通过、2 项按设计跳过、0 失败；SM-09
-Gate 会启用前台 CSV 性能测试，因此正式 Gate 仅保留 1 项离线 Paddle 测试跳过。严格的
-`-warnings-as-errors` 构建现已通过：
+普通 `swift test` 默认跳过前台 CSV 帧率测试及需要专用环境的离线 Paddle 测试。完整 SM-09
+Gate 会启用前台 CSV 性能测试；功能合并模式则将该测试交给独立性能任务。严格构建命令：
 
 ```sh
 swift build -Xswiftc -warnings-as-errors
