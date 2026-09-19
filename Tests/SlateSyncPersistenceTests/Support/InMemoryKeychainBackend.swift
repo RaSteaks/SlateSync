@@ -26,6 +26,10 @@ actor InMemoryKeychainBackend: KeychainBackend {
         })
     }
 
+    func status(service: String, account: String) async -> CredentialStatus {
+        values[key(service: service, account: account)] == nil ? .missing : .configured
+    }
+
     func read(service: String, account: String) async throws -> Data? {
         if failNextRead {
             failNextRead = false

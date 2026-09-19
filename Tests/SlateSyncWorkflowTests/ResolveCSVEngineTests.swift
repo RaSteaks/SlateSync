@@ -6,7 +6,8 @@ import SlateSyncDomain
 
 final class ResolveCSVEngineTests: XCTestCase {
     private let expectedHashes: [String: (source: String, roundTrip: String)] = [
-        "resolve-source.csv": ("6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0", "f53f385f9d583ab3c9b7844ebbba0cb47320b944e8cd171266386092f809397c"),
+        // Plain encoding preserves nonnumeric source cells; CSV quoting still canonicalizes.
+        "resolve-source.csv": ("6d4506de1908529ec73ccd309f66384ca29bd98ad69f62a9dae9e81d7b2cd1c0", "8f16dfe37845c92db08cf078cd771a627b67653899027ef4dd26aa5961d604e0"),
         "resolve-source-utf8.csv": ("7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e", "7bff366094886aeac6b9ebbd84a40e5d5979e5b03d394660fd56ed435ef73e1e"),
         "resolve-source-utf16le.csv": ("2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b", "2d19d4bf372203f46428b36a779df6a7d4179dae5e6e62509457aedef217c88b"),
         "resolve-source-utf16be.csv": ("c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea", "c31fd875071678cc7db0278552c6c9a656c46e88b77fa7893f7f883926bbc2ea"),
@@ -22,6 +23,8 @@ final class ResolveCSVEngineTests: XCTestCase {
             let encoded = try await engine.encode(table)
             XCTAssertEqual(sha256(encoded), hashes.roundTrip, name)
             XCTAssertFalse(encoded.isEmpty, name)
+            let reopened = try await engine.decode(encoded)
+            XCTAssertEqual(reopened.rows, table.rows, "Encoding must not normalize source cells: \(name)")
         }
         XCTAssertEqual(try fixture("resolve-source.csv").count, 156)
     }

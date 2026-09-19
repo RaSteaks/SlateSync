@@ -46,7 +46,7 @@ public enum SnapshotDeletion {
         }
         // Capture the current snapshot bytes so a failed row delete can put
         // the file back exactly as it was.
-        let originalSnapshot = try? Data(contentsOf: snapshotURL)
+        let originalSnapshot = try? LocalProjectEncryption.read(from: snapshotURL)
         do {
             try remover.removeItem(at: snapshotURL)
         } catch let error as CocoaError where error.code == .fileNoSuchFile {

@@ -300,8 +300,11 @@ clean_workspace_check() {
 # 与其他 Gate 检查一样支持自测注入故障 rg，验证扫描工具自身故障时 fail-closed。
 
 sm01_debug_settings_check() {
+  # Gate artifacts run against isolated roots and are ad-hoc candidates, so
+  # every build explicitly bypasses the machine-local development certificate.
   local settings
   settings="$(xcodebuild \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Debug \
@@ -551,12 +554,14 @@ swift_test_check() {
     # SM-08/SM-09 的 Gate 显式获得前台授权：收集全部 scale JSON 于忽略的
     # Gate 工件目录并行使真实显示节奏（SM-09 的 sm08 技术回归要求该用例
     # 在日志中 PASS；WP-1 也明确不因进入 release 阶段跳过性能）。常规
-    # `swift test` 保持该面跳过。
+    # `swift test` 保持该面跳过。Gate 的完整套件使用交付配置 Release：
+    # Debug 的 -Onone 开销不应计入用户可见延迟预算；Debug 构建和 Xcode
+    # Test Plan 仍单独执行。所有用例、前台采样及原有性能阈值保持启用。
     mkdir -p "${result_dir}/sm08-metrics" || return 1
     SWIFTPM_MODULECACHE_OVERRIDE="${result_dir}/swift-module-cache" \
     CLANG_MODULE_CACHE_PATH="${result_dir}/swift-module-cache" \
     SLATESYNC_SM08_METRICS_DIR="${result_dir}/sm08-metrics" \
-      SLATESYNC_SM08_FOREGROUND_GATE=1 swift test
+      SLATESYNC_SM08_FOREGROUND_GATE=1 swift test --configuration release
   else
     swift test
   fi
@@ -564,6 +569,7 @@ swift_test_check() {
 run_check swift_test true "SwiftPM 核心测试通过" swift_test_check
 run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   xcodebuild -quiet \
+  CODE_SIGN_IDENTITY=- \
   -project SlateSync.xcodeproj \
   -scheme SlateSync \
   -configuration Debug \
@@ -605,6 +611,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_real_app_launch_check
   run_check sm01_release_build true "Release generic macOS 构建通过" \
     xcodebuild -quiet \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Release \
@@ -615,6 +622,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_release_artifact_check
   run_check sm01_archive true "共享 Scheme 可生成 Release Archive" \
     xcodebuild -quiet \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Release \

@@ -4,6 +4,29 @@ import SlateSyncDomain
 @testable import SlateSyncWorkflow
 
 final class SM05WorkflowServiceTests: XCTestCase {
+    func testExportPreservesUnmatchedConflictingIncompleteAndManualCells() async throws {
+        // Only C001 is writable; every other original cell must survive both
+        // the merge preview and final encoding, including nonnumeric text.
+        let source = Data("File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\nA001C002.mov,12B,wide,alt,KEEP THIS NOTE\r\nA001C003.mov,003,003,03,conflict note\r\nA001C004.mov,004,004,04,incomplete note\r\n".utf8)
+        let records: [ResolveSlateRecord] = [
+            .init(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "2", take: "3", takeStatus: .passed),
+            .init(cardNumber: "A001", videoCode: "C003", scene: "3", shot: "3", take: "3"),
+            .init(cardNumber: "A001", videoCode: "C003", scene: "9", shot: "3", take: "3"),
+            .init(cardNumber: "A001", videoCode: "C004", scene: nil, shot: "4", take: "4"),
+        ]
+        let engine = ResolveCSVEngine()
+        let original = try await engine.decode(source)
+        let result = try await SM05WorkflowServices().mergeAndEncode(source: source, records: records,
+            edits: [.init(rowIndex: 0, columnIndex: 4, value: "manual note"),
+                    .init(rowIndex: 0, columnIndex: 2, value: "custom shot")])
+        let exported = try await engine.decode(result.data)
+        XCTAssertEqual(exported, result.merge.table)
+        XCTAssertEqual(Array(exported.rows.dropFirst()), Array(original.rows.dropFirst()))
+        XCTAssertEqual(exported.rows[0], ["A001C001.mov", "001", "custom shot", "03", "manual note"])
+        XCTAssertEqual(result.merge.updatedRowCount, 1)
+        XCTAssertTrue(result.merge.changes.allSatisfy { $0.rowIndex == 0 })
+    }
+
     func testResolveMaterialKeyProjectionMatchesMetadataScanContract() async throws {
         let table = ResolveCSVTable(
             headers: ["File Name", "Reel Name", "Clip Name"],
@@ -52,10 +75,8 @@ final class SM05WorkflowServiceTests: XCTestCase {
                 records: [.init(cardNumber: "A001", videoCode: "C999", scene: "1", shot: "1", take: "1")]
             )
         )
-        // Old export-resolve judges matchedRecordCount on purpose: a record
-        // whose missing 卷号/视频码 matches nothing must fail the export even
-        // though whole-table width canonicalization would still rewrite the
-        // shot cell (002 → 02) and mark the row as updated.
+        // Missing material identity cannot become exportable just because
+        // source cells could have been normalized by the old implementation.
         let canonicalizable = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,87A,002,03\r\n"
         await XCTAssertSM05Error(
             "CSV_NO_EXPORT",

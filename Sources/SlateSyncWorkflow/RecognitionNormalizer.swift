@@ -4,6 +4,9 @@ import SlateSyncDomain
 /// Reproduces the retained JavaScript normalization boundary before page
 /// results are merged or persisted, including UTF-16-compatible field rules.
 public enum RecognitionNormalizer {
+    // Compiled once and shared read-only across concurrent page normalization.
+    private static let scenePattern = try? NSRegularExpression(pattern: #"(\d+)\s*([A-Z]+)?"#)
+
     public static func normalize(_ value: JSONValue, pageNumber: Int) throws -> RecognitionSheet {
         guard case .object(let root) = value, case .array(let rows)? = root["records"] else {
             throw SlateSyncError(code: "MODEL_JSON", message: "模型返回的数据不包含 records 数组", status: 502, providerError: true)
@@ -94,7 +97,7 @@ public enum RecognitionNormalizer {
 
     public static func normalizeScene(_ value: String?, width: Int) -> String? {
         guard let normalized = clean(ResolveCSVNormalization.chineseNumeralsToArabic(value))?.uppercased() else { return nil }
-        let regex = try? NSRegularExpression(pattern: #"(\d+)\s*([A-Z]+)?"#)
+        let regex = scenePattern
         let range = NSRange(normalized.startIndex..., in: normalized)
         let parts = (regex?.matches(in: normalized, range: range) ?? []).compactMap { match -> String? in
             guard let numberRange = Range(match.range(at: 1), in: normalized), let number = Int(normalized[numberRange]), number < 1_000_000 else { return nil }

@@ -11,6 +11,24 @@ final class RecognitionReviewRegressionTests: XCTestCase {
         .init(id: id, sourcePage: 1, cardNumber: card, videoCode: clip, scene: scene, shot: shot, take: take, confidence: .high)
     }
 
+    func testCachedSortKeysPreserveLegacyOrderForLargeRecognitionSheet() {
+        // Compare with the retained comparator, including stable missing keys;
+        // cached decorations must not alter physical-card identity or ordering.
+        var records = (0..<2_000).reversed().map {
+            record(id: "r-\($0)", card: "a-\($0)", clip: "C001", scene: "001")
+        }
+        records += [record(id: "missing-1", card: "", clip: "", scene: nil),
+                    record(id: "missing-2", card: "", clip: "", scene: nil)]
+        let expected = records.enumerated().sorted {
+            let left = RecognitionNormalizer.materialKey($0.element) ?? "~"
+            let right = RecognitionNormalizer.materialKey($1.element) ?? "~"
+            return left != right ? left < right : $0.offset < $1.offset
+        }.map { $0.element.id }
+        let merged = RecognitionPostprocessor.mergeHighAccuracy(.init(records: records), .init(records: []))
+        XCTAssertEqual(merged.result.records.map(\.id), expected)
+        XCTAssertEqual(merged.result.records.suffix(2).map(\.id), ["missing-1", "missing-2"])
+    }
+
     // MARK: - #1 applyReview duplicate-key crash
 
     func testApplyReviewKeepsFirstDuplicateReviewKeyAndWarns() {

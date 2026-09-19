@@ -6,12 +6,15 @@ import SlateSyncUI
 import SlateSyncWorkflow
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 @main
 @MainActor
 struct SlateSyncApp: App {
     @NSApplicationDelegateAdaptor(SlateSyncAppDelegate.self) private var appDelegate
     private let workflow: SlateSyncWorkflowFacade
     @State private var globalSettings: GlobalSettingsModel
+    @State private var settingsNavigation: SettingsNavigationModel
     @State private var paddleInstaller: PaddleInstallerModel
     @State private var termination: TerminationCoordinator
     private let projectOwnership = ProjectWindowOwnership()
@@ -48,9 +51,10 @@ struct SlateSyncApp: App {
             // 终极回退不可达：两个非空常量 suite 名不会同时创建失败；若真
             // 发生，宁可隔离启动显式失败，也不静默写真实 .standard 破坏
             // 测试隔离承诺。
-            precondition(isolatedPreferences != nil, "无法创建隔离偏好 suite")
+            precondition(isolatedPreferences != nil, L10n.tr("无法创建隔离偏好 suite"))
         }
         preferences = isolated ? (isolatedPreferences ?? .standard) : .standard
+        L10n.configure(preferences: preferences)
         let runtime = SlateSyncRuntime(
             locator: locator,
             environment: isolated ? [:] : ProcessInfo.processInfo.environment,
@@ -85,6 +89,7 @@ struct SlateSyncApp: App {
         )
         self.workflow = workflow
         _globalSettings = State(initialValue: GlobalSettingsModel(service: workflow))
+        _settingsNavigation = State(initialValue: SettingsNavigationModel())
         _paddleInstaller = State(initialValue: PaddleInstallerModel(service: workflow))
         _termination = State(initialValue: TerminationCoordinator(lifecycle: workflow))
     }
@@ -97,11 +102,13 @@ struct SlateSyncApp: App {
             SlateSyncWindowRoot(
                 workflow: workflow,
                 globalSettings: globalSettings,
+                settingsNavigation: settingsNavigation,
                 termination: termination,
                 projectOwnership: projectOwnership
             )
                 .defaultAppStorage(preferences)
-                .frame(minWidth: 960, minHeight: 600)
+                .environment(\.locale, L10n.language.locale)
+                .slateWindowMinimumSize(width: 960, height: 600)
                 .task {
                     appDelegate.termination = termination
                     termination.applicationDrain = { [globalSettings, paddleInstaller] in
@@ -114,10 +121,19 @@ struct SlateSyncApp: App {
         .commands { SlateSyncCommands() }
 
         Settings {
-            SettingsRootView(settings: globalSettings, paddleInstaller: paddleInstaller)
+            SettingsRootView(
+                settings: globalSettings,
+                paddleInstaller: paddleInstaller,
+                navigation: settingsNavigation,
+                preferences: preferences
+            )
                 .defaultAppStorage(preferences)
+                .environment(\.locale, L10n.language.locale)
                 .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired)
         }
+        // Settings keeps a readable default while permitting longer forms.
+        .defaultSize(width: 780, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }
 
@@ -126,6 +142,10 @@ struct SlateSyncApp: App {
 private actor IsolatedAppKeychain: KeychainBackend {
     private struct Item { let data: Data; let ownership: Data }
     private var items: [String: [String: Item]] = [:]
+    // Mirror production metadata queries without reading any credential bytes.
+    func status(service: String, account: String) -> CredentialStatus {
+        items[service]?[account] == nil ? .missing : .configured
+    }
     func read(service: String, account: String) -> Data? { items[service]?[account]?.data }
     func write(_ data: Data, service: String, account: String) {
         items[service, default: [:]][account] = Item(data: data, ownership: Data(UUID().uuidString.utf8))
@@ -147,6 +167,7 @@ private actor IsolatedAppKeychain: KeychainBackend {
 @MainActor
 private struct SlateSyncWindowRoot: View {
     private let globalSettings: GlobalSettingsModel
+    private let settingsNavigation: SettingsNavigationModel
     private let termination: TerminationCoordinator
     @State private var windowID: UUID
     @State private var projects: ProjectLibraryModel
@@ -163,10 +184,12 @@ private struct SlateSyncWindowRoot: View {
     init(
         workflow: SlateSyncWorkflowFacade,
         globalSettings: GlobalSettingsModel,
+        settingsNavigation: SettingsNavigationModel,
         termination: TerminationCoordinator,
         projectOwnership: ProjectWindowOwnership
     ) {
         self.globalSettings = globalSettings
+        self.settingsNavigation = settingsNavigation
         self.termination = termination
         let windowID = UUID()
         _windowID = State(initialValue: windowID)
@@ -201,6 +224,7 @@ private struct SlateSyncWindowRoot: View {
             projectSettings: projectSettings,
             logs: logs,
             help: help,
+            settingsNavigation: settingsNavigation,
             termination: termination,
             settingsRevision: globalSettings.revision
         )
@@ -297,7 +321,7 @@ final class SlateSyncAppDelegate: NSObject, NSApplicationDelegate {
         // native editor before any asynchronous store drain, respecting IME.
         for window in sender.windows {
             if let editor = window.firstResponder as? NSTextView, editor.hasMarkedText() {
-                termination.reportCloseFailure(SlateSyncError(code: "EDIT_COMPOSITION", message: "请先完成当前文字输入，再退出"))
+                termination.reportCloseFailure(SlateSyncError(code: "EDIT_COMPOSITION", message: L10n.tr("请先完成当前文字输入，再退出")))
                 return .terminateCancel
             }
             guard window.makeFirstResponder(nil) else { return .terminateCancel }

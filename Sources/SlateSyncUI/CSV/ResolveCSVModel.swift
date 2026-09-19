@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public struct CSVCellCommit: Hashable, Sendable {
     public let tableID: UUID
     public let rowID: Int
@@ -38,6 +40,10 @@ public final class ResolveCSVModel {
     public private(set) var revision = 0
     public private(set) var filename: String?
     public private(set) var operation: OperationState = .idle
+    // Reconciliation diagnostics from the latest canonical merge (badge
+    // strip + detail rows). Purely presentational retention: export bytes
+    // keep coming from the same frozen re-merge path.
+    public private(set) var lastMergeDiagnostics: ResolveMergeResult?
     // Retained raw import bytes (the old worker's metadataTable) plus the
     // manual edits keyed "row:column"; a canonical export re-merges from
     // these instead of re-encoding the merged display table.
@@ -71,9 +77,11 @@ public final class ResolveCSVModel {
             rawData = data
             rawBase64 = data.base64EncodedString()
             sparseEdits = [:]
+            // A new table geometry invalidates the previous merge's row keys.
+            lastMergeDiagnostics = nil
             revision += 1
             onTableChange?(CSVStageSnapshot(table: decoded, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
-            operation = .succeeded(message: "已载入 \(decoded.rows.count) 行")
+            operation = .succeeded(message: L10n.tr("已载入 {0} 行", [String(describing: decoded.rows.count)]))
         }
     }
 
@@ -104,30 +112,32 @@ public final class ResolveCSVModel {
     public func encodedData() async throws -> Data {
         try flushEditor?()
         guard let table else {
-            throw SlateSyncError(code: "CSV_EMPTY", message: "请先导入 Resolve CSV")
+            throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
         }
         return try await service.encodeResolveCSV(table)
     }
 
-    /// Canonical merged export, frozen from the retained Worker's
-    /// `export-resolve`: the merge starts from the retained raw table so the
-    /// latest recognition records win over the staged preview, manual sparse
-    /// edits are applied last byte-for-byte, and the whole table is encoded
-    /// with canonicalized field widths and Comments. An empty recognition
+    /// Export re-merges the retained raw table using the latest recognition.
+    /// Only matched values are normalized; manual sparse edits apply last and
+    /// encoding preserves them and every unmatched cell. An empty recognition
     /// list is never exportable (`CSV_NO_EXPORT`).
     public func exportData(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async throws -> Data {
         try flushEditor?()
         guard let current = table else {
-            throw SlateSyncError(code: "CSV_EMPTY", message: "请先导入 Resolve CSV")
+            throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
         }
         guard let exporter = service as? any ResolveExportWorkflowServing else {
-            throw SlateSyncError(code: "CSV_EXPORT_UNAVAILABLE", message: "导出服务当前不可用")
+            throw SlateSyncError(code: "CSV_EXPORT_UNAVAILABLE", message: L10n.tr("导出服务当前不可用"))
         }
         // Tasks persisted before raw bytes existed fall back to their staged
         // table; the merge is still recomputed from the latest records.
         let source: Data
         if let rawData { source = rawData } else { source = try await service.encodeResolveCSV(current) }
-        return try await exporter.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits).data
+        let result = try await exporter.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
+        // The export re-merge is also the freshest reconciliation report; the
+        // badge strip shows what the exported bytes actually contain.
+        lastMergeDiagnostics = result.merge
+        return result.data
     }
 
     /// Suggested export filename, frozen from the old renderer naming
@@ -174,7 +184,7 @@ public final class ResolveCSVModel {
     public func materialKeys() async throws -> [String] {
         try flushEditor?()
         guard let table else {
-            throw SlateSyncError(code: "CSV_EMPTY", message: "请先导入 Resolve CSV")
+            throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
         }
         return try await service.resolveMaterialKeys(in: table)
     }
@@ -184,7 +194,7 @@ public final class ResolveCSVModel {
         await performWork { [self] in
             try flushEditor?()
             let edits = editGeneration
-            guard let current = table else { throw SlateSyncError(code: "CSV_EMPTY", message: "请先导入 Resolve CSV") }
+            guard let current = table else { throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV")) }
             // The merge recomputes from the retained raw table (old worker
             // semantics); manual edits ride along and are applied last. Tasks
             // persisted before raw bytes existed fall back to their staged
@@ -196,9 +206,10 @@ public final class ResolveCSVModel {
             try Task.checkCancellation()
             try requireUnchangedEdits(edits)
             self.table = result.merge.table
+            lastMergeDiagnostics = result.merge
             revision += 1
             onTableChange?(CSVStageSnapshot(table: result.merge.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
-            operation = .succeeded(message: "已更新 \(result.merge.updatedRowCount) 行")
+            operation = .succeeded(message: L10n.tr("已更新 {0} 行", [String(describing: result.merge.updatedRowCount)]))
         }
     }
 
@@ -210,7 +221,7 @@ public final class ResolveCSVModel {
         previous?.cancel()
         workGeneration += 1
         let generation = workGeneration
-        operation = .running(label: "正在处理 CSV…")
+        operation = .running(label: L10n.tr("正在处理 CSV…"))
         let task = Task { @MainActor [weak self] in
             await previous?.value
             guard let self, !Task.isCancelled else { return }
@@ -227,15 +238,8 @@ public final class ResolveCSVModel {
         // A native field editor can finish while an actor call is suspended.
         // Never replace its newer edits with a merge based on an older table.
         guard expected == editGeneration else {
-            throw SlateSyncError(code: "CSV_CHANGED", message: "表格已有新编辑，已保留。请重试导入或合并。", retryable: true)
+            throw SlateSyncError(code: "CSV_CHANGED", message: L10n.tr("表格已有新编辑，已保留。请重试导入或合并。"), retryable: true)
         }
-    }
-
-    public func standaloneData(records: [ResolveSlateRecord], settings: ProjectSettings.ResolveSettings) async throws -> Data {
-        guard let exporter = service as? any ResolveExportWorkflowServing else {
-            throw SlateSyncError(code: "CSV_EXPORT_UNAVAILABLE", message: "导出服务当前不可用")
-        }
-        return try await exporter.exportStandalone(records: records, settings: settings)
     }
 
     public func reset() {
@@ -247,6 +251,7 @@ public final class ResolveCSVModel {
         rawData = nil
         rawBase64 = nil
         sparseEdits = [:]
+        lastMergeDiagnostics = nil
         revision += 1
         operation = .idle
     }
@@ -266,7 +271,7 @@ public final class ResolveCSVModel {
 
     public func report(_ error: Error) { operation = .failed(ProductPrivacy.error(error)) }
 
-    public func exported() { operation = .succeeded(message: "CSV 已导出") }
+    public func exported() { operation = .succeeded(message: L10n.tr("CSV 已导出")) }
 
     /// Local edit timers belong to the visible coordinator; the shared
     /// workspace barrier flushes it before this owner is released.

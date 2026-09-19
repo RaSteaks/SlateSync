@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// One ordered teardown pipeline owned by the coordinator. Window close, Quit
 /// and library mutation execute the same registered session, so a writer added
 /// to teardown joins the shared pipeline and cannot join only one path.
@@ -132,7 +134,7 @@ public final class TerminationCoordinator {
     /// the reported error.
     public func closeWindow(id: UUID) async throws {
         guard !isDraining, !isMutatingLibrary else {
-            throw SlateSyncError(code: "LIBRARY_BUSY", message: "项目库正在更新，请稍后关闭窗口", retryable: true)
+            throw SlateSyncError(code: "LIBRARY_BUSY", message: L10n.tr("项目库正在更新，请稍后关闭窗口"), retryable: true)
         }
         guard let session = await windows.session(for: id) else { return }
         try await session.close()
@@ -151,7 +153,7 @@ public final class TerminationCoordinator {
 
     public func performLibraryMutation(_ action: @escaping @MainActor () async throws -> Void) async throws {
         guard !isMutatingLibrary, !isDraining, !restartRequired else {
-            throw SlateSyncError(code: "LIBRARY_BUSY", message: "项目库正在更新或等待重启，请稍后重试", retryable: true)
+            throw SlateSyncError(code: "LIBRARY_BUSY", message: L10n.tr("项目库正在更新或等待重启，请稍后重试"), retryable: true)
         }
         // All windows freeze editing before the shared mutation starts. Each
         // writer and operation drains, including windows that are not focused.

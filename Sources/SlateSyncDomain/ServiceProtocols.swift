@@ -68,6 +68,11 @@ public protocol RecognitionServing: Sendable {
 /// Provider credentials remain machine-local and are read only by the
 /// transport while it constructs an Authorization header. Callers can ask for
 /// configuration state without receiving the credential bytes.
+/// Secret-free credential availability. Authorization failure is not absence.
+public enum CredentialStatus: String, Codable, Hashable, Sendable {
+    case configured, missing, authorizationRequired, unavailable
+}
+
 public protocol ProviderCredentialReading: Sendable {
     func credential(for providerID: String) async throws -> String?
     func isCredentialConfigured(for providerID: String) async throws -> Bool

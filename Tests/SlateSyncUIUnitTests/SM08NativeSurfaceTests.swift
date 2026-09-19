@@ -154,6 +154,53 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertEqual(harness.commits.count, 1)
     }
 
+    func testDensityChangePreservesNativeIdentitySelectionAndComposition() async throws {
+        let harness = CSVHarness(table: fixtureTable())
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        let field = try XCTUnwrap(table.view(atColumn: 1, row: 0, makeIfNecessary: true) as? NSTextField)
+        field.selectText(nil)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        let coordinator = try XCTUnwrap(field.delegate as? EditableCSVTableRepresentable.Coordinator)
+        coordinator.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: field))
+        editor.setMarkedText("zhongwen", selectedRange: NSRange(location: 8, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        let before = table.rowHeight
+        harness.setDensity(.compact)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertTrue(harness.tableView === table)
+        XCTAssertTrue(editor.hasMarkedText())
+        XCTAssertEqual(table.rowHeight, before, "Density waits until the active editor finishes")
+        XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 0))
+        XCTAssertTrue(harness.commits.isEmpty)
+        editor.unmarkText()
+        editor.string = "中文保留"
+        coordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: field))
+        XCTAssertEqual(harness.commits.last?.value, "中文保留")
+        XCTAssertEqual(table.rowHeight, SlateSyncDensity.compact.tableRowHeight)
+        XCTAssertTrue(harness.tableView === table)
+    }
+
+    func testLayoutBoundaryRefusesNativeMarkedText() async throws {
+        let harness = CSVHarness(table: fixtureTable())
+        defer { harness.unmount() }
+        try await harness.mount()
+        let boundary = WorkspaceEditorBoundary()
+        boundary.window = harness.window
+        let table = try XCTUnwrap(harness.tableView)
+        let field = try XCTUnwrap(table.view(atColumn: 1, row: 0, makeIfNecessary: true) as? NSTextField)
+        field.selectText(nil)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        editor.setMarkedText("shuru", selectedRange: NSRange(location: 5, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertThrowsError(try boundary.prepare()) {
+            XCTAssertEqual(($0 as? SlateSyncError)?.code, "EDIT_COMPOSITION")
+        }
+        XCTAssertTrue(editor.hasMarkedText())
+        editor.unmarkText()
+        XCTAssertNoThrow(try boundary.prepare())
+    }
+
     func testNativeCSVExposesAccessibleHeadersAndEditableCells() async throws {
         let harness = CSVHarness(table: fixtureTable())
         defer { harness.unmount() }
@@ -167,6 +214,29 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertEqual(field.accessibilityLabel(), "第 1 行，\(harness.headers[0])")
         XCTAssertTrue(field.isEditable)
         XCTAssertTrue(field.isSelectable)
+    }
+
+    func testBorderlessCellPreservesMultilineEditing() async throws {
+        // Display sizing must not become the text system's single-line mode:
+        // embedded CSV newlines remain editable and cross the commit boundary.
+        var input = fixtureTable()
+        input.rows[0][0] = "原始\n第二行"
+        let harness = CSVHarness(table: input)
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        let field = try XCTUnwrap(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTextField)
+        XCTAssertFalse(field.isBezeled)
+        XCTAssertEqual(field.maximumNumberOfLines, 1)
+        XCTAssertFalse(field.cell?.usesSingleLineMode ?? true)
+        XCTAssertEqual(field.stringValue, "原始\n第二行")
+        field.selectText(nil)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        let coordinator = try XCTUnwrap(field.delegate as? EditableCSVTableRepresentable.Coordinator)
+        coordinator.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: field))
+        editor.insertText("校对\n保留", replacementRange: NSRange(location: 0, length: editor.string.utf16.count))
+        try coordinator.flushEdit()
+        XCTAssertEqual(harness.commits.last?.value, "校对\n保留")
     }
 
     func testForegroundCSVMeetsDisplayCadenceBudget() async throws {
@@ -276,18 +346,23 @@ final class SM08NativeSurfaceTests: XCTestCase {
 @MainActor
 private final class CSVHarness {
     private let input: ResolveCSVTable
+    private let tableID = UUID()
     var headers: [String] { input.headers }
     var commits: [CSVCellCommit] = []
     var host: NSHostingView<EditableCSVTableRepresentable>?
     var window: NSWindow?
     var tableView: NSTableView? { host?.descendants.compactMap { $0 as? NSTableView }.first }
     init(table: ResolveCSVTable) { input = table }
+    // Change presentation without changing data identity, as a settings scene does.
+    func setDensity(_ density: SlateSyncDensity) {
+        host?.rootView = EditableCSVTableRepresentable(tableID: tableID, table: input, revision: 0, density: density) { [weak self] in self?.commits.append($0) }
+    }
     func replace(_ table: ResolveCSVTable) {
         host?.rootView = EditableCSVTableRepresentable(tableID: UUID(), table: table, revision: 0) { [weak self] in self?.commits.append($0) }
     }
     func mount() async throws {
         _ = NSApplication.shared
-        let content = EditableCSVTableRepresentable(tableID: UUID(), table: input, revision: 0) { [weak self] in self?.commits.append($0) }
+        let content = EditableCSVTableRepresentable(tableID: tableID, table: input, revision: 0) { [weak self] in self?.commits.append($0) }
         let host = NSHostingView(rootView: content)
         let window = backgroundTestWindow(width: 1000, height: 600, styleMask: [.titled, .closable, .resizable])
         window.contentView = host

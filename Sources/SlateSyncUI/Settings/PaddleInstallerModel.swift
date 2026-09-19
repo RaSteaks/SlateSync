@@ -1,6 +1,8 @@
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Settings-scoped projection for the application-owned installer. Raw child
 /// output and environment never enter observable state; only frozen progress
 /// stages and verified public versions are published.
@@ -18,7 +20,7 @@ public final class PaddleInstallerModel {
 
     public func install() {
         guard task == nil, acceptsOperations else { return }
-        operation = .running(label: "正在准备 PaddleOCR 安装…")
+        operation = .running(label: L10n.tr("正在准备 PaddleOCR 安装…"))
         progress = nil
         result = nil
         task = Task { [weak self] in
@@ -37,7 +39,7 @@ public final class PaddleInstallerModel {
                     }
                 }
                 result = installed
-                operation = .succeeded(message: "PaddleOCR 已安装")
+                operation = .succeeded(message: L10n.tr("PaddleOCR 已安装"))
             } catch {
                 let wrapped = ProductPrivacy.error(error)
                 operation = wrapped.code == "PADDLEOCR_INSTALL_CANCELED" ? .canceled : .failed(wrapped)
@@ -48,7 +50,7 @@ public final class PaddleInstallerModel {
 
     public func cancel() {
         guard task != nil, cancelTask == nil, acceptsOperations else { return }
-        operation = .running(label: "正在取消 PaddleOCR 安装…")
+        operation = .running(label: L10n.tr("正在取消 PaddleOCR 安装…"))
         let service = self.service
         // Retain the service hop so application drain can join exactly the
         // cancellation requested by the user instead of racing a duplicate.

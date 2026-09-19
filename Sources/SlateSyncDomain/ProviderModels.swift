@@ -20,6 +20,7 @@ public struct ProviderDescriptor: Codable, Hashable, Sendable {
     public let credentialRequired: Bool
     public let revision: Int?
     public let openRouterSiteURL: String?
+    public let openRouterTitle: String?
     public let isLegacyCompatible: Bool
 
     public init(
@@ -34,6 +35,7 @@ public struct ProviderDescriptor: Codable, Hashable, Sendable {
         credentialRequired: Bool = true,
         revision: Int? = nil,
         openRouterSiteURL: String? = nil,
+        openRouterTitle: String? = nil,
         isLegacyCompatible: Bool = false
     ) {
         self.id = id
@@ -47,6 +49,7 @@ public struct ProviderDescriptor: Codable, Hashable, Sendable {
         self.credentialRequired = credentialRequired
         self.revision = revision
         self.openRouterSiteURL = openRouterSiteURL
+        self.openRouterTitle = openRouterTitle
         self.isLegacyCompatible = isLegacyCompatible
     }
 

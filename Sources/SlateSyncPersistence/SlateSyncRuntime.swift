@@ -3,6 +3,7 @@ import SlateSyncDomain
 
 public enum SlateSyncRuntimeMigrationStatus: String, Codable, Hashable, Sendable {
     case notRun
+    case awaitingAuthorization
     case sourceMissing
     case noCredentials
     case migrated
@@ -199,7 +200,13 @@ public actor SlateSyncRuntime: SettingsServing {
 
         var migration = snapshot.migration
         if !snapshot.isBootstrapped || retryFailedMigration || migration.status == .notRun {
-            migration = await migrateLegacyCredentials()
+            // Legacy import can read existing secrets to compare values. Defer
+            // it to the explicit settings action instead of prompting at launch.
+            if !retryFailedMigration && FileManager.default.fileExists(atPath: legacyCredentialURL.path) {
+                migration = SlateSyncRuntimeMigrationState(status: .awaitingAuthorization, sourceURL: legacyCredentialURL)
+            } else {
+                migration = await migrateLegacyCredentials()
+            }
         }
 
         snapshot = SlateSyncRuntimeSnapshot(
@@ -264,6 +271,19 @@ public actor SlateSyncRuntime: SettingsServing {
         _ = await bootstrap()
         guard let typedKey = GlobalSettingKey(rawValue: key) else { return nil }
         return snapshot.configuration.values[typedKey]
+    }
+
+    /// Resolve an editor snapshot with the same environment/legacy precedence
+    /// as a save, without changing the persisted or running configuration.
+    public func resolveSettingsDraft(_ values: GlobalSettingValues) async -> GlobalSettingValues {
+        _ = await bootstrap()
+        return ConfigurationResolver.resolveAll(
+            globalSettings: values,
+            processEnvironment: processEnvironment,
+            envFile: loadEnvironment().values,
+            legacySettings: snapshot.machineSettings,
+            applicationSupportRoot: locator.url
+        ).values
     }
 
     public func setValue(_ value: String?, for key: String) async throws {

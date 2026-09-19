@@ -3,48 +3,179 @@
     "id": "quick-start",
     "title": "快速开始",
     "symbol": "play.circle",
-    "body": "在项目库新建项目，进入工作台后导入场记单。选择 Provider 和模型，确认本地 OCR 可用后开始识别。",
+    "body": "SlateSync 的基本流程是：创建项目，配置 Provider，导入场记单，识别后校对结果，最后导出交付文件。帮助中的按钮会打开现有功能，不会自动创建项目或启动识别。",
     "englishTitle": "Quick start",
-    "englishBody": "Create a project in the library, then import a slate in the workspace. Select a Provider and model, verify local OCR availability, and start recognition."
+    "englishBody": "SlateSync's basic flow is to create a project, configure a Provider, import a slate, recognize and review the result, then export the deliverable. Help buttons open existing features and never create projects or start recognition automatically.",
+    "paragraphs": [
+      "SlateSync 的基本流程是：创建项目，配置 Provider，导入场记单，识别后校对结果，最后导出交付文件。帮助中的按钮会打开现有功能，不会自动创建项目或启动识别。"
+    ],
+    "englishParagraphs": [
+      "SlateSync's basic flow is to create a project, configure a Provider, import a slate, recognize and review the result, then export the deliverable. Help buttons open existing features and never create projects or start recognition automatically."
+    ],
+    "steps": [
+      { "id": "quick-project", "title": "创建或打开项目", "detail": "从项目库创建项目，或打开已有项目；项目是任务、设置和识别结果的归属范围。", "englishTitle": "Create or open a project", "englishDetail": "Create a project in the library or open an existing one. The project owns its tasks, settings, and recognition results." },
+      { "id": "quick-provider", "title": "配置 Provider", "detail": "填写 API Key 和必要的 Base URL，保存后再验证连接与模型能力。", "englishTitle": "Configure a Provider", "englishDetail": "Enter the API Key and, when needed, the Base URL. Save first, then validate the connection and model capability." },
+      { "id": "quick-import", "title": "导入材料并识别", "detail": "在工作台导入场记单或图片，选择项目/任务已有的模型配置，再开始识别。", "englishTitle": "Import and recognize", "englishDetail": "Import a slate or image in the workspace, use the model configured by the project or task, and start recognition." },
+      { "id": "quick-review", "title": "校对并导出", "detail": "检查字段、场景匹配和 OCR 结果；确认后导出 Resolve CSV 或其他当前任务产物。", "englishTitle": "Review and export", "englishDetail": "Review fields, scene matches, and OCR results, then export the Resolve CSV or another artifact for the current task." }
+    ],
+    "tips": [
+      { "id": "quick-local", "text": "图片准备和本地 OCR 不会把原始文件路径写入运行日志。", "englishText": "Image preparation and local OCR do not write original file paths to run logs." }
+    ],
+    "actions": ["openProjectLibrary", "openProviderSettings"]
   },
   {
     "id": "projects",
     "title": "项目与任务",
     "symbol": "film.stack",
-    "body": "项目设置只影响当前项目。归档可恢复；永久删除需逐字输入项目名称。切换项目或任务前会先保存编辑。",
+    "body": "项目设置只影响当前项目。任务保存场记单、媒体、元数据和识别结果；切换项目或任务前会先经过现有保存屏障。归档可恢复，永久删除需要逐字输入项目名称。",
     "englishTitle": "Projects and tasks",
-    "englishBody": "Project settings affect the current project. Archived projects can be restored. Permanent deletion requires the exact project name. Switching projects or tasks first saves pending edits."
+    "englishBody": "Project settings affect only the current project. Tasks own slates, media, metadata, and recognition results. Switching projects or tasks first crosses the existing save barrier. Archived projects can be restored; permanent deletion requires the exact project name.",
+    "paragraphs": [
+      "项目设置只影响当前项目。任务保存场记单、媒体、元数据和识别结果；切换项目或任务前会先经过现有保存屏障。归档可恢复，永久删除需要逐字输入项目名称。"
+    ],
+    "englishParagraphs": [
+      "Project settings affect only the current project. Tasks own slates, media, metadata, and recognition results. Switching projects or tasks first crosses the existing save barrier. Archived projects can be restored; permanent deletion requires the exact project name."
+    ],
+    "steps": [
+      { "id": "project-open", "title": "打开项目", "detail": "项目库区分活跃和已归档项目；打开项目后，工作台和项目设置才有当前上下文。", "englishTitle": "Open a project", "englishDetail": "The library separates active and archived projects. The workspace and project settings gain context only after a project is open." },
+      { "id": "task-switch", "title": "选择任务", "detail": "任务切换会先保存当前编辑；如果保存失败，页面会停留在原任务并显示原因。", "englishTitle": "Select a task", "englishDetail": "Task switching saves current edits first. If saving fails, the page stays on the original task and shows the reason." },
+      { "id": "project-archive", "title": "归档或恢复", "detail": "归档适合暂时移出活跃列表，恢复后仍保留项目数据；永久删除是独立的破坏性操作。", "englishTitle": "Archive or restore", "englishDetail": "Archive projects to remove them from the active list temporarily. Restore keeps project data; permanent deletion is a separate destructive action." }
+    ],
+    "tips": [
+      { "id": "project-scope", "text": "Provider 凭据和全局 OCR 配置属于应用级；模型选择和任务数据属于项目/任务级。", "englishText": "Provider credentials and global OCR configuration are app-scoped; model selection and task data are project/task-scoped." }
+    ],
+    "faqs": [
+      { "id": "project-delete", "question": "为什么删除按钮要求输入项目名称？", "answer": "这是为了让不可恢复的库操作有明确确认，防止误点。归档或关闭项目不会触发此确认。", "englishQuestion": "Why must I type the project name to delete it?", "englishAnswer": "The exact-name confirmation makes an irreversible library operation explicit and prevents accidental clicks. Archiving or closing a project does not require it." }
+    ],
+    "actions": ["openProjectLibrary", "openProjectSettings"]
   },
   {
     "id": "recognition",
     "title": "识别与校对",
     "symbol": "viewfinder",
-    "body": "识别会先在本机处理 PDF 或图像并执行 OCR，再发送必要的图像证据。可随时取消；离开工作台时进度不会丢失。",
+    "body": "识别流程会先在本机准备 PDF 或图像并执行 OCR，再向已保存的 Provider 发送必要的图像证据。远程模型负责结构化理解，本地 OCR 负责文字提取与辅助；识别可以取消，完成后应检查字段和匹配结果。",
     "englishTitle": "Recognition and review",
-    "englishBody": "PDF and image preparation and OCR run locally before necessary image evidence is sent to the selected Provider. Cancel recognition at any time. Progress stays available when navigating to another page."
+    "englishBody": "Recognition first prepares PDFs or images and runs OCR locally, then sends necessary image evidence to the saved Provider. The remote model provides structured understanding while local OCR extracts and assists with text. Recognition can be canceled; review fields and matches after completion.",
+    "paragraphs": [
+      "识别流程会先在本机准备 PDF 或图像并执行 OCR，再向已保存的 Provider 发送必要的图像证据。远程模型负责结构化理解，本地 OCR 负责文字提取与辅助；识别可以取消，完成后应检查字段和匹配结果。",
+      "如果当前没有项目或任务，进入当前任务的入口会说明缺少的上下文，并提供返回项目库的操作。帮助不会为了完成跳转而自动创建任务、安装 OCR 或开始识别。"
+    ],
+    "englishParagraphs": [
+      "Recognition first prepares PDFs or images and runs OCR locally, then sends necessary image evidence to the saved Provider. The remote model provides structured understanding while local OCR extracts and assists with text. Recognition can be canceled; review fields and matches after completion.",
+      "When no project or task is open, the current-task action explains which context is missing and offers the project library. Help never creates a task, installs OCR, or starts recognition just to complete a navigation action."
+    ],
+    "steps": [
+      { "id": "recognition-prepare", "title": "准备输入", "detail": "导入媒体后，应用在本机完成尺寸、页数和图像证据准备，并显示必要的状态。", "englishTitle": "Prepare input", "englishDetail": "After media import, the app prepares dimensions, pages, and image evidence locally and reports the relevant state." },
+      { "id": "recognition-start", "title": "开始或取消识别", "detail": "确认项目/任务的 Provider 和模型后开始；运行中的识别可从状态栏取消。", "englishTitle": "Start or cancel recognition", "englishDetail": "Confirm the Provider and model for the project or task, then start. Running recognition can be canceled from the status bar." },
+      { "id": "recognition-review", "title": "检查结果", "detail": "校对字段、场景和镜头匹配；不确定的模型结果应在导出前修正。", "englishTitle": "Review results", "englishDetail": "Review field, scene, and shot matches. Correct uncertain model results before exporting." }
+    ],
+    "tips": [
+      { "id": "recognition-cost", "text": "模型能力验证可能发起一次模型调用并产生费用；模型列表发现本身不等于视觉能力验证通过。", "englishText": "Model capability verification may make a model call and incur cost. Discovering a model list is not the same as verifying vision capability." }
+    ],
+    "actions": ["openOCRSettings", "openRecognitionSettings", "enterCurrentTask"]
+  },
+  {
+    "id": "providers",
+    "title": "Provider 配置",
+    "symbol": "key.horizontal",
+    "body": "Provider 配置页同时说明服务用途、官方入口、Base URL、API Key、模型发现和视觉能力。普通配置与密钥分别由现有全局设置和 macOS 钥匙串保存；密钥不会回填显示。",
+    "englishTitle": "Provider configuration",
+    "englishBody": "Provider configuration explains the service, official links, Base URL, API Key, model discovery, and vision capability. Ordinary settings use the existing global store and keys use macOS Keychain; saved secrets are never filled back into the UI.",
+    "paragraphs": [
+      "Provider 配置页同时说明服务用途、官方入口、Base URL、API Key、模型发现和视觉能力。普通配置与密钥分别由现有全局设置和 macOS 钥匙串保存；密钥不会回填显示。",
+      "API Key 输入框留空表示保留当前密钥。删除密钥是独立操作并需要确认；如果钥匙串授权被取消或读取失败，页面会保留相应状态，而不是显示成“未配置”。"
+    ],
+    "englishParagraphs": [
+      "Provider configuration explains the service, official links, Base URL, API Key, model discovery, and vision capability. Ordinary settings use the existing global store and keys use macOS Keychain; saved secrets are never filled back into the UI.",
+      "Leaving the API Key field blank preserves the current key. Deleting a key is a separate confirmed action. If Keychain authorization is canceled or reading fails, the page keeps that state instead of calling it missing."
+    ],
+    "steps": [
+      { "id": "provider-service", "title": "先看服务说明", "detail": "通过官网、密钥获取入口和官方文档确认账号权限与服务范围。", "englishTitle": "Read the service information", "englishDetail": "Use the website, key creation entry point, and official documentation to confirm account access and service scope." },
+      { "id": "provider-base", "title": "填写基础地址", "detail": "填写 Base URL，不要追加 /chat/completions、/responses 或 /models；应用会按 Provider 协议拼接接口。", "englishTitle": "Enter the Base URL", "englishDetail": "Enter the Base URL without /chat/completions, /responses, or /models. The app appends the endpoint for the Provider protocol." },
+      { "id": "provider-models", "title": "保存并验证", "detail": "保存配置不发起模型调用；保存后点击验证连接刷新模型，再单独验证待选模型的视觉能力。", "englishTitle": "Save and validate", "englishDetail": "Saving does not make a model call. After saving, validate the connection to refresh models, then verify vision capability for pending candidates separately." }
+    ],
+    "tips": [
+      { "id": "provider-status", "text": "“已配置密钥”“连接成功”和“模型可用于识别”是三个不同状态，请分别检查。", "englishText": "Configured key, connected service, and model usable for recognition are three different states; check each separately." }
+    ],
+    "faqs": [
+      { "id": "provider-error", "question": "连接失败时先检查什么？", "answer": "先看页面反馈的类别：鉴权/权限检查 API Key，地址错误检查 Base URL，余额错误前往服务商账户，网络或超时可重试。无法确定时只显示脱敏后的错误信息。", "englishQuestion": "What should I check when validation fails?", "englishAnswer": "Follow the category shown by the page: check the API Key for authentication or permission errors, Base URL for address errors, the provider account for balance errors, and retry network or timeout failures. Unknown causes show only sanitized error text." }
+    ],
+    "actions": ["openProviderSettings", "configureOpenRouter"],
+    "externalLinks": [
+      { "id": "openrouter-docs", "title": "OpenRouter 官方配置说明", "englishTitle": "OpenRouter official configuration guide", "url": "https://openrouter.ai/docs/quickstart#using-the-openai-sdk" }
+    ]
+  },
+  {
+    "id": "ocr",
+    "title": "OCR 配置",
+    "symbol": "doc.text.viewfinder",
+    "body": "Vision OCR 使用系统能力，不需要额外安装；PaddleOCR 适合需要本地模型或备用路径的场景，安装和运行需要 Python 3.10 或更高版本。两者的启用策略、必需性和语言配置在 OCR 设置中维护。",
+    "englishTitle": "OCR configuration",
+    "englishBody": "Vision OCR uses system capabilities and needs no extra installation. PaddleOCR is useful when a local model or fallback path is needed and requires Python 3.10 or newer. Enablement, requiredness, and language settings are maintained in OCR settings.",
+    "paragraphs": [
+      "Vision OCR 使用系统能力，不需要额外安装；PaddleOCR 适合需要本地模型或备用路径的场景，安装和运行需要 Python 3.10 或更高版本。两者的启用策略、必需性和语言配置在 OCR 设置中维护。",
+      "定位入口只会打开并滚动到已有设置区域，不会自动安装 PaddleOCR、修改配置或启动识别。"
+    ],
+    "englishParagraphs": [
+      "Vision OCR uses system capabilities and needs no extra installation. PaddleOCR is useful when a local model or fallback path is needed and requires Python 3.10 or newer. Enablement, requiredness, and language settings are maintained in OCR settings.",
+      "A locate action only opens and scrolls to an existing settings region. It never installs PaddleOCR, changes configuration, or starts recognition automatically."
+    ],
+    "steps": [
+      { "id": "ocr-vision", "title": "确认 Vision", "detail": "查看系统可用性、语言和识别级别；Vision 不需要下载组件。", "englishTitle": "Check Vision", "englishDetail": "Review system availability, language, and recognition level. Vision does not require a component download." },
+      { "id": "ocr-paddle", "title": "安装或配置 PaddleOCR", "detail": "确认 Python 路径和版本后再安装；安装过程由 OCR 设置中的明确按钮启动，可以取消。", "englishTitle": "Install or configure PaddleOCR", "englishDetail": "Confirm the Python path and version before installing. Installation starts only from the explicit OCR settings button and can be canceled." },
+      { "id": "ocr-route", "title": "选择启用策略", "detail": "根据项目环境选择自动、启用或禁用；若选择必需但组件不可用，识别会在开始前提示原因。", "englishTitle": "Choose an enablement policy", "englishDetail": "Choose automatic, enabled, or disabled according to the project environment. If a required engine is unavailable, recognition reports the reason before starting." }
+    ],
+    "faqs": [
+      { "id": "ocr-which", "question": "Vision 和 PaddleOCR 会同时修改结果吗？", "answer": "它们是现有识别流程中的不同本地能力，具体路由由当前配置和可用性决定。帮助入口不会改变路由；完成识别后仍需校对结果。", "englishQuestion": "Do Vision and PaddleOCR both modify the result?", "englishAnswer": "They are separate local capabilities in the existing recognition flow, routed by current configuration and availability. Help navigation does not change routing; review results after recognition." }
+    ],
+    "actions": ["openVisionOCR", "openPaddleOCR"]
   },
   {
     "id": "resolve",
     "title": "Resolve CSV 与元数据",
     "symbol": "tablecells",
-    "body": "导入 Resolve CSV 后可直接编辑万行表格。导出保留原分隔符、换行和 BOM 语义。元数据扫描只读取选定的目录。",
+    "body": "Resolve CSV 可在当前任务中导入、编辑、匹配并导出；导出会保留原分隔符、换行和 BOM 语义。元数据扫描只读取用户明确选择的目录，并把扫描结果放回当前任务上下文。",
     "englishTitle": "Resolve CSV and metadata",
-    "englishBody": "Import and edit a Resolve CSV, including large tables. Export preserves its delimiter, newline and BOM semantics. Metadata scanning reads only your selected directory."
-  },
-  {
-    "id": "settings",
-    "title": "Provider 与 OCR 设置",
-    "symbol": "gearshape.2",
-    "body": "Provider 凭据保存在 macOS 钥匙串，界面只显示已配置或缺失。Vision 无需下载；Paddle OCR 需要 Python 3.10 或更高版本。",
-    "englishTitle": "Provider and OCR settings",
-    "englishBody": "Provider credentials are stored in macOS Keychain and are never displayed again. Vision needs no download. PaddleOCR requires Python 3.10 or newer and an explicit installation."
+    "englishBody": "Resolve CSV files can be imported, edited, matched, and exported in the current task. Export preserves the original delimiter, newline, and BOM semantics. Metadata scanning reads only a directory the user explicitly selects and returns results to the current task.",
+    "paragraphs": [
+      "Resolve CSV 可在当前任务中导入、编辑、匹配并导出；导出会保留原分隔符、换行和 BOM 语义。元数据扫描只读取用户明确选择的目录，并把扫描结果放回当前任务上下文。"
+    ],
+    "englishParagraphs": [
+      "Resolve CSV files can be imported, edited, matched, and exported in the current task. Export preserves the original delimiter, newline, and BOM semantics. Metadata scanning reads only a directory the user explicitly selects and returns results to the current task."
+    ],
+    "steps": [
+      { "id": "resolve-import", "title": "导入 CSV", "detail": "从当前任务导入 CSV；大表格采用按需编辑，未编辑的行不会被提前复制到视图状态。", "englishTitle": "Import a CSV", "englishDetail": "Import a CSV from the current task. Large tables edit on demand, so untouched rows are not eagerly copied into view state." },
+      { "id": "resolve-edit", "title": "编辑和匹配", "detail": "修正字段并处理元数据匹配；切换任务或离开工作台前会先保存编辑。", "englishTitle": "Edit and match", "englishDetail": "Correct fields and handle metadata matches. Edits are saved before switching tasks or leaving the workspace." },
+      { "id": "resolve-export", "title": "导出交付", "detail": "确认当前任务后导出，保留源文件的格式语义并显示失败原因。", "englishTitle": "Export the deliverable", "englishDetail": "Confirm the current task, then export while preserving source formatting semantics and reporting failures." }
+    ],
+    "tips": [
+      { "id": "resolve-context", "text": "没有当前任务时，快捷入口会先引导到项目库，不会猜测要打开哪个文件。", "englishText": "Without a current task, the shortcut leads to the project library instead of guessing which file to open." }
+    ],
+    "actions": ["openCurrentTaskCSV"]
   },
   {
     "id": "recovery",
     "title": "日志与故障恢复",
     "symbol": "lifepreserver",
-    "body": "失败时先保留当前编辑，再使用重试。运行日志按天保留 7 天，不记录凭据、原始请求或媒体路径。",
+    "body": "失败时先保留当前编辑，再按页面给出的类别重试或修正配置。运行日志按天保留 7 天，记录脱敏事件，不记录凭据、原始请求、媒体路径或模型响应正文。",
     "englishTitle": "Logs and recovery",
-    "englishBody": "Failures preserve current edits for retry. Local logs retain seven calendar days of sanitized events without credentials, raw payloads or media paths. After a library relocation, quit and reopen the app."
+    "englishBody": "When something fails, keep current edits first, then retry or correct configuration according to the category shown by the page. Run logs retain seven calendar days of sanitized events and never record credentials, raw requests, media paths, or model response bodies.",
+    "paragraphs": [
+      "失败时先保留当前编辑，再按页面给出的类别重试或修正配置。运行日志按天保留 7 天，记录脱敏事件，不记录凭据、原始请求、媒体路径或模型响应正文。",
+      "如果库迁移或工作流配置路径变更要求重启，先完成保存，再退出并重新打开 SlateSync；重启前不会把新的路径假装成已经生效。"
+    ],
+    "englishParagraphs": [
+      "When something fails, keep current edits first, then retry or correct configuration according to the category shown by the page. Run logs retain seven calendar days of sanitized events and never record credentials, raw requests, media paths, or model response bodies.",
+      "If a library migration or workflow configuration path change requires a restart, finish saving, then quit and reopen SlateSync. The new path is not presented as active before the restart."
+    ],
+    "steps": [
+      { "id": "recovery-preserve", "title": "保留现场", "detail": "不要用关闭或新建任务覆盖当前草稿；错误状态会保留在拥有该操作的页面。", "englishTitle": "Preserve the state", "englishDetail": "Do not close or create a new task over the current draft. The owning page keeps the error state." },
+      { "id": "recovery-classify", "title": "按类别处理", "detail": "鉴权看 API Key，地址看 Base URL，权限/余额看服务商账户，网络与超时使用重试。", "englishTitle": "Use the error category", "englishDetail": "Check the API Key for authentication, Base URL for address errors, the provider account for permission or balance issues, and retry network or timeout failures." },
+      { "id": "recovery-log", "title": "查看运行日志", "detail": "日志用于确认事件顺序和脱敏错误；必要时把错误类别与时间提供给维护者。", "englishTitle": "Inspect run logs", "englishDetail": "Use logs to confirm event order and sanitized errors. When needed, provide the error category and time to maintainers." }
+    ],
+    "tips": [
+      { "id": "recovery-secret", "text": "日志不会成为 API Key 备份；请从 Provider 官方入口重新创建或替换密钥。", "englishText": "Logs are not an API Key backup. Create or replace a key through the Provider's official entry point." }
+    ],
+    "actions": ["openLogs"]
   }
 ]

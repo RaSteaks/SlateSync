@@ -29,6 +29,9 @@ public actor ProjectLibraryActivationCoordinator {
     public func importLibrary(at selectedURL: URL) async throws -> LibraryImportResult {
         try beginSwitch()
         do {
+            // Selecting a library again is an explicit authorization retry;
+            // background validation must retain any prior refusal instead.
+            await LocalProjectEncryption.allowUnlockRetry()
             let info = try await ProjectLibraryTransfer.validateLibrary(at: selectedURL)
             try await activate(info)
             return .imported(info)
@@ -101,6 +104,12 @@ public actor ProjectLibraryActivationCoordinator {
     ) async throws {
         guard state == .switching else {
             throw SlateSyncError(code: "LIBRARY_RESTART_PENDING", message: "项目库已切换，正在等待应用重启")
+        }
+        // A library adopted for local work inherits encryption before activation;
+        // explicit exports remain portable and are never modified here.
+        let source = await library.libraryRoot
+        if try LocalProjectEncryption.identifier(for: source.appending(path: "library.sqlite")) != nil {
+            try await LocalProjectEncryption.prepare(at: URL(fileURLWithPath: info.path))
         }
         var settings = try await machineSettings.load()
         settings.libraryPath = URL(fileURLWithPath: info.path).standardizedFileURL.path

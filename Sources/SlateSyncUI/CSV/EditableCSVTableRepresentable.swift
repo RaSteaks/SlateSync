@@ -2,6 +2,8 @@ import AppKit
 import SlateSyncDomain
 import SwiftUI
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Pure grid navigation keeps keyboard semantics deterministic even when an
 /// AppKit field editor is recreated by NSTableView's virtualization layer.
 /// The coordinator applies the returned destination only after committing the
@@ -79,6 +81,9 @@ enum CSVKeyboardNavigation {
 /// and reports immutable identities back to the MainActor model.
 public struct EditableCSVTableRepresentable: NSViewRepresentable {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.slateSyncDensity) private var sceneDensity
+    private let density: SlateSyncDensity?
+    private var effectiveDensity: SlateSyncDensity { density ?? sceneDensity }
     public let tableID: UUID
     public let table: ResolveCSVTable
     public let revision: Int
@@ -90,7 +95,8 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableID: UUID,
         table: ResolveCSVTable,
         revision: Int,
-        accessibilityLabel: String = "可编辑 Resolve CSV",
+        accessibilityLabel: String = L10n.tr("可编辑 Resolve CSV"),
+        density: SlateSyncDensity? = nil,
         onCommit: @escaping @MainActor @Sendable (CSVCellCommit) -> Void,
         editorRegistration: (@MainActor ((@MainActor () throws -> Void)?) -> Void)? = nil
     ) {
@@ -98,6 +104,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         self.table = table
         self.revision = revision
         self.accessibilityLabel = accessibilityLabel
+        self.density = density
         self.onCommit = onCommit
         self.editorRegistration = editorRegistration
     }
@@ -110,7 +117,8 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableView.allowsMultipleSelection = false
         tableView.allowsEmptySelection = true
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
-        tableView.rowSizeStyle = .medium
+        tableView.rowSizeStyle = .custom
+        tableView.rowHeight = effectiveDensity.tableRowHeight
         tableView.setAccessibilityLabel(accessibilityLabel)
         context.coordinator.tableView = tableView
         context.coordinator.rebuildColumns(for: tableView)
@@ -139,6 +147,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
     public func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let tableView = context.coordinator.tableView else { return }
         context.coordinator.parent = self
+        context.coordinator.applyDensity()
         // AppKit controls must explicitly honor SwiftUI's shared mutation/
         // termination freeze. Preserve the field editor until flush consumes it.
         let visible = tableView.rows(in: tableView.visibleRect)
@@ -217,13 +226,29 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         public func flushEdit() throws {
             guard let field = editingField else { return }
             if (field.currentEditor() as? NSTextView)?.hasMarkedText() == true {
-                throw SlateSyncError(code: "EDIT_COMPOSITION", message: "请先完成当前文字输入，再切换或关闭")
+                throw SlateSyncError(code: "EDIT_COMPOSITION", message: L10n.tr("请先完成当前文字输入，再切换或关闭"))
             }
             timer?.cancel()
             commit(field)
         }
 
         fileprivate init(parent: EditableCSVTableRepresentable) { self.parent = parent }
+
+        /// Geometry updates never reload rows. Defer while a field editor is
+        /// active, then apply after its commit so marked text is not disrupted.
+        fileprivate func applyDensity() {
+            guard editingField == nil, let tableView else { return }
+            let height = parent.effectiveDensity.tableRowHeight
+            guard tableView.rowHeight != height else { return }
+            let selected = tableView.selectedRowIndexes
+            let origin = tableView.enclosingScrollView?.contentView.bounds.origin
+            tableView.rowHeight = height
+            tableView.selectRowIndexes(selected, byExtendingSelection: false)
+            if let origin, let scrollView = tableView.enclosingScrollView {
+                scrollView.contentView.scroll(to: origin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
 
         public func numberOfRows(in tableView: NSTableView) -> Int { parent.table.rows.count }
 
@@ -242,6 +267,12 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 field = NSTextField()
                 field.identifier = identifier
                 field.isBordered = false
+                // Table cells do not need the standalone text-input bezel's
+                // appearance layers. Limit display layout to the fixed-height
+                // row without single-line editing mode, which would strip
+                // pasted newlines from the original CSV value.
+                field.isBezeled = false
+                field.maximumNumberOfLines = 1
                 field.drawsBackground = false
                 field.lineBreakMode = .byTruncatingTail
                 field.delegate = self
@@ -249,7 +280,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             field.tag = row * max(1, parent.table.headers.count) + column
             field.isEditable = parent.isEnabled
             field.stringValue = value(row: row, column: column)
-            field.setAccessibilityLabel("第 \(row + 1) 行，\(parent.table.headers[column])")
+            field.setAccessibilityLabel(L10n.tr("第 {0} 行，{1}", [String(describing: row + 1), String(describing: parent.table.headers[column])]))
             return field
         }
 
@@ -261,6 +292,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             editingField = nil
             editingIdentity = nil
             lastCommittedValue = nil
+            applyDensity()
         }
 
         public func control(
@@ -287,6 +319,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 editingIdentity = nil
                 lastCommittedValue = nil
                 tableView?.abortEditing()
+                applyDensity()
                 return true
             case .finish:
                 finishEditing(field)
@@ -301,7 +334,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             headers = parent.table.headers
             for (index, title) in headers.enumerated() {
                 let column = NSTableColumn(identifier: .init("csv.column.\(index)"))
-                column.title = title.isEmpty ? "第 \(index + 1) 列" : title
+                column.title = title.isEmpty ? L10n.tr("第 {0} 列", [String(describing: index + 1)]) : title
                 column.width = 160
                 column.minWidth = 88
                 column.maxWidth = 480
@@ -339,6 +372,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             // returning focus to the table lets AppKit complete its edit cycle
             // without retaining a field editor or creating a duplicate draft.
             _ = tableView?.window?.makeFirstResponder(tableView)
+            applyDensity()
         }
 
         private func moveEditing(_ field: NSTextField, movement: CSVKeyboardNavigation.Movement) -> Bool {

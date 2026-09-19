@@ -16,10 +16,9 @@ jobs:
     runs-on: macos-26
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    # A full compatibility Gate measured about seven minutes locally. The
-    # native path keeps a 30-minute ceiling for cold caches, UI startup, the
-    # Universal archive, DMG mount verification, and cleanup (CARRY-02).
-    timeout-minutes: 30
+    # Complete Debug and packaged Release UI matrices now exceed the former
+    # 30-minute budget on hosted runners; retain all checks with bounded headroom.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,7 +51,7 @@ jobs:
         run: ./script/phase_gate.sh SM-09
 
       - name: Upload failure diagnostics
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: native-ci-diagnostics

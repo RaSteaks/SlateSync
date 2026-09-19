@@ -13,10 +13,17 @@ struct NativeRecognitionPersistence: RecognitionPersistence {
     }
 
     func saveTask(projectID: String, taskID: String?, payload: Data) async throws -> String {
-        if let taskID {
-            return try await runtime.updateTask(projectID: projectID, taskID: taskID, patch: payload)
+        // Native recognition completes an existing draft. Losing its identity
+        // must fail instead of leaving a draft beside a new completed task.
+        let id = try Self.requireTaskID(taskID)
+        return try await runtime.updateTask(projectID: projectID, taskID: id, patch: payload)
+    }
+
+    static func requireTaskID(_ taskID: String?) throws -> String {
+        guard let taskID, !taskID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw SlateSyncError(code: "RECOGNITION_TASK_REQUIRED", message: "请先创建或选择任务，再开始识别")
         }
-        return try await runtime.saveTask(projectID: projectID, taskID: nil, payload: payload)
+        return taskID
     }
 
     func saveDiagnostic(projectID: String, sessionID: String?, payload: Data) async throws -> String {

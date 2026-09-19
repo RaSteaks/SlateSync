@@ -44,6 +44,10 @@ public actor SlateSyncWorkflowFacade:
     private let logs: LocalLogStore
     private let paddleInstaller: PaddleOCRInstallerService
     private let allowsExternalOperations: Bool
+    // All consumers share model eligibility; transports keep independent lifetimes.
+    private var sharedRegistry: ProviderRegistry?
+    private var registryBuild: Task<ProviderRegistry, Error>?
+    private let providerTransportFactory: @Sendable () -> any ProviderHTTPTransporting
     private var recognition: RecognitionCoordinator?
     private var settingsProviders: SettingsProviderRuntime?
     private var recognitionBuild: Task<RecognitionCoordinator, Error>?
@@ -56,7 +60,7 @@ public actor SlateSyncWorkflowFacade:
 
     private struct SettingsProviderRuntime {
         let registry: ProviderRegistry
-        let transport: URLSessionProviderTransport
+        let transport: any ProviderHTTPTransporting
         let discovery: ModelDiscoveryService
         let probe: ModelCapabilityProbeService
     }
@@ -67,7 +71,8 @@ public actor SlateSyncWorkflowFacade:
         sm05: SM05WorkflowServices = SM05WorkflowServices(),
         logs: LocalLogStore,
         paddleInstaller: PaddleOCRInstallerService,
-        allowsExternalOperations: Bool = true
+        allowsExternalOperations: Bool = true,
+        providerTransportFactory: (@Sendable () -> any ProviderHTTPTransporting)? = nil
     ) {
         self.library = library
         self.runtime = runtime
@@ -75,6 +80,9 @@ public actor SlateSyncWorkflowFacade:
         self.logs = logs
         self.paddleInstaller = paddleInstaller
         self.allowsExternalOperations = allowsExternalOperations
+        self.providerTransportFactory = providerTransportFactory ?? {
+            URLSessionProviderTransport(credentials: runtime.keychainStore)
+        }
     }
 
     /// Isolated app launches can exercise persistence and UI without reaching
@@ -84,6 +92,8 @@ public actor SlateSyncWorkflowFacade:
             throw SlateSyncError(code: "ISOLATED_OPERATION", message: "隔离验收环境已禁用外部服务", retryable: false)
         }
     }
+
+    public func retryProjectLibraryUnlock() async { await LocalProjectEncryption.allowUnlockRetry() }
 
     public func projectLibrary() async throws -> ProjectLibraryProjection {
         try await library.projectLibrary()
@@ -241,6 +251,12 @@ public actor SlateSyncWorkflowFacade:
 
     public func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData {
         try requireExternalOperations()
+        // Validate ownership before any credential, OCR or Provider work. The
+        // native entry point never creates a second task for a completed run;
+        // the row-only probe avoids loading its potentially large media payload.
+        let taskID = try NativeRecognitionPersistence.requireTaskID(request.taskID)
+        try await library.projectRuntime().requireTaskExists(projectID: request.projectID, taskID: taskID)
+        await runtime.keychainStore.beginUserOperation(providerID: request.providerID)
         let cancellationTicket = recognitionCancellations.ticket(for: request.projectID)
         try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
         let coordinator = try await recognitionCoordinator()
@@ -293,19 +309,30 @@ public actor SlateSyncWorkflowFacade:
         try await globalSettings(restartRequired: false)
     }
 
+    /// Probe the editor's effective configuration without saving its draft or
+    /// replacing the recognition coordinator currently serving a project.
+    public func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
+        let resolved = await runtime.resolveSettingsDraft(values)
+        let resourcePaths = try OCRRuntimePaths(
+            resources: Self.paddleResources(), python: URL(fileURLWithPath: "/usr/bin/python3"),
+            workingDirectory: runtime.locator.url,
+            modelCache: runtime.locator.url.appending(path: "paddle-models"), environment: [:])
+        return try await OCREnvironmentChecker().check(
+            values: resolved, directory: runtime.locator.url, runnerURL: resourcePaths.runner,
+            environment: ProcessInfo.processInfo.environment)
+    }
+
     private func globalSettings(restartRequired: Bool) async throws -> GlobalSettingsProjection {
         let runtimeSnapshot = await runtime.bootstrap()
         let config = try await runtime.globalConfigStore.load()
-        let registry = ProviderRegistry(
-            settings: runtimeSnapshot.configuration.values,
-            customProviders: config.customProviders,
-            credentials: runtime.keychainStore
-        )
-        let providers = await registry.providerSummaries()
-        var credentialIDs = Set<String>()
-        for provider in providers where (try? await runtime.keychainStore.isCredentialConfigured(for: provider.id)) == true {
-            credentialIDs.insert(provider.id)
+        let registry = try await modelRegistry()
+        // Query attributes once, never secrets, while building settings state.
+        var credentialStatuses: [String: CredentialStatus] = [:]
+        for id in Set(ProviderCatalog.definitions.map(\.id) + config.customProviders.map(\.id)) {
+            credentialStatuses[id] = await runtime.keychainStore.status(providerID: id)
         }
+        let providers = await registry.providerSummaries(credentialStatuses: credentialStatuses)
+        let credentialIDs = Set(credentialStatuses.filter { $0.value == .configured }.map(\.key))
         let vision = VisionOCRService(configuration: VisionOCRConfiguration(runtimeSnapshot.configuration.values))
         let visionAvailable = await vision.isAvailable()
         await vision.close()
@@ -329,7 +356,8 @@ public actor SlateSyncWorkflowFacade:
                     ? nil
                     : runtimeSnapshot.workflowConfigPath
             ),
-            restartRequired: restartRequired
+            restartRequired: restartRequired,
+            credentialStatuses: credentialStatuses
         )
     }
 
@@ -343,8 +371,9 @@ public actor SlateSyncWorkflowFacade:
         let previousPath = await runtime.currentSnapshot().configuration.values[.slateSyncConfigPath] ?? ""
         try await resetRecognition()
         await resetSettingsProviders()
-        _ = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
+        let saved = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
         let snapshot = await runtime.refreshConfiguration()
+        try await modelRegistry().replace(settings: snapshot.configuration.values, customProviders: saved.customProviders)
         await record(.info, category: "settings", event: "saved", message: "全局设置已保存")
         let nextPath = snapshot.configuration.values[.slateSyncConfigPath] ?? ""
         return try await globalSettings(restartRequired: previousPath != nextPath)
@@ -354,6 +383,8 @@ public actor SlateSyncWorkflowFacade:
         try await resetRecognition()
         await resetSettingsProviders()
         try await runtime.setProviderKey(value, for: providerID)
+        // Credentials invalidate eligibility even when the endpoint is unchanged.
+        await sharedRegistry?.invalidate(providerID: providerID)
         await record(.info, category: "settings", event: "credential-updated", message: "Provider 凭据状态已更新")
     }
 
@@ -367,6 +398,7 @@ public actor SlateSyncWorkflowFacade:
         forceRefresh: Bool
     ) async throws -> ModelDiscoveryResult {
         try requireExternalOperations()
+        await runtime.keychainStore.beginUserOperation(providerID: providerID)
         return try await settingsProviderRuntime().discovery.discover(
             providerID: providerID,
             forceRefresh: forceRefresh
@@ -379,6 +411,7 @@ public actor SlateSyncWorkflowFacade:
         progress: @escaping @Sendable (ModelProbeProgress) -> Void
     ) async throws -> ModelProbeResult {
         try requireExternalOperations()
+        await runtime.keychainStore.beginUserOperation(providerID: providerID)
         let value = try await settingsProviderRuntime().probe.probe(
             providerID: providerID,
             modelIDs: modelIDs,
@@ -464,14 +497,8 @@ public actor SlateSyncWorkflowFacade:
     /// Discovery and probe across multiple Provider rows share one retained
     /// transport; reset also joins construction suspended in config loading.
     private func makeSettingsProviderRuntime() async throws -> SettingsProviderRuntime {
-        let snapshot = await runtime.bootstrap()
-        let config = try await runtime.globalConfigStore.load()
-        let registry = ProviderRegistry(
-            settings: snapshot.configuration.values,
-            customProviders: config.customProviders,
-            credentials: runtime.keychainStore
-        )
-        let transport = URLSessionProviderTransport(credentials: runtime.keychainStore)
+        let registry = try await modelRegistry()
+        let transport = providerTransportFactory()
         let client = ProviderRecognitionClient(transport: transport)
         let discovery = ModelDiscoveryService(registry: registry, transport: transport)
         let probe = ModelCapabilityProbeService(
@@ -513,7 +540,6 @@ public actor SlateSyncWorkflowFacade:
 
     private static func closeSettingsProviderRuntime(_ value: SettingsProviderRuntime) async {
         await value.probe.close()
-        await value.discovery.invalidate()
         await value.transport.close()
     }
 
@@ -556,6 +582,35 @@ public actor SlateSyncWorkflowFacade:
             customProviders: providers
         )
         _ = await runtime.refreshConfiguration()
+        // Publish into the registry already retained by active coordinators;
+        // do not cancel another window's recognition to refresh capabilities.
+        try await modelRegistry().refreshCapabilities(providers[index])
+    }
+
+    /// Join concurrent first-use requests so Settings and recognition cannot
+    /// construct separate catalogs while configuration I/O is suspended.
+    func modelRegistry() async throws -> ProviderRegistry {
+        if let sharedRegistry { return sharedRegistry }
+        let build: Task<ProviderRegistry, Error>
+        if let registryBuild { build = registryBuild }
+        else {
+            build = Task { [runtime] in
+                let snapshot = await runtime.bootstrap()
+                let config = try await runtime.globalConfigStore.load()
+                return ProviderRegistry(settings: snapshot.configuration.values,
+                    customProviders: config.customProviders, credentials: runtime.keychainStore)
+            }
+            registryBuild = build
+        }
+        do {
+            let registry = try await build.value
+            sharedRegistry = registry
+            registryBuild = nil
+            return registry
+        } catch {
+            registryBuild = nil
+            throw error
+        }
     }
 
     private func recognitionCoordinator() async throws -> RecognitionCoordinator {
@@ -587,13 +642,8 @@ public actor SlateSyncWorkflowFacade:
 
     private func makeRecognitionCoordinator() async throws -> RecognitionCoordinator {
         let snapshot = await runtime.bootstrap()
-        let config = try await runtime.globalConfigStore.load()
-        let registry = ProviderRegistry(
-            settings: snapshot.configuration.values,
-            customProviders: config.customProviders,
-            credentials: runtime.keychainStore
-        )
-        let transport = URLSessionProviderTransport(credentials: runtime.keychainStore)
+        let registry = try await modelRegistry()
+        let transport = providerTransportFactory()
         let client = ProviderRecognitionClient(transport: transport)
         let projectRuntime = try await library.projectRuntime()
         let values = snapshot.configuration.values
@@ -639,22 +689,25 @@ public actor SlateSyncWorkflowFacade:
         let cache = root.appending(path: "paddle-models", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        let resources: OCRRuntimePaths.Resources
-        if let bundleRoot = Bundle.main.resourceURL?.appending(path: "PaddleOCR", directoryHint: .isDirectory),
-           FileManager.default.isReadableFile(atPath: bundleRoot.appending(path: "paddleocr_runner.py").path) {
-            // The folder reference preserves one canonical PaddleOCR subtree
-            // in the bundle; runtime/cache paths remain outside Resources.
-            resources = .bundle(bundleRoot)
-        } else {
-            resources = .development(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-        }
         return try OCRRuntimePaths(
-            resources: resources,
+            resources: paddleResources(),
             python: URL(fileURLWithPath: rawPython),
             workingDirectory: work,
             modelCache: cache,
             environment: ProcessInfo.processInfo.environment
         )
+    }
+
+    /// Diagnostics and inference must inspect the same bundled/development runner.
+    private nonisolated static func paddleResources() -> OCRRuntimePaths.Resources {
+        if let bundleRoot = Bundle.main.resourceURL?.appending(path: "PaddleOCR", directoryHint: .isDirectory),
+           FileManager.default.isReadableFile(atPath: bundleRoot.appending(path: "paddleocr_runner.py").path) {
+            // The folder reference preserves one canonical PaddleOCR subtree
+            // in the bundle; runtime/cache paths remain outside Resources.
+            return .bundle(bundleRoot)
+        } else {
+            return .development(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        }
     }
 
     private func resetRecognition() async throws {
@@ -702,6 +755,7 @@ public actor SlateSyncWorkflowFacade:
     ) -> LegacyCredentialMigrationStatus {
         switch status {
         case .notRun: .notRun
+        case .awaitingAuthorization: .awaitingAuthorization
         case .sourceMissing: .sourceMissing
         case .noCredentials: .noCredentials
         case .migrated: .migrated
