@@ -39,15 +39,14 @@ public actor SM05WorkflowServices {
         // Match export-resolve: manual edits may make an otherwise unchanged
         // merge exportable, but an empty recognition list is never exportable.
         // ResolveSparseEdit is the typed equivalent of a normalized JS edit.
-        // The old guard counts matchedRecordCount on purpose — never
-        // updatedRowCount: whole-table width canonicalization and slate
-        // sidecar backfills rewrite rows without any record matching, and
-        // must not mask a 卷号/视频码 mismatch.
+        // Count complete matched records, not updatedRowCount: independent
+        // metadata backfills must not mask incomplete recognition records.
         guard !records.isEmpty, result.matchedRecordCount > 0 || !edits.isEmpty else {
             throw SlateSyncError(code: "CSV_NO_EXPORT", message: "没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。")
         }
         try Task.checkCancellation()
-        let data = try await csv.encode(result.table, fieldFormats: fieldFormats, comments: comments, canonicalizeComments: true)
+        // Merge owns normalization; encoding must not rewrite manual or unmatched cells.
+        let data = try await csv.encode(result.table)
         let milliseconds = Self.milliseconds(start.duration(to: clock.now))
         // Diagnostics intentionally contain counts/duration only—never cells,
         // OCR text, prompt hints, file names, or absolute media paths.
@@ -71,7 +70,7 @@ public actor SM05WorkflowServices {
             throw SlateSyncError(code: "CSV_NO_EXPORT", message: "没有场次、镜、次完整的识别记录可导出。")
         }
         try Task.checkCancellation()
-        return try await csv.encode(table, fieldFormats: fieldFormats, comments: .init(), canonicalizeComments: false)
+        return try await csv.encode(table)
     }
 
     /// Resolve material identifiers are normalized by the merger, so metadata

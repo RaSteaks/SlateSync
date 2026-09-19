@@ -30,15 +30,59 @@ public actor SQLiteDatabase {
     }
 
     public nonisolated let url: URL
+    private let encryptionID: String?
+    private var snapshotURL: URL
+    private let openMode: OpenMode
+    // Cache the exact authenticated envelope, not filesystem timestamps. Equal-size
+    // in-place edits on coarse-timestamp volumes must invalidate cached plaintext.
+    private var loadedSnapshot: Data?
 
     // `nonisolated(unsafe)` is restricted to storage so deinit can close the C
     // handle. All operational access remains actor-isolated.
     nonisolated(unsafe) private var handle: OpaquePointer?
 
     public init(url: URL, mode: OpenMode = .readWriteCreate) throws {
-        self.url = url.standardizedFileURL
+        let url = url.standardizedFileURL
+        self.url = url
+        self.snapshotURL = url.standardizedFileURL
+        self.openMode = mode
+        self.encryptionID = try LocalProjectEncryption.identifier(for: url)
         if mode != .readOnly {
             try SecureFilePermissions.prepareDirectory(at: url.deletingLastPathComponent())
+        }
+
+        if let encryptionID {
+            if mode != .readWriteCreate && !FileManager.default.fileExists(atPath: url.path) {
+                throw LocalProjectEncryption.error("项目数据库不存在")
+            }
+            guard sqlite3_open(":memory:", &handle) == SQLITE_OK, let opened = handle else {
+                throw LocalProjectEncryption.error("无法创建加密数据库内存连接")
+            }
+            do {
+                let initialSnapshot = try CrossProcessFileLock.withExclusiveLock(at: URL(fileURLWithPath: url.path + ".lock.tmp")) {
+                    var snapshot = try EncryptedSQLiteSnapshot.load(url: url, into: opened)
+                    if !FileManager.default.fileExists(atPath: url.path) {
+                        // Materialize an empty page so the first durable snapshot
+                        // exists before any caller can issue a fallible mutation.
+                        try Self.executeScript(opened, sql: "PRAGMA user_version=0;")
+                    }
+                    // Opening an authenticated encrypted snapshot is read-only;
+                    // resealing it here needlessly rewrites the entire project.
+                    if mode != .readOnly, snapshot == nil {
+                        snapshot = try EncryptedSQLiteSnapshot.save(handle: opened, to: url, id: encryptionID)
+                    }
+                    // The first query can reuse the snapshot authenticated by
+                    // init; a later external replacement still invalidates it.
+                    return snapshot
+                }
+                loadedSnapshot = initialSnapshot
+                try Self.executeScript(opened, sql: "PRAGMA foreign_keys=ON; PRAGMA temp_store=MEMORY;")
+            } catch {
+                sqlite3_close(opened)
+                handle = nil
+                throw error
+            }
+            return
         }
 
         let flags: Int32 = switch mode {
@@ -81,6 +125,10 @@ public actor SQLiteDatabase {
 
     @discardableResult
     public func execute(_ sql: String, bindings: [String?] = []) throws -> Int {
+        try withEncryptedSnapshot(writing: true) { database in try database.executeUnlocked(sql, bindings: bindings) }
+    }
+
+    private func executeUnlocked(_ sql: String, bindings: [String?] = []) throws -> Int {
         let handle = try openHandle()
         return try executePrepared(SQLiteCommand(sql, bindings: bindings), handle: handle)
     }
@@ -88,6 +136,10 @@ public actor SQLiteDatabase {
     /// Executes schema SQL containing multiple statements. User values must use
     /// `execute`/`transaction` bindings; this entry point is only for constants.
     public func executeScript(_ sql: String) throws {
+        try withEncryptedSnapshot(writing: true) { database in try database.executeScriptUnlocked(sql) }
+    }
+
+    private func executeScriptUnlocked(_ sql: String) throws {
         try Self.executeScript(try openHandle(), sql: sql)
     }
 
@@ -96,6 +148,12 @@ public actor SQLiteDatabase {
     /// every failure and the original stable SQLite error remains authoritative.
     @discardableResult
     public func transaction(_ commands: [SQLiteCommand]) throws -> [Int] {
+        // An empty compatibility import must not reseal a large encrypted DB.
+        guard !commands.isEmpty else { return [] }
+        return try withEncryptedSnapshot(writing: true) { database in try database.transactionUnlocked(commands) }
+    }
+
+    private func transactionUnlocked(_ commands: [SQLiteCommand]) throws -> [Int] {
         guard !commands.isEmpty else { return [] }
         let handle = try openHandle()
         try Self.executeScript(handle, sql: "BEGIN IMMEDIATE;")
@@ -112,7 +170,93 @@ public actor SQLiteDatabase {
         }
     }
 
+    /// Keep row and compatibility-snapshot mutations ordered across store
+    /// instances too. The outer lock spans SQLite commit and the file write;
+    /// otherwise a delayed patch snapshot could resurrect a concurrent delete.
+    private func withTaskSnapshotLock<Value>(_ action: () throws -> Value) throws -> Value {
+        try CrossProcessFileLock.withExclusiveLock(
+            at: URL(fileURLWithPath: snapshotURL.path + ".tasks.lock.tmp"), action)
+    }
+
+    func saveTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
+        try withTaskSnapshotLock {
+            let object = try PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
+            _ = try execute("""
+                INSERT INTO tasks (id, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json,
+                  created_at = excluded.created_at, updated_at = excluded.updated_at;
+                """, bindings: [id, String(decoding: data, as: UTF8.self),
+                    object["createdAt"] as? String, object["updatedAt"] as? String])
+            try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+        }
+    }
+
+    func deleteTaskSnapshot(_ id: String, snapshotURL: URL, writer: any AtomicFileWriting, remover: any FileRemoving) throws {
+        try withTaskSnapshotLock {
+            guard try !rows("SELECT 1 FROM tasks WHERE id = ?;", bindings: [id]).isEmpty else {
+                throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+            }
+            let original = try? LocalProjectEncryption.read(from: snapshotURL)
+            do { try remover.removeItem(at: snapshotURL) }
+            catch let error as CocoaError where error.code == .fileNoSuchFile { }
+            do {
+                guard try execute("DELETE FROM tasks WHERE id = ?;", bindings: [id]) > 0 else {
+                    throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+                }
+            } catch {
+                if let original { try? writer.writeAtomically(original, to: snapshotURL, permissions: 0o600) }
+                throw error
+            }
+        }
+    }
+
+    /// A task patch is one read/modify/UPDATE transaction, also inside the
+    /// encrypted snapshot lock. No actor suspension or upsert can lose another
+    /// writer's fields or resurrect a task deleted before this transaction.
+    func patchTask(_ id: String, patch: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
+        try withTaskSnapshotLock {
+            let data = try patchTaskData(id, patch: patch)
+            try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+        }
+    }
+
+    private func patchTaskData(_ id: String, patch: Data) throws -> Data {
+        try withEncryptedSnapshot(writing: true) { database in
+            let handle = try database.openHandle()
+            try Self.executeScript(handle, sql: "BEGIN IMMEDIATE;")
+            do {
+                guard let text = try database.rowsUnlocked(
+                    "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]
+                ).first?["data_json"] ?? nil else {
+                    throw SlateSyncError(code: "ENOENT", message: "任务不存在")
+                }
+                var object = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
+                let createdAt = object["createdAt"]
+                let changes = try PersistenceJSON.object(from: patch, errorCode: "TASK_INVALID")
+                for (key, value) in changes { object[key] = value }
+                let now = PersistenceJSON.timestamp()
+                object["id"] = id
+                object["createdAt"] = createdAt
+                object["updatedAt"] = now
+                let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
+                _ = try database.executeUnlocked(
+                    "UPDATE tasks SET data_json = ?, updated_at = ? WHERE id = ?;",
+                    bindings: [String(decoding: data, as: UTF8.self), now, id]
+                )
+                try Self.executeScript(handle, sql: "COMMIT;")
+                return data
+            } catch {
+                try? Self.executeScript(handle, sql: "ROLLBACK;")
+                throw error
+            }
+        }
+    }
+
     public func rows(_ sql: String, bindings: [String?] = []) throws -> [[String: String?]] {
+        try withEncryptedSnapshot(writing: false) { database in try database.rowsUnlocked(sql, bindings: bindings) }
+    }
+
+    private func rowsUnlocked(_ sql: String, bindings: [String?] = []) throws -> [[String: String?]] {
         let handle = try openHandle()
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -154,6 +298,7 @@ public actor SQLiteDatabase {
     /// Checkpointing before a copy makes the main database file a complete v1
     /// snapshot while leaving WAL mode enabled for the next open.
     public func checkpoint() throws {
+        if encryptionID != nil { return }
         try Self.executeScript(try openHandle(), sql: "PRAGMA wal_checkpoint(TRUNCATE);")
         repairSidecarPermissions()
     }
@@ -176,6 +321,10 @@ public actor SQLiteDatabase {
     /// actor keeps owning the source handle. The destination is switched to the
     /// rollback journal so a portable package never depends on WAL sidecars.
     public func backup(to destinationURL: URL) throws {
+        try withEncryptedSnapshot(writing: false) { database in try database.backupUnlocked(to: destinationURL) }
+    }
+
+    private func backupUnlocked(to destinationURL: URL) throws {
         let source = try openHandle()
         let destination = destinationURL.standardizedFileURL
         guard !FileManager.default.fileExists(atPath: destination.path) else {
@@ -186,7 +335,7 @@ public actor SQLiteDatabase {
         var destinationHandle: OpaquePointer?
         var removeFailedBackup = false
         let openStatus = sqlite3_open_v2(
-            destination.path,
+            (try LocalProjectEncryption.identifier(for: destination)) == nil ? destination.path : ":memory:",
             &destinationHandle,
             SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
             nil
@@ -229,6 +378,9 @@ public actor SQLiteDatabase {
                 throw databaseError(openedDestination, status: status, fallbackCode: "SQLITE_BACKUP")
             }
             try Self.executeScript(openedDestination, sql: "PRAGMA journal_mode = DELETE;")
+            if let id = try LocalProjectEncryption.identifier(for: destination) {
+                try EncryptedSQLiteSnapshot.save(handle: openedDestination, to: destination, id: id)
+            }
             guard sqlite3_close(openedDestination) == SQLITE_OK else {
                 throw SlateSyncError(code: "SQLITE_BACKUP", message: "无法关闭 SQLite 备份")
             }
@@ -256,6 +408,46 @@ public actor SQLiteDatabase {
             throw databaseError(handle, status: status, fallbackCode: "SQLITE_CLOSE")
         }
         self.handle = nil
+    }
+
+    /// Persist before acknowledging a mutation. A failed operation is discarded
+    /// by the next reload, including a failed atomic snapshot replacement.
+    /// Directory renames move the encrypted backing file, unlike an open
+    /// filesystem SQLite handle. Follow the committed library rename explicitly.
+    func relocateEncryptedBacking(to newURL: URL) {
+        snapshotURL = newURL.standardizedFileURL
+        loadedSnapshot = nil
+    }
+
+    private func withEncryptedSnapshot<T>(writing: Bool, _ operation: @Sendable (isolated SQLiteDatabase) throws -> T) throws -> T {
+        guard let encryptionID else { return try operation(self) }
+        if writing && openMode == .readOnly {
+            throw SlateSyncError(code: "SQLITE_READONLY", message: "数据库为只读")
+        }
+        return try CrossProcessFileLock.withExclusiveLock(at: URL(fileURLWithPath: snapshotURL.path + ".lock.tmp")) {
+            let handle = try openHandle()
+            guard FileManager.default.fileExists(atPath: snapshotURL.path) else {
+                throw LocalProjectEncryption.error("加密项目数据库已被移动或删除，请重新打开项目库")
+            }
+            do {
+                let bytes = try Data(contentsOf: snapshotURL)
+                if loadedSnapshot != bytes {
+                    // Load the exact bytes compared here; plaintext/WAL inputs
+                    // return nil and must always be reloaded on the next access.
+                    loadedSnapshot = try EncryptedSQLiteSnapshot.load(url: snapshotURL, into: handle, bytes: bytes)
+                }
+                let result = try operation(self)
+                if writing {
+                    loadedSnapshot = try EncryptedSQLiteSnapshot.save(handle: handle, to: snapshotURL, id: encryptionID)
+                }
+                return result
+            } catch {
+                // A failed script or save may have mutated memory. Force a
+                // reload before any subsequent read or write can observe it.
+                loadedSnapshot = nil
+                throw error
+            }
+        }
     }
 
     private func openHandle() throws -> OpaquePointer {

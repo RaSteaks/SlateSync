@@ -332,7 +332,9 @@ final class ProjectLibraryStoreTests: XCTestCase {
         )
         try await Task.sleep(for: .milliseconds(30))
         async let pendingClose: Void = runtime.closeProject(project.id)
-        try await Task.sleep(for: .milliseconds(30))
+        // Observe the marker published by closeProject instead of guessing
+        // that a scheduler delay has allowed the actor to enter the transition.
+        try await runtime.waitForProjectTransitionStart(project.id)
 
         do {
             _ = try await runtime.deleteProject(project.id)

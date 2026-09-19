@@ -209,6 +209,22 @@ SlateSyncApp/Resources/PaddleOCR
 
 也可以在应用中选择其他项目库位置。全局设置按机器用户保存，不随项目包导入/导出。
 
+### 本地项目加密
+
+正常启动会自动将项目库索引、项目设置、任务、诊断、场记 Profile 和 JSON 快照转换为
+AES-256-GCM 加密存储。加密密钥保存在本机 macOS 登录钥匙串，无需 Apple 开发者账号。
+旧数据逐文件迁移，认证失败或密钥不可用时停止，保留原文件供恢复。
+
+原始媒体与媒体缓存、机器级配置和日志不在此加密范围。应用内导出的 CSV、项目包和项目库
+保持通用格式；导入到本地项目库后重新加密。迁移时请关闭其他旧版 SlateSync。
+
+跨 Mac 或备份给其他软件使用时，请通过应用内导出。直接复制内部加密目录仍需要原钥匙串；
+丢失密钥无法解密。迁移不会清除已有系统备份或磁盘历史快照中的旧明文数据。
+
+内部 SQLite 在内存中查询并以加密快照原子落盘，避免新增明文数据库日志；这会增加大型
+项目库的内存与读写开销。该加密边界保护本地文件内容，不隐藏目录名称，也不替代整盘加密。
+
+
 ### PaddleOCR
 
 PaddleOCR 是可选功能。App 只携带 runner 源码和固定依赖清单，不携带 Python、虚拟环境或模型缓存。
@@ -249,6 +265,23 @@ python3 script/tests/sm09_coverage_tests.py
 python3 script/tests/sm09_inventory_tests.py
 ```
 
+### 合并 CI 与性能报告
+
+PR 和 `swift-rewrite` 的 CI 使用 `./script/phase_gate.sh SM-09 --functional`：
+构建、功能/数据断言、资源释放、原生 UI、归档与安装包验证仍为强制门禁。
+耗时预算由独立的 **Performance report (non-blocking)** 任务检查；原性能阈值不变，
+超标会产生告警，并上传 `native-performance-report`（日志、JSON 指标、汇总），但不阻塞合并。
+功能报告明确标注 `scope=functional`、`approvable=false`，不代表完整发布验收通过。
+
+本地运行相同的严格性能报告（指定新的或空的结果目录）：
+
+```sh
+python3 script/performance_report.py --results-dir /tmp/SlateSync-Performance
+```
+
+此命令失败时仍返回非零；非阻塞策略仅由 CI 工作流决定。默认完整 Gate 和 release workflow
+继续强制执行性能预算，适合发布前验收。
+
 运行当前原生迁移的完整 Gate：
 
 ```sh
@@ -259,9 +292,8 @@ python3 script/tests/sm09_inventory_tests.py
 Gate 会验证原生项目布局、Swift/Xcode 构建与测试、删除来源和冻结夹具、Release/Archive、
 Universal bundle、ZIP/DMG 回验、打包后的 UI 启动与退出重开，以及 CSV 性能预算。
 
-当前本地基线为：普通 Swift 测试 320 项执行、318 项通过、2 项按设计跳过、0 失败；SM-09
-Gate 会启用前台 CSV 性能测试，因此正式 Gate 仅保留 1 项离线 Paddle 测试跳过。严格的
-`-warnings-as-errors` 构建现已通过：
+普通 `swift test` 默认跳过前台 CSV 帧率测试及需要专用环境的离线 Paddle 测试。完整 SM-09
+Gate 会启用前台 CSV 性能测试；功能合并模式则将该测试交给独立性能任务。严格构建命令：
 
 ```sh
 swift build -Xswiftc -warnings-as-errors
@@ -313,3 +345,20 @@ ZIP 和 DMG 来自同一个已审计的 app，并会经过解压、只读挂载�
 ## License
 
 [MIT](./LICENSE)
+
+### 开发构建的钥匙串授权
+
+本机首次开发构建先运行 `python3 script/setup_local_signing.py`，再使用
+`./script/build_and_run.sh`。脚本建立长期复用的本地代码签名证书，无需付费 Apple 开发者
+账号；私钥在登录钥匙串，仓库只引用被忽略的本地证书指纹配置。Xcode Debug/Release
+使用同一配置。请保留原签名证书；证书丢失时构建会停止，不自动更换身份。
+
+首次从临时签名升级时，系统可能分别询问项目密钥和已存 API Key 的访问权限；在确认是
+本机 SlateSync 后选择“始终允许”。正常重启和重新编译会继续使用相同身份。钥匙串锁定、
+授权撤销或更换证书时仍可能要求解锁。此证书只用于本地开发，不替代公开分发签名与公证。
+
+设置状态检查不读取 API Key，秘密只在实际操作时读取并缓存在进程内。取消授权后需主动
+重试，不会循环弹窗。若存在旧版凭据文件，请在设置中点击“迁移旧凭据”完成迁移。
+
+可运行 `python3 script/verify_local_keychain.py` 验证三次独立启动、重新编译与授权失败恢复；
+脚本只创建和清理临时独立钥匙串。隔离 Xcode 测试可显式传入 `CODE_SIGN_IDENTITY=-`。

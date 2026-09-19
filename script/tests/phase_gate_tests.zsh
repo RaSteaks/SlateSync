@@ -228,8 +228,13 @@ run_xcode_test_plan_fixture() {
   print -r -- '#!/bin/zsh
 result_bundle=""
 derived_data=""
+signing_identity=""
 while (( $# > 0 )); do
   case "$1" in
+    CODE_SIGN_IDENTITY=*)
+      signing_identity="${1#CODE_SIGN_IDENTITY=}"
+      shift
+      ;;
     -derivedDataPath)
       derived_data="$2"
       shift 2
@@ -245,6 +250,7 @@ while (( $# > 0 )); do
 done
 print -r -- "$derived_data" > "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
 print -r -- "$result_bundle" >> "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
+print -r -- "$signing_identity" >> "$SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH"
 mkdir -p "$result_bundle"
 print -r -- "fixture xcodebuild status=${SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS}"
 if (( SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS != 0 )); then
@@ -271,6 +277,9 @@ exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
   local recorded_result_bundle
   recorded_derived_data="$(sed -n '1p' "${fixture_dir}/xcodebuild-arguments.txt")"
   recorded_result_bundle="$(sed -n '2p' "${fixture_dir}/xcodebuild-arguments.txt")"
+  # Clean CI must not inherit a developer's private certificate or placeholder.
+  assert_equal "${name} explicitly signs isolated tests ad-hoc" "-" \
+    "$(sed -n '3p' "${fixture_dir}/xcodebuild-arguments.txt")"
   # XCUI executables and their live result bundle must not be hosted below a
   # protected repository; only the completed evidence is moved into results.
   assert_failure "${name} DerivedData is outside repository" \
@@ -686,5 +695,8 @@ assert r["checks"][-1]["result"] == "NOT_RUN"
 assert "missing required tool: rg" in p.with_name("SUMMARY.md").read_text()
 PYTEST
 fi
+# Policy tests prove functional failures remain blocking and advisory results stay honest.
+assert_success "functional/advisory CI policy boundaries" python3 -B "${project_root}/script/tests/ci_policy_tests.py"
+
 print -r -- "Gate helper tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

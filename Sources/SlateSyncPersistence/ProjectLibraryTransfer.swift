@@ -87,7 +87,8 @@ public enum ProjectLibraryTransfer {
 
     public static func validateLibrary(
         at libraryURL: URL,
-        requireExtension: Bool = true
+        requireExtension: Bool = true,
+        keychainBackend: any KeychainBackend = SecurityKeychainBackend()
     ) async throws -> ValidatedLibraryInfo {
         let root = libraryURL.standardizedFileURL
         try requireDirectory(root, code: "INVALID_PROJECT_LIBRARY", message: "请选择有效的 .slatesync-library 项目库目录")
@@ -96,11 +97,16 @@ public enum ProjectLibraryTransfer {
         }
         try assertNoSymbolicLinks(in: root, code: "INVALID_PROJECT_LIBRARY", message: "项目库不能包含符号链接")
 
+        // A previously used library may not be unlocked in this process.
+        // Keep authorization errors outside the malformed-manifest catch so
+        // callers can offer recovery without modifying the selected package.
+        try await LocalProjectEncryption.unlockExisting(at: root, backend: keychainBackend)
+
         let manifest: LibraryV1Manifest
         do {
             manifest = try JSONDecoder().decode(
                 LibraryV1Manifest.self,
-                from: Data(contentsOf: root.appending(path: "library.json"))
+                from: LocalProjectEncryption.read(from: root.appending(path: "library.json"))
             )
         } catch {
             throw transferError("INVALID_PROJECT_LIBRARY", "无法读取 library.json")
@@ -163,11 +169,11 @@ public enum ProjectLibraryTransfer {
         do {
             packageManifest = try JSONDecoder().decode(
                 ProjectPackageManifest.self,
-                from: Data(contentsOf: root.appending(path: projectPackageManifest))
+                from: LocalProjectEncryption.read(from: root.appending(path: projectPackageManifest))
             )
             storageManifest = try JSONDecoder().decode(
                 ProjectV1Manifest.self,
-                from: Data(contentsOf: root.appending(path: "project.json"))
+                from: LocalProjectEncryption.read(from: root.appending(path: "project.json"))
             )
         } catch {
             throw transferError("INVALID_PROJECT_PACKAGE", "无法读取项目包清单")
@@ -387,7 +393,7 @@ public enum ProjectLibraryTransfer {
             let directory = root.appending(path: directoryName, directoryHint: .isDirectory)
             for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
                 guard !isTemporary(file.lastPathComponent), file.pathExtension.lowercased() == "json" else { continue }
-                let data = try Data(contentsOf: file)
+                let data = try LocalProjectEncryption.read(from: file)
                 guard var object = try? PersistenceJSON.object(from: data, errorCode: "INVALID_PROJECT_PACKAGE") else {
                     // Malformed v1 snapshots remain opaque compatibility evidence.
                     continue
@@ -441,10 +447,15 @@ public enum ProjectLibraryTransfer {
                 }
             }
             let metaRows = try await database.rows("SELECT key, value FROM project_meta;")
-            let metadata = Dictionary(uniqueKeysWithValues: metaRows.compactMap { row -> (String, String)? in
-                guard let key = row["key"] ?? nil, let value = row["value"] ?? nil else { return nil }
-                return (key, value)
-            })
+            // External SQLite schemas may omit the expected primary key.
+            // Treat duplicates as an invalid package, never a Dictionary trap.
+            var metadata: [String: String] = [:]
+            for row in metaRows {
+                guard let key = row["key"] ?? nil, let value = row["value"] ?? nil,
+                      metadata.updateValue(value, forKey: key) == nil else {
+                    throw transferError("INVALID_PROJECT_PACKAGE", "项目数据库资料包含重复键或空值")
+                }
+            }
             let required = ["project_id", "library_id", "name", "description", "settings", "created_at", "updated_at", "archived_at", "schema_version"]
             guard required.allSatisfy({ metadata[$0] != nil }),
                   metadata["project_id"] == expected.id,
@@ -528,7 +539,7 @@ public enum ProjectLibraryTransfer {
         do {
             return try JSONDecoder().decode(
                 ProjectV1Manifest.self,
-                from: Data(contentsOf: root.appending(path: "project.json"))
+                from: LocalProjectEncryption.read(from: root.appending(path: "project.json"))
             )
         } catch {
             throw transferError("INVALID_PROJECT_PACKAGE", "无法读取项目存储中的 project.json")
@@ -540,7 +551,7 @@ public enum ProjectLibraryTransfer {
             let directory = root.appending(path: directoryName, directoryHint: .isDirectory)
             for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
                 guard !isTemporary(file.lastPathComponent) else { continue }
-                let data = try Data(contentsOf: file)
+                let data = try LocalProjectEncryption.read(from: file)
                 guard let object = try? PersistenceJSON.object(from: data, errorCode: "INVALID_PROJECT_PACKAGE") else {
                     continue
                 }
@@ -615,7 +626,8 @@ public enum ProjectLibraryTransfer {
               !isSQLiteArtifact(source.lastPathComponent),
               !skippedNames.contains(source.lastPathComponent) else { return }
         try SecureFilePermissions.prepareDirectory(at: target.deletingLastPathComponent())
-        try FileManager.default.copyItem(at: source, to: target)
+        // Decode internal envelopes at the portable boundary; imports seal again.
+        try FileManagerAtomicFileWriter().writeAtomically(LocalProjectEncryption.read(from: source), to: target, permissions: 0o600)
         try SecureFilePermissions.repairFile(at: target, permissions: 0o600)
     }
 
@@ -624,7 +636,7 @@ public enum ProjectLibraryTransfer {
         var traversalError: (any Error)?
         let enumerator = FileManager.default.enumerator(
             at: sourceRoot,
-            includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey],
+            includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey],
             options: [],
             errorHandler: { _, error in
                 traversalError = error
@@ -633,7 +645,11 @@ public enum ProjectLibraryTransfer {
         )
         while let source = enumerator?.nextObject() as? URL {
             if isTemporary(source.lastPathComponent) {
-                enumerator?.skipDescendants()
+                // Skipping descendants on a regular lock file can skip its
+                // siblings, including the database that still needs backup.
+                if try source.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
+                    enumerator?.skipDescendants()
+                }
                 continue
             }
             let values = try source.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
@@ -723,7 +739,7 @@ public enum ProjectLibraryTransfer {
     }
 
     private static func isTemporary(_ name: String) -> Bool {
-        name.lowercased().hasSuffix(".tmp")
+        name == LocalProjectEncryption.markerName || name.lowercased().hasSuffix(".tmp")
     }
 
     private static func isLibraryID(_ value: String) -> Bool {

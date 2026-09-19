@@ -87,6 +87,25 @@ public enum SQLiteV1 {
     }
 
     static func bootstrapProject(_ database: SQLiteDatabase) async throws {
+        // Derive required objects from the same DDL that creates them, so adding
+        // a table/index cannot silently leave an independent name list stale.
+        // Unknown statement forms fall back to running DDL rather than skipping
+        // a future migration whose effects this existence check cannot verify.
+        let statements = projectSchema.split(separator: ";").filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let required = statements.compactMap { statement -> String? in
+            let words = statement.split(whereSeparator: { $0.isWhitespace })
+            guard words.count >= 6, words[0] == "CREATE",
+                  words[1] == "TABLE" || words[1] == "INDEX",
+                  words[2] == "IF", words[3] == "NOT", words[4] == "EXISTS" else { return nil }
+            return "\(words[1].lowercased()):\(words[5])"
+        }
+        let installed = Set(try await database.rows(
+            "SELECT type || ':' || name AS object FROM sqlite_master WHERE type IN ('table', 'index');"
+        ).compactMap { $0["object"] ?? nil })
+        if required.count == statements.count, !required.isEmpty,
+           Set(required).isSubset(of: installed) { return }
         try await database.executeScript(projectSchema)
     }
 }

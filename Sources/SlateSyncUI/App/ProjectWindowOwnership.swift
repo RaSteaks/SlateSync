@@ -1,6 +1,8 @@
 import Foundation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Application-scoped ownership map, injected into window sessions. Different
 /// projects may be edited concurrently; a second writer for the same project
 /// is rejected explicitly instead of racing independent autosave snapshots.
@@ -11,7 +13,7 @@ public final class ProjectWindowOwnership {
 
     public func acquire(projectID: String, windowID: UUID) throws {
         guard owners[projectID] == nil || owners[projectID] == windowID else {
-            throw SlateSyncError(code: "PROJECT_OPEN_IN_OTHER_WINDOW", message: "此项目已在另一个窗口打开，请在该窗口继续编辑", retryable: true)
+            throw SlateSyncError(code: "PROJECT_OPEN_IN_OTHER_WINDOW", message: L10n.tr("此项目已在另一个窗口打开，请在该窗口继续编辑"), retryable: true)
         }
         owners[projectID] = windowID
     }

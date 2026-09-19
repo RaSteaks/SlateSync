@@ -13,13 +13,14 @@ readonly exit_usage=64
 phase=""
 evidence_path=""
 allow_dirty=0
+functional_only=0
 results_root="${SLATESYNC_GATE_RESULTS_DIR:-${project_root}/.codex/gate-results}"
 overall_failures=0
 overall_environment_blocks=0
 approvable=true
 
 usage() {
-  print -r -- "用法: ./script/phase_gate.sh SM-XX [--evidence FILE] [--results-dir DIR] [--allow-dirty]"
+  print -r -- "用法: ./script/phase_gate.sh SM-XX [--evidence FILE] [--results-dir DIR] [--allow-dirty] [--functional]"
 }
 
 sanitize_field() {
@@ -300,8 +301,11 @@ clean_workspace_check() {
 # 与其他 Gate 检查一样支持自测注入故障 rg，验证扫描工具自身故障时 fail-closed。
 
 sm01_debug_settings_check() {
+  # Gate artifacts run against isolated roots and are ad-hoc candidates, so
+  # every build explicitly bypasses the machine-local development certificate.
   local settings
   settings="$(xcodebuild \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Debug \
@@ -410,12 +414,12 @@ write_result_artifacts() {
   generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
   python3 - "$checks_tsv" "${result_dir}/result.json" \
-    "$phase" "$review_commit" "$generated_at" "$overall_result" "$approvable" "$allow_dirty" <<'PY'
+    "$phase" "$review_commit" "$generated_at" "$overall_result" "$approvable" "$allow_dirty" "$functional_only" <<'PY'
 import csv
 import json
 import sys
 
-checks_path, output_path, phase, commit, generated_at, overall, approvable, allow_dirty = sys.argv[1:]
+checks_path, output_path, phase, commit, generated_at, overall, approvable, allow_dirty, functional_only = sys.argv[1:]
 checks = []
 with open(checks_path, encoding="utf-8", newline="") as handle:
     for row in csv.reader(handle, delimiter="\t"):
@@ -430,6 +434,8 @@ with open(checks_path, encoding="utf-8", newline="") as handle:
 
 payload = {
     "schemaVersion": 1,
+    "scope": "functional" if functional_only == "1" else "full",
+    "performancePolicy": "advisory" if functional_only == "1" else "required",
     "phase": phase,
     "reviewCommit": commit,
     "generatedAt": generated_at,
@@ -450,6 +456,7 @@ PY
     print -r -- "- Commit: \`${review_commit}\`"
     print -r -- "- Generated: ${generated_at}"
     print -r -- "- Result: **${overall_result}**"
+    print -r -- "- Functional-only: **${functional_only}**"
     print -r -- "- Approvable: **${approvable}**"
     print -r -- ""
     print -r -- "Raw check logs and result.json are local artifacts and must not be committed."
@@ -473,6 +480,11 @@ while (( $# > 0 )); do
       (( $# >= 2 )) || { usage; exit "$exit_usage"; }
       results_root="$2"
       shift 2
+      ;;
+    --functional)
+      functional_only=1
+      approvable=false
+      shift
       ;;
     --allow-dirty)
       allow_dirty=1
@@ -551,12 +563,24 @@ swift_test_check() {
     # SM-08/SM-09 的 Gate 显式获得前台授权：收集全部 scale JSON 于忽略的
     # Gate 工件目录并行使真实显示节奏（SM-09 的 sm08 技术回归要求该用例
     # 在日志中 PASS；WP-1 也明确不因进入 release 阶段跳过性能）。常规
-    # `swift test` 保持该面跳过。
+    # `swift test` 保持该面跳过。Gate 的完整套件使用交付配置 Release：
+    # Debug 的 -Onone 开销不应计入用户可见延迟预算；Debug 构建和 Xcode
+    # Test Plan 仍单独执行。所有用例、前台采样及原有性能阈值保持启用。
     mkdir -p "${result_dir}/sm08-metrics" || return 1
-    SWIFTPM_MODULECACHE_OVERRIDE="${result_dir}/swift-module-cache" \
-    CLANG_MODULE_CACHE_PATH="${result_dir}/swift-module-cache" \
-    SLATESYNC_SM08_METRICS_DIR="${result_dir}/sm08-metrics" \
-      SLATESYNC_SM08_FOREGROUND_GATE=1 swift test
+    # Merge CI retains semantic/resource assertions but delegates elapsed-time
+    # budgets to the advisory job. The default release Gate stays strict.
+    local -x SWIFTPM_MODULECACHE_OVERRIDE="${result_dir}/swift-module-cache"
+    local -x CLANG_MODULE_CACHE_PATH="${result_dir}/swift-module-cache"
+    local -x SLATESYNC_SM08_METRICS_DIR="${result_dir}/sm08-metrics"
+    # The timed CSV pass has its own lane; inherited flags cannot promote it here.
+    local -x SM05_PERFORMANCE_GATE=0
+    local -x SLATESYNC_PERFORMANCE_POLICY=strict
+    local -x SLATESYNC_SM08_FOREGROUND_GATE=1
+    if (( functional_only )); then
+      SLATESYNC_PERFORMANCE_POLICY=functional
+      SLATESYNC_SM08_FOREGROUND_GATE=0
+    fi
+    swift test --configuration release
   else
     swift test
   fi
@@ -564,6 +588,7 @@ swift_test_check() {
 run_check swift_test true "SwiftPM 核心测试通过" swift_test_check
 run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   xcodebuild -quiet \
+  CODE_SIGN_IDENTITY=- \
   -project SlateSync.xcodeproj \
   -scheme SlateSync \
   -configuration Debug \
@@ -588,12 +613,18 @@ sm09_release_tools_check() {
 run_check sm09_release_tools true "原生归档、依赖与 ZIP/DMG 审计工具可用" sm09_release_tools_check
 run_check sm09_release_contract true "原生资源、版本、workflow 与发布边界完整" \
   python3 -B script/tests/sm09_release_contract.py
-run_check sm09_native_contract true "删除来源、冻结夹具、235 项原生回归与45项界面验收有实际证据" \
-  python3 -B script/tests/sm09_native_contract.py --result-dir "$result_dir"
+contract_arguments=()
+(( functional_only )) && contract_arguments=(--functional)
+run_check sm09_native_contract true "原生来源、功能与资源验收符合当前检查范围" \
+  python3 -B script/tests/sm09_native_contract.py --result-dir "$result_dir" "${contract_arguments[@]}"
 run_check sm09_package_self_tests true "包审计失败、并发和清理路径自测通过" \
   ./script/tests/release_pipeline_tests.zsh
-run_check sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
-  env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling
+if (( functional_only )); then
+  record_check sm05_release_performance false NOT_APPLICABLE "性能预算由独立 advisory job 报告；本次不构成完整发布验收" ""
+else
+  run_check sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
+    env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling
+fi
 
 # Milestone phases retain the real executable and distributable artifact
 # checks. SM-08 adds the final native UI to the same signed app surface.
@@ -605,6 +636,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_real_app_launch_check
   run_check sm01_release_build true "Release generic macOS 构建通过" \
     xcodebuild -quiet \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Release \
@@ -615,6 +647,7 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     sm01_release_artifact_check
   run_check sm01_archive true "共享 Scheme 可生成 Release Archive" \
     xcodebuild -quiet \
+    CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
     -scheme SlateSync \
     -configuration Release \
@@ -637,7 +670,9 @@ fi
 # 批准检查仅在"状态阶段 == 本阶段且 lifecycleState == COMPLETE"时生效；
 # PASS 合法中间态（Gate PASS 后、Owner 批准前）窗口内按 NOT_APPLICABLE
 # 记录，门控用 JSON 精确判断而非子串匹配（见 lib 中 gate_state_is_complete）。
-if gate_state_is_complete \
+if (( functional_only )); then
+  record_check approval_freshness false NOT_APPLICABLE "功能合并检查不授予发布批准" ""
+elif gate_state_is_complete \
   .codex/swift-migration/CURRENT_STATE.json "$phase"; then
   run_check approval_freshness true "COMPLETE 状态包含匹配当前提交的 Owner 批准" \
     gate_validate_approval_state \
@@ -666,7 +701,7 @@ if [[ "$overall_result" == "FAIL" ]]; then
   exit "$exit_fail"
 elif [[ "$overall_result" == "BLOCKED_ENV" ]]; then
   exit "$exit_blocked_environment"
-elif [[ "$approvable" != "true" ]]; then
+elif (( allow_dirty )) || [[ "$approvable" != "true" && "$functional_only" != "1" ]]; then
   exit "$exit_diagnostic_only"
 fi
 exit 0

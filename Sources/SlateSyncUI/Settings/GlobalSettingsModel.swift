@@ -2,6 +2,37 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
+/// Result of the Provider panel's two persistence transactions. Keeping the
+/// two flags separate lets the UI explain a successful ordinary-config write
+/// when a subsequent Keychain write fails.
+public struct BuiltinProviderSaveResult: Hashable, Sendable {
+    public let configurationSaved: Bool
+    public let credentialUpdateRequested: Bool
+    public let credentialSaved: Bool
+    public let message: String
+    public let error: SlateSyncError?
+
+    public var isComplete: Bool {
+        configurationSaved && (!credentialUpdateRequested || credentialSaved)
+    }
+
+    public init(
+        configurationSaved: Bool,
+        credentialUpdateRequested: Bool,
+        credentialSaved: Bool,
+        message: String,
+        error: SlateSyncError? = nil
+    ) {
+        self.configurationSaved = configurationSaved
+        self.credentialUpdateRequested = credentialUpdateRequested
+        self.credentialSaved = credentialSaved
+        self.message = message
+        self.error = error
+    }
+}
+
 /// Global settings keeps editing and live snapshots separate. Provider key
 /// bytes are accepted only as method arguments and are never published by this
 /// observable model.
@@ -9,6 +40,55 @@ import SlateSyncDomain
 public final class GlobalSettingsModel {
     public private(set) var live: GlobalSettingsProjection?
     public private(set) var operation: OperationState = .idle
+    public private(set) var ocrChecks: [OCREnvironmentCheck] = []
+    public private(set) var ocrCheckOperation: OperationState = .idle
+    private var checkedOCRDraft: GlobalSettingValues?
+    private var ocrCheckTask: Task<[OCREnvironmentCheck], Error>?
+
+    /// Keep historical results visible but never present them as current after
+    /// edits, installation, or another settings snapshot changes their inputs.
+    public var ocrChecksAreStale: Bool {
+        guard let checkedOCRDraft else { return false }
+        return Self.ocrInputs(checkedOCRDraft) != Self.ocrInputs(draft)
+    }
+
+    private static func ocrInputs(_ values: GlobalSettingValues) -> [GlobalSettingKey: String] {
+        values.values.filter { $0.key.rawValue.hasPrefix("VISIONOCR_") || $0.key.rawValue.hasPrefix("PADDLEOCR_") }
+    }
+
+    public func checkOCREnvironment() async {
+        guard !ocrCheckOperation.isRunning, beginOperation() else { return }
+        defer { endOperation() }
+        let snapshot = draft
+        ocrChecks = []
+        checkedOCRDraft = nil
+        ocrCheckOperation = .running(label: L10n.tr("正在检测 OCR 环境…"))
+        let task = Task { try await service.checkOCREnvironment(values: snapshot) }
+        ocrCheckTask = task
+        defer { ocrCheckTask = nil }
+        do {
+            let checks = try await task.value
+            if task.isCancelled { throw CancellationError() }
+            ocrChecks = checks
+            checkedOCRDraft = snapshot
+            ocrCheckOperation = .succeeded(message: L10n.tr("OCR 环境检测完成"))
+        } catch is CancellationError {
+            ocrCheckOperation = .canceled
+        } catch {
+            ocrCheckOperation = .failed(ProductPrivacy.error(error))
+        }
+    }
+
+    public func cancelOCREnvironmentCheck() {
+        // The retained task owns subprocess cleanup before completion.
+        ocrCheckTask?.cancel()
+    }
+
+    public func invalidateOCREnvironmentCheck() {
+        // Reinstallation can change packages without changing the Python path.
+        ocrChecks = []
+        checkedOCRDraft = nil
+    }
     /// Shared windows observe this monotonic publication token and reload the
     /// workflow-owned Provider/model projection after Settings changes.
     public private(set) var revision = 0
@@ -33,7 +113,7 @@ public final class GlobalSettingsModel {
         defer { endOperation() }
         // Reopening Settings must not replace an existing unsaved draft.
         guard live == nil, !operation.isRunning else { return }
-        operation = .running(label: "正在读取全局设置…")
+        operation = .running(label: L10n.tr("正在读取全局设置…"))
         do {
             let value = try await service.globalSettings()
             publish(value)
@@ -50,7 +130,7 @@ public final class GlobalSettingsModel {
         guard beginOperation() else { return }
         defer { endOperation() }
         guard !operation.isRunning else { return }
-        operation = .running(label: "正在保存全局设置…")
+        operation = .running(label: L10n.tr("正在保存全局设置…"))
         let values = draft
         let providers = customProviders
         do {
@@ -69,15 +149,15 @@ public final class GlobalSettingsModel {
             // cannot hot-switch the startup provider, so the save response
             // announces that a relaunch is needed.
             operation = saved.restartRequired
-                ? .succeeded(message: "已保存；工作流路径下次启动生效。")
-                : .succeeded(message: "全局设置已保存")
+                ? .succeeded(message: L10n.tr("已保存；工作流路径下次启动生效。"))
+                : .succeeded(message: L10n.tr("全局设置已保存"))
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }
     }
 
     public func storeCredential(_ value: String?, providerID: String) async throws {
-        guard beginOperation() else { throw SlateSyncError(code: "SETTINGS_CLOSING", message: "设置正在关闭，请稍后重试") }
+        guard beginOperation() else { throw SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试")) }
         defer { endOperation() }
         try await service.setProviderCredential(value, providerID: providerID)
         // Keychain edits refresh configured status without discarding unrelated
@@ -85,10 +165,171 @@ public final class GlobalSettingsModel {
         refreshPreservingDraft(try await service.globalSettings())
     }
 
+    /// Saves only the fields owned by one built-in Provider. The current live
+    /// snapshot is used as the base so an independent settings draft is not
+    /// accidentally cleared when the small Provider sheet saves itself.
+    public func saveBuiltinProviderConfiguration(
+        providerID: String,
+        values: [GlobalSettingKey: String?],
+        apiKey: String?
+    ) async -> BuiltinProviderSaveResult {
+        guard beginOperation() else {
+            let error = SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试"))
+            return .init(
+                configurationSaved: false,
+                credentialUpdateRequested: apiKey != nil,
+                credentialSaved: false,
+                message: error.message,
+                error: error
+            )
+        }
+        defer { endOperation() }
+        operation = .running(label: L10n.tr("正在保存 Provider 配置…"))
+
+        let cleanedKey: String?
+        if let apiKey {
+            let value = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else {
+                let error = SlateSyncError(code: "PROVIDER_KEY_INVALID", message: L10n.tr("API Key 不能是纯空白；留空表示保留当前 Key"))
+                operation = .failed(error)
+                return .init(
+                    configurationSaved: false,
+                    credentialUpdateRequested: true,
+                    credentialSaved: false,
+                    message: error.message,
+                    error: error
+                )
+            }
+            cleanedKey = value
+        } else {
+            cleanedKey = nil
+        }
+
+        var candidate = live?.values ?? draft
+        let baseURLKeys: Set<GlobalSettingKey> = [
+            .openAIBaseUrl,
+            .openRouterBaseUrl,
+            .tokenPlanBaseUrl,
+            .dashScopeBaseUrl,
+            .openAICompatibleBaseUrl,
+        ]
+        do {
+            for (key, rawValue) in values {
+                guard let rawValue else {
+                    candidate[key] = nil
+                    continue
+                }
+                let normalized = try GlobalSettingsValidator.normalizedPatchValue(rawValue, for: key)
+                if normalized?.isEmpty == true {
+                    guard !baseURLKeys.contains(key) else {
+                        throw SlateSyncError(code: "PROVIDER_URL", message: L10n.tr("API 基础地址不能为空；请填写地址或恢复默认地址"))
+                    }
+                    candidate[key] = nil
+                } else {
+                    candidate[key] = normalized
+                }
+            }
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            return .init(
+                configurationSaved: false,
+                credentialUpdateRequested: apiKey != nil,
+                credentialSaved: false,
+                message: L10n.tr("配置未保存：{0}", [String(describing: L10n.message(sanitized.message))]),
+                error: sanitized
+            )
+        }
+
+        let saved: GlobalSettingsProjection
+        do {
+            saved = try await service.saveGlobalSettings(values: candidate, customProviders: customProviders)
+            // A changed Base URL or protocol invalidates the old discovery and
+            // probe result immediately; the workflow façade also resets its
+            // Provider runtime before committing the ordinary configuration.
+            providerRequests[providerID] = nil
+            discoveryResults[providerID] = nil
+            providerOperations[providerID] = nil
+            probeProgress[providerID] = nil
+            probingProviderIDs.remove(providerID)
+            refreshPreservingDraft(saved)
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            return .init(
+                configurationSaved: false,
+                credentialUpdateRequested: apiKey != nil,
+                credentialSaved: false,
+                message: L10n.tr("配置未保存：{0}", [String(describing: L10n.message(sanitized.message))]),
+                error: sanitized
+            )
+        }
+
+        guard let cleanedKey else {
+            operation = .succeeded(message: L10n.tr("Provider 配置已保存；未修改当前 API Key"))
+            return .init(
+                configurationSaved: true,
+                credentialUpdateRequested: false,
+                credentialSaved: false,
+                message: L10n.tr("Provider 配置已保存；未修改当前 API Key")
+            )
+        }
+
+        do {
+            try await service.setProviderCredential(cleanedKey, providerID: providerID)
+            // The write API intentionally returns no secret. Refresh only the
+            // secret-free projection so status changes are visible in both the
+            // list and this still-open configuration panel.
+            if let refreshed = try? await service.globalSettings() {
+                refreshPreservingDraft(refreshed)
+            }
+            operation = .succeeded(message: L10n.tr("Provider 配置与 API Key 已保存"))
+            return .init(
+                configurationSaved: true,
+                credentialUpdateRequested: true,
+                credentialSaved: true,
+                message: L10n.tr("Provider 配置与 API Key 已保存")
+            )
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            return .init(
+                configurationSaved: true,
+                credentialUpdateRequested: true,
+                credentialSaved: false,
+                message: L10n.tr("普通配置已保存，但 API Key 保存失败：{0}", [String(describing: L10n.message(sanitized.message))]),
+                error: sanitized
+            )
+        }
+    }
+
+    /// Key deletion is independent from the blank API Key field. A dedicated
+    /// call prevents an accidental empty submit from destroying a valid key.
+    public func removeProviderCredential(providerID: String) async throws {
+        guard beginOperation() else {
+            throw SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试"))
+        }
+        defer { endOperation() }
+        operation = .running(label: L10n.tr("正在删除 API Key…"))
+        do {
+            try await service.setProviderCredential(nil, providerID: providerID)
+            if let refreshed = try? await service.globalSettings() {
+                refreshPreservingDraft(refreshed)
+            }
+            discoveryResults[providerID] = nil
+            providerOperations[providerID] = nil
+            operation = .succeeded(message: L10n.tr("{0} 的 API Key 已删除", [String(describing: providerID)]))
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            operation = .failed(sanitized)
+            throw sanitized
+        }
+    }
+
     public func retryLegacyCredentialMigration() async {
         guard beginOperation() else { return }
         defer { endOperation() }
-        operation = .running(label: "正在重试旧凭据迁移…")
+        operation = .running(label: L10n.tr("正在重试旧凭据迁移…"))
         do {
             refreshPreservingDraft(try await service.retryLegacyCredentialMigration())
             operation = .idle
@@ -101,7 +342,7 @@ public final class GlobalSettingsModel {
         guard beginOperation() else { return }
         defer { endOperation() }
         guard providerOperations[providerID]?.isRunning != true else { return }
-        providerOperations[providerID] = .running(label: "正在刷新模型…")
+        providerOperations[providerID] = .running(label: L10n.tr("正在刷新模型…"))
         let request = UUID()
         providerRequests[providerID] = request
         do {
@@ -111,7 +352,12 @@ public final class GlobalSettingsModel {
             )
             guard providerRequests[providerID] == request else { return }
             discoveryResults[providerID] = result
-            providerOperations[providerID] = .succeeded(message: "发现 \(result.visionModelCount) 个可用模型")
+            // Publish the shared catalog revision so already-open workspaces
+            // refresh their model pickers without discarding Settings drafts.
+            let refreshed = try await service.globalSettings()
+            guard providerRequests[providerID] == request else { return }
+            refreshPreservingDraft(refreshed)
+            providerOperations[providerID] = .succeeded(message: L10n.tr("发现 {0} 个可用模型", [String(describing: result.visionModelCount)]))
         } catch {
             guard providerRequests[providerID] == request else { return }
             providerOperations[providerID] = .failed(ProductPrivacy.error(error))
@@ -122,7 +368,7 @@ public final class GlobalSettingsModel {
         guard beginOperation() else { return }
         defer { endOperation() }
         guard providerOperations[providerID]?.isRunning != true else { return }
-        providerOperations[providerID] = .running(label: "正在验证视觉能力…")
+        providerOperations[providerID] = .running(label: L10n.tr("正在验证视觉能力…"))
         probeProgress[providerID] = nil
         probingProviderIDs.insert(providerID)
         let request = UUID()
@@ -145,14 +391,14 @@ public final class GlobalSettingsModel {
                     }
                     self.probeProgress[providerID] = value
                     self.providerOperations[providerID] = .running(
-                        label: "已验证 \(value.completed)/\(value.total)"
+                        label: L10n.tr("已验证 {0}/{1}", [String(describing: value.completed), String(describing: value.total)])
                     )
                 }
             }
             guard providerRequests[providerID] == request else { return }
             providerOperations[providerID] = result.canceled
                 ? .canceled
-                : .succeeded(message: "模型能力验证完成")
+                : .succeeded(message: L10n.tr("模型能力验证完成"))
             let refreshed = try await service.globalSettings()
             guard providerRequests[providerID] == request else { return }
             refreshPreservingDraft(refreshed)
@@ -169,7 +415,7 @@ public final class GlobalSettingsModel {
         guard beginOperation() else { return }
         defer { endOperation() }
         guard providerOperations[providerID]?.isRunning == true else { return }
-        providerOperations[providerID] = .running(label: "正在取消验证…")
+        providerOperations[providerID] = .running(label: L10n.tr("正在取消验证…"))
         // A provider edit/removal can supersede this cancellation while the
         // service drains. Retain a unique owner so the late callback cannot
         // recreate operation state that the newer mutation already cleared.
@@ -237,7 +483,7 @@ public final class GlobalSettingsModel {
         guard !customProviders.contains(where: {
             $0.id != existing?.id && $0.name.caseInsensitiveCompare(cleanName) == .orderedSame
         }) else {
-            operation = .failed(.init(code: "CUSTOM_PROVIDER_DUPLICATE", message: "Provider 名称已存在"))
+            operation = .failed(.init(code: "CUSTOM_PROVIDER_DUPLICATE", message: L10n.tr("Provider 名称已存在")))
             return false
         }
         let models = modelIDs
@@ -323,6 +569,7 @@ public final class GlobalSettingsModel {
     /// admission, cancels network probes, then joins all active service calls.
     public func drain() async {
         acceptsOperations = false
+        ocrCheckTask?.cancel()
         for id in providerOperations.keys where providerOperations[id]?.isRunning == true {
             await service.cancelModelProbe(providerID: id)
         }

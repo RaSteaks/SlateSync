@@ -63,6 +63,11 @@ def validate_resources(manifest: dict[str, object]) -> None:
         require(len(data) == entry["bytes"], f"resource byte count drift: {source}")
         require(hashlib.sha256(data).hexdigest() == entry["sha256"], f"resource hash drift: {source}")
 
+    # UI copy is a shipped resource too. Adding a locale or help file without
+    # updating the current release manifest must fail before archive/package.
+    ui_resources = {str(path.relative_to(ROOT)) for path in (ROOT / "Sources/SlateSyncUI/Resources").rglob("*") if path.is_file()}
+    require(ui_resources <= seen, f"untracked UI resources in release manifest: {sorted(ui_resources - seen)}")
+
     tracked = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
         check=True,
@@ -103,12 +108,12 @@ def validate_workflows(ci: str, release: str) -> None:
     validate_yaml_shape(ci, "ci.yml")
     validate_yaml_shape(release, "release.yml")
     combined = ci + "\n" + release
-    require(combined.count("runs-on: macos-26") == 2, "runner image drift")
+    require(combined.count("runs-on: macos-26") == 3, "runner image drift")
     require(
-        combined.count("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer") == 2,
+        combined.count("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer") == 3,
         "Xcode selection drift",
     )
-    require(combined.count("timeout-minutes: 30") == 2, "CARRY-02 timeout drift")
+    require(combined.count("timeout-minutes: 45") == 2, "native Gate execution budget drift")
     forbidden = re.compile(
         r"actions/setup-node|\bnpm\b|\bnpx\b|\bnode\b|electron-builder|\bgh\s+release\b|"
         r"CSC_LINK|APPLE_APP_SPECIFIC_PASSWORD|notarytool",
@@ -121,6 +126,12 @@ def validate_workflows(ci: str, release: str) -> None:
         "./script/phase_gate.sh SM-09",
     ):
         require(required in ci, f"CI native command missing: {required}")
+    require("./script/phase_gate.sh SM-09 --functional" in ci, "merge CI must explicitly select functional scope")
+    primary, separator, advisory = ci.partition("\n  performance:")
+    require(separator and "continue-on-error:" not in primary, "required functional job must fail closed")
+    require(advisory.count("continue-on-error: true") == 2 and "script/performance_report.py" in advisory,
+            "independent advisory performance job missing")
+    require("--functional" not in release, "release acceptance must retain strict performance budgets")
     require("./script/phase_gate.sh SM-09" in release, "release native Gate missing")
     require("workflow_dispatch:" in release, "release must use protected explicit dispatch")
     require("contents: read" in release, "release permissions are not read-only")
@@ -186,6 +197,15 @@ def run_self_tests() -> None:
         cases += 1
     else:
         raise AssertionError("resource hash negative fixture unexpectedly passed")
+
+    manifest = json.loads(read(".codex/swift-migration/manifests/sm09-native-resources.json"))
+    manifest["resources"] = [entry for entry in manifest["resources"] if entry["role"] != "english-localization"]
+    try:
+        validate_resources(manifest)
+    except AssertionError:
+        cases += 1
+    else:
+        raise AssertionError("missing localization resource unexpectedly passed")
 
     gate = read("script/phase_gate.sh")
     for mutated, expected in (

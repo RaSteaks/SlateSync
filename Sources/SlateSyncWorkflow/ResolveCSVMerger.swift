@@ -183,36 +183,9 @@ public actor ResolveCSVMerger {
             warnings.append("Shoot Day 对账：\(orderedMissingDay.count) 个已识别且匹配 CSV 的素材没有可用 Shot Date（\(ResolveCSVNormalization.compactMaterialRanges(orderedMissingDay))），其 Shoot Day 保持原值。")
         }
 
-        // Electron performs fixed-width fields across the whole table first,
-        // then Comments in a second pass; preserve that changes/warning order.
-        for rowNumber in rows.indices {
-            if rowNumber.isMultiple(of: 512) { try Task.checkCancellation() }
-            let targets = [
-                ("scene", columns.scene, ResolveCSVNormalization.normalizeScene(rows[rowNumber][columns.scene], format: fieldFormats.scene)),
-                ("shot", columns.shot, ResolveCSVNormalization.normalizeShot(rows[rowNumber][columns.shot], format: fieldFormats.shot)),
-                ("take", columns.take, ResolveCSVNormalization.normalizeTake(rows[rowNumber][columns.take], format: fieldFormats.take)),
-            ]
-            for (field, column, value) in targets {
-                let previous = ResolveCSVNormalization.clean(rows[rowNumber][column])
-                Self.write(value, field: field, column: column, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
-                if previous != value {
-                    let fileName = Self.rowDisplayName(rows[rowNumber], columns: columns)
-                    warnings.append("CSV 第 \(rowNumber + 2) 行 \(fileName.isEmpty ? "未知素材" : fileName) 的 \(headers[column])“\(previous)”已规范为“\(value)”。")
-                }
-            }
-        }
-
-        for rowNumber in rows.indices {
-            if rowNumber.isMultiple(of: 512) { try Task.checkCancellation() }
-            let previous = ResolveCSVNormalization.clean(rows[rowNumber][columns.comments])
-            let value = ResolveCSVNormalization.canonicalComment(rows[rowNumber][columns.comments], comments: comments)
-            Self.write(value, field: "comments", column: columns.comments, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
-            if previous != value {
-                let fileName = Self.rowDisplayName(rows[rowNumber], columns: columns)
-                warnings.append("CSV 第 \(rowNumber + 2) 行 \(fileName.isEmpty ? "未知素材" : fileName) 的 Comments“\(previous)”已规范为“\(value)”。")
-            }
-        }
-
+        // Matched candidates were normalized before writing. Unmatched,
+        // conflicting and incomplete rows retain their original cell values;
+        // a whole-table cleanup would silently erase unrelated Resolve notes.
         // Preserve request order exactly; a Dictionary here would reintroduce
         // process-randomized audit ordering for multiple manual edits.
         for edit in edits {

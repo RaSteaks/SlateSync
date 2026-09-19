@@ -51,16 +51,17 @@ public actor ResolveCSVEngine: CSVProcessing {
     }
 
     public func encode(_ table: ResolveCSVTable) throws -> Data {
-        try encode(table, fieldFormats: .init(), comments: .init(), canonicalizeComments: false)
+        try encode(table, fieldFormats: .init(), comments: .init(), canonicalizeComments: false, normalizeFields: false)
     }
 
-    /// The explicit export variant performs the same field canonicalization as
-    /// the Electron encoder while the protocol method remains a plain round trip.
+    /// Explicit legacy normalization remains opt-in. Normal exports encode the
+    /// merged table verbatim so unmatched cells and manual edits survive.
     public func encode(
         _ table: ResolveCSVTable,
         fieldFormats: ResolveFieldFormats,
         comments: ResolveComments,
-        canonicalizeComments: Bool
+        canonicalizeComments: Bool,
+        normalizeFields: Bool = true
     ) throws -> Data {
         try table.format.validate()
         try fieldFormats.validate()
@@ -70,9 +71,9 @@ public actor ResolveCSVEngine: CSVProcessing {
         let rows = table.rows.map { source -> [String] in
             var row = Array(source.prefix(table.headers.count))
             if row.count < table.headers.count { row.append(contentsOf: repeatElement("", count: table.headers.count - row.count)) }
-            if columns.scene >= 0 { row[columns.scene] = ResolveCSVNormalization.normalizeScene(row[columns.scene], format: fieldFormats.scene) }
-            if columns.shot >= 0 { row[columns.shot] = ResolveCSVNormalization.normalizeShot(row[columns.shot], format: fieldFormats.shot) }
-            if columns.take >= 0 { row[columns.take] = ResolveCSVNormalization.normalizeTake(row[columns.take], format: fieldFormats.take) }
+            if normalizeFields, columns.scene >= 0 { row[columns.scene] = ResolveCSVNormalization.normalizeScene(row[columns.scene], format: fieldFormats.scene) }
+            if normalizeFields, columns.shot >= 0 { row[columns.shot] = ResolveCSVNormalization.normalizeShot(row[columns.shot], format: fieldFormats.shot) }
+            if normalizeFields, columns.take >= 0 { row[columns.take] = ResolveCSVNormalization.normalizeTake(row[columns.take], format: fieldFormats.take) }
             if canonicalizeComments, columns.comments >= 0 { row[columns.comments] = ResolveCSVNormalization.canonicalComment(row[columns.comments], comments: comments) }
             return row
         }

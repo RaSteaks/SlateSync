@@ -5,6 +5,7 @@ import SlateSyncDomain
 /// Lazy composition lets the synchronous SwiftUI `App` initializer retain an
 /// actor-owned settings store without blocking or opening user data eagerly.
 public actor ProjectLibraryStartupService: ProjectLibraryServing {
+    private let encryptsLocalProjects: Bool
     private let machineSettings: MachineSettingsStore
     private let defaultLibraryParent: URL
     private let legacyDefaultRoots: [URL]
@@ -26,6 +27,7 @@ public actor ProjectLibraryStartupService: ProjectLibraryServing {
         let parent = (hasTestRoot || forceIsolatedRoot)
             ? locator.url
             : locator.url.deletingLastPathComponent()
+        self.encryptsLocalProjects = !hasTestRoot && !forceIsolatedRoot
         self.machineSettings = machineSettings
         defaultLibraryParent = parent.standardizedFileURL
         legacyDefaultRoots = [
@@ -49,6 +51,7 @@ public actor ProjectLibraryStartupService: ProjectLibraryServing {
         defaultLibraryParent: URL,
         legacyDefaultRoots: [URL]
     ) {
+        self.encryptsLocalProjects = false
         self.machineSettings = machineSettings
         self.defaultLibraryParent = defaultLibraryParent.standardizedFileURL
         self.legacyDefaultRoots = legacyDefaultRoots.map(\.standardizedFileURL)
@@ -195,6 +198,8 @@ public actor ProjectLibraryStartupService: ProjectLibraryServing {
                 settings.libraryPath = resolved.path
                 _ = try await settingsStore.save(settings)
             }
+            // Unlock and migrate before any store opens the internal files.
+            if encryptsLocalProjects { try await LocalProjectEncryption.prepare(at: resolved) }
             return try ProjectLibraryStore(libraryRoot: resolved)
         }
         openingTask = task

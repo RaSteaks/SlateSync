@@ -11,6 +11,32 @@ import CryptoKit
 import Synchronization
 
 final class SM08OwnershipTests: XCTestCase {
+    @MainActor
+    func testLocalCompletionRefreshesOriginalTaskRowAndSearchProjection() async throws {
+        let service = WorkspaceFake(rowCount: 0)
+        let workspace = WorkspaceModel(service: service)
+        try await workspace.activate(projectID: "p1")
+        let id = try XCTUnwrap(workspace.selectedTaskID)
+        let originalIDs = workspace.tasks.map(\.id)
+        workspace.searchText = "本地完成.csv"
+        XCTAssertTrue(workspace.filteredTasks.isEmpty)
+        // A local result completes the selected draft without a list reload
+        // or a second row. Subsequent edits keep the same completed identity.
+        workspace.stageLocalRecords([.init(id: "row", scene: "1")], filename: "本地完成.csv")
+        XCTAssertEqual(workspace.tasks.map(\.id), originalIDs)
+        XCTAssertEqual(workspace.selectedTaskID, id)
+        XCTAssertEqual(workspace.filteredTasks.first?.id, id)
+        XCTAssertEqual(workspace.filteredTasks.first?.status, "completed")
+        XCTAssertEqual(workspace.filteredTasks.first?.recordCount, 1)
+        XCTAssertEqual(workspace.selectableTasks, workspace.filteredTasks)
+        workspace.customPrompt = "完成后的修改"
+        try await workspace.flush()
+        let saved = await service.savedTasks.last
+        XCTAssertEqual(saved?.id, id)
+        XCTAssertEqual(saved?.status, "completed")
+        try await workspace.close()
+    }
+
     func testAutosaveFlushWritesOnlyLatestImmutableSnapshot() async throws {
         let probe = AutosaveProbe()
         let autosave = WorkspaceAutosave(delay: .seconds(30)) { projectID, taskID, snapshot in
@@ -79,12 +105,32 @@ final class SM08OwnershipTests: XCTestCase {
     }
 
     @MainActor
-    func testHelpIsFrozenToSixOfflineSearchableSections() {
+    func testHelpIsFrozenToSevenOfflineSearchableSections() {
         let help = HelpModel()
-        XCTAssertEqual(help.sections.count, 6)
+        XCTAssertEqual(help.sections.count, 7)
         help.query = "OCR"
         XCTAssertFalse(help.results.isEmpty)
-        XCTAssertTrue(help.results.allSatisfy { $0.title.contains("OCR") || $0.body.contains("OCR") })
+        // Structured help search includes steps, tips, and FAQs as well as the
+        // legacy body fields retained for bundle compatibility.
+        XCTAssertTrue(help.results.allSatisfy { $0.searchableText.contains { $0.contains("OCR") } })
+    }
+
+    @MainActor
+    func testSettingsNavigationUsesTypedTargetsAndUniqueRequests() {
+        let navigation = SettingsNavigationModel()
+        navigation.navigate(to: .ocr, subregion: .paddleOCR)
+        let first = navigation.pendingRequest
+        navigation.navigate(to: .providers, providerID: "openrouter")
+        let second = navigation.pendingRequest
+
+        XCTAssertNotEqual(first?.id, second?.id)
+        XCTAssertEqual(second?.category, .providers)
+        XCTAssertEqual(second?.providerID, "openrouter")
+        // Consuming an older request cannot clear a newer destination.
+        if let first { navigation.consume(first) }
+        XCTAssertEqual(navigation.pendingRequest?.id, second?.id)
+        if let second { navigation.consume(second) }
+        XCTAssertNil(navigation.pendingRequest)
     }
 
     @MainActor
@@ -535,7 +581,11 @@ final class SM08OwnershipTests: XCTestCase {
         XCTAssertNil(model.customProviders.last?.capabilityCache)
         XCTAssertEqual(model.customProviders.last?.manualModelIds, ["vision-test", "vision-backup"])
 
+        let revisionBeforeDiscovery = model.revision
         await model.discover(providerID: "custom-test")
+        // Existing workspaces observe this token to refresh their model picker.
+        XCTAssertGreaterThan(model.revision, revisionBeforeDiscovery)
+        XCTAssertEqual(model.customProviders.last?.name, "本地接口 2")
         XCTAssertEqual(model.discoveryResults["custom-test"]?.models.map(\.id), ["vision-test"])
         await model.probe(providerID: "custom-test", modelIDs: ["vision-test"])
         let discoveryCount = await service.discoveryCount
@@ -670,6 +720,28 @@ final class SM08OwnershipTests: XCTestCase {
         let saved = await workspaceService.savedEditedRecords
         XCTAssertEqual(saved.last?.first?.description, "中文 IME 校对")
         XCTAssertEqual(saved.last?.first?.takeStatus, .passed)
+    }
+
+    @MainActor
+    func testTaskSearchProjectionRefreshesAcrossReloadAndSelection() async throws {
+        let workspace = WorkspaceModel(service: WorkspaceFake(rowCount: 0, taskCount: 1_000))
+        try await workspace.activate(projectID: "p1")
+        XCTAssertEqual(workspace.selectableTasks.count, 1_000)
+        workspace.searchText = " 场记单 42.PDF \n"
+        XCTAssertEqual(workspace.filteredTasks.count, 10)
+        let expected = workspace.filteredTasks
+        try await workspace.selectTask("t42")
+        XCTAssertEqual(workspace.filteredTasks, expected)
+        try await workspace.reloadTasks()
+        XCTAssertEqual(workspace.filteredTasks, expected)
+        workspace.searchText = "no matches"
+        XCTAssertTrue(workspace.selectableTasks.isEmpty)
+        workspace.searchText = "  "
+        XCTAssertEqual(workspace.filteredTasks.count, 1_000)
+        // Search remains valid when a project activation republishes the list.
+        workspace.searchText = "t999"
+        try await workspace.activate(projectID: "p2")
+        XCTAssertEqual(workspace.selectableTasks.compactMap(\.id), ["t999"])
     }
 
     @MainActor
@@ -1458,9 +1530,13 @@ extension SM08OwnershipTests {
     func testBundledHelpChineseHashAndNoResults() {
         let help = HelpModel()
         XCTAssertNil(help.resourceError)
-        XCTAssertEqual(help.sections.count, 6)
+        XCTAssertEqual(help.sections.count, 7)
         XCTAssertEqual(help.contentSHA256.count, 64)
-        XCTAssertEqual(Set(help.sections.map(\.id)).count, 6)
+        XCTAssertEqual(Set(help.sections.map(\.id)).count, 7)
+        XCTAssertEqual(help.sections.map(\.id), ["quick-start", "projects", "recognition", "providers", "ocr", "resolve", "recovery"])
+        XCTAssertTrue(help.sections.allSatisfy { !$0.steps.isEmpty })
+        help.selection = "settings"
+        XCTAssertEqual(help.selection, "providers")
         // Language acceptance is Chinese only under the Owner's scope update.
         XCTAssertEqual(help.title(help.sections[0]), "快速开始")
         help.query = "永久删除"
@@ -1608,8 +1684,10 @@ extension SM08OwnershipTests {
             projectSamples.append(try await loadProjects())
             taskSamples.append(try await loadTasks())
         }
-        XCTAssertLessThanOrEqual(projectSamples.max() ?? .infinity, 1_500)
-        XCTAssertLessThanOrEqual(taskSamples.max() ?? .infinity, 900)
+        if PerformancePolicy.enforcesTiming {
+            XCTAssertLessThanOrEqual(projectSamples.max() ?? .infinity, 1_500)
+            XCTAssertLessThanOrEqual(taskSamples.max() ?? .infinity, 900)
+        }
 
         if let path = ProcessInfo.processInfo.environment["SLATESYNC_SM08_METRICS_DIR"] {
             let output: [String: Any] = [
@@ -1682,10 +1760,12 @@ extension SM08OwnershipTests {
                 projectRows.append(visibleProjects); taskRows.append(visibleTasks)
             }
         }
-        XCTAssertLessThanOrEqual(projectsMS.max() ?? .infinity, 1500)
-        XCTAssertLessThanOrEqual(tasksMS.max() ?? .infinity, 900)
-        XCTAssertLessThanOrEqual(projectSelectionMS.max() ?? .infinity, 120)
-        XCTAssertLessThanOrEqual(taskSelectionMS.max() ?? .infinity, 120)
+        if PerformancePolicy.enforcesTiming {
+            XCTAssertLessThanOrEqual(projectsMS.max() ?? .infinity, 1500)
+            XCTAssertLessThanOrEqual(tasksMS.max() ?? .infinity, 900)
+            XCTAssertLessThanOrEqual(projectSelectionMS.max() ?? .infinity, 120)
+            XCTAssertLessThanOrEqual(taskSelectionMS.max() ?? .infinity, 120)
+        }
         if let path = ProcessInfo.processInfo.environment["SLATESYNC_SM08_METRICS_DIR"] {
             let projectFixture = try JSONEncoder().encode(await fixtureProjects.projectLibrary().active)
             let taskFixture = try JSONEncoder().encode(await fixtureTasks.listTasks(projectID: "fixture"))
@@ -1710,6 +1790,49 @@ private func sm08Milliseconds(_ duration: Duration) -> Double {
 }
 
 extension SM08OwnershipTests {
+    // Suspended I/O makes opening feedback deterministic without timing sleeps.
+    @MainActor
+    func testProjectOpeningFeedbackDeduplicatesAndRemainsWindowOwned() async throws {
+        let gate = SM08TestGate()
+        let workspace = WorkspaceModel(service: WorkspaceFake(rowCount: 0, loadGate: gate))
+        let session = AppSessionModel(workspace: workspace)
+        let other = AppSessionModel(workspace: WorkspaceModel(service: WorkspaceFake(rowCount: 0)))
+        let project = ProjectLibraryFake().projectSummary
+        let open = Task { await session.openProject(project) }
+        await gate.entered()
+        XCTAssertEqual(session.openingProjectName, project.name)
+        XCTAssertEqual(workspace.activationStage, "正在恢复任务…")
+        XCTAssertNil(other.openingProjectName)
+        let generation = session.generation
+        await session.openProject(project)
+        XCTAssertEqual(session.generation, generation)
+        XCTAssertNil(session.navigationError)
+        await gate.release()
+        await open.value
+        XCTAssertEqual(session.route, .workspace)
+        XCTAssertNil(session.openingProjectName)
+        XCTAssertNil(workspace.activationStage)
+        try await workspace.close()
+    }
+
+    @MainActor
+    func testProjectOpeningFailureClearsFeedbackAndPreservesProject() async throws {
+        let workspace = WorkspaceModel(service: WorkspaceFake(rowCount: 0))
+        try await workspace.activate(projectID: "original")
+        // An editor barrier failure must keep the acquired project and route.
+        workspace.flushEditor = { throw SlateSyncError(code: "TEST_SAVE", message: "保存失败") }
+        let session = AppSessionModel(workspace: workspace)
+        await session.openProject(ProjectLibraryFake().projectSummary)
+        XCTAssertEqual(session.projectID, "original")
+        XCTAssertEqual(session.route, .projects)
+        XCTAssertEqual(session.navigationError?.code, "TEST_SAVE")
+        XCTAssertNil(session.openingProjectName)
+        XCTAssertNil(workspace.activationStage)
+        XCTAssertFalse(workspace.isTransitioning)
+        workspace.flushEditor = nil
+        try await workspace.close()
+    }
+
     @MainActor
     func testLateProjectOpenCannotOverrideNewerHelpNavigation() async throws {
         let gate = SM08TestGate()

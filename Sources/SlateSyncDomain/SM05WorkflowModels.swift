@@ -118,6 +118,20 @@ public struct ResolveMergeResult: Codable, Hashable, Sendable {
     public let missingShootDayKeys: [String]
     public let sequenceAnomalies: [SlateSequenceAnomaly]
 
+    /// Record-level outcomes that prevented the merger from writing the
+    /// recognition fields. These are separate from informational audit
+    /// warnings such as normalization or overwrite notices.
+    public var unresolvedStatuses: [ResolveRecordStatus] {
+        statuses.compactMap { status in
+            guard let status, Self.unresolvedStatusValues.contains(status.status) else { return nil }
+            return status
+        }
+    }
+
+    private static let unresolvedStatusValues: Set<String> = [
+        "missing-key", "incomplete", "conflict", "unmatched", "duplicate"
+    ]
+
     public init(
         table: ResolveCSVTable,
         statuses: [ResolveRecordStatus?],

@@ -116,7 +116,11 @@ public actor URLSessionProviderTransport: ProviderHTTPTransporting {
             request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         }
         if input.provider.providerKind == .openRouter {
-            request.setValue("SlateSync", forHTTPHeaderField: "X-Title")
+            // OpenRouter uses the documented header name; keep the default in
+            // the transport so older descriptors without the optional title
+            // continue to identify SlateSync consistently.
+            let title = input.provider.openRouterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            request.setValue(title?.isEmpty == false ? title : "SlateSync", forHTTPHeaderField: "X-OpenRouter-Title")
             if let site = input.provider.openRouterSiteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !site.isEmpty {
                 request.setValue(site, forHTTPHeaderField: "HTTP-Referer")
             }

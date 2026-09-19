@@ -3,11 +3,10 @@ import SlateSyncWorkflow
 @testable import SlateSyncUI
 import XCTest
 
-/// Regression freeze for review findings #3–6: the merged export must follow
-/// the retained Worker's `export-resolve` — start from the retained raw table,
-/// re-merge the latest recognition records, apply manual sparse edits last,
-/// canonicalize the whole table, refuse an empty-record export, and suggest
-/// the old `<baseName>_场记已回填.csv` filename.
+/// Export still re-merges raw bytes with current recognition and refuses empty
+/// records, but the 2026-09-19 data-preservation fix supersedes whole-table
+/// normalization: unmatched cells and explicit manual edits survive verbatim.
+/// The retained `<baseName>_场记已回填.csv` filename contract is unchanged.
 @MainActor
 final class ResolveCSVExportRegressionTests: XCTestCase {
     private let rawCSV = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\n"
@@ -61,25 +60,24 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         XCTAssertEqual(sceneValue(of: table, row: 0), "002", "导出必须使用最新识别记录：\(table.rows)")
     }
 
-    // MARK: - #4/#6 canonicalized whole-table encode
+    // MARK: - protected source rows
 
-    func testExportCanonicalizesUnmergedRows() async throws {
+    func testExportPreservesUnmergedRows() async throws {
         let (model, _) = makeModel()
         await model.importData(Data(twoRowCSV.utf8), filename: "原始.csv")
-        // Only the first row matches a record; the second row must still be
-        // canonicalized by the export encode pass (old export-resolve did).
+        // Only the first row matches; encoding must preserve the second row's
+        // widths exactly instead of reproducing the old whole-table rewrite.
         let exported = try await model.exportData(records: [record(scene: "001")], metadata: [], settings: .init())
         let table = try await ResolveCSVEngine().decode(exported)
-        XCTAssertEqual(sceneValue(of: table, row: 1), "002", "未匹配行也需按位宽规范化：\(table.rows)")
-        XCTAssertEqual(takeValue(of: table, row: 1), "01", "未匹配行也需按位宽规范化：\(table.rows)")
+        XCTAssertEqual(sceneValue(of: table, row: 1), "2", "未匹配行必须保留原值：\(table.rows)")
+        XCTAssertEqual(takeValue(of: table, row: 1), "1", "未匹配行必须保留原值：\(table.rows)")
     }
 
     // MARK: - sparse manual edits survive merge and export
 
     func testExportAppliesManualEditsAfterMerge() async throws {
-        // Old export truth: Comments is a strict marker allowlist at encode
-        // ("manual edits must not reintroduce arbitrary text"), while unknown
-        // passthrough columns keep manual edits byte-for-byte.
+        // The final byte encoder must agree with the edited preview. Explicit
+        // Comments edits are no longer rewritten by a second normalization pass.
         let withNotes = "File Name,Scene,Shot,Take,Comments,Notes\r\nA001C001.mov,,,,,\r\n"
         let (model, _) = makeModel()
         await model.importData(Data(withNotes.utf8), filename: "原始.csv")
@@ -91,7 +89,7 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         let exported = try await model.exportData(records: [record(scene: "001")], metadata: [], settings: .init())
         let table = try await ResolveCSVEngine().decode(exported)
         XCTAssertEqual(table.rows[0][1], "001")
-        XCTAssertEqual(table.rows[0][4], "_OK", "Comments 手动编辑按旧规则收敛为标记：\(table.rows)")
+        XCTAssertEqual(table.rows[0][4], "ok", "Comments 手动编辑必须与预览一致：\(table.rows)")
         XCTAssertEqual(table.rows[0][5], "备注信息", "透传列的手动编辑必须逐字节保留：\(table.rows)")
     }
 
@@ -137,7 +135,7 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         let exported = try await model.exportData(records: [record(scene: "009")], metadata: [], settings: .init())
         let table = try await ResolveCSVEngine().decode(exported)
         XCTAssertEqual(sceneValue(of: table, row: 0), "009", "恢复的任务必须从原始字节重新合并：\(table.rows)")
-        XCTAssertEqual(table.rows[0][4], "_OK", "恢复的任务必须保留并规范 Comments 编辑：\(table.rows)")
+        XCTAssertEqual(table.rows[0][4], "ok", "恢复的任务必须原样保留 Comments 编辑：\(table.rows)")
         XCTAssertEqual(table.rows[0][5], "备注信息", "恢复的任务必须保留透传列编辑：\(table.rows)")
     }
 

@@ -69,10 +69,14 @@ public enum RecognitionPostprocessor {
         }
         // Old compareMaterialRecords sorted missing keys last and, being a
         // modern-JS sort, kept input order for equal (missing) keys.
-        records = records.enumerated().sorted {
-            let left = RecognitionNormalizer.materialKey($0.element) ?? "~", right = RecognitionNormalizer.materialKey($1.element) ?? "~"
-            return left != right ? left < right : $0.offset < $1.offset
-        }.map(\.element)
+        // Compute normalization once per record, not inside every comparison.
+        let keyed: [(offset: Int, record: RecognitionRecord, key: String)] = records.enumerated().map {
+            (offset: $0.offset, record: $0.element, key: RecognitionNormalizer.materialKey($0.element) ?? "~")
+        }
+        let sorted = keyed.sorted { left, right in
+            left.key != right.key ? left.key < right.key : left.offset < right.offset
+        }
+        records = sorted.map { $0.record }
         return .init(result: .init(sheetTitle: primary.sheetTitle ?? audit.sheetTitle, records: records, warnings: warnings), conflicts: conflicts, auditOnlyKeys: auditOnly)
     }
 
@@ -118,13 +122,16 @@ public enum RecognitionPostprocessor {
         // normalized reel (never zero-padded), clip ordinal with missing last,
         // and the source index as the final tie-breaker so equal keys keep
         // input order deterministically.
+        // Decorate once so comparison does no repeated regex/string parsing.
+        let keys = records.map {
+            (page: $0.sourcePage ?? 0, reel: RecognitionNormalizer.normalizeCard($0.cardNumber) ?? "~",
+             ordinal: RecognitionNormalizer.videoOrdinal($0.videoCode) ?? Int.max)
+        }
         let order = records.indices.sorted {
-            let left = records[$0], right = records[$1]
-            if (left.sourcePage ?? 0) != (right.sourcePage ?? 0) { return (left.sourcePage ?? 0) < (right.sourcePage ?? 0) }
-            let lc = RecognitionNormalizer.normalizeCard(left.cardNumber) ?? "~", rc = RecognitionNormalizer.normalizeCard(right.cardNumber) ?? "~"
-            if lc != rc { return lc < rc }
-            let lo = RecognitionNormalizer.videoOrdinal(left.videoCode), ro = RecognitionNormalizer.videoOrdinal(right.videoCode)
-            if lo != ro { return (lo ?? .max) < (ro ?? .max) }
+            let left = keys[$0], right = keys[$1]
+            if left.page != right.page { return left.page < right.page }
+            if left.reel != right.reel { return left.reel < right.reel }
+            if left.ordinal != right.ordinal { return left.ordinal < right.ordinal }
             return $0 < $1
         }
         var last: [String: (String?, String?)] = [:]

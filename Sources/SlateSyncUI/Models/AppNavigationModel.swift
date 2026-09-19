@@ -1,5 +1,7 @@
 import Observation
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 public enum SidebarDestination: String, CaseIterable, Identifiable, Sendable {
     case projects
     case workspace
@@ -11,11 +13,11 @@ public enum SidebarDestination: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .projects: "项目库"
-        case .workspace: "工作台"
-        case .projectSettings: "项目设置"
-        case .logs: "运行日志"
-        case .help: "帮助"
+        case .projects: L10n.tr("项目库")
+        case .workspace: L10n.tr("工作台")
+        case .projectSettings: L10n.tr("项目设置")
+        case .logs: L10n.tr("运行日志")
+        case .help: L10n.tr("帮助")
         }
     }
 

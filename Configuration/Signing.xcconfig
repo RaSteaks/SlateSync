@@ -1,0 +1,5 @@
+// Both Xcode and the run script use the same persistent local identity.
+// Tests may explicitly override CODE_SIGN_IDENTITY=- on the command line.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = SlateSync Local Development - run script/setup_local_signing.py
+#include? "LocalSigning.xcconfig"

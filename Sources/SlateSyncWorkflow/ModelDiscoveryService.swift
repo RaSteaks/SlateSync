@@ -30,9 +30,10 @@ public actor ModelDiscoveryService {
     }
 
     public func discover(providerID: String, forceRefresh: Bool = false) async throws -> ModelDiscoveryResult {
+        let generation = await registry.currentGeneration()
         let provider = try await registry.descriptor(providerID: providerID)
         let legacyModel = provider.providerKind == .openAICompatible ? await registry.setting(.openAICompatibleModel) : nil
-        let key = [providerID, provider.baseURL.absoluteString, legacyModel ?? "", provider.revision.map(String.init) ?? "-"].joined(separator: "\u{1f}")
+        let key = [providerID, provider.baseURL.absoluteString, legacyModel ?? "", provider.revision.map(String.init) ?? "-", String(generation)].joined(separator: "\u{1f}")
         if !forceRefresh, let cached = cache[key], clock.nowMilliseconds() - cached.createdAt < Self.cacheTTLMilliseconds { return cached.value }
         guard activeProviders.insert(providerID).inserted else { throw RecognitionFailure.discoveryBusy }
         defer { activeProviders.remove(providerID) }
@@ -42,20 +43,38 @@ public actor ModelDiscoveryService {
                 provider: provider, purpose: .discovery, method: .get,
                 timeoutMilliseconds: Self.timeoutMilliseconds
             ))
-            let result = try await decode(response.body, provider: provider, modelsEndpointAvailable: true)
+            try Task.checkCancellation()
+            let result = try await decode(response.body, provider: provider, modelsEndpointAvailable: true, generation: generation)
+            try Task.checkCancellation()
+            guard await registry.currentGeneration() == generation else { throw CancellationError() }
             cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
             return result
         } catch let error as SlateSyncError {
+            // Closing a settings transport must not replace the shared catalog
+            // with a fallback result while recognition still uses it.
+            try Task.checkCancellation()
+            if error.code == RecognitionFailure.canceled.code || error.code == RecognitionFailure.closed.code { throw error }
             if provider.origin == .custom, [404, 405, 501].contains(error.status ?? -1) {
-                let result = try await decode(Data("{}".utf8), provider: provider, modelsEndpointAvailable: false)
+                let result = try await decode(Data("{}".utf8), provider: provider, modelsEndpointAvailable: false, generation: generation)
+                try Task.checkCancellation()
+                guard await registry.currentGeneration() == generation else { throw CancellationError() }
                 cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
                 return result
+            }
+            // Authentication, account, and endpoint failures must reach the
+            // Settings panel instead of looking like a usable offline list.
+            // Network/server failures still retain the established static
+            // catalog fallback, which keeps configuration possible offline.
+            if provider.origin == .builtin, [400, 401, 402, 403, 404, 429].contains(error.status ?? -1) {
+                throw error
             }
             // Configuration errors are actionable and must never masquerade as
             // successful static discovery. Runtime endpoint failures retain a
             // secret-free fallback so the settings UI remains usable offline.
             if error.status == 400 { throw error }
-            let result = try await fallback(provider: provider, warning: error.message)
+            let result = try await fallback(provider: provider, warning: error.message, generation: generation)
+            try Task.checkCancellation()
+            guard await registry.currentGeneration() == generation else { throw CancellationError() }
             cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
             return result
         }
@@ -67,18 +86,18 @@ public actor ModelDiscoveryService {
         await registry.invalidate(providerID: providerID)
     }
 
-    private func decode(_ data: Data, provider: ProviderDescriptor, modelsEndpointAvailable: Bool) async throws -> ModelDiscoveryResult {
+    private func decode(_ data: Data, provider: ProviderDescriptor, modelsEndpointAvailable: Bool, generation: Int) async throws -> ModelDiscoveryResult {
         let root: JSONValue
         do { root = try JSONDecoder().decode(JSONValue.self, from: data) }
         catch {
-            if provider.origin == .custom { return try await customUnavailable(provider: provider) }
+            if provider.origin == .custom { return try await customUnavailable(provider: provider, generation: generation) }
             throw RecognitionFailure.invalidResponse
         }
         guard case .object(let fields) = root else { throw RecognitionFailure.invalidResponse }
         let candidates: [JSONValue]
         if case .array(let values)? = fields["data"] { candidates = values }
         else if case .array(let values)? = fields["models"] { candidates = values }
-        else if provider.origin == .custom { return try await customUnavailable(provider: provider) }
+        else if provider.origin == .custom { return try await customUnavailable(provider: provider, generation: generation) }
         else { throw RecognitionFailure.invalidResponse }
 
         let custom = await registry.customConfiguration(providerID: provider.id)
@@ -143,11 +162,11 @@ public actor ModelDiscoveryService {
             guard let status = model.capabilityStatus, [.declared, .inferred, .verified].contains(status) else { return nil }
             return .init(publicID: model.id, apiID: model.apiId ?? model.id, providerID: provider.id, label: model.label, imageDetail: model.imageDetail ?? provider.imageDetail, jsonMode: provider.providerKind == .openRouter && model.openRouterStructuredOutputs == false ? .jsonObject : provider.jsonMode, capabilityStatus: status, revision: provider.revision)
         }
-        await registry.register(resolved, providerID: provider.id, revision: provider.revision)
+        await registry.register(resolved, providerID: provider.id, revision: provider.revision, generation: generation)
         return result(provider: provider, source: .api, availableCount: modelsEndpointAvailable ? Set(candidates.compactMap(RemoteModel.rawID)).count : nil, usable: ProviderCatalog.sort(usable), pending: pending, failed: failed, unsupported: unsupported, endpointAvailable: modelsEndpointAvailable, warning: modelsEndpointAvailable ? nil : "接口未提供 /models；请从手动模型 ID 中选择并验证。")
     }
 
-    private func customUnavailable(provider: ProviderDescriptor) async throws -> ModelDiscoveryResult {
+    private func customUnavailable(provider: ProviderDescriptor, generation: Int) async throws -> ModelDiscoveryResult {
         let custom = await registry.customConfiguration(providerID: provider.id)
         var usable: [ModelData] = [], pending: [ModelData] = [], failed: [ModelData] = []
         for modelID in custom?.manualModelIds ?? [] {
@@ -163,12 +182,12 @@ public actor ModelDiscoveryService {
         let resolved = usable.map {
             ResolvedModel(publicID: $0.id, apiID: $0.apiId ?? $0.id, providerID: provider.id, label: $0.label, imageDetail: $0.imageDetail ?? provider.imageDetail, jsonMode: provider.jsonMode, capabilityStatus: .verified, revision: provider.revision)
         }
-        await registry.register(resolved, providerID: provider.id, revision: provider.revision)
+        await registry.register(resolved, providerID: provider.id, revision: provider.revision, generation: generation)
         return result(provider: provider, source: .api, availableCount: nil, usable: usable, pending: pending, failed: failed, unsupported: [], endpointAvailable: false, warning: "接口未提供 /models；请从手动模型 ID 中选择并验证。")
     }
 
-    private func fallback(provider: ProviderDescriptor, warning: String) async throws -> ModelDiscoveryResult {
-        if provider.origin == .custom { return try await customUnavailable(provider: provider) }
+    private func fallback(provider: ProviderDescriptor, warning: String, generation: Int) async throws -> ModelDiscoveryResult {
+        if provider.origin == .custom { return try await customUnavailable(provider: provider, generation: generation) }
         let fixed = ProviderCatalog.fixedModels(providerID: provider.id)
         return result(provider: provider, source: .staticFallback, availableCount: nil, usable: fixed, pending: [], failed: [], unsupported: [], endpointAvailable: true, warning: bounded(warning, 500))
     }

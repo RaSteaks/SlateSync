@@ -16,10 +16,9 @@ jobs:
     runs-on: macos-26
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    # A full compatibility Gate measured about seven minutes locally. The
-    # native path keeps a 30-minute ceiling for cold caches, UI startup, the
-    # Universal archive, DMG mount verification, and cleanup (CARRY-02).
-    timeout-minutes: 30
+    # Complete Debug and packaged Release UI matrices now exceed the former
+    # 30-minute budget on hosted runners; retain all checks with bounded headroom.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,13 +45,49 @@ jobs:
       - name: Run strict Swift build
         run: swift build -Xswiftc -warnings-as-errors
 
-      - name: Run shared native SM-09 Gate
+      - name: Run required functional SM-09 Gate
         env:
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
-        run: ./script/phase_gate.sh SM-09
+        run: ./script/phase_gate.sh SM-09 --functional
+
+      - name: Export failed XCTest attachments
+        if: failure() || cancelled()
+        shell: bash
+        run: |
+          # The Gate retains both the ordinary Test Plan bundle and the
+          # Packaged.xcresult produced by package_smoke.sh. Export only
+          # failure-linked attachments so diagnostics stay bounded while both
+          # UI test surfaces remain available to the artifact upload below.
+          set -u -o pipefail
+          gate_root="$RUNNER_TEMP/SlateSync-Gate/SM-09"
+          export_status=0
+          bundle_count=0
+          if [[ -d "$gate_root" ]]; then
+            while IFS= read -r -d '' bundle; do
+              bundle_count=$((bundle_count + 1))
+              bundle_name="$(basename "$bundle")"
+              bundle_kind="ordinary"
+              if [[ "$bundle_name" == "Packaged.xcresult" ]]; then
+                bundle_kind="packaged"
+              fi
+              output_path="$(dirname "$bundle")/xcresult-failure-attachments/$bundle_name"
+              mkdir -p "$output_path"
+              echo "Exporting ${bundle_kind} XCTest failure attachments from ${bundle}"
+              if ! xcrun xcresulttool export attachments \
+                --path "$bundle" \
+                --output-path "$output_path" \
+                --only-failures; then
+                export_status=1
+              fi
+            done < <(find "$gate_root" -type d -name '*.xcresult' -print0)
+          fi
+          if (( bundle_count == 0 )); then
+            echo "No XCTest result bundles were available for failure attachment export" >&2
+          fi
+          exit "$export_status"
 
       - name: Upload failure diagnostics
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: native-ci-diagnostics
@@ -60,10 +95,12 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/native-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/*-manifest.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-failure-attachments/**
           if-no-files-found: ignore
           retention-days: 7
 
@@ -76,7 +113,33 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/SUMMARY.md
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/native-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
           if-no-files-found: ignore
+          retention-days: 14
+
+  # Independent advisory lane: an over-budget benchmark is reported, not merged
+  # into the required functional job's result. Its assertions remain strict.
+  performance:
+    name: Performance report (non-blocking)
+    runs-on: macos-26
+    continue-on-error: true
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run performance benchmarks
+        id: benchmarks
+        continue-on-error: true
+        run: python3 script/performance_report.py --results-dir "$RUNNER_TEMP/SlateSync-Performance"
+      - name: Upload performance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-performance-report
+          path: ${{ runner.temp }}/SlateSync-Performance
+          if-no-files-found: warn
           retention-days: 14

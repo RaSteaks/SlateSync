@@ -2,6 +2,33 @@ import Foundation
 import SlateSyncDomain
 
 public enum ProviderCatalog {
+    /// A bounded set of provider-specific options that the native form can
+    /// explain and validate. Arbitrary authentication headers intentionally
+    /// never enter this metadata surface.
+    public struct AdvancedOption: Hashable, Sendable, Identifiable {
+        public let key: GlobalSettingKey
+        public let title: String
+        public let description: String
+        public let defaultValue: String
+        public let isRequired: Bool
+
+        public var id: GlobalSettingKey { key }
+
+        public init(
+            key: GlobalSettingKey,
+            title: String,
+            description: String,
+            defaultValue: String = "",
+            isRequired: Bool = false
+        ) {
+            self.key = key
+            self.title = title
+            self.description = description
+            self.defaultValue = defaultValue
+            self.isRequired = isRequired
+        }
+    }
+
     public struct Definition: Hashable, Sendable {
         public let id: String
         public let kind: ProviderKind
@@ -11,14 +38,179 @@ public enum ProviderCatalog {
         public let transport: ProviderTransport
         public let jsonMode: ProviderJSONMode
         public let credentialRequired: Bool
+        public let serviceDescription: String
+        public let websiteURL: String?
+        public let apiKeyURL: String?
+        public let documentationURL: String?
+        public let apiKeyHint: String
+        public let protocolDescription: String
+        public let modelHint: String
+        public let helpSectionID: String
+        public let advancedOptions: [AdvancedOption]
+
+        public init(
+            id: String,
+            kind: ProviderKind,
+            label: String,
+            defaultBaseURL: String,
+            baseURLSetting: GlobalSettingKey,
+            transport: ProviderTransport,
+            jsonMode: ProviderJSONMode,
+            credentialRequired: Bool,
+            serviceDescription: String = "",
+            websiteURL: String? = nil,
+            apiKeyURL: String? = nil,
+            documentationURL: String? = nil,
+            apiKeyHint: String = "",
+            protocolDescription: String = "",
+            modelHint: String = "",
+            helpSectionID: String = "providers",
+            advancedOptions: [AdvancedOption] = []
+        ) {
+            self.id = id
+            self.kind = kind
+            self.label = label
+            self.defaultBaseURL = defaultBaseURL
+            self.baseURLSetting = baseURLSetting
+            self.transport = transport
+            self.jsonMode = jsonMode
+            self.credentialRequired = credentialRequired
+            self.serviceDescription = serviceDescription
+            self.websiteURL = websiteURL
+            self.apiKeyURL = apiKeyURL
+            self.documentationURL = documentationURL
+            self.apiKeyHint = apiKeyHint
+            self.protocolDescription = protocolDescription
+            self.modelHint = modelHint
+            self.helpSectionID = helpSectionID
+            self.advancedOptions = advancedOptions
+        }
     }
 
     public static let definitions: [Definition] = [
-        .init(id: "openai", kind: .openAI, label: "OpenAI 官方 API", defaultBaseURL: "https://api.openai.com/v1", baseURLSetting: .openAIBaseUrl, transport: .responses, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "openrouter", kind: .openRouter, label: "OpenRouter API", defaultBaseURL: "https://openrouter.ai/api/v1", baseURLSetting: .openRouterBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "tokenplan", kind: .tokenPlan, label: "阿里云 Token Plan", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", baseURLSetting: .tokenPlanBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "dashscope", kind: .dashScope, label: "阿里云百炼（DashScope）", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", baseURLSetting: .dashScopeBaseUrl, transport: .chatCompletions, jsonMode: .jsonSchema, credentialRequired: true),
-        .init(id: "openai-compatible", kind: .openAICompatible, label: "OpenAI 兼容 API", defaultBaseURL: "", baseURLSetting: .openAICompatibleBaseUrl, transport: .chatCompletions, jsonMode: .jsonObject, credentialRequired: true),
+        .init(
+            id: "openai",
+            kind: .openAI,
+            label: "OpenAI 官方 API",
+            defaultBaseURL: "https://api.openai.com/v1",
+            baseURLSetting: .openAIBaseUrl,
+            transport: .responses,
+            jsonMode: .jsonSchema,
+            credentialRequired: true,
+            serviceDescription: "使用 OpenAI 官方 Responses API 进行视觉识别。API Key 由 OpenAI 控制台创建，应用不会读取或回显已保存的密钥。",
+            websiteURL: "https://platform.openai.com",
+            apiKeyURL: "https://platform.openai.com/api-keys",
+            documentationURL: "https://platform.openai.com/docs/guides/vision",
+            apiKeyHint: "填写 OpenAI 创建的 API Key，不要添加 Bearer 前缀。",
+            protocolDescription: "OpenAI Responses API；应用会在 Base URL 后追加 /responses。",
+            modelHint: "模型列表与视觉能力以服务端响应为准；项目和任务仍各自保存当前模型选择。"
+        ),
+        .init(
+            id: "openrouter",
+            kind: .openRouter,
+            label: "OpenRouter API",
+            defaultBaseURL: "https://openrouter.ai/api/v1",
+            baseURLSetting: .openRouterBaseUrl,
+            transport: .chatCompletions,
+            jsonMode: .jsonSchema,
+            credentialRequired: true,
+            serviceDescription: "通过 OpenRouter 的 OpenAI 兼容接口访问多个视觉模型。模型和能力状态来自现有发现、验证流程。",
+            websiteURL: "https://openrouter.ai",
+            apiKeyURL: "https://openrouter.ai/keys",
+            documentationURL: "https://openrouter.ai/docs/quickstart#using-the-openai-sdk",
+            apiKeyHint: "填写 OpenRouter 创建的 API Key，不需要添加 Bearer 前缀。",
+            protocolDescription: "OpenAI 兼容的 Chat Completions；应用会在 Base URL 后追加 /chat/completions。",
+            modelHint: "模型 ID 使用 OpenRouter 返回的完整值，例如供应商前缀也属于 ID 的一部分。",
+            advancedOptions: [
+                .init(
+                    key: .openRouterSiteUrl,
+                    title: "站点 URL",
+                    description: "可选，对应 HTTP-Referer，用于标识请求来源；留空时不发送该请求头。",
+                    defaultValue: "https://github.com/RaSteaks/SlateSync"
+                ),
+                .init(
+                    key: .openRouterAppTitle,
+                    title: "应用名称",
+                    description: "可选，对应 X-OpenRouter-Title；用于来源标识，不影响基本连接。",
+                    defaultValue: "SlateSync"
+                ),
+            ]
+        ),
+        .init(
+            id: "tokenplan",
+            kind: .tokenPlan,
+            label: "阿里云 Token Plan",
+            defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            baseURLSetting: .tokenPlanBaseUrl,
+            transport: .chatCompletions,
+            jsonMode: .jsonSchema,
+            credentialRequired: true,
+            serviceDescription: "使用阿里云 Token Plan 的兼容模式接口进行视觉识别，额度与模型权限由阿里云账户控制。",
+            websiteURL: "https://www.aliyun.com/product/ai/tokenplan",
+            apiKeyURL: "https://bailian.console.aliyun.com/",
+            documentationURL: "https://help.aliyun.com/zh/model-studio/developer-reference/compatibility-of-openai-with-dashscope",
+            apiKeyHint: "填写阿里云百炼或 Token Plan 创建的 API Key，不要添加 Bearer 前缀。",
+            protocolDescription: "OpenAI 兼容的 Chat Completions；应用会在 Base URL 后追加 /chat/completions。",
+            modelHint: "只会把服务端声明并通过视觉筛选的模型纳入可用列表。"
+        ),
+        .init(
+            id: "dashscope",
+            kind: .dashScope,
+            label: "阿里云百炼（DashScope）",
+            defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            baseURLSetting: .dashScopeBaseUrl,
+            transport: .chatCompletions,
+            jsonMode: .jsonSchema,
+            credentialRequired: true,
+            serviceDescription: "使用阿里云百炼兼容模式访问通义系列视觉模型，模型权限和余额由百炼控制台管理。",
+            websiteURL: "https://bailian.console.aliyun.com/",
+            apiKeyURL: "https://bailian.console.aliyun.com/",
+            documentationURL: "https://help.aliyun.com/zh/model-studio/developer-reference/compatibility-of-openai-with-dashscope",
+            apiKeyHint: "填写百炼控制台创建的 API Key，不要添加 Bearer 前缀。",
+            protocolDescription: "OpenAI 兼容的 Chat Completions；应用会在 Base URL 后追加 /chat/completions。",
+            modelHint: "模型 ID 保留服务端真实值；列表成功不代表每个模型都可用于当前识别任务。"
+        ),
+        .init(
+            id: "openai-compatible",
+            kind: .openAICompatible,
+            label: "OpenAI 兼容 API",
+            defaultBaseURL: "",
+            baseURLSetting: .openAICompatibleBaseUrl,
+            transport: .chatCompletions,
+            jsonMode: .jsonObject,
+            credentialRequired: true,
+            serviceDescription: "连接支持 OpenAI 请求格式的第三方服务或本地服务。请向服务维护者确认 Base URL、模型 ID 和认证方式。",
+            apiKeyHint: "填写服务方要求的密钥，不要添加 Bearer 前缀；匿名本地服务仍需由服务方确认是否支持。",
+            protocolDescription: "默认使用 Chat Completions；可在高级选项中切换 Responses 和 JSON 行为。",
+            modelHint: "必须填写服务方提供的真实模型 ID；能力验证可能会产生一次模型调用。",
+            advancedOptions: [
+                .init(
+                    key: .openAICompatibleModel,
+                    title: "模型 ID",
+                    description: "服务方公开的真实模型 ID；该字段用于兼容接口无法自动列出模型时的请求。",
+                    defaultValue: "your-vision-model",
+                    isRequired: true
+                ),
+                .init(
+                    key: .openAICompatibleAPIMode,
+                    title: "API 协议",
+                    description: "选择服务实际支持的请求形状。默认是 Chat Completions。",
+                    defaultValue: "chat-completions"
+                ),
+                .init(
+                    key: .openAICompatibleJSONMode,
+                    title: "JSON 模式",
+                    description: "控制结构化识别结果的请求方式；默认使用 JSON Object。",
+                    defaultValue: "json_object"
+                ),
+                .init(
+                    key: .openAICompatibleImageDetail,
+                    title: "图像细节",
+                    description: "发送给兼容服务的图像细节级别；具体支持范围由服务方决定。",
+                    defaultValue: "high"
+                ),
+            ]
+        ),
     ]
 
     /// Curated records intentionally omit raw price data. Public value scores

@@ -2,13 +2,17 @@ import Foundation
 import Observation
 import SlateSyncDomain
 
+// Product copy uses the shared launch language; user content stays verbatim.
+
 /// Window-owned workspace state. The model publishes only the selected task
 /// snapshot; persistence is serialized by `WorkspaceAutosave`, and every
 /// selection change crosses the same flush barrier before generation changes.
 @MainActor @Observable
 public final class WorkspaceModel {
     public private(set) var projectID: String?
-    public private(set) var tasks: [TaskListItem] = []
+    public private(set) var tasks: [TaskListItem] = [] {
+        didSet { if tasks != oldValue { refreshTaskProjection() } }
+    }
     public private(set) var selectedTaskID: String?
     public private(set) var selectedTask: TaskData?
     public private(set) var generation = 0
@@ -17,7 +21,13 @@ public final class WorkspaceModel {
     public private(set) var operation: OperationState = .idle
     public private(set) var autosaveError: SlateSyncError?
     public private(set) var isDirty = false
-    public var searchText = ""
+    public var searchText = "" {
+        didSet { if searchText != oldValue { refreshTaskProjection() } }
+    }
+    // Materialize the search projection only when its inputs change, not on
+    // selection, progress, autosave or layout updates in the task rail.
+    public private(set) var filteredTasks: [TaskListItem] = []
+    public private(set) var selectableTasks: [TaskListItem] = []
     public var customPrompt = "" {
         didSet {
             guard !isPublishingSnapshot, customPrompt != oldValue else { return }
@@ -32,6 +42,8 @@ public final class WorkspaceModel {
     private var autosaveObservation: Task<Void, Never>?
     private var editRevision = 0
     private var isClosed = false
+    // Stage text follows real suspension points, not estimated percentages.
+    public private(set) var activationStage: String?
     public private(set) var isTransitioning = false
     public var prepareSelectionChange: (@MainActor () async throws -> Void)?
     public var flushEditor: (@MainActor () throws -> Void)?
@@ -60,19 +72,21 @@ public final class WorkspaceModel {
         }
     }
 
-    public var filteredTasks: [TaskListItem] {
+    private func refreshTaskProjection() {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return tasks }
-        return tasks.filter {
+        let filtered = query.isEmpty ? tasks : tasks.filter {
             ($0.filename ?? "").localizedCaseInsensitiveContains(query) ||
                 ($0.id ?? "").localizedCaseInsensitiveContains(query)
         }
+        if filteredTasks != filtered { filteredTasks = filtered }
+        let selectable = filtered.filter { $0.id != nil }
+        if selectableTasks != selectable { selectableTasks = selectable }
     }
 
     public func activate(projectID newProjectID: String) async throws {
         guard !isTransitioning, permitsNewOperation?() != false else { throw transitionError }
         isTransitioning = true
-        defer { isTransitioning = false }
+        defer { isTransitioning = false; activationStage = nil }
         let oldProjectID = projectID
         try acquireProject?(newProjectID)
         var didActivate = false
@@ -81,21 +95,28 @@ public final class WorkspaceModel {
         }
         // Even reopening the same project must flush before refreshing its
         // persisted projection. Otherwise its unsaved editor is overwritten.
+        activationStage = L10n.tr("正在保存当前草稿…")
         try await flush()
+        activationStage = L10n.tr("正在等待当前操作结束…")
         try await prepareSelectionChange?()
         // A completing operation may have staged data while the first flush
         // was suspended. Drain first, then persist its final state.
+        activationStage = L10n.tr("正在保存最终修改…")
         try await flush()
+        activationStage = L10n.tr("正在读取任务列表…")
         let loaded = try await service.listTasks(projectID: newProjectID)
         let candidate = loaded.compactMap(\.id).first
+        activationStage = L10n.tr("正在恢复任务…")
         let task: TaskData?
         if let candidate { task = try await service.loadTask(projectID: newProjectID, taskID: candidate) }
         else { task = nil }
+        activationStage = L10n.tr("正在读取项目配置…")
         let settings: ProjectSettings
         if let library = service as? any ProjectLibraryWorkflowServing {
             settings = try await library.project(id: newProjectID).settings
         } else { settings = task?.projectSettingsSnapshot ?? .init() }
         let availableScenarios = try await (service as? any LocalSlateWorkflowServing)?.listScenarios(projectID: newProjectID) ?? []
+        activationStage = L10n.tr("正在完成项目切换…")
         if let projectID, projectID != newProjectID {
             try await closeRuntimeProject(projectID)
         }
@@ -115,7 +136,7 @@ public final class WorkspaceModel {
     public func reloadTasks(selecting preferredID: String? = nil) async throws {
         guard let projectID else { return }
         let requestGeneration = generation
-        operation = .running(label: "正在读取任务…")
+        operation = .running(label: L10n.tr("正在读取任务…"))
         do {
             let loaded = try await service.listTasks(projectID: projectID)
             guard requestGeneration == generation, self.projectID == projectID else { return }
@@ -163,18 +184,18 @@ public final class WorkspaceModel {
             // A completing operation may have staged data while the first
             // flush was suspended. Drain first, then persist its final state.
             try await flush()
-            operation = .running(label: "正在新建任务…")
+            operation = .running(label: L10n.tr("正在新建任务…"))
             let task = TaskData(
                 projectId: projectID,
                 projectSettingsSnapshot: projectSettings,
                 status: "draft",
-                filename: "未命名场记单",
+                filename: L10n.tr("未命名场记单"),
                 customPrompt: ""
             )
             let id = try await service.saveTask(projectID: projectID, taskID: nil, task: task)
             generation += 1
             try await reloadTasks(selecting: id)
-            operation = .succeeded(message: "任务已创建")
+            operation = .succeeded(message: L10n.tr("任务已创建"))
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }
@@ -198,12 +219,12 @@ public final class WorkspaceModel {
             // A completing operation may have staged data while the first
             // flush was suspended. Drain first, then persist its final state.
             try await flush()
-            operation = .running(label: "正在删除任务…")
+            operation = .running(label: L10n.tr("正在删除任务…"))
             try await service.deleteTask(projectID: projectID, taskID: taskID)
             generation += 1
             if selectedTaskID == taskID { publish(nil, id: nil) }
             try await reloadTasks()
-            operation = .succeeded(message: "任务已删除")
+            operation = .succeeded(message: L10n.tr("任务已删除"))
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }
@@ -321,7 +342,7 @@ public final class WorkspaceModel {
     }
 
     private func loadTask(id: String, projectID: String, generation expected: Int) async throws {
-        operation = .running(label: "正在读取任务…")
+        operation = .running(label: L10n.tr("正在读取任务…"))
         let task = try await service.loadTask(projectID: projectID, taskID: id)
         guard expected == generation, self.projectID == projectID else { return }
         publish(task, id: id)
@@ -365,7 +386,7 @@ public final class WorkspaceModel {
     }
 
     private var transitionError: SlateSyncError {
-        .init(code: "WORKSPACE_BUSY", message: "正在切换任务，请稍后重试", retryable: true)
+        .init(code: "WORKSPACE_BUSY", message: L10n.tr("正在切换任务，请稍后重试"), retryable: true)
     }
 
     private func closeRuntimeProject(_ id: String) async throws {
@@ -381,6 +402,17 @@ public final class WorkspaceModel {
     private func enqueue(_ snapshot: TaskData, delay: Duration? = nil) {
         guard let projectID, !isClosed else { return }
         let taskID = selectedTaskID
+        // The rail and editor describe the same task, including local CSV
+        // completion. Replace its summary in place; never append a result row.
+        if let taskID, let index = tasks.firstIndex(where: { $0.id == taskID }) {
+            tasks[index] = TaskListItem(
+                id: taskID, filename: snapshot.filename, provider: snapshot.provider,
+                model: snapshot.model, pageCount: snapshot.pageCount, scenarioId: snapshot.scenarioId,
+                recordCount: (snapshot.editedRecords ?? snapshot.result?.records ?? []).count,
+                status: snapshot.status ?? "draft", createdAt: snapshot.createdAt,
+                updatedAt: snapshot.updatedAt
+            )
+        }
         editRevision += 1
         isDirty = true
         let previous = autosaveScheduleTask
