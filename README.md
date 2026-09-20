@@ -31,7 +31,7 @@
 
 > [!NOTE]
 > SlateSync 当前是原生 Swift/SwiftUI macOS 应用，不再依赖 Electron、Node.js 或 npm 运行时。
-> 原生迁移已在本地 ad-hoc 交付范围通过 SM-09 Gate；Developer ID 签名、公证和公开发布仍未配置。
+> 原生迁移已在本地 ad-hoc 交付范围通过 SM-09 Gate；正式分发使用独立的 Developer ID、公证和 GitHub Release lane。
 
 ## 架构与分支基线
 
@@ -314,6 +314,42 @@ swift build -Xswiftc -warnings-as-errors
 架构、资源、签名、hardened runtime 和依赖。版本号和 build number 是显式输入，不会改写
 已跟踪的工程文件。
 
+### Developer ID 归档与公证
+
+PR/Gate 默认仍使用 ad-hoc 签名，不需要私钥。正式 GitHub 分发必须显式选择
+`developer-id` lane，并提供已安装的 `Developer ID Application` 身份：
+
+```sh
+export DEVELOPMENT_TEAM=HF4Y6246CT
+export SLATESYNC_SIGNING_IDENTITY='Developer ID Application: Yutian Zhu (HF4Y6246CT)'
+
+./script/archive_release.sh \
+  /private/tmp/SlateSync-release 1.1.0 2 developer-id \
+  "$SLATESYNC_SIGNING_IDENTITY"
+
+xcrun notarytool store-credentials SlateSyncNotary \
+  --apple-id '<Apple Account>' \
+  --team-id "$DEVELOPMENT_TEAM"
+
+./script/notarize_app.sh \
+  /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app \
+  /private/tmp/SlateSync-release/SlateSync-notarization.zip \
+  SlateSyncNotary
+
+SLATESYNC_RELEASE_NOTES_PATH=/private/tmp/SlateSync-release/release-notes.md \
+SLATESYNC_NOTARIZATION_STATUS=Accepted \
+SLATESYNC_NOTARIZED=true \
+  ./script/package_release.sh \
+    /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app \
+    /private/tmp/SlateSync-artifacts 1.1.0 2 developer-id
+```
+
+其中 `release-notes.md` 需要先由本次发布内容生成，不能直接复用历史迁移记录。
+
+`notarytool` 会交互读取 app-specific password；不要将密码、`.p12`、`.p8` 或临时钥匙串写入仓库。
+GitHub Actions 的正式入口是 `.github/workflows/release-developer-id.yml`，使用 tag
+`v1.1.0-swift`、临时钥匙串、公证和 GitHub Release 上传。
+
 ### 生成 ZIP 与 DMG
 
 ```sh
@@ -331,7 +367,8 @@ ZIP 和 DMG 来自同一个已审计的 app，并会经过解压、只读挂载�
 - JSON manifest
 - 中英 release notes
 
-当前只验证 ad-hoc 本地候选包；尚未配置 Developer ID 签名、公证、Gatekeeper 评估或公开发布。
+当前本机已验证 Developer ID 签名 archive 和 bundle 审计；本次未执行 Apple 公证或 GitHub Release
+上传。发布前仍需使用正式 notary credentials 完成 `Accepted`、staple/validate 和 Gatekeeper 复核。
 详细说明见 [发布与支持说明](RELEASE.md)。
 
 ## 限制与已知边界
@@ -340,7 +377,8 @@ ZIP 和 DMG 来自同一个已审计的 app，并会经过解压、只读挂载�
 - PaddleOCR 需要用户提供 Python 环境和网络安装条件；Python、虚拟环境和模型不包含在 App 中。
 - 无法确认的识别字段不会被强行写入，必须人工校对。
 - 项目库与项目包当前保持 v1 格式；升级、迁移或回退前应保留独立备份。
-- 当前公开分发链路尚未完成 Developer ID 签名、公证和发布授权验证。
+- 当前公开分发链路已具备 Developer ID archive、notarization wrapper 和受保护 GitHub workflow；
+  尚未在本机执行真实公证或发布上传。
 
 ## License
 

@@ -1,0 +1,174 @@
+name: Publish notarized Swift macOS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Swift app SemVer
+        required: true
+        default: 1.1.0
+      build:
+        description: Monotonic CFBundleVersion integer
+        required: true
+        default: "2"
+      tag:
+        description: Existing Swift annotated tag to publish
+        required: true
+        default: v1.1.0-swift
+
+permissions:
+  contents: write
+
+jobs:
+  distribution:
+    name: Developer ID, notarize and publish
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_NAME: ${{ secrets.CSC_NAME }}
+
+    steps:
+      - name: Checkout the annotated Swift tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version, tag and toolchain
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$RELEASE_BUILD" =~ ^[1-9][0-9]*$ ]]
+          [[ "$RELEASE_TAG" == "v${RELEASE_VERSION}-swift" ]]
+          git fetch --tags origin
+          git checkout --detach "refs/tags/${RELEASE_TAG}"
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
+          grep -Fx 'Xcode 26.3' "$RUNNER_TEMP/xcode-version.txt"
+          grep -Fx 'Build version 17C529' "$RUNNER_TEMP/xcode-version.txt"
+
+      - name: Import Developer ID certificate into a temporary keychain
+        run: |
+          set -euo pipefail
+          keychain_path="$RUNNER_TEMP/slatesync-developer-id.keychain-db"
+          certificate_path="$RUNNER_TEMP/slatesync-developer-id.p12"
+          keychain_password="$(openssl rand -hex 24)"
+          printf '%s' "$CSC_LINK" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path"
+          {
+            printf 'SLATESYNC_KEYCHAIN_PATH=%s\n' "$keychain_path"
+            printf 'SLATESYNC_CERTIFICATE_PATH=%s\n' "$certificate_path"
+          } >> "$GITHUB_ENV"
+
+      - name: Configure App Store Connect notarization credentials
+        run: |
+          set -euo pipefail
+          xcrun notarytool store-credentials SlateSyncNotary \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --keychain "$SLATESYNC_KEYCHAIN_PATH"
+
+      - name: Archive with Developer ID
+        id: archive
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build }}
+          RELEASE_IDENTITY: ${{ secrets.CSC_NAME }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_IDENTITY" == Developer\ ID\ Application:* ]]
+          security find-identity -v -p codesigning "$SLATESYNC_KEYCHAIN_PATH" | grep -F "$RELEASE_IDENTITY"
+          output="$RUNNER_TEMP/SlateSync-${RELEASE_VERSION}-${RELEASE_BUILD}"
+          DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+          SLATESYNC_SIGNING_IDENTITY="$RELEASE_IDENTITY" \
+            ./script/archive_release.sh "$output" "$RELEASE_VERSION" "$RELEASE_BUILD" developer-id "$RELEASE_IDENTITY"
+          printf 'SLATESYNC_RELEASE_OUTPUT=%s\n' "$output" >> "$GITHUB_ENV"
+          printf 'SLATESYNC_APP_PATH=%s\n' "$output/SlateSync.xcarchive/Products/Applications/SlateSync.app" >> "$GITHUB_ENV"
+
+      - name: Notarize and staple the app
+        run: |
+          set -euo pipefail
+          ./script/notarize_app.sh \
+            "$SLATESYNC_APP_PATH" \
+            "$SLATESYNC_RELEASE_OUTPUT/SlateSync-notarization.zip" \
+            SlateSyncNotary
+
+      - name: Package the stapled app
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="$SLATESYNC_RELEASE_OUTPUT/SlateSync-${RELEASE_VERSION}-release-notes.md"
+          cat > "$notes" <<EOF
+          # SlateSync Swift ${RELEASE_VERSION}
+
+          Swift native macOS release, build ${RELEASE_BUILD}.
+
+          - Signed with Developer ID Application.
+          - Notarization status: Accepted.
+          - Tag: ${RELEASE_TAG}
+          EOF
+          SLATESYNC_RELEASE_NOTES_PATH="$notes" \
+          SLATESYNC_NOTARIZATION_STATUS=Accepted \
+          SLATESYNC_NOTARIZED=true \
+            ./script/package_release.sh \
+              "$SLATESYNC_APP_PATH" \
+              "$SLATESYNC_RELEASE_OUTPUT/artifacts" \
+              "$RELEASE_VERSION" \
+              "$RELEASE_BUILD" \
+              developer-id
+
+      - name: Create GitHub Release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          artifacts="$SLATESYNC_RELEASE_OUTPUT/artifacts"
+          gh release create "$RELEASE_TAG" \
+            "$artifacts/SlateSync-${RELEASE_VERSION}-macOS-universal.zip" \
+            "$artifacts/SlateSync-${RELEASE_VERSION}-macOS-universal.dmg" \
+            "$artifacts/SlateSync-${RELEASE_VERSION}-manifest.json" \
+            "$artifacts/SHA256SUMS" \
+            --verify-tag \
+            --title "SlateSync Swift ${RELEASE_VERSION}" \
+            --notes-file "$artifacts/SlateSync-${RELEASE_VERSION}-release-notes.md"
+
+      - name: Retain release evidence as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlateSync-${{ inputs.version }}-macOS-universal-developer-id
+          path: ${{ runner.temp }}/SlateSync-${{ inputs.version }}-${{ inputs.build }}/artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove temporary signing material
+        if: ${{ always() }}
+        run: |
+          set +e
+          if [[ -n "${SLATESYNC_KEYCHAIN_PATH:-}" ]]; then
+            security default-keychain -s "$HOME/Library/Keychains/login.keychain-db"
+            security delete-keychain "$SLATESYNC_KEYCHAIN_PATH"
+          fi
+          rm -f "${SLATESYNC_CERTIFICATE_PATH:-}"

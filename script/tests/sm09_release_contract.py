@@ -139,6 +139,21 @@ def validate_workflows(ci: str, release: str) -> None:
     require("Developer ID" in release and "no Developer ID secret" in release, "ad-hoc limitation is not explicit")
 
 
+def validate_distribution_workflow(source: str) -> None:
+    """Keep the protected Developer ID/notarization lane explicit and auditable."""
+
+    validate_yaml_shape(source, "release-developer-id.yml")
+    require("contents: write" in source, "distribution workflow cannot publish GitHub Release assets")
+    require("Developer ID Application" in source, "Developer ID identity is not required")
+    require("script/archive_release.sh" in source and "developer-id" in source, "Developer ID archive lane missing")
+    require("script/notarize_app.sh" in source, "notarization wrapper is missing")
+    require("xcrun notarytool store-credentials" in source, "notary credentials are not isolated")
+    require("gh release create" in source and "--verify-tag" in source, "GitHub Release upload is not tag-bound")
+    for secret in ("CSC_LINK", "CSC_KEY_PASSWORD", "CSC_NAME", "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"):
+        require(secret in source, f"distribution secret is missing: {secret}")
+    require("v1.1.0-swift" in source, "Swift architecture tag is not enforced")
+
+
 def validate_gate_package_retention(source: str) -> None:
     """Keep the package wrapper fail-closed after its external staging step."""
 
@@ -165,8 +180,9 @@ def run_contract() -> None:
     validate_resources(manifest)
     validate_xcode()
     validate_workflows(read(".github/workflows/ci.yml"), read(".github/workflows/release.yml"))
+    validate_distribution_workflow(read(".github/workflows/release-developer-id.yml"))
     validate_gate_package_retention(read("script/phase_gate.sh"))
-    for script in ("archive_release.sh", "package_release.sh", "verify_bundle.sh"):
+    for script in ("archive_release.sh", "package_release.sh", "notarize_app.sh", "verify_bundle.sh"):
         mode = (ROOT / "script" / script).stat().st_mode
         require(mode & stat.S_IXUSR != 0, f"script is not executable: {script}")
 

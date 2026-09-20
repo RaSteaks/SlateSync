@@ -12,15 +12,27 @@ through the same isolated XCUI scenarios. Preserve the Gate result, manifest and
 
 ## Distribution boundary / 分发边界
 
-Current artifacts are ad-hoc local validation candidates. The dispatch workflow has read-only
-repository permissions and uploads validation artifacts only. It does not publish a release.
-Developer ID, secure timestamp, notarization acceptance, stapling and Gatekeeper assessment
-must be verified separately before public distribution. Do not disable Gatekeeper to work
-around an unsigned or unnotarized candidate.
+The default dispatch workflow remains an ad-hoc local validation lane with read-only repository
+permissions. It does not publish a release. Formal distribution uses the separate
+`.github/workflows/release-developer-id.yml` workflow, which imports a Developer ID certificate
+into a temporary keychain, archives with a secure timestamp, notarizes, staples, packages and
+uploads a GitHub Release.
 
-当前候选包未公证，不能宣称通过公开分发验证。正式发布前需匹配的 Developer ID/team、
-安全时间戳、notarytool Accepted、staple/validate 与 spctl 结果。证书、私钥和密码不得写入
-命令日志、manifest 或 Git；外部 tag/Release 创建需要另行授权。
+正式分发必须使用 `Developer ID Application`、hardened runtime、secure timestamp、Apple
+notary `Accepted`、staple/validate 和 Gatekeeper assessment。不要用 Apple Development 或
+ad-hoc 候选包直接对外发布，也不要为了绕过 Gatekeeper 关闭安全检查。
+
+The distribution workflow reuses the repository's existing secrets: `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `CSC_KEY_PASSWORD`, `CSC_LINK`, and
+`CSC_NAME`. `CSC_LINK` must contain the base64-encoded encrypted Developer ID `.p12`,
+`CSC_KEY_PASSWORD` decrypts that p12, and `CSC_NAME` must be the full Developer ID Application
+identity. The Apple ID and app-specific password are stored in a temporary keychain profile for
+`notarytool`; none of these values are written to the repository.
+
+本次本机验证已确认 Developer ID identity、Universal archive、hardened runtime、secure
+timestamp 和 `verify_bundle.sh ... developer-id` 通过；尚未取得 `notarytool Accepted`，不宣称
+已完成公开分发。证书、私钥和密码不得写入命令日志、manifest 或 Git；外部 tag/Release 创建
+需要通过受保护 workflow 进行。
 
 ## Data upgrade and rollback / 升级与回退
 

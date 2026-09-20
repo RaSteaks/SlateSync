@@ -68,7 +68,12 @@ cat > "${fake_bin}/codesign" <<'SH'
 if [[ "$*" == *--verify* && "${MOCK_SIGNATURE_FAIL:-0}" == 1 ]]; then exit 1; fi
 if [[ "$1" == -dvvv ]]; then
   [[ "${MOCK_HARDENED_MISSING:-0}" == 1 ]] || print -u2 'CodeDirectory flags=0x10000(runtime)'
-  print -u2 'Signature=adhoc'
+  if [[ "${MOCK_SIGNING_LANE:-adhoc}" == developer-id ]]; then
+    print -u2 'Authority=Developer ID Application: Yutian Zhu (HF4Y6246CT)'
+    print -u2 'Timestamp=2026-09-20 00:00:00 +0000'
+  else
+    print -u2 'Signature=adhoc'
+  fi
 elif [[ "$1" == -d && "$2" == --entitlements ]]; then
   print -u2 'Executable=fixture'
 fi
@@ -118,6 +123,8 @@ app="${fixture_root}/valid/SlateSync.app"
 create_app "$app"
 export MOCK_SOURCE_APP="$app"
 assert_success "valid audited bundle" "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 adhoc
+assert_success "valid Developer ID bundle" env MOCK_SIGNING_LANE=developer-id \
+  "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 developer-id
 
 assert_failure "single architecture is rejected" env MOCK_ARCHS=arm64 \
   "${project_root}/script/verify_bundle.sh" "$app" 1.1.0 2 adhoc
@@ -140,6 +147,15 @@ renderer_app="${fixture_root}/renderer/SlateSync.app"
 /usr/bin/ditto "$app" "$renderer_app"
 print '<html></html>' > "${renderer_app}/Contents/Resources/index.html"
 assert_failure "renderer residue is rejected" "${project_root}/script/verify_bundle.sh" "$renderer_app" 1.1.0 2 adhoc
+
+developer_package_output="${fixture_root}/developer-id-artifacts"
+assert_success "Developer ID package lane" env MOCK_SIGNING_LANE=developer-id \
+  SLATESYNC_NOTARIZATION_STATUS=Accepted SLATESYNC_NOTARIZED=true \
+  "${project_root}/script/package_release.sh" "$app" "$developer_package_output" 1.1.0 2 developer-id
+assert_success "Developer ID manifest records the signing lane" \
+  rg -q '"signingLane": "developer-id"' "${developer_package_output}/SlateSync-1.1.0-manifest.json"
+assert_success "Developer ID manifest records notarization" \
+  rg -q '"notarized": true' "${developer_package_output}/SlateSync-1.1.0-manifest.json"
 
 package_output="${fixture_root}/artifacts"
 assert_success "ZIP and DMG round-trip" \

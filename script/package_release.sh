@@ -4,8 +4,8 @@ set -euo pipefail
 script_dir="${0:A:h}"
 project_root="${script_dir:h}"
 
-if (( $# != 4 )); then
-  print -u2 "usage: package_release.sh <SlateSync.app> <absolute-output-directory> <version> <build>"
+if (( $# < 4 || $# > 5 )); then
+  print -u2 "usage: package_release.sh <SlateSync.app> <absolute-output-directory> <version> <build> [adhoc|developer-id]"
   exit 64
 fi
 
@@ -13,15 +13,22 @@ source_app="${1:A}"
 output_dir="${2:A}"
 version="$3"
 build_number="$4"
+lane="${5:-${SLATESYNC_SIGNING_LANE:-adhoc}}"
 [[ "$1" == /* && "$2" == /* && "$source_app" == */SlateSync.app ]] || { print -u2 "app and output paths must be absolute"; exit 64; }
 [[ "$output_dir" != "$project_root" && "$output_dir" != "$project_root"/* ]] || { print -u2 "release output must stay outside the repository"; exit 64; }
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' && "$build_number" =~ '^[1-9][0-9]*$' ]] || { print -u2 "invalid version/build"; exit 64; }
+[[ "$lane" == adhoc || "$lane" == developer-id ]] || { print -u2 "unknown signing lane: $lane"; exit 64; }
 if [[ "${GITHUB_REF_TYPE:-}" == tag && "${GITHUB_REF_NAME:-}" != "v${version}" ]]; then
-  print -u2 "release tag does not match version"
-  exit 65
+  [[ "${GITHUB_REF_NAME}" == "v${version}-swift" ]] || {
+    print -u2 "release tag does not match version or Swift architecture suffix"
+    exit 65
+  }
 fi
 
-"${script_dir}/verify_bundle.sh" "$source_app" "$version" "$build_number" adhoc
+release_notes_source="${SLATESYNC_RELEASE_NOTES_PATH:-${project_root}/.codex/swift-migration/manifests/sm09-release-notes.md}"
+[[ -f "$release_notes_source" ]] || { print -u2 "release notes file is missing: $release_notes_source"; exit 65; }
+
+"${script_dir}/verify_bundle.sh" "$source_app" "$version" "$build_number" "$lane"
 # A new output directory is an atomic release lock and prevents jobs from
 # overwriting one another after both observed that an artifact was absent.
 mkdir "$output_dir" || { print -u2 "package output must be a new directory"; exit 65; }
@@ -86,7 +93,7 @@ hdiutil create -quiet -fs HFS+ -format UDZO -volname "SlateSync ${version}" -src
 
 ditto -x -k "$zip_path" "$zip_check"
 [[ "$(find "$zip_check" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" == 1 ]]
-"${script_dir}/verify_bundle.sh" "${zip_check}/SlateSync.app" "$version" "$build_number" adhoc
+"${script_dir}/verify_bundle.sh" "${zip_check}/SlateSync.app" "$version" "$build_number" "$lane"
 [[ "$(bundle_manifest_hash "${zip_check}/SlateSync.app")" == "$source_app_hash" ]] || {
   print -u2 "ZIP app lineage mismatch"
   exit 65
@@ -94,7 +101,7 @@ ditto -x -k "$zip_path" "$zip_check"
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_point" "$dmg_path"
 mounted=1
 [[ "$(find "$mount_point" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" == 1 ]]
-"${script_dir}/verify_bundle.sh" "${mount_point}/SlateSync.app" "$version" "$build_number" adhoc
+"${script_dir}/verify_bundle.sh" "${mount_point}/SlateSync.app" "$version" "$build_number" "$lane"
 [[ "$(bundle_manifest_hash "${mount_point}/SlateSync.app")" == "$source_app_hash" ]] || {
   print -u2 "DMG app lineage mismatch"
   exit 65
@@ -102,7 +109,7 @@ mounted=1
 hdiutil detach "$mount_point" -quiet
 mounted=0
 
-cp "${project_root}/.codex/swift-migration/manifests/sm09-release-notes.md" "$release_notes"
+cp "$release_notes_source" "$release_notes"
 (cd "$output_dir" && shasum -a 256 "${zip_path:t}" "${dmg_path:t}" "${release_notes:t}" > "${checksums:t}")
 commit="$(git -C "$project_root" rev-parse HEAD)"
 zip_hash="$(shasum -a 256 "$zip_path" | awk '{print $1}')"
@@ -113,11 +120,21 @@ toolchain="$(xcodebuild -version | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
 release_tag="${GITHUB_REF_NAME:-}"
 [[ "${GITHUB_REF_TYPE:-}" == tag ]] || release_tag=""
-python3 - "$manifest" "$commit" "$release_tag" "$version" "$build_number" "$source_app_hash" "$resource_manifest_hash" "$toolchain" "$sdk_version" "$zip_path" "$zip_hash" "$dmg_path" "$dmg_hash" "$release_notes" "$notes_hash" <<'PY'
+if [[ "$lane" == developer-id ]]; then
+  developer_id_status="VERIFIED"
+  notarization_status="${SLATESYNC_NOTARIZATION_STATUS:-NOT_RUN}"
+  notarized="${SLATESYNC_NOTARIZED:-false}"
+else
+  developer_id_status="BLOCKED_ENV:ad-hoc-local-validation"
+  notarization_status="NOT_APPLICABLE"
+  notarized="false"
+fi
+[[ "$notarized" == true || "$notarized" == false ]] || { print -u2 "SLATESYNC_NOTARIZED must be true or false"; exit 64; }
+python3 - "$manifest" "$commit" "$release_tag" "$version" "$build_number" "$source_app_hash" "$resource_manifest_hash" "$toolchain" "$sdk_version" "$zip_path" "$zip_hash" "$dmg_path" "$dmg_hash" "$release_notes" "$notes_hash" "$lane" "$developer_id_status" "$notarization_status" "$notarized" <<'PY'
 import json, os, sys
 (path, commit, tag, version, build, app_hash, resource_hash, toolchain,
  sdk_version, zip_path, zip_hash, dmg_path, dmg_hash, notes_path,
- notes_hash) = sys.argv[1:]
+ notes_hash, lane, developer_id_status, notarization_status, notarized) = sys.argv[1:]
 document = {
     "schemaVersion": 1,
     "commit": commit,
@@ -129,10 +146,10 @@ document = {
     "minimumMacOS": "15.0",
     "toolchain": toolchain,
     "macOSSDK": sdk_version,
-    "signingLane": "adhoc-local-validation",
-    "developerIDStatus": "BLOCKED_ENV:not-authorized-or-configured",
-    "notarizationStatus": "BLOCKED_ENV:not-authorized-or-configured",
-    "notarized": False,
+    "signingLane": "developer-id" if lane == "developer-id" else "adhoc-local-validation",
+    "developerIDStatus": developer_id_status,
+    "notarizationStatus": notarization_status,
+    "notarized": notarized.lower() == "true",
     "published": False,
     "appBundleManifestSHA256": app_hash,
     "resourceManifestSHA256": resource_hash,

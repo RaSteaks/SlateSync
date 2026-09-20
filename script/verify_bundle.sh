@@ -87,7 +87,16 @@ signing_details="$(codesign -dvvv "$app_path" 2>&1)"
 [[ "$signing_details" == *"flags="*"runtime"* ]] || { print -u2 "hardened runtime is missing"; exit 65; }
 case "$lane" in
   adhoc) [[ "$signing_details" == *"Signature=adhoc"* ]] || { print -u2 "bundle is not ad-hoc signed"; exit 65; } ;;
-  developer-id) [[ "$signing_details" == *"Authority=Developer ID Application:"* ]] || { print -u2 "bundle lacks Developer ID signature"; exit 65; } ;;
+  developer-id)
+    [[ "$signing_details" == *"Authority=Developer ID Application:"* ]] || {
+      print -u2 "bundle lacks Developer ID signature"
+      exit 65
+    }
+    [[ "$signing_details" == *"Timestamp="* ]] || {
+      print -u2 "Developer ID bundle lacks a secure timestamp"
+      exit 65
+    }
+    ;;
   *) print -u2 "unknown signing lane: $lane"; exit 64 ;;
 esac
 

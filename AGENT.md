@@ -1,5 +1,12 @@
 # SlateSync 当前项目方案
 
+## 2026-09-20 Developer ID 分发签名流程
+
+- 保留 SM-09/PR 的 ad-hoc lane 作为不依赖私钥的本地验证；`archive_release.sh` 与 `package_release.sh` 新增显式 `developer-id` lane，要求 Developer ID Application、Team ID 和 secure timestamp。
+- 新增 `script/notarize_app.sh`：提交待分发 app、等待 notary Accepted、staple/validate 后再生成最终 ZIP/DMG；manifest 记录 signing lane、Developer ID 和 notarization 状态。
+- 新增受保护 workflow `.github/workflows/release-developer-id.yml`：复用现有 `CSC_LINK`/`CSC_KEY_PASSWORD`/`CSC_NAME` 和 `APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID` secrets，临时导入 p12、临时钥匙串、公证，并以 `v1.1.0-swift` tag 创建 GitHub Release；私钥、p12 和密码只允许存在于 GitHub Secrets。
+- 本机使用 `Developer ID Application: Yutian Zhu (HF4Y6246CT)` 完成 Universal Release archive 与 bundle 审计；`codesign` 显示 runtime、secure timestamp、TeamIdentifier，公证前 `spctl` 正确显示 `source=Unnotarized Developer ID`。未执行真实 notary submission 或 GitHub 上传。
+
 ## 2026-09-20 Swift 原生版本小版本更新
 
 - Swift 架构当前应用版本从 `1.0.0` 提升到 `1.1.0`，`MARKETING_VERSION` 在 Debug/Release 保持一致。
