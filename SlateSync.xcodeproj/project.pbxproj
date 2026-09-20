@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 71;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -13,20 +13,13 @@
 		B10000000000000000000004 /* SlateSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000004 /* SlateSyncTests.swift */; };
 		B10000000000000000000005 /* SlateSyncPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = X10000000000000000000003 /* SlateSyncPersistence */; };
 		B10000000000000000000006 /* SlateSyncUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* SlateSyncUITests.swift */; };
-		B10000000000000000000007 /* slatesync.icon in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* slatesync.icon */; };
-		B10000000000000000000008 /* canonical PaddleOCR resources in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* PaddleOCR */; };
-		B10000000000000000000009 /* legacy fixture in test Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* sm09-legacy-export.json */; };
+		B10000000000000000000007 /* build/slatesync.icon in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* build/slatesync.icon */; };
+		B10000000000000000000008 /* SlateSyncApp/Resources/PaddleOCR in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* SlateSyncApp/Resources/PaddleOCR */; };
+		B10000000000000000000009 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		C10000000000000000000001 = {
-			isa = PBXContainerItemProxy;
-			containerPortal = P10000000000000000000000 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A10000000000000000000001;
-			remoteInfo = SlateSync;
-		};
-		C10000000000000000000002 = {
+		C10000000000000000000002 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = P10000000000000000000000 /* Project object */;
 			proxyType = 1;
@@ -36,7 +29,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		F10000000000000000000020 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Signing.xcconfig; sourceTree = SOURCE_ROOT; };
 		F10000000000000000000001 /* SlateSyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateSyncApp.swift; sourceTree = "<group>"; };
 		F10000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F10000000000000000000003 /* SlateSync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SlateSync.entitlements; sourceTree = "<group>"; };
@@ -46,9 +38,10 @@
 		F10000000000000000000007 /* SlateSyncTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SlateSyncTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F10000000000000000000008 /* SlateSyncUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SlateSyncUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F10000000000000000000009 /* SlateSync.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = SlateSync.xctestplan; sourceTree = SOURCE_ROOT; };
-		F10000000000000000000010 /* slatesync.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = build/slatesync.icon; sourceTree = SOURCE_ROOT; };
-		F10000000000000000000011 /* PaddleOCR */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SlateSyncApp/Resources/PaddleOCR; sourceTree = SOURCE_ROOT; };
-		F10000000000000000000012 /* sm09-legacy-export.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000010 /* build/slatesync.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = build/slatesync.icon; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000011 /* SlateSyncApp/Resources/PaddleOCR */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SlateSyncApp/Resources/PaddleOCR; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000012 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json"; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000020 /* Configuration/Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Signing.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +72,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		8229D1EA30603DC400B05EF7 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000000020 /* Configuration/Signing.xcconfig */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		G10000000000000000000000 = {
 			isa = PBXGroup;
 			children = (
@@ -86,9 +87,10 @@
 				G10000000000000000000004 /* SlateSyncTests */,
 				G10000000000000000000005 /* SlateSyncUITests */,
 				F10000000000000000000009 /* SlateSync.xctestplan */,
-				F10000000000000000000010 /* slatesync.icon */,
-				F10000000000000000000011 /* PaddleOCR */,
+				F10000000000000000000010 /* build/slatesync.icon */,
+				F10000000000000000000011 /* SlateSyncApp/Resources/PaddleOCR */,
 				G10000000000000000000001 /* Products */,
+				8229D1EA30603DC400B05EF7 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -132,7 +134,7 @@
 			isa = PBXGroup;
 			children = (
 				F10000000000000000000005 /* SlateSyncUITests.swift */,
-				F10000000000000000000012 /* sm09-legacy-export.json */,
+				F10000000000000000000012 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json */,
 			);
 			path = SlateSyncUITests;
 			sourceTree = "<group>";
@@ -211,9 +213,17 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					A10000000000000000000001 = { CreatedOnToolsVersion = 26.3; };
-					A10000000000000000000002 = { CreatedOnToolsVersion = 26.3; TestTargetID = A10000000000000000000001; };
-					A10000000000000000000003 = { CreatedOnToolsVersion = 26.3; TestTargetID = A10000000000000000000001; };
+					A10000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					A10000000000000000000002 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = A10000000000000000000001;
+					};
+					A10000000000000000000003 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = A10000000000000000000001;
+					};
 				};
 			};
 			buildConfigurationList = L10000000000000000000000 /* Build configuration list for PBXProject "SlateSync" */;
@@ -230,7 +240,6 @@
 			packageReferences = (
 				K10000000000000000000001 /* XCLocalSwiftPackageReference "." */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = G10000000000000000000001 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -243,20 +252,65 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		R10000000000000000000001 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000007 /* slatesync.icon in Resources */, B10000000000000000000008 /* canonical PaddleOCR resources in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
-		R10000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		R10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000009 /* legacy fixture in test Resources */,); runOnlyForDeploymentPostprocessing = 0; };
+		R10000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000007 /* build/slatesync.icon in Resources */,
+				B10000000000000000000008 /* SlateSyncApp/Resources/PaddleOCR in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		R10000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		R10000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000009 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		S10000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000001 /* SlateSyncApp.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
-		S10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000004 /* SlateSyncTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
-		S10000000000000000000003 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000006 /* SlateSyncUITests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		S10000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* SlateSyncApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		S10000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000004 /* SlateSyncTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		S10000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000006 /* SlateSyncUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		D10000000000000000000001 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A10000000000000000000001 /* SlateSync */; targetProxy = C10000000000000000000001; };
-		D10000000000000000000002 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A10000000000000000000001 /* SlateSync */; targetProxy = C10000000000000000000002; };
+		D10000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000001 /* SlateSync */;
+			targetProxy = C10000000000000000000002 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -292,18 +346,23 @@
 		};
 		Q10000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F10000000000000000000020 /* Signing.xcconfig */;
+			baseConfigurationReference = F10000000000000000000020 /* Configuration/Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = slatesync;
 				CODE_SIGN_ENTITLEMENTS = SlateSyncApp/SlateSync.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = HF4Y6246CT;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SlateSyncApp/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.slatesync.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -313,21 +372,27 @@
 		};
 		Q10000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F10000000000000000000020 /* Signing.xcconfig */;
+			baseConfigurationReference = F10000000000000000000020 /* Configuration/Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = slatesync;
 				CODE_SIGN_ENTITLEMENTS = SlateSyncApp/SlateSync.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = HF4Y6246CT;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SlateSyncApp/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.slatesync.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 			};
 			name = Release;
 		};
@@ -380,20 +445,67 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		L10000000000000000000000 /* Build configuration list for PBXProject "SlateSync" */ = {isa = XCConfigurationList; buildConfigurations = (Q10000000000000000000001 /* Debug */, Q10000000000000000000002 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		L10000000000000000000001 /* Build configuration list for PBXNativeTarget "SlateSync" */ = {isa = XCConfigurationList; buildConfigurations = (Q10000000000000000000003 /* Debug */, Q10000000000000000000004 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		L10000000000000000000002 /* Build configuration list for PBXNativeTarget "SlateSyncTests" */ = {isa = XCConfigurationList; buildConfigurations = (Q10000000000000000000005 /* Debug */, Q10000000000000000000006 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		L10000000000000000000003 /* Build configuration list for PBXNativeTarget "SlateSyncUITests" */ = {isa = XCConfigurationList; buildConfigurations = (Q10000000000000000000007 /* Debug */, Q10000000000000000000008 /* Release */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		L10000000000000000000000 /* Build configuration list for PBXProject "SlateSync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				Q10000000000000000000001 /* Debug */,
+				Q10000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		L10000000000000000000001 /* Build configuration list for PBXNativeTarget "SlateSync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				Q10000000000000000000003 /* Debug */,
+				Q10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		L10000000000000000000002 /* Build configuration list for PBXNativeTarget "SlateSyncTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				Q10000000000000000000005 /* Debug */,
+				Q10000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		L10000000000000000000003 /* Build configuration list for PBXNativeTarget "SlateSyncUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				Q10000000000000000000007 /* Debug */,
+				Q10000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		K10000000000000000000001 /* XCLocalSwiftPackageReference "." */ = {isa = XCLocalSwiftPackageReference; relativePath = .; };
+		K10000000000000000000001 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		X10000000000000000000001 /* SlateSyncUI */ = {isa = XCSwiftPackageProductDependency; package = K10000000000000000000001 /* XCLocalSwiftPackageReference "." */; productName = SlateSyncUI; };
-		X10000000000000000000002 /* SlateSyncPersistence */ = {isa = XCSwiftPackageProductDependency; package = K10000000000000000000001 /* XCLocalSwiftPackageReference "." */; productName = SlateSyncPersistence; };
-		X10000000000000000000003 /* SlateSyncPersistence */ = {isa = XCSwiftPackageProductDependency; package = K10000000000000000000001 /* XCLocalSwiftPackageReference "." */; productName = SlateSyncPersistence; };
+		X10000000000000000000001 /* SlateSyncUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = K10000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+			productName = SlateSyncUI;
+		};
+		X10000000000000000000002 /* SlateSyncPersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = K10000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+			productName = SlateSyncPersistence;
+		};
+		X10000000000000000000003 /* SlateSyncPersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = K10000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+			productName = SlateSyncPersistence;
+		};
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = P10000000000000000000000 /* Project object */;
