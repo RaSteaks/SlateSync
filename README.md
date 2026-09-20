@@ -285,7 +285,22 @@ npm run electron:build:dir
 npm run electron:build
 ```
 
-输出目录为 `dist/`。签名、公证和发布需要单独配置 Apple 发布凭据。
+输出目录为 `dist/`，发布产物统一命名为 `SlateSync-<version>-<arch>.<ext>`。
+无签名目录构建只用于本地验证；Electron macOS 发布必须使用
+Developer ID Application 身份，并在构建后通过签名、嵌套代码、Gatekeeper 和
+notarization ticket 验证：
+
+```bash
+# 本机钥匙串已安装 Developer ID Application 证书时
+export CSC_NAME="Developer ID Application: <Developer Name> (<TEAM_ID>)"
+node scripts/macos-signing.mjs preflight
+npm run release:mac
+node scripts/macos-signing.mjs verify --all --notarized
+```
+
+CI 使用 `CSC_LINK`、`CSC_KEY_PASSWORD`、`CSC_NAME`、`APPLE_ID`、
+`APPLE_APP_SPECIFIC_PASSWORD` 和 `APPLE_TEAM_ID`，只响应 `v*-electron` tag；
+`v*-swift` 不会触发 Electron 发布工作流。
 
 
 

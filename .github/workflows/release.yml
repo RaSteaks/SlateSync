@@ -1,9 +1,11 @@
-name: Release macOS application
+name: Release Electron macOS application
 
 on:
   push:
     tags:
-      - "v*"
+      # Swift and Electron share the repository but publish through separate
+      # architecture-qualified tags and release pipelines.
+      - "v*-electron"
 
 permissions:
   contents: write
@@ -41,14 +43,30 @@ jobs:
           npm run test:native:abi
           npm run build:modern
 
+      - name: Verify Apple signing inputs
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/macos-signing.mjs preflight --ci
+
       - name: Build macOS artifacts
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+
+      - name: Verify signed and notarized app
+        env:
+          CSC_NAME: ${{ secrets.CSC_NAME }}
+        run: node scripts/macos-signing.mjs verify --arch ${{ matrix.arch }} --notarized
 
       - name: Upload architecture artifacts
         uses: actions/upload-artifact@v4
@@ -76,5 +94,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "SlateSync $GITHUB_REF_NAME" \
+            --title "SlateSync Electron $GITHUB_REF_NAME" \
             --generate-notes

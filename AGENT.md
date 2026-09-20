@@ -2,6 +2,11 @@
 
 ## 当前任务
 
+2026-09-20：更新 Electron macOS 签名发布流程：仅由 `v*-electron` tag 触发；CI
+先校验 Developer ID、版本 tag 与 notarization 凭据，再构建带架构后缀的产物，
+验证 hardened runtime、嵌套签名、Gatekeeper 和 stapled ticket；本地无签名目录
+构建路径保持不变。
+
 2026-09-20：Electron 架构应用版本由 `0.2.1` 升级至 `1.1.0`；同步更新根目录
 `package.json`、`package-lock.json` 及活动兼容契约，并将架构发布 tag 统一为
 `v1.1.0-electron`；Swift 版本使用独立的 `v1.1.0-swift`。

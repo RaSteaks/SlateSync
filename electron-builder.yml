@@ -13,6 +13,10 @@ directories:
   output: dist
   buildResources: build
 
+# Keep architecture visible in every distributable so Swift and Electron
+# releases cannot be confused after downloading artifacts from GitHub.
+artifactName: ${productName}-${version}-${arch}.${ext}
+
 # Local source builds select the host platform explicitly. macOS release builds
 # retain both supported architectures; Windows builds are intentionally x64-only.
 mac:

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
@@ -16,6 +16,11 @@ import {
   verifyVisionOcrBinary,
   visionArchitectureFromArgs,
 } from "../../../scripts/build-vision-ocr.mjs";
+import {
+  appPathForArchitecture,
+  preflightMacSigning,
+  verifyMacSignedApp,
+} from "../../../scripts/macos-signing.mjs";
 
 const repositoryRoot = new URL("../../../", import.meta.url);
 
@@ -33,6 +38,7 @@ describe("host-specific Electron packaging", () => {
     expect(builderConfig).toMatch(/^win:\n  target:\n    - target: nsis\n      arch: \[x64\]/m);
     expect(builderConfig).not.toMatch(/^linux:/m);
     expect(builderConfig).toMatch(/^mac:[\s\S]*?extraResources:\n    - from: bin\/\n      to: app\/bin\/\n/m);
+    expect(builderConfig).toContain("artifactName: ${productName}-${version}-${arch}.${ext}");
     expect(builderConfig).not.toMatch(/^extraResources:[\s\S]*?from: bin\/\n/m);
     expect(buildScript).toContain("hostTargets");
     expect(buildScript).toContain('"--mac"');
@@ -183,6 +189,82 @@ describe("host-specific Electron packaging", () => {
           return { status: 0, stdout: "", stderr: "" };
         },
       })).toThrow(/Vision OCR 架构不匹配：期望 arm64\+x86_64/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("macOS signed release packaging", () => {
+  it("requires the architecture-qualified Electron release workflow", async () => {
+    const [releaseWorkflow, signingScript] = await Promise.all([
+      readFile(new URL(".github/workflows/release.yml", repositoryRoot), "utf8"),
+      readFile(new URL("scripts/macos-signing.mjs", repositoryRoot), "utf8"),
+    ]);
+
+    expect(releaseWorkflow).toContain('"v*-electron"');
+    expect(releaseWorkflow).toContain("CSC_NAME");
+    expect(releaseWorkflow).toContain("preflight --ci");
+    expect(releaseWorkflow).toContain("verify --arch");
+    expect(releaseWorkflow).toContain("--notarized");
+    expect(releaseWorkflow).toContain("SlateSync Electron $GITHUB_REF_NAME");
+    expect(signingScript).toContain("Developer ID Application");
+  });
+
+  it("preflights a local Developer ID identity without exposing credentials", () => {
+    const commands: string[] = [];
+    const result = preflightMacSigning({
+      platform: "darwin",
+      env: { CSC_NAME: "Developer ID Application: Example (TEAM123)" },
+      run: (command: string, args: string[]) => {
+        commands.push([command, ...args].join(" "));
+        return {
+          status: 0,
+          stdout: '1 valid identities found\n"Developer ID Application: Example (TEAM123)"',
+          stderr: "",
+        };
+      },
+    });
+
+    expect(result).toMatchObject({ mode: "keychain", version: "1.1.0" });
+    expect(commands).toEqual(["security find-identity -v -p codesigning"]);
+  });
+
+  it("validates signed, hardened, notarized app output per architecture", () => {
+    const root = mkdtempSync(join(tmpdir(), "slatesync-signing-test-"));
+    const appPath = join(root, "SlateSync.app");
+    mkdirSync(join(appPath, "Contents"), { recursive: true });
+    const commands: string[] = [];
+    try {
+      const result = verifyMacSignedApp({
+        platform: "darwin",
+        appPath,
+        env: { CSC_NAME: "Developer ID Application: Example (TEAM123)" },
+        requireNotarization: true,
+        run: (command: string, args: string[]) => {
+          commands.push([command, ...args].join(" "));
+          if (command === "plutil") return { status: 0, stdout: "1.1.0\n", stderr: "" };
+          if (command === "codesign" && args[0] === "-dvvv") {
+            return {
+              status: 0,
+              stdout: "",
+              stderr: "Authority=Developer ID Application: Example (TEAM123)\nTeamIdentifier=TEAM123\nflags=0x10000(runtime)",
+            };
+          }
+          return { status: 0, stdout: "", stderr: "" };
+        },
+      });
+
+      expect(result).toMatchObject({ appPath, version: "1.1.0", notarized: true });
+      expect(commands).toEqual([
+        expect.stringContaining("plutil -extract CFBundleShortVersionString"),
+        expect.stringContaining("codesign -dvvv"),
+        expect.stringContaining("codesign --verify --deep --strict"),
+        expect.stringContaining("spctl --assess --type execute"),
+        expect.stringContaining("xcrun stapler validate"),
+      ]);
+      expect(appPathForArchitecture("arm64")).toContain("dist/mac-arm64/SlateSync.app");
+      expect(appPathForArchitecture("x64")).toContain("dist/mac/SlateSync.app");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
