@@ -2,6 +2,12 @@
 
 ## 当前任务
 
+2026-09-21：修复 Electron macOS 发布 Action 的测试前置顺序。`bin/local-encryption.dylib`
+是被忽略的生成产物，macOS storage Worker 测试会在 `npm test` 中直接加载它；发布
+工作流必须在测试前显式运行 `scripts/build-local-encryption.mjs`，不能等到测试后的
+`build:modern` 生命周期再生成，否则干净 runner 会以 `local-encryption.dylib.dylib`
+缺失失败。
+
 2026-09-20：更新 Electron macOS 签名发布流程：仅由 `v*-electron` tag 触发；CI
 先校验 Developer ID、版本 tag 与 notarization 凭据，再构建带架构后缀的产物，
 验证 hardened runtime、嵌套签名、Gatekeeper 和 stapled ticket；本地无签名目录

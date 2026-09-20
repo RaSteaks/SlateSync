@@ -35,6 +35,11 @@ jobs:
       - name: Build local Vision OCR bridge
         run: node scripts/build-vision-ocr.mjs --arch ${{ matrix.arch }}
 
+      # macOS storage tests load this ignored build artifact before the main
+      # application build; create it before npm test instead of after it.
+      - name: Build local encryption bridge
+        run: node scripts/build-local-encryption.mjs
+
       - name: Verify source and tests
         run: |
           npm run check
