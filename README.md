@@ -29,9 +29,7 @@
 | Resolve CSV、素材目录 | 条号对账、场镜次序检查、`slate.txt` 元数据读取 | 可预览、可校对、可导出的回填结果 |
 | 项目库或项目包 | SQLite v1 校验、原子传输、导入导出与关闭重开回归 | 可迁移的项目与项目库数据 |
 
-> [!NOTE]
-> SlateSync 当前是原生 Swift/SwiftUI macOS 应用，不再依赖 Electron、Node.js 或 npm 运行时。
-> 原生迁移已在本地 ad-hoc 交付范围通过 SM-09 Gate；正式分发使用独立的 Developer ID、公证和 GitHub Release lane。
+
 
 ## 架构与分支基线
 
@@ -42,13 +40,8 @@
 | `main` | Electron 主架构 | 维护现有 Electron 产品与兼容行为 |
 | `swift-rewrite` | Swift/SwiftUI 原生架构 | 当前项目开发、验证和新功能的基线 |
 
-当前开发分支默认从 `swift-rewrite` 创建，并以 `swift-rewrite` 为合并目标。在 Owner 或项目决策
-明确 Swift 成为主架构之前，禁止将 `swift-rewrite` 或其派生分支合并到 `main`，包括普通合并、
-squash、fast-forward 或其他等效方式。
+当前开发分支默认从 `swift-rewrite` 创建，并以 `swift-rewrite` 为合并目标。
 
-后续目标是在 `swift-rewrite` 上持续完成原生功能、兼容性、严格质量门禁和 GitHub CI 验证；GitHub
-分支保护已配置。只有在架构切换决策、功能与数据验收、发布/回滚方案及分支治理均记录完成后，才
-讨论将 Swift 提升为 `main` 的主架构。详细项目方案见 [AGENT.md](AGENT.md)。
 
 ## 核心能力
 
@@ -265,42 +258,7 @@ python3 script/tests/sm09_coverage_tests.py
 python3 script/tests/sm09_inventory_tests.py
 ```
 
-### 合并 CI 与性能报告
 
-PR 和 `swift-rewrite` 的 CI 使用 `./script/phase_gate.sh SM-09 --functional`：
-构建、功能/数据断言、资源释放、原生 UI、归档与安装包验证仍为强制门禁。
-耗时预算由独立的 **Performance report (non-blocking)** 任务检查；原性能阈值不变，
-超标会产生告警，并上传 `native-performance-report`（日志、JSON 指标、汇总），但不阻塞合并。
-功能报告明确标注 `scope=functional`、`approvable=false`，不代表完整发布验收通过。
-
-本地运行相同的严格性能报告（指定新的或空的结果目录）：
-
-```sh
-python3 script/performance_report.py --results-dir /tmp/SlateSync-Performance
-```
-
-此命令失败时仍返回非零；非阻塞策略仅由 CI 工作流决定。默认完整 Gate 和 release workflow
-继续强制执行性能预算，适合发布前验收。
-
-运行当前原生迁移的完整 Gate：
-
-```sh
-./script/phase_gate.sh SM-09
-```
-
-正式 Gate 要求干净的已提交工作区。施工诊断可加 `--allow-dirty`，但该结果不可用于批准。
-Gate 会验证原生项目布局、Swift/Xcode 构建与测试、删除来源和冻结夹具、Release/Archive、
-Universal bundle、ZIP/DMG 回验、打包后的 UI 启动与退出重开，以及 CSV 性能预算。
-
-普通 `swift test` 默认跳过前台 CSV 帧率测试及需要专用环境的离线 Paddle 测试。完整 SM-09
-Gate 会启用前台 CSV 性能测试；功能合并模式则将该测试交给独立性能任务。严格构建命令：
-
-```sh
-swift build -Xswiftc -warnings-as-errors
-```
-
-原始 Gate 结果写入忽略目录 `.codex/gate-results/`；迁移状态、审查摘要和逐项来源记录在
-`.codex/swift-migration/`。
 
 ## 构建与打包
 
@@ -313,90 +271,14 @@ swift build -Xswiftc -warnings-as-errors
 脚本会在仓库外的新目录中生成 Universal `SlateSync.xcarchive`，并验证最低 macOS 版本、
 架构、资源、签名、hardened runtime 和依赖。版本号和 build number 是显式输入，不会改写
 已跟踪的工程文件。
-
-### Developer ID 归档与公证
-
-PR/Gate 默认仍使用 ad-hoc 签名，不需要私钥。正式 GitHub 分发必须显式选择
-`developer-id` lane，并提供已安装的 `Developer ID Application` 身份：
-
-```sh
-export DEVELOPMENT_TEAM=HF4Y6246CT
-export SLATESYNC_SIGNING_IDENTITY='Developer ID Application: Yutian Zhu (HF4Y6246CT)'
-
-./script/archive_release.sh \
-  /private/tmp/SlateSync-release 1.1.0 2 developer-id \
-  "$SLATESYNC_SIGNING_IDENTITY"
-
-xcrun notarytool store-credentials SlateSyncNotary \
-  --apple-id '<Apple Account>' \
-  --team-id "$DEVELOPMENT_TEAM"
-
-./script/notarize_app.sh \
-  /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app \
-  /private/tmp/SlateSync-release/SlateSync-notarization.zip \
-  SlateSyncNotary
-
-SLATESYNC_RELEASE_NOTES_PATH=/private/tmp/SlateSync-release/release-notes.md \
-SLATESYNC_NOTARIZATION_STATUS=Accepted \
-SLATESYNC_NOTARIZED=true \
-  ./script/package_release.sh \
-    /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app \
-    /private/tmp/SlateSync-artifacts 1.1.0 2 developer-id
-```
-
-其中 `release-notes.md` 需要先由本次发布内容生成，不能直接复用历史迁移记录。
-
-`notarytool` 会交互读取 app-specific password；不要将密码、`.p12`、`.p8` 或临时钥匙串写入仓库。
-GitHub Actions 的正式入口是 `.github/workflows/release-developer-id.yml`，使用 tag
-`v1.1.0-swift`、临时钥匙串、公证和 GitHub Release 上传。
-
-### 生成 ZIP 与 DMG
-
-```sh
-./script/package_release.sh \
-  /private/tmp/SlateSync-release/SlateSync.xcarchive/Products/Applications/SlateSync.app \
-  /private/tmp/SlateSync-artifacts 1.1.0 2
-```
-
-ZIP 和 DMG 来自同一个已审计的 app，并会经过解压、只读挂载、签名和 bundle lineage 回验。输出
-包括：
-
-- `SlateSync-<version>-macOS-universal.zip`
-- `SlateSync-<version>-macOS-universal.dmg`
-- `SHA256SUMS`
-- JSON manifest
-- 中英 release notes
-
-当前本机已验证 Developer ID 签名 archive 和 bundle 审计；本次未执行 Apple 公证或 GitHub Release
-上传。发布前仍需使用正式 notary credentials 完成 `Accepted`、staple/validate 和 Gatekeeper 复核。
-详细说明见 [发布与支持说明](RELEASE.md)。
-
 ## 限制与已知边界
 
 - 当前仅支持 macOS 15.0 及以上版本，不提供 Windows 或 Linux 运行时。
 - PaddleOCR 需要用户提供 Python 环境和网络安装条件；Python、虚拟环境和模型不包含在 App 中。
 - 无法确认的识别字段不会被强行写入，必须人工校对。
 - 项目库与项目包当前保持 v1 格式；升级、迁移或回退前应保留独立备份。
-- 当前公开分发链路已具备 Developer ID archive、notarization wrapper 和受保护 GitHub workflow；
-  尚未在本机执行真实公证或发布上传。
 
 ## License
 
 [MIT](./LICENSE)
 
-### 开发构建的钥匙串授权
-
-本机首次开发构建先运行 `python3 script/setup_local_signing.py`，再使用
-`./script/build_and_run.sh`。脚本建立长期复用的本地代码签名证书，无需付费 Apple 开发者
-账号；私钥在登录钥匙串，仓库只引用被忽略的本地证书指纹配置。Xcode Debug/Release
-使用同一配置。请保留原签名证书；证书丢失时构建会停止，不自动更换身份。
-
-首次从临时签名升级时，系统可能分别询问项目密钥和已存 API Key 的访问权限；在确认是
-本机 SlateSync 后选择“始终允许”。正常重启和重新编译会继续使用相同身份。钥匙串锁定、
-授权撤销或更换证书时仍可能要求解锁。此证书只用于本地开发，不替代公开分发签名与公证。
-
-设置状态检查不读取 API Key，秘密只在实际操作时读取并缓存在进程内。取消授权后需主动
-重试，不会循环弹窗。若存在旧版凭据文件，请在设置中点击“迁移旧凭据”完成迁移。
-
-可运行 `python3 script/verify_local_keychain.py` 验证三次独立启动、重新编译与授权失败恢复；
-脚本只创建和清理临时独立钥匙串。隔离 Xcode 测试可显式传入 `CODE_SIGN_IDENTITY=-`。
