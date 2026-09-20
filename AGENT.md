@@ -2,6 +2,8 @@
 
 ## 当前任务
 
+2026-09-21：更新 README，按当前功能整理安装、识别、模板库、项目迁移、配置与构建说明；补充多来源素材元数据和 macOS 测试前的加密桥接构建步骤，区分内置 Resolve 备注与既有条次标记行为，删减内部迁移细节和未来方案。仅修改文档，检查本地链接、npm 脚本引用及 diff 格式，不运行应用测试。
+
 2026-09-21：修复 Electron macOS 发布 Action 的测试前置顺序。`bin/local-encryption.dylib`
 是被忽略的生成产物，macOS storage Worker 测试会在 `npm test` 中直接加载它；发布
 工作流必须在测试前显式运行 `scripts/build-local-encryption.mjs`，不能等到测试后的
