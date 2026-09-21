@@ -19,18 +19,18 @@ final class SlateSyncUITests: XCTestCase {
     @MainActor
     func testApplicationLanguageRoundTripIncludesHelpMenusAndUserContent() {
         let app = launchIsolatedApp()
-        XCTAssertTrue(app.buttons["project.create"].firstMatch.waitForExistence(timeout: 8))
-        app.typeKey(",", modifierFlags: .command)
-        let language = app.popUpButtons["settings.applicationLanguage"]
-        XCTAssertTrue(language.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["project.create"].firstMatch.waitForExistence(timeout: 15))
+        _ = openSettingsWindow(app)
+        let language = app.popUpButtons["settings.applicationLanguage"].firstMatch
+        XCTAssertTrue(language.waitForExistence(timeout: 10))
         language.click()
         app.menuItems["English"].firstMatch.click()
-        XCTAssertTrue(app.descendants(matching: .any)["settings.languageRestart"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["settings.languageRestart"].firstMatch.waitForExistence(timeout: 6))
         app.terminate()
         app.launch()
         app.activate()
 
-        XCTAssertTrue(app.staticTexts["Project Library"].firstMatch.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Project Library"].firstMatch.waitForExistence(timeout: 15))
         app.staticTexts["Help"].firstMatch.click()
         XCTAssertTrue(app.textFields["help.search"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Quick start"].firstMatch.waitForExistence(timeout: 3))
@@ -176,13 +176,37 @@ final class SlateSyncUITests: XCTestCase {
         // Launch can leave the window behind another desktop application.
         // Keyboard and accessibility assertions require the target foreground.
         app.activate()
+        // A freshly extracted Release app can take longer to publish its first
+        // SwiftUI window while LaunchServices and the runtime warm up. Wait for
+        // the native window once here so each test's semantic control timeout
+        // measures UI readiness rather than process cold-start overhead.
+        _ = app.windows.firstMatch.waitForExistence(timeout: 15)
+        app.activate()
         return app
+    }
+
+    @MainActor
+    private func openSettingsWindow(_ app: XCUIApplication) -> XCUIElement {
+        app.activate()
+        app.typeKey(",", modifierFlags: .command)
+        let settingsWindow = app.windows["com_apple_SwiftUI_Settings_window"]
+        if !settingsWindow.waitForExistence(timeout: 10) {
+            // A freshly launched packaged app can accept the command before
+            // its Settings scene has registered with AppKit. Retry only when
+            // the native Settings window is absent, so an existing window is
+            // never toggled closed by a blind second shortcut.
+            app.activate()
+            app.typeKey(",", modifierFlags: .command)
+            XCTAssertTrue(settingsWindow.waitForExistence(timeout: 10))
+        }
+        app.activate()
+        return settingsWindow
     }
 
     @MainActor
     func testIndependentWindowsAndNewWindowAfterClosingLastWindow() {
         let app = launchIsolatedApp()
-        XCTAssertTrue(app.buttons.matching(identifier: "project.create").firstMatch.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons.matching(identifier: "project.create").firstMatch.waitForExistence(timeout: 15))
         app.staticTexts["帮助"].firstMatch.click()
         XCTAssertTrue(app.textFields["help.search"].waitForExistence(timeout: 3))
         // Window creation has its own shortcut, leaving Command-N available
@@ -228,7 +252,7 @@ final class SlateSyncUITests: XCTestCase {
         // SwiftUI toolbar accessibility children.
         app.typeKey("n", modifierFlags: [.command, .shift])
         let name = app.textFields["project.name"]
-        XCTAssertTrue(name.waitForExistence(timeout: 3))
+        XCTAssertTrue(name.waitForExistence(timeout: 8))
         name.typeText(projectName)
         XCTAssertEqual(name.value as? String, projectName)
         app.buttons.matching(identifier: "project.create.confirm").firstMatch.click()
@@ -433,13 +457,12 @@ final class SlateSyncUITests: XCTestCase {
     func testSettingsWindowResizesWithoutLosingPreferences() {
         let app = launchIsolatedApp()
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 8))
-        app.typeKey(",", modifierFlags: .command)
-        let appearance = app.popUpButtons["settings.appearance"].firstMatch
+        let settingsWindow = openSettingsWindow(app)
+        let appearance = settingsWindow.popUpButtons["settings.appearance"].firstMatch
         XCTAssertTrue(appearance.waitForExistence(timeout: 5))
         let value = appearance.value as? String
         // Window ordering can change during native resize activation. Keep
         // the Settings identity instead of reevaluating a firstMatch query.
-        let settingsWindow = app.windows["com_apple_SwiftUI_Settings_window"]
         // Packaged Release launches can leave the newly created Settings
         // window behind the app until activation is restored explicitly.
         app.activate()
@@ -560,12 +583,39 @@ final class SlateSyncUITests: XCTestCase {
                 .withOffset(CGVector(dx: -1, dy: 0))
             edge.press(forDuration: 0.15, thenDragTo: edge.withOffset(
                 CGVector(dx: target.width - window.frame.width, dy: 0)))
+            if abs(window.frame.width - target.width) > 4 {
+                // Tahoe accepts the inset hit point while older AppKit can
+                // require the exact border. Refocus through the title bar and
+                // retry the still-visible right edge at its native boundary;
+                // the left edge is parked against the display and unavailable.
+                title.click()
+                let retryEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+                retryEdge.press(forDuration: 0.15, thenDragTo: retryEdge.withOffset(
+                    CGVector(dx: target.width - window.frame.width, dy: 0)))
+            }
         }
         if abs(window.frame.height - target.height) > 4 {
-            let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
-                .withOffset(CGVector(dx: 0, dy: -1))
+            let shrinking = target.height < window.frame.height
+            let shrinkFromTop = shrinking && window.frame.height >= visible.height - 4
+            // A full-height window puts its bottom resize edge on the display
+            // boundary; use the visible top edge only for that case. Smaller
+            // windows keep the native bottom-edge path used by Settings.
+            let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: shrinkFromTop ? 0 : 1))
+                .withOffset(CGVector(dx: 0, dy: shrinkFromTop ? 1 : -1))
             edge.press(forDuration: 0.15, thenDragTo: edge.withOffset(
-                CGVector(dx: 0, dy: target.height - window.frame.height)))
+                CGVector(dx: 0, dy: shrinkFromTop ? window.frame.height - target.height : target.height - window.frame.height)))
+            if abs(window.frame.height - target.height) > 4 {
+                // Match the horizontal compatibility path: retain Tahoe's
+                // inset first, then retry the same visible edge on the exact
+                // AppKit border with only the remaining height delta.
+                title.click()
+                let retryEdge = window.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.5, dy: shrinkFromTop ? 0 : 1))
+                retryEdge.press(forDuration: 0.15, thenDragTo: retryEdge.withOffset(
+                    CGVector(dx: 0, dy: shrinkFromTop
+                        ? window.frame.height - target.height
+                        : target.height - window.frame.height)))
+            }
         }
         print("UI_RESIZE requested=\(size) supported=\(target) visible=\(visible) actual=\(window.frame)")
         XCTAssertEqual(window.frame.width, target.width, accuracy: 4)

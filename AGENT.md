@@ -1,5 +1,12 @@
 # SlateSync 当前项目方案
 
+## 2026-09-21 UI 窗口缩放测试边界
+
+- 工作台在显示器可用高度等于首次窗口高度时，从底边向上拖动可能命中屏幕边界而不触发原生缩放；XCUI 辅助方法改为在收缩满高窗口时拖动可见的上边直线区域。缩放首先使用 Tahoe 需要的边内命中点；尺寸未变时重新聚焦标题栏，再以旧版 AppKit 需要的精确边界和剩余差值重试同一可见边缘；不使用贴在显示器边界上的反向边缘，生产窗口约束与尺寸断言保持不变。
+- 打包 Release 首次冷启动可能晚于 Debug 发布首个 SwiftUI 窗口；测试先等待原生窗口并给首屏控件更宽的有界等待，避免把 LaunchServices/运行时预热误报为功能失败。
+- 仅调整测试交互与等待路径，不添加生产环境的窗口控制钩子；设置窗口原有的 `700×540` 与工作台 `960×600` 尺寸契约继续由真实 AppKit 窗口验证。
+- 定向验证缩放/语言/中文重开场景，再复查共享 Test Plan、打包 UI 与 Gate 相关契约。
+
 ## 2026-09-20 Developer ID 分发签名流程
 
 - 保留 SM-09/PR 的 ad-hoc lane 作为不依赖私钥的本地验证；`archive_release.sh` 与 `package_release.sh` 新增显式 `developer-id` lane，要求 Developer ID Application、Team ID 和 secure timestamp。
