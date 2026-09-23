@@ -1,5 +1,16 @@
 # SlateSync 当前项目方案
 
+## 2026-09-24 Mac App Store 沙盒签名修复
+
+- 新增独立 `AppStore` 构建配置及 entitlements，声明 App Sandbox、Provider 出站联网、用户选取文件读写；共享 Xcode scheme 的 Organizer Archive 使用该配置。现有 Debug/Release 与 Developer ID ZIP/DMG 仍使用无沙盒配置，避免改变已有项目库和外部 Python 行为。
+- `script/verify_app_store_sandbox.sh` 从 `.app` 或导出的 `.pkg` 提取签名后的主可执行文件，检查沙盒及两项功能权限均为 Boolean true；`sm09_release_contract.py` 固定配置边界。
+- 重新归档、导出并检查 pkg 后再上传。Mac App Store 沙盒版仍需实机验证旧数据迁移、项目库重启后访问、PaddleOCR 外部 Python 安装/运行及审核要求；当前签名修复不等于这些路径已通过。
+
+## 2026-09-24 窗口回调捕获警告修复
+
+- 将窗口模型回调注册从 SwiftUI `.task` 闭包提取到主线程隔离的视图方法，保持原有注册顺序与弱引用生命周期，消除 Swift 6 对外层隐式强捕获和内层弱捕获不一致的警告。
+- macOS App 目标的 Release 构建通过，输出未再出现捕获所有权警告；`git diff --check` 通过。不改动用户已有的 UI 测试工作区修改。
+
 ## 2026-09-21 UI 窗口缩放测试边界
 
 - 工作台在显示器可用高度等于首次窗口高度时，从底边向上拖动可能命中屏幕边界而不触发原生缩放；XCUI 辅助方法改为在收缩满高窗口时拖动可见的上边直线区域。缩放首先使用 Tahoe 需要的边内命中点；尺寸未变时重新聚焦标题栏，再以旧版 AppKit 需要的精确边界和剩余差值重试同一可见边缘；不使用贴在显示器边界上的反向边缘，生产窗口约束与尺寸断言保持不变。

@@ -34,6 +34,20 @@ timestamp 和 `verify_bundle.sh ... developer-id` 通过；尚未取得 `notaryt
 已完成公开分发。证书、私钥和密码不得写入命令日志、manifest 或 Git；外部 tag/Release 创建
 需要通过受保护 workflow 进行。
 
+## Mac App Store archive / Mac App Store 归档
+
+The shared Xcode scheme now archives with the `AppStore` configuration. That configuration
+uses automatic Apple Distribution signing and embeds App Sandbox, outgoing network, and
+user-selected file read/write entitlements. The existing `Release` configuration and scripted
+Developer ID ZIP/DMG workflow remain separate. After exporting the App Store `.pkg`, run
+`./script/verify_app_store_sandbox.sh /absolute/path/to/SlateSync.pkg` before upload; the check
+reads the signed executable inside the package. An earlier `.pkg` cannot gain entitlements
+without a new archive and export.
+
+共享 Xcode scheme 的 Archive 使用 `AppStore` 配置；导出 App Store `.pkg` 后先运行上述
+校验脚本。该检查只验证签名与沙盒权限，不代表完整商店审核通过。沙盒版仍需在目标签名下
+验证旧版数据迁移、项目库重开、文件导入/导出，以及依赖外部 Python 的 PaddleOCR 功能。
+
 ## Data upgrade and rollback / 升级与回退
 
 The format stays at Library/project SQLite v1. Native tests import genuine pre-cutover

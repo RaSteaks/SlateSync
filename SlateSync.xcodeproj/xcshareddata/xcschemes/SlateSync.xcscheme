@@ -23,5 +23,6 @@
       </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction buildConfiguration="Debug"/>
-   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
+   <!-- Organizer archives use App Store signing; scripted Developer ID builds explicitly select Release. -->
+   <ArchiveAction buildConfiguration="AppStore" revealArchiveInOrganizer="YES"/>
 </Scheme>

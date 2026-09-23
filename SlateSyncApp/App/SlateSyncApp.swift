@@ -229,66 +229,7 @@ private struct SlateSyncWindowRoot: View {
             settingsRevision: globalSettings.revision
         )
         .task {
-            // Per-feature admission: independent editors stay usable while
-            // recognition runs; only CSV import waits for it.
-            workspace.permitsNewOperation = WindowAdmission.shared(termination)
-            workspace.didFailRuntimeClose = termination.requireRestart
-            csv.permitsNewOperation = WindowAdmission.csv(termination, recognition: recognition)
-            media.permitsNewOperation = WindowAdmission.media(termination)
-            metadata.permitsNewOperation = WindowAdmission.metadata(termination)
-            recognition.permitsNewOperation = WindowAdmission.recognition(termination, workspace: workspace)
-            projects.mutationCoordinator = termination.performLibraryMutation
-            projects.didChangeLibrary = { await termination.refreshProjects(activeIDs: $0) }
-            projects.didRequireRestart = termination.requireRestart
-            session.flushProjectSettings = { [weak projectSettings] in try await projectSettings?.flushIfNeeded() }
-            workspace.flushEditor = { [weak csv, weak recognition] in
-                try csv?.flushEditor?()
-                try recognition?.flushEditor?()
-            }
-            csv.onTableChange = { [weak workspace] snapshot in
-                workspace?.stageCSV(snapshot.table, filename: snapshot.filename, edits: snapshot.edits, rawBase64: snapshot.rawBase64)
-            }
-            media.onPrepared = { [weak workspace] document in workspace?.stageMedia(document) }
-            metadata.onResult = { [weak workspace] result, name in workspace?.stageMetadata(result, directoryName: name) }
-            projectSettings.onSaved = { [weak workspace] in workspace?.adoptProjectSettings($0) }
-            // Selection callbacks run with publication, before a subsequent
-            // file-import action can start; view onChange would race that work.
-            workspace.didSelectTask = { [weak csv, weak recognition, weak media, weak metadata] task in
-                csv?.load(task: task)
-                recognition?.load(task: task)
-                media?.load(task: task)
-                metadata?.load(task: task)
-            }
-            workspace.prepareSelectionChange = { [weak recognition, weak metadata, weak media, weak csv] in
-                await csv?.drain()
-                await recognition?.drain()
-                await metadata?.drain()
-                await media?.drain()
-            }
-            recognition.didComplete = { [weak workspace] request, _ in
-                // The coordinator persisted recognition first. Refresh that
-                // exact task before another autosave can replace its result
-                // with the pre-recognition draft snapshot.
-                guard let workspace, workspace.projectID == request.projectID else { return }
-                try await workspace.reloadTasks(selecting: request.taskID)
-            }
-            await termination.registerWindow(
-                id: windowID,
-                workspace: workspace,
-                recognition: recognition,
-                csv: csv,
-                metadata: metadata,
-                media: media,
-                settings: projectSettings,
-                logs: logs,
-                refresh: { [weak workspace, weak session, weak projects] activeIDs in
-                    if let id = workspace?.projectID, !activeIDs.contains(id) {
-                        await workspace?.deactivate()
-                        session?.reconcileClosedProject()
-                    }
-                    await projects?.load()
-                }
-            )
+            await configureWindowLifecycle()
         }
         .background {
             // The adapter vetoes close before the view disappears. On failure
@@ -300,6 +241,71 @@ private struct SlateSyncWindowRoot: View {
             }, failure: termination.reportCloseFailure, visibility: logs.setWindowVisible)
                 .frame(width: 0, height: 0)
         }
+    }
+
+    // Register callbacks outside the SwiftUI task closure so its implicit
+    // strong captures do not conflict with the models' weak callback captures.
+    private func configureWindowLifecycle() async {
+        // Per-feature admission: independent editors stay usable while
+        // recognition runs; only CSV import waits for it.
+        workspace.permitsNewOperation = WindowAdmission.shared(termination)
+        workspace.didFailRuntimeClose = termination.requireRestart
+        csv.permitsNewOperation = WindowAdmission.csv(termination, recognition: recognition)
+        media.permitsNewOperation = WindowAdmission.media(termination)
+        metadata.permitsNewOperation = WindowAdmission.metadata(termination)
+        recognition.permitsNewOperation = WindowAdmission.recognition(termination, workspace: workspace)
+        projects.mutationCoordinator = termination.performLibraryMutation
+        projects.didChangeLibrary = { await termination.refreshProjects(activeIDs: $0) }
+        projects.didRequireRestart = termination.requireRestart
+        session.flushProjectSettings = { [weak projectSettings] in try await projectSettings?.flushIfNeeded() }
+        workspace.flushEditor = { [weak csv, weak recognition] in
+            try csv?.flushEditor?()
+            try recognition?.flushEditor?()
+        }
+        csv.onTableChange = { [weak workspace] snapshot in
+            workspace?.stageCSV(snapshot.table, filename: snapshot.filename, edits: snapshot.edits, rawBase64: snapshot.rawBase64)
+        }
+        media.onPrepared = { [weak workspace] document in workspace?.stageMedia(document) }
+        metadata.onResult = { [weak workspace] result, name in workspace?.stageMetadata(result, directoryName: name) }
+        projectSettings.onSaved = { [weak workspace] in workspace?.adoptProjectSettings($0) }
+        // Selection callbacks run with publication, before a subsequent
+        // file-import action can start; view onChange would race that work.
+        workspace.didSelectTask = { [weak csv, weak recognition, weak media, weak metadata] task in
+            csv?.load(task: task)
+            recognition?.load(task: task)
+            media?.load(task: task)
+            metadata?.load(task: task)
+        }
+        workspace.prepareSelectionChange = { [weak recognition, weak metadata, weak media, weak csv] in
+            await csv?.drain()
+            await recognition?.drain()
+            await metadata?.drain()
+            await media?.drain()
+        }
+        recognition.didComplete = { [weak workspace] request, _ in
+            // The coordinator persisted recognition first. Refresh that
+            // exact task before another autosave can replace its result
+            // with the pre-recognition draft snapshot.
+            guard let workspace, workspace.projectID == request.projectID else { return }
+            try await workspace.reloadTasks(selecting: request.taskID)
+        }
+        await termination.registerWindow(
+            id: windowID,
+            workspace: workspace,
+            recognition: recognition,
+            csv: csv,
+            metadata: metadata,
+            media: media,
+            settings: projectSettings,
+            logs: logs,
+            refresh: { [weak workspace, weak session, weak projects] activeIDs in
+                if let id = workspace?.projectID, !activeIDs.contains(id) {
+                    await workspace?.deactivate()
+                    session?.reconcileClosedProject()
+                }
+                await projects?.load()
+            }
+        )
     }
 }
 

@@ -102,6 +102,17 @@ def validate_xcode() -> None:
     require("$(CURRENT_PROJECT_VERSION)" in info, "build version is not injected")
     with (ROOT / "SlateSyncApp/SlateSync.entitlements").open("rb") as handle:
         require(plistlib.load(handle) == {}, "Release entitlement baseline must remain empty")
+    # App Store archives need their own sandbox boundary; Developer ID Release stays unchanged.
+    with (ROOT / "SlateSyncApp/SlateSyncAppStore.entitlements").open("rb") as handle:
+        require(plistlib.load(handle) == {
+            "com.apple.security.app-sandbox": True,
+            "com.apple.security.network.client": True,
+            "com.apple.security.files.user-selected.read-write": True,
+        }, "App Store sandbox entitlement baseline drifted")
+    require(project.count("ENABLE_APP_SANDBOX = YES;") == 1, "App Store sandbox build setting missing")
+    require(project.count("ENABLE_APP_SANDBOX = NO;") == 2, "Developer ID sandbox boundary drifted")
+    scheme = read("SlateSync.xcodeproj/xcshareddata/xcschemes/SlateSync.xcscheme")
+    require('<ArchiveAction buildConfiguration="AppStore"' in scheme, "Organizer archive must use AppStore")
 
 
 def validate_workflows(ci: str, release: str) -> None:
