@@ -1,5 +1,10 @@
 # SlateSync 当前项目方案
 
+## 2026-09-24 加密出口合规声明
+
+- 在 App 主目标的 `SlateSyncApp/Info.plist` 中设置 `ITSAppUsesNonExemptEncryption = NO`，声明未使用非豁免加密；此值并不表示 App 完全不使用加密。
+- 现有项目库使用 Apple 系统 CryptoKit 的 AES-256-GCM，加密密钥保存在 macOS 登录钥匙串；按 Apple 对仅使用操作系统内加密的说明处理。若今后加入系统外或自有加密实现，需重新评估声明及所需文件。
+
 ## 2026-09-24 Mac App Store 沙盒签名修复
 
 - 新增独立 `AppStore` 构建配置及 entitlements，声明 App Sandbox、Provider 出站联网、用户选取文件读写；共享 Xcode scheme 的 Organizer Archive 使用该配置。现有 Debug/Release 与 Developer ID ZIP/DMG 仍使用无沙盒配置，避免改变已有项目库和外部 Python 行为。
