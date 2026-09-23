@@ -1,5 +1,9 @@
 # SlateSync 当前项目方案
 
+## 2026-09-24 应用版权署名
+
+- App 主目标 `Info.plist` 的可读版权声明使用个人权利人姓名“朱煜天”；应用名称 SlateSync 保持不变。App Store Connect 的版权栏由发布者填写对应年份和姓名。
+
 ## 2026-09-24 加密出口合规声明
 
 - 在 App 主目标的 `SlateSyncApp/Info.plist` 中设置 `ITSAppUsesNonExemptEncryption = NO`，声明未使用非豁免加密；此值并不表示 App 完全不使用加密。
