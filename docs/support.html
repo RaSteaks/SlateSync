@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<!--
+  SlateSync 官方支持页（App Store Connect「支持 URL」用）
+  设计遵循 .claude/ui-design/design-system.md：冷灰阶梯 + 钨丝琥珀，琥珀只用于焦点/主操作；
+  双语（zh 默认 / en 切换），单文件零外部依赖，随系统深浅色自适应。
+-->
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="SlateSync 支持与帮助：场记单识别、结构校对、Resolve CSV 回填。快速上手、常见问题与联系方式。">
+<title>SlateSync 支持 · Support</title>
+<style>
+  /* ===== 设计令牌：来源 DESIGN.md / SlateSyncTheme（冷灰 + 钨丝琥珀，2026-09-16 版）===== */
+  :root {
+    --canvas: #F6F7F9;        /* 主背景（light） */
+    --evidence: #FFFFFF;      /* 证据面 / 卡片 */
+    --inset: #EEF0F3;         /* 次级嵌入面 */
+    --line: #E2E5EA;          /* 发丝级分隔线 */
+    --ink: #1A1D23;           /* 正文 */
+    --ink-2: #5B6470;         /* 次级文字 */
+    --accent: #B45309;        /* 钨丝琥珀（light）——只用于焦点与关键操作 */
+    --accent-soft: rgba(180, 83, 9, .08);
+    --ok: #1E7A5A;
+    --warn: #7C6A00;
+    --danger: #B03A2E;
+    --paper: #F2EEE3;         /* 证据内容色：只属于“纸面”（场记单事实卡） */
+    --paper-line: #D8D2C2;
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+            "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #1E2229;      /* 碳素仪架底盘（dark） */
+      --evidence: #2A2F37;
+      --inset: #232830;
+      --line: #3A414C;
+      --ink: #E8EAED;
+      --ink-2: #9AA3AE;
+      --accent: #F59E0B;
+      --accent-soft: rgba(245, 158, 11, .12);
+      --ok: #7FC9A9;
+      --warn: #E3C36B;
+      --danger: #E58873;
+      --paper: #2E2A22;       /* 暗色下的“灯箱纸面” */
+      --paper-line: #4A4436;
+    }
+  }
+
+  /* ===== 基础排版 ===== */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+
+  /* ===== 语言切换：默认中文，html[data-lang=en] 时显示英文 ===== */
+  html[data-lang="en"] .lang-zh { display: none; }
+  html:not([data-lang="en"]) .lang-en { display: none; }
+
+  /* ===== 顶栏 ===== */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 24px;
+    background: color-mix(in srgb, var(--canvas) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    width: 100%; max-width: 880px; margin: 0 auto;
+    display: flex; align-items: center; gap: 12px;
+  }
+  /* 品牌标记：场记板剪影，顶条为琥珀斜纹（签名元素） */
+  .brand-mark {
+    display: inline-flex; flex-direction: column; flex: none;
+    width: 26px; border-radius: 4px; overflow: hidden;
+    border: 1.5px solid var(--ink);
+  }
+  .brand-mark-top {
+    height: 9px;
+    background: var(--accent);
+    background-image: repeating-linear-gradient(135deg,
+      rgba(0,0,0,.28) 0 3px, transparent 3px 7px);
+  }
+  .brand-mark-body { height: 13px; background: var(--ink); }
+  .brand-name { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  .lang-toggle {
+    margin-left: auto;
+    font: 600 13px/1 var(--font);
+    color: var(--ink-2);
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .lang-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ===== 主体布局 ===== */
+  main { max-width: 880px; margin: 0 auto; padding: 0 24px 80px; }
+  section { margin-top: 56px; scroll-margin-top: 76px; }
+
+  .hero { margin-top: 48px; }
+  h1 {
+    font-size: clamp(30px, 5vw, 40px);
+    line-height: 1.2; letter-spacing: -.02em; font-weight: 800;
+    margin: 0 0 10px;
+  }
+  .hero-sub { color: var(--ink-2); font-size: 17px; max-width: 620px; margin: 0; }
+
+  /* 事实卡：纸面材质，借场记单的表单语言呈现设备与版本事实 */
+  .slate-card {
+    margin-top: 28px;
+    background: var(--paper);
+    border: 1px solid var(--paper-line);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    display: flex; flex-wrap: wrap; gap: 8px 36px;
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.9;
+    box-shadow: 0 1px 0 var(--paper-line);
+  }
+  .slate-card .row b { font-weight: 600; color: var(--ink-2); margin-right: 8px; }
+
+  /* 锚点导航 */
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .toc a {
+    font-size: 13.5px; font-weight: 600;
+    color: var(--ink-2);
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 14px;
+  }
+  .toc a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+
+  /* 章节标题：左缘 3px 场记板斜纹（签名元素的克制延续） */
+  h2 {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 22px; font-weight: 700; letter-spacing: -.01em;
+    margin: 0 0 6px;
+  }
+  h2::before {
+    content: ""; flex: none;
+    width: 3px; height: 26px; border-radius: 2px;
+    background: repeating-linear-gradient(135deg,
+      var(--accent) 0 4px, transparent 4px 8px);
+  }
+  .section-sub { color: var(--ink-2); margin: 0 0 20px; }
+
+  /* ===== 卡片与网格 ===== */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15.5px; font-weight: 700; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 14.5px; line-height: 1.7; }
+
+  /* ===== 快速上手：真实流程，故使用序号 ===== */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 22px 52px;
+    border-left: 1px solid var(--line);
+    margin-left: 17px;
+  }
+  .steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: -18px; top: 0;
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center;
+    font: 700 14px var(--mono);
+    color: var(--accent);
+    background: var(--canvas);
+    border: 1.5px solid var(--accent);
+  }
+  .steps h3 { margin: 4px 0 4px; font-size: 15.5px; }
+  .steps p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+
+  /* ===== 表格 ===== */
+  .table-wrap {
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 12px 18px; vertical-align: top; }
+  thead th {
+    font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--line);
+    background: var(--inset);
+  }
+  tbody tr + tr td { border-top: 1px solid var(--line); }
+  td code {
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 5px; padding: 2px 7px; white-space: nowrap;
+  }
+
+  /* 提示条 */
+  .note {
+    display: flex; gap: 10px;
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 14.5px;
+    margin-top: 16px;
+  }
+  .note::before { content: "◆"; color: var(--accent); flex: none; line-height: 1.75; }
+
+  /* ===== FAQ（原生 details/summary，可访问性内建）===== */
+  details {
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+  }
+  summary {
+    cursor: pointer;
+    padding: 15px 20px;
+    font-weight: 600; font-size: 15px;
+    list-style: none;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "+"; font: 700 16px var(--mono); color: var(--accent); flex: none;
+  }
+  details[open] summary::before { content: "–"; }
+  details .answer { padding: 0 20px 16px 48px; color: var(--ink-2); font-size: 14.5px; }
+  details .answer code { color: var(--ink); }
+
+  /* 列表与边界 */
+  ul.plain { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 14.5px; }
+  ul.plain li + li { margin-top: 8px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 24px 40px;
+    color: var(--ink-2); font-size: 13px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
+    <span class="brand-name">SlateSync</span>
+    <!-- 语言切换：持久化到 localStorage，失败时静默回退中文 -->
+    <button class="lang-toggle" id="langToggle" type="button" aria-pressed="false">
+      <span class="lang-zh">English</span><span class="lang-en">中文</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <div class="hero">
+    <h1>
+      <span class="lang-zh">SlateSync 支持</span>
+      <span class="lang-en">SlateSync Support</span>
+    </h1>
+    <p class="hero-sub">
+      <span class="lang-zh">识别 PDF 或图片场记单，复核场、镜、次及条次状态，再把确认后的结果写回 DaVinci Resolve CSV。本页提供使用指引、常见问题与联系方式。</span>
+      <span class="lang-en">Recognize camera slates from PDFs or images, review scene, shot, take and take-status fields, then write confirmed results back into your DaVinci Resolve CSV. This page covers getting started, FAQs and how to reach us.</span>
+    </p>
+
+    <!-- 事实卡：借场记单表单语言呈现设备与版本事实 -->
+    <div class="slate-card">
+      <span class="row"><b>PRODUCTION</b> SlateSync</span>
+      <span class="row"><b class="lang-zh">系统</b><b class="lang-en">SYSTEM</b> macOS 15.0+</span>
+      <span class="row"><b class="lang-zh">机型</b><b class="lang-en">HARDWARE</b> Apple Silicon / Intel</span>
+      <span class="row"><b class="lang-zh">界面</b><b class="lang-en">LANGUAGE</b> 简体中文 / English</span>
+    </div>
+
+    <nav class="toc" aria-label="页面导航 / Page sections">
+      <a href="#features"><span class="lang-zh">核心功能</span><span class="lang-en">Features</span></a>
+      <a href="#getting-started"><span class="lang-zh">快速上手</span><span class="lang-en">Getting started</span></a>
+      <a href="#recognition"><span class="lang-zh">识别方式</span><span class="lang-en">Recognition</span></a>
+      <a href="#fields"><span class="lang-zh">字段回填</span><span class="lang-en">Field mapping</span></a>
+      <a href="#data"><span class="lang-zh">项目与数据</span><span class="lang-en">Projects &amp; data</span></a>
+      <a href="#faq"><span class="lang-zh">常见问题</span><span class="lang-en">FAQ</span></a>
+      <a href="#contact"><span class="lang-zh">联系我们</span><span class="lang-en">Contact</span></a>
+    </nav>
+  </div>
+
+  <!-- ===== 核心功能 ===== -->
+  <section id="features">
+    <h2><span class="lang-zh">核心功能</span><span class="lang-en">Core features</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">从纸质场记单到已校验的 Resolve CSV，SlateSync 把整条信任链留在你的 Mac 上完成。</span>
+      <span class="lang-en">From a paper slate to a verified Resolve CSV — SlateSync keeps the whole chain of trust on your Mac.</span>
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="lang-zh">场记单识别</span><span class="lang-en">Slate recognition</span></h3>
+        <p><span class="lang-zh">支持 PDF、JPEG、PNG、WebP。PDF 在本机逐页栅格化，结合本地 OCR 与视觉模型抽取场、镜、次与条次状态。</span>
+           <span class="lang-en">Works with PDF, JPEG, PNG and WebP. PDFs are rasterized page by page on your Mac; local OCR plus a vision model extract scene, shot, take and take status.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">结构校对</span><span class="lang-en">Structural review</span></h3>
+        <p><span class="lang-zh">条号对账、场镜次序检查与完整性告警；识别结果在导出前必须经过人工确认。</span>
+           <span class="lang-en">Take-number reconciliation, scene/shot order checks and completeness warnings. Results always require human confirmation before export.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">Resolve CSV 回填</span><span class="lang-en">Resolve CSV backfill</span></h3>
+        <p><span class="lang-zh">只更新匹配到的素材与允许写入的字段，保留原 CSV 的编码、分隔符、换行和其余内容。</span>
+           <span class="lang-en">Only matched clips and permitted fields are updated. The original CSV's encoding, delimiter, line endings and untouched content are preserved.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">slate.txt 元数据</span><span class="lang-en">slate.txt metadata</span></h3>
+        <p><span class="lang-zh">可选扫描素材目录中的 slate.txt，自动补充 <code>Camera FPS</code> 与 <code>Shoot Day</code>。</span>
+           <span class="lang-en">Optionally scan a clip folder's slate.txt to fill in <code>Camera FPS</code> and <code>Shoot Day</code> automatically.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">项目库与加密</span><span class="lang-en">Project Library &amp; encryption</span></h3>
+        <p><span class="lang-zh">项目、任务、诊断与场记结构 Profile 保存在本地 SQLite 项目库，并以 AES-256-GCM 加密存储，密钥保存在本机钥匙串。</span>
+           <span class="lang-en">Projects, tasks, diagnostics and slate-layout profiles live in a local SQLite library, encrypted with AES-256-GCM; the key stays in your Mac's keychain.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">项目包导入导出</span><span class="lang-en">Project packages</span></h3>
+        <p><span class="lang-zh">以独立项目包或整个项目库迁移数据；单项目导入创建新项目 ID，整库导入则切换到导入的项目库。</span>
+           <span class="lang-en">Move data as a single project package or a whole library. Importing a project creates a new project ID; importing a library switches to the imported library.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 快速上手 ===== -->
+  <section id="getting-started">
+    <h2><span class="lang-zh">快速上手</span><span class="lang-en">Getting started</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">六步完成一次完整回填。帮助中的按钮会打开现有功能，不会自动创建项目或启动识别。</span>
+      <span class="lang-en">Six steps take you through a full backfill. In-app Help buttons open existing features; nothing is created or recognized automatically.</span>
+    </p>
+    <ol class="steps">
+      <li>
+        <h3><span class="lang-zh">创建项目</span><span class="lang-en">Create a project</span></h3>
+        <p><span class="lang-zh">在项目库中新建项目；项目设置只影响当前项目。</span>
+           <span class="lang-en">Create one in the Project Library. Project settings apply only to that project.</span></p>
+      </li>
+      <li>
+        <h3><span class="lang-zh">配置 Provider</span><span class="lang-en">Configure a provider</span></h3>
+        <p><span class="lang-zh">在全局设置中添加 OpenAI 兼容视觉服务：Base URL、模型、并发与超时可调，API Key 存入 macOS 钥匙串。</span>
+           <span class="lang-en">In Global Settings, add an OpenAI-compatible vision service: base URL, model, concurrency and timeout are adjustable; the API key is stored in the macOS keychain.</span></p>
+      </li>
+      <li>
+        <h3><span class="lang-zh">导入场记单</span><span class="lang-en">Import a slate</span></h3>
+        <p><span class="lang-zh">支持 PDF、JPEG、PNG、WebP；任务会保存场记单、媒体、元数据和识别结果。</span>
+           <span class="lang-en">PDF, JPEG, PNG and WebP are supported. The task keeps the slate, media, metadata and recognition results together.</span></p>
+      </li>
+      <li>
+        <h3><span class="lang-zh">识别与校对</span><span class="lang-en">Recognize &amp; review</span></h3>
+        <p><span class="lang-zh">本机完成 OCR 后，由视觉模型做结构化理解。识别可取消；完成后逐条检查场、镜、次与条次状态。</span>
+           <span class="lang-en">OCR runs locally, then the vision model does the structured understanding. Recognition can be cancelled; afterwards review every scene, shot, take and status.</span></p>
+      </li>
+      <li>
+        <h3><span class="lang-zh">载入 Resolve CSV</span><span class="lang-en">Load the Resolve CSV</span></h3>
+        <p><span class="lang-zh">导入 CSV 进行条号对账与场镜次序检查，可选扫描素材目录中的 slate.txt 补充元数据。</span>
+           <span class="lang-en">Import the CSV for take reconciliation and order checks, and optionally scan a clip folder's slate.txt for metadata.</span></p>
+      </li>
+      <li>
+        <h3><span class="lang-zh">预览回填并导出</span><span class="lang-en">Preview &amp; export</span></h3>
+        <p><span class="lang-zh">在回填预览中人工校对每一条，确认后导出；导出保留原分隔符、换行与 BOM 语义。</span>
+           <span class="lang-en">Proof each entry in the backfill preview, then export. Delimiters, line endings and BOM semantics are preserved.</span></p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===== 识别方式 ===== -->
+  <section id="recognition">
+    <h2><span class="lang-zh">支持的识别方式</span><span class="lang-en">Recognition methods</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">三种方式可组合使用；OCR 引擎不可用时可按设置降级，或设为必需时停止识别。</span>
+      <span class="lang-en">The three methods can be combined. If an OCR engine is unavailable you can fall back per settings — or require it and stop recognition instead.</span>
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><span class="lang-zh">方式</span><span class="lang-en">Method</span></th>
+            <th><span class="lang-zh">位置</span><span class="lang-en">Runs</span></th>
+            <th><span class="lang-zh">适合场景</span><span class="lang-en">Best for</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="lang-zh">macOS Vision OCR</span><span class="lang-en">macOS Vision OCR</span></td>
+            <td><span class="lang-zh">本地</span><span class="lang-en">On-device</span></td>
+            <td><span class="lang-zh">基础文字与坐标识别，无需额外安装</span><span class="lang-en">Baseline text and coordinates; nothing to install</span></td>
+          </tr>
+          <tr>
+            <td>PaddleOCR</td>
+            <td><span class="lang-zh">本地（可选安装）</span><span class="lang-en">On-device (optional)</span></td>
+            <td><span class="lang-zh">需要额外的本地 OCR 引擎</span><span class="lang-en">An additional on-device OCR engine</span></td>
+          </tr>
+          <tr>
+            <td><span class="lang-zh">视觉模型（OpenAI 兼容）</span><span class="lang-en">Vision model (OpenAI-compatible)</span></td>
+            <td><span class="lang-zh">按你的设置配置</span><span class="lang-en">As you configure</span></td>
+            <td><span class="lang-zh">复杂版式、中文或手写内容的视觉理解</span><span class="lang-en">Complex layouts, Chinese or handwritten slates</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <!-- 请求正文还包含文件名与可选项目上下文；认证 Key 通过请求头发送，详见隐私政策。 -->
+      <span class="lang-zh">模型请求发送本地准备的页面图片、OCR 证据和识别上下文，并以配置的 API Key 认证；不发送原始 PDF 文件。</span>
+      <span class="lang-en">Model requests send locally prepared page images, OCR evidence and recognition context, authenticated with the configured API key; they do not send the original PDF file.</span>
+    </div>
+  </section>
+
+  <!-- ===== 字段回填 ===== -->
+  <section id="fields">
+    <h2><span class="lang-zh">Resolve 字段回填</span><span class="lang-en">Resolve field mapping</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">只有下列字段会被写入，且仅在成功匹配后更新。</span>
+      <span class="lang-en">Only these fields are written, and only after a successful match.</span>
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Resolve <span class="lang-zh">字段</span><span class="lang-en">field</span></th>
+            <th><span class="lang-zh">数据来源</span><span class="lang-en">Source</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Scene</code></td>
+            <td><span class="lang-zh">场记单中的场次</span><span class="lang-en">Scene from the slate</span></td>
+          </tr>
+          <tr>
+            <td><code>Shot</code></td>
+            <td><span class="lang-zh">场记单中的镜</span><span class="lang-en">Shot from the slate</span></td>
+          </tr>
+          <tr>
+            <td><code>Take</code></td>
+            <td><span class="lang-zh">场记单中的次</span><span class="lang-en">Take from the slate</span></td>
+          </tr>
+          <tr>
+            <td><code>Comments</code></td>
+            <td><span class="lang-zh">按设置写入过条、保条标记；其他情况为空</span><span class="lang-en">Circled / printed-take marks per settings; otherwise empty</span></td>
+          </tr>
+          <tr>
+            <td><code>Camera FPS</code></td>
+            <td><span class="lang-zh">素材目录 <code>slate.txt</code> 的 <code>Sensor FPS</code></span><span class="lang-en"><code>Sensor FPS</code> from the clip folder's <code>slate.txt</code></span></td>
+          </tr>
+          <tr>
+            <td><code>Shoot Day</code></td>
+            <td><span class="lang-zh">素材目录 <code>slate.txt</code> 的 <code>Shot Date</code></span><span class="lang-en"><code>Shot Date</code> from the clip folder's <code>slate.txt</code></span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <span class="lang-zh">字段无法确认时不会被强行写入，必须人工校对；合并导出不会掩盖未匹配到完整素材记录的情况。</span>
+      <span class="lang-en">Fields that cannot be confirmed are never force-written and require manual review. Merge exports never paper over clips lacking a complete matching record.</span>
+    </div>
+  </section>
+
+  <!-- ===== 项目与数据 ===== -->
+  <section id="data">
+    <h2><span class="lang-zh">项目与数据</span><span class="lang-en">Projects &amp; data</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">数据都在你的 Mac 上：这是默认位置、加密方式与迁移方法。</span>
+      <span class="lang-en">Everything lives on your Mac. Here is where, how it is protected, and how to move it.</span>
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="lang-zh">存储位置</span><span class="lang-en">Where data lives</span></h3>
+        <p><span class="lang-zh">设置与日志位于 <code>~/Library/Application Support/SlateSync/</code>；默认项目库位于 <code>~/Library/Application Support/Local SlateSync Library/</code>，也可以在应用中选择其他位置。</span>
+           <span class="lang-en">Settings and logs live in <code>~/Library/Application Support/SlateSync/</code>; the default Project Library in <code>~/Library/Application Support/Local SlateSync Library/</code>. You can pick another library location in the app.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">本地加密</span><span class="lang-en">Local encryption</span></h3>
+        <p><span class="lang-zh">正常启动会自动把项目库索引、项目设置、任务、诊断、场记 Profile 与 JSON 快照转换为 AES-256-GCM 加密存储；密钥保存在本机登录钥匙串。原始媒体与缓存、机器级配置和日志不在加密范围内。</span>
+           <span class="lang-en">On first launch the library index, project settings, tasks, diagnostics, slate profiles and JSON snapshots are migrated to AES-256-GCM encrypted storage; the key stays in the login keychain. Raw media and caches, machine-level configuration and logs are outside that scope.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">迁移与备份</span><span class="lang-en">Migration &amp; backup</span></h3>
+        <p><span class="lang-zh">优先使用应用内导出：单个项目包或整个项目库。单项目导入创建新项目 ID；整库导入切换到导入的项目库。任务、诊断、Profile 与设置会随项目保留。跨设备请勿直接复制内部加密目录——那需要原机器钥匙串密钥。</span>
+           <span class="lang-en">Prefer in-app export: a single project package or the whole library. A project import creates a new project ID; a library import switches to the imported library. Tasks, diagnostics, profiles and settings are carried along. Don't copy the internal encrypted folder across Macs — it needs the original machine's keychain key.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">日志</span><span class="lang-en">Logs</span></h3>
+        <p><span class="lang-zh">运行日志按天保留 7 天，记录脱敏事件；不记录凭据、原始请求、媒体路径或模型响应正文。</span>
+           <span class="lang-en">Run logs are kept locally for 7 days by day and record redacted events only — never credentials, raw requests, media paths or model response bodies.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 常见问题 ===== -->
+  <section id="faq">
+    <h2><span class="lang-zh">常见问题</span><span class="lang-en">FAQ</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">没有找到答案？请通过页面底部的联系方式告诉我们。</span>
+      <span class="lang-en">Can't find your answer? Reach us through the contact section below.</span>
+    </p>
+
+    <details>
+      <summary><span class="lang-zh">SlateSync 需要注册账号吗？</span><span class="lang-en">Do I need an account?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">不需要。应用在本机运行，没有账号体系；联网识别使用你在全局设置中自行配置的模型服务。</span>
+        <span class="lang-en">No. The app runs on your Mac with no account system. Online recognition uses whichever model service you configure in Global Settings.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">我的 API Key 保存在哪里？安全吗？</span><span class="lang-en">Where is my API key stored?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">API Key 由 macOS 钥匙串保存，不会写入项目包、项目库导出或 Git 仓库，也不会回填显示在设置界面；只有原生应用的数据服务会读取它。</span>
+        <span class="lang-en">Keys are stored in the macOS keychain — never written into project packages, library exports or Git, and never echoed back into the settings UI. Only the native data service can read them.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">识别时哪些内容会被发送出去？</span><span class="lang-en">What gets sent during recognition?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">本地准备页面图片与 OCR 证据后，识别请求还会携带源文件名及可选的项目提示、场记 CSV 记录和版式提示；配置的 API Key 用于请求头认证。原始 PDF 不会上传。没有配置 Provider 时，识别不会产生模型网络请求。详见<a href="privacy.html">隐私政策</a>。</span>
+        <span class="lang-en">After local preparation, recognition sends page images and OCR evidence together with the source filename and optional project prompts, slate CSV records and layout hints. A configured API key is used in the authentication header. The original PDF is not uploaded. With no provider configured, recognition makes no model network request. See our <a href="privacy.html">privacy policy</a>.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">PaddleOCR 为什么需要单独安装？</span><span class="lang-en">Why does PaddleOCR need a separate install?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">应用只内置 runner 与固定依赖清单，不携带 Python、虚拟环境或模型。安装需要 Python 3.10 或更高版本的环境与网络，在应用内选择环境后进行；如果你只用 macOS Vision OCR，可以完全跳过这一步。</span>
+        <span class="lang-en">The app bundles only the runner and a pinned dependency list — no Python, virtualenv or models. Installing requires a Python 3.10+ environment and network access, done in-app after you pick the environment. If you only use macOS Vision OCR you can skip it entirely.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">为什么有的字段导出后是空的？</span><span class="lang-en">Why are some fields empty after export?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">无法确认的识别字段不会被强行写入，必须人工校对。请在回填预览中查看条号缺失、场镜次序与完整性告警，手动补全后再导出。</span>
+        <span class="lang-en">Fields that cannot be confirmed are never force-written — they need human review. Check the backfill preview for missing takes, order issues and completeness warnings, fix them manually, then export.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">更换电脑时如何迁移项目？</span><span class="lang-en">How do I move projects to a new Mac?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">在旧电脑使用应用内导出（单个项目包或整个项目库），在新电脑导入。单项目导入会创建新的项目 ID；整库导入会切换到导入的项目库。不要直接复制内部加密目录：它绑定原机器钥匙串，丢失密钥无法解密。</span>
+        <span class="lang-en">Export in-app on the old Mac (a project package or the whole library) and import on the new one. A project import creates a new project ID; a library import switches to the imported library. Don't copy the internal encrypted folder directly: it is bound to the original machine's keychain, and without that key the data cannot be decrypted.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">导出会改动我的原始 CSV 文件吗？</span><span class="lang-en">Will export modify my original CSV?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">不会。导出保留原 CSV 的编码、分隔符、换行与 BOM 语义以及未匹配字段，只更新匹配到的字段；源文件保持不变，请以导出的新文件为准。</span>
+        <span class="lang-en">No. Export preserves the original encoding, delimiter, line endings, BOM semantics and unmatched content, updating only matched fields. Your source file is untouched — use the exported file.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">识别失败或结果异常怎么办？</span><span class="lang-en">Recognition failed or looks wrong — what now?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">先在全局设置中检查 Provider 的 Base URL、API Key 与模型是否有效，以及 OCR 配置是否可用；失败时应用会按设置降级为页面图片识别，或在设为必需时停止并报告错误。失败详情可查看帮助中的日志（本地保留 7 天、内容脱敏）。修正配置后可直接重试，当前编辑会先被保留。</span>
+        <span class="lang-en">First check the provider's base URL, API key and model in Global Settings, and that your OCR configuration is available. On failure the app falls back to image-only recognition per settings — or stops and reports if OCR is set to required. Details are in the Help logs (kept locally 7 days, redacted). Your current edits are preserved, so you can retry after fixing the configuration.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">钥匙串密钥丢失了怎么办？</span><span class="lang-en">What if the keychain key is lost?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">加密密钥保存在本机登录钥匙串。若钥匙串数据丢失且没有应用内导出的备份，已加密数据无法恢复。请在升级、迁移或重装系统前，先通过应用内导出保存项目包或项目库备份。</span>
+        <span class="lang-en">The encryption key lives in the local login keychain. If that data is lost and you have no in-app export, encrypted data cannot be recovered. Before upgrading, migrating or reinstalling macOS, export a project package or library backup from within the app.</span>
+      </div>
+    </details>
+  </section>
+
+  <!-- ===== 已知边界 ===== -->
+  <section id="limitations">
+    <h2><span class="lang-zh">已知边界</span><span class="lang-en">Known limitations</span></h2>
+    <ul class="plain">
+      <li><span class="lang-zh">仅支持 macOS 15.0 及以上版本，不提供 Windows 或 Linux 版本。</span>
+          <span class="lang-en">macOS 15.0 or later only; there is no Windows or Linux version.</span></li>
+      <li><span class="lang-zh">PaddleOCR 需要自备 Python 环境与网络安装条件，应用不包含 Python 与模型。</span>
+          <span class="lang-en">PaddleOCR needs your own Python environment and network for installation; the app ships no Python and no models.</span></li>
+      <li><span class="lang-zh">无法确认的识别字段不会被强行写入，必须人工校对后才会导出。</span>
+          <span class="lang-en">Unconfirmed fields are never force-written; they must be reviewed manually before export.</span></li>
+      <li><span class="lang-zh">项目库与项目包当前为 v1 格式，升级、迁移或回退前请保留独立备份。</span>
+          <span class="lang-en">The Project Library and packages use the v1 format; keep a separate backup before upgrading, migrating or rolling back.</span></li>
+    </ul>
+  </section>
+
+  <!-- ===== 联系我们 ===== -->
+  <section id="contact">
+    <h2><span class="lang-zh">联系我们</span><span class="lang-en">Contact us</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">遇到问题或有功能建议，欢迎通过 GitHub 与我们联系，通常会尽快回复。</span>
+      <span class="lang-en">For issues or feature requests, get in touch on GitHub — we usually respond quickly.</span>
+    </p>
+    <div class="card">
+      <p>
+        <span class="lang-zh">问题反馈与功能建议：</span><span class="lang-en">Bug reports &amp; feature requests: </span>
+        <a href="https://github.com/RaSteaks/SlateSync/issues" target="_blank" rel="noopener">github.com/RaSteaks/SlateSync/issues</a><br>
+        <span class="lang-zh">项目主页：</span><span class="lang-en">Project home: </span>
+        <a href="https://github.com/RaSteaks/SlateSync" target="_blank" rel="noopener">github.com/RaSteaks/SlateSync</a><br>
+        <span class="lang-zh">隐私政策：</span><span class="lang-en">Privacy policy: </span>
+        <a href="privacy.html"><span class="lang-zh">SlateSync 隐私政策</span><span class="lang-en">SlateSync Privacy Policy</span></a>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  © 2026 SlateSync · <span class="lang-zh">本页信息适用于当前发布的 macOS 版本。</span><span class="lang-en">This page applies to the current macOS release.</span>
+</footer>
+
+<script>
+  // 语言切换：写入 <html data-lang>，持久化到 localStorage；任何存储异常都静默回退中文。
+  (function () {
+    var root = document.documentElement;
+    var button = document.getElementById('langToggle');
+    var saved = null;
+    try { saved = localStorage.getItem('slatesync-support-lang'); } catch (e) { /* 隐私模式下忽略 */ }
+    if (saved === 'en') { root.dataset.lang = 'en'; button.setAttribute('aria-pressed', 'true'); }
+
+    button.addEventListener('click', function () {
+      var next = root.dataset.lang === 'en' ? 'zh' : 'en';
+      if (next === 'en') { root.dataset.lang = 'en'; } else { delete root.dataset.lang; }
+      button.setAttribute('aria-pressed', next === 'en' ? 'true' : 'false');
+      try { localStorage.setItem('slatesync-support-lang', next); } catch (e) { /* 忽略 */ }
+    });
+  })();
+</script>
+</body>
+</html>

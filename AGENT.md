@@ -2626,3 +2626,10 @@ Worker 边界、验收证据和最终治理交接。
   本次不按文件名自动合并或删除真实项目记录，避免丢失不同任务的输入、配置或校对结果。
 - 验证：`swift test --filter 'SM08OwnershipTests|RecognitionStateRegressionTests|SM07CoordinatorTests|ProjectStoresTests'`
   共 76 项通过，`git diff --check` 通过。未调用真实识别 API、修改真实项目数据或重启正在运行的应用。
+
+## 2026-09-24 GitHub Pages 支持与隐私页面
+
+- `docs/support.html` 和 `docs/privacy.html` 是双语静态页面，用于公开支持与隐私政策；`docs/index.html` 将 Pages 站点根路径导向支持页，支持页提供隐私政策链接。
+- 发布源设为 `swift-rewrite` 分支的 `/docs`，与原生 macOS 1.1 文案保持同步；不改变 `main` 分支的 Electron 产品基线。
+- 隐私披露按实际识别请求更新：模型服务接收图片、OCR 证据、文件名、可选项目提示/场记 CSV 记录/版式提示/输出设置，以及请求头中的 API Key；原始 PDF 文件不在请求中。PaddleOCR 安装会访问软件源。
+- 单项目导入与整库导入的行为分别说明，避免把整库切换误写为创建新项目 ID。

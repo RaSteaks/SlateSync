@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<!--
+  SlateSync 官方隐私政策页（App Store Connect「隐私政策 URL」用）
+  设计遵循 .claude/ui-design/design-system.md：冷灰阶梯 + 钨丝琥珀，琥珀只用于焦点/主操作；
+  双语（zh 默认 / en 切换），单文件零外部依赖，随系统深浅色自适应。
+  事实来源：README「数据与安全 / 本地项目加密 / 配置」、help-sections.json、SlateSyncApp/Info.plist。
+-->
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="SlateSync 隐私政策：本地优先的数据处理、AES-256-GCM 本地加密、钥匙串保管的 API Key，以及识别时发送给你自己配置的模型服务的内容范围。">
+<title>SlateSync 隐私政策 · Privacy Policy</title>
+<style>
+  /* ===== 设计令牌：来源 DESIGN.md / SlateSyncTheme（冷灰 + 钨丝琥珀，2026-09-16 版）===== */
+  :root {
+    --canvas: #F6F7F9;
+    --evidence: #FFFFFF;
+    --inset: #EEF0F3;
+    --line: #E2E5EA;
+    --ink: #1A1D23;
+    --ink-2: #5B6470;
+    --accent: #B45309;
+    --accent-soft: rgba(180, 83, 9, .08);
+    --ok: #1E7A5A;
+    --paper: #F2EEE3;
+    --paper-line: #D8D2C2;
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+            "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #1E2229;
+      --evidence: #2A2F37;
+      --inset: #232830;
+      --line: #3A414C;
+      --ink: #E8EAED;
+      --ink-2: #9AA3AE;
+      --accent: #F59E0B;
+      --accent-soft: rgba(245, 158, 11, .12);
+      --ok: #7FC9A9;
+      --paper: #2E2A22;
+      --paper-line: #4A4436;
+    }
+  }
+
+  /* ===== 基础排版（与支持页共用同一套外壳）===== */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+
+  html[data-lang="en"] .lang-zh { display: none; }
+  html:not([data-lang="en"]) .lang-en { display: none; }
+
+  /* ===== 顶栏 ===== */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 24px;
+    background: color-mix(in srgb, var(--canvas) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    width: 100%; max-width: 880px; margin: 0 auto;
+    display: flex; align-items: center; gap: 12px;
+  }
+  /* 品牌标记：场记板剪影，顶条为琥珀斜纹 */
+  .brand-mark {
+    display: inline-flex; flex-direction: column; flex: none;
+    width: 26px; border-radius: 4px; overflow: hidden;
+    border: 1.5px solid var(--ink);
+  }
+  .brand-mark-top {
+    height: 9px;
+    background: var(--accent);
+    background-image: repeating-linear-gradient(135deg,
+      rgba(0,0,0,.28) 0 3px, transparent 3px 7px);
+  }
+  .brand-mark-body { height: 13px; background: var(--ink); }
+  .brand-name { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  .lang-toggle {
+    margin-left: auto;
+    font: 600 13px/1 var(--font);
+    color: var(--ink-2);
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .lang-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ===== 主体布局 ===== */
+  main { max-width: 880px; margin: 0 auto; padding: 0 24px 80px; }
+  section { margin-top: 56px; scroll-margin-top: 76px; }
+
+  .hero { margin-top: 48px; }
+  h1 {
+    font-size: clamp(30px, 5vw, 40px);
+    line-height: 1.2; letter-spacing: -.02em; font-weight: 800;
+    margin: 0 0 10px;
+  }
+  .hero-sub { color: var(--ink-2); font-size: 17px; max-width: 640px; margin: 0; }
+  .hero-meta { margin-top: 14px; font-size: 13.5px; color: var(--ink-2); font-family: var(--mono); }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .toc a {
+    font-size: 13.5px; font-weight: 600;
+    color: var(--ink-2);
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 14px;
+  }
+  .toc a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+
+  /* 章节标题：法律条款按条编号（真实序列），左缘 3px 场记板斜纹 */
+  h2 {
+    display: flex; align-items: baseline; gap: 14px;
+    font-size: 22px; font-weight: 700; letter-spacing: -.01em;
+    margin: 0 0 6px;
+  }
+  h2 .clause {
+    font: 700 13px var(--mono); color: var(--accent); flex: none;
+  }
+  h2 .clause::before {
+    content: ""; position: absolute; left: -14px; top: 2px; bottom: 2px; width: 3px;
+    border-radius: 2px;
+    background: repeating-linear-gradient(135deg,
+      var(--accent) 0 4px, transparent 4px 8px);
+  }
+  .section-sub { color: var(--ink-2); margin: 0 0 20px; }
+
+  /* ===== 摘要卡：纸面材质 ===== */
+  .summary-card {
+    background: var(--paper);
+    border: 1px solid var(--paper-line);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-top: 28px;
+  }
+  .summary-card h2 { margin-bottom: 12px; }
+  .summary-card ul { margin: 0; padding-left: 20px; font-size: 15px; }
+  .summary-card li + li { margin-top: 10px; }
+
+  /* ===== 数据流向图（纯 CSS，无外部资源）===== */
+  .flow { display: flex; flex-direction: column; margin: 8px 0 0; }
+  .flow-box {
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+  }
+  .flow-box b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .flow-box span { color: var(--ink-2); font-size: 13.5px; }
+  .flow-box.local b { color: var(--ok); }
+  .flow-arrow {
+    align-self: center;
+    display: flex; align-items: center; gap: 10px;
+    color: var(--ink-2);
+    font: 600 12.5px var(--mono);
+    padding: 8px 0;
+  }
+  .flow-arrow::before { content: "↓"; color: var(--accent); font-size: 15px; }
+  /* “始终留在本机”横条：与本地图同色系，强调数据驻留 */
+  .flow-stay {
+    margin-top: 14px;
+    border: 1px dashed var(--ok);
+    border-radius: var(--radius);
+    padding: 12px 20px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    background: color-mix(in srgb, var(--ok) 6%, transparent);
+  }
+  .flow-stay b { color: var(--ok); font-weight: 700; }
+
+  /* ===== 条款正文 ===== */
+  .clause-body { color: var(--ink-2); font-size: 14.5px; }
+  .clause-body p { margin: 0 0 14px; }
+  .clause-body p:last-child { margin-bottom: 0; }
+  .clause-body code { color: var(--ink); }
+  ul.plain { margin: 0 0 14px; padding-left: 20px; }
+  ul.plain li + li { margin-top: 8px; }
+  ul.plain:last-child { margin-bottom: 0; }
+
+  .card {
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 24px 40px;
+    color: var(--ink-2); font-size: 13px;
+    text-align: center;
+  }
+
+  @media print {
+    .topbar, .toc, .lang-toggle { display: none; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
+    <span class="brand-name">SlateSync</span>
+    <!-- 语言切换：持久化到 localStorage，失败时静默回退中文 -->
+    <button class="lang-toggle" id="langToggle" type="button" aria-pressed="false">
+      <span class="lang-zh">English</span><span class="lang-en">中文</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <div class="hero">
+    <h1>
+      <span class="lang-zh">隐私政策</span>
+      <span class="lang-en">Privacy Policy</span>
+    </h1>
+    <p class="hero-sub">
+      <span class="lang-zh">SlateSync 是一款本地优先的 macOS 应用：识别场记单、校对结构、回填 DaVinci Resolve CSV。本政策说明哪些数据留在你的 Mac、哪些内容会发送给你自己配置的模型服务，以及我们不收集什么。</span>
+      <span class="lang-en">SlateSync is a local-first macOS app that recognizes camera slates, reviews their structure and backfills DaVinci Resolve CSVs. This policy explains what stays on your Mac, what is sent to model services you configure yourself, and what we never collect.</span>
+    </p>
+    <p class="hero-meta">
+      <span class="lang-zh">生效日期：2026 年 9 月 24 日 · 适用于 SlateSync for macOS（1.1 及后续版本）</span>
+      <span class="lang-en">Effective date: September 24, 2026 · Applies to SlateSync for macOS (1.1 and later)</span>
+    </p>
+
+    <!-- 摘要：先给结论，条款在后 -->
+    <div class="summary-card">
+      <h2><span class="lang-zh">先说结论</span><span class="lang-en">In short</span></h2>
+      <ul>
+        <li><span class="lang-zh">SlateSync 没有账号系统，也不向开发者运营的服务器上传任何数据：没有统计、广告或崩溃上报。</span>
+            <span class="lang-en">SlateSync has no account system and uploads nothing to developer-operated servers: no analytics, ads or crash reporting.</span></li>
+        <li><span class="lang-zh">项目数据保存在本机；项目库内容以 AES-256-GCM 加密，密钥保存在本机登录钥匙串。</span>
+            <span class="lang-en">Project data stays on your Mac. Library contents are encrypted with AES-256-GCM; the key lives in your Mac's login keychain.</span></li>
+        <li><span class="lang-zh">你主动识别时，页面图片、OCR 证据及识别上下文会发送给你配置的模型服务；原始 PDF 文件不会上传。</span>
+            <span class="lang-en">When you run recognition, page images, OCR evidence and recognition context go to the model service you configured. The original PDF file is not uploaded.</span></li>
+        <li><span class="lang-zh">可选的 PaddleOCR 完全在本机运行；Python 环境与模型由你在本机选择和下载。</span>
+            <span class="lang-en">Optional PaddleOCR runs entirely on your Mac; you choose and download the Python environment and models yourself.</span></li>
+      </ul>
+    </div>
+
+    <nav class="toc" aria-label="条款导航 / Policy sections">
+      <a href="#flow"><span class="lang-zh">数据流向</span><span class="lang-en">Data flow</span></a>
+      <a href="#collect"><span class="lang-zh">不收集</span><span class="lang-en">What we don't collect</span></a>
+      <a href="#local"><span class="lang-zh">本地存储</span><span class="lang-en">Local storage</span></a>
+      <a href="#providers"><span class="lang-zh">第三方 AI 服务</span><span class="lang-en">Third-party AI</span></a>
+      <a href="#ocr"><span class="lang-zh">OCR</span><span class="lang-en">OCR</span></a>
+      <a href="#logs"><span class="lang-zh">日志</span><span class="lang-en">Logs</span></a>
+      <a href="#exports"><span class="lang-zh">导出与共享</span><span class="lang-en">Exports</span></a>
+      <a href="#contact"><span class="lang-zh">联系</span><span class="lang-en">Contact</span></a>
+    </nav>
+  </div>
+
+  <!-- ===== 1 数据流向 ===== -->
+  <section id="flow">
+    <h2><span class="clause">1</span><span class="lang-zh">数据流向</span><span class="lang-en">How data moves</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">一次识别中，数据只在这条路径上流动：</span>
+      <span class="lang-en">During a recognition, data moves along one path only:</span>
+    </p>
+    <div class="flow">
+      <div class="flow-box">
+        <b><span class="lang-zh">你的场记单</span><span class="lang-en">Your slate</span></b>
+        <span>PDF · JPEG · PNG · WebP</span>
+      </div>
+      <div class="flow-arrow"><span class="lang-zh">导入，仅保存在本机</span><span class="lang-en">Imported — stored locally only</span></div>
+      <div class="flow-box local">
+        <b><span class="lang-zh">你的 Mac：本地处理</span><span class="lang-en">Your Mac: local processing</span></b>
+        <span><span class="lang-zh">逐页栅格化 · Vision / PaddleOCR 文字提取 · 字段校验 · 加密项目库</span><span class="lang-en">Page rasterization · Vision / PaddleOCR text extraction · field validation · encrypted Project Library</span></span>
+      </div>
+      <div class="flow-arrow"><span class="lang-zh">仅当你运行识别</span><span class="lang-en">Only when you run recognition</span></div>
+      <div class="flow-box">
+        <b><span class="lang-zh">你配置的 AI 服务（OpenAI 兼容接口）</span><span class="lang-en">The AI service you configured (OpenAI-compatible)</span></b>
+        <span><span class="lang-zh">接收页面图片、OCR 证据、识别上下文与认证请求头；原始 PDF 不会上传</span><span class="lang-en">Receives page images, OCR evidence, recognition context and an authentication header; the original PDF is not uploaded</span></span>
+      </div>
+    </div>
+    <div class="flow-stay">
+      <b><span class="lang-zh">始终留在本机：</span><span class="lang-en">Always on your Mac:</span></b>
+      <span><span class="lang-zh">项目库（AES-256-GCM 加密）</span><span class="lang-en">Project Library (AES-256-GCM)</span></span>
+      <span><span class="lang-zh">API Key（登录钥匙串）</span><span class="lang-en">API keys (login keychain)</span></span>
+      <span><span class="lang-zh">运行日志（7 天 · 脱敏）</span><span class="lang-en">Run logs (7 days · redacted)</span></span>
+      <span><span class="lang-zh">全局设置</span><span class="lang-en">Global settings</span></span>
+    </div>
+  </section>
+
+  <!-- ===== 2 我们不收集 ===== -->
+  <section id="collect">
+    <h2><span class="clause">2</span><span class="lang-zh">我们不收集的数据</span><span class="lang-en">What we don't collect</span></h2>
+    <div class="clause-body">
+      <ul class="plain">
+        <li><span class="lang-zh">没有账号、注册或登录，我们不知道你是谁。</span>
+            <span class="lang-en">No account, registration or sign-in exists — we have no way to know who you are.</span></li>
+        <li><span class="lang-zh">没有统计、行为分析、广告 SDK 或崩溃上报；数据不会发送到开发者运营的任何服务器。</span>
+            <span class="lang-en">No analytics, telemetry, ad SDKs or crash reporting; nothing is sent to developer-operated servers.</span></li>
+        <li><span class="lang-zh">我们不出售、出租或共享任何用户数据——因为我们从一开始就没有收到过。</span>
+            <span class="lang-en">We never sell, rent or share user data — we never receive any in the first place.</span></li>
+        <li><span class="lang-zh">模型请求只指向你配置的服务（见第 4 条）；主动安装 PaddleOCR 时还会访问软件源与模型下载服务（见第 5 条）。</span>
+            <span class="lang-en">Model requests go only to the service you configure (see §4); an optional PaddleOCR installation also contacts package and model sources (see §5).</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== 3 本地存储与加密 ===== -->
+  <section id="local">
+    <h2><span class="clause">3</span><span class="lang-zh">本地存储与加密</span><span class="lang-en">Local storage &amp; encryption</span></h2>
+    <div class="clause-body">
+      <p><span class="lang-zh">设置、日志与默认项目库位于：</span><span class="lang-en">Settings, logs and the default Project Library live in:</span></p>
+      <ul class="plain">
+        <li><code>~/Library/Application Support/SlateSync/</code>（<span class="lang-zh">机器设置与日志</span><span class="lang-en">machine settings and logs</span>）</li>
+        <li><code>~/Library/Application Support/Local SlateSync Library/</code>（<span class="lang-zh">默认项目库，可在应用中更改位置</span><span class="lang-en">default Project Library; the location can be changed in the app</span>）</li>
+      </ul>
+      <p><span class="lang-zh">正常启动时，项目库索引、项目设置、任务、诊断证据、场记结构 Profile 与 JSON 快照会自动转换为 <strong>AES-256-GCM</strong> 加密存储。加密密钥保存在本机 macOS 登录钥匙串，不需要 Apple 开发者账号，也不会同步到 iCloud。</span>
+         <span class="lang-en">At launch, the library index, project settings, tasks, diagnostic evidence, slate-layout profiles and JSON snapshots are automatically stored encrypted with <strong>AES-256-GCM</strong>. The key is kept in the local macOS login keychain — no Apple developer account needed, and it never syncs to iCloud.</span></p>
+      <p><span class="lang-zh">以下内容不在该加密范围内：原始媒体与媒体缓存、机器级配置和运行日志。该边界保护本地文件内容，不隐藏目录名称，也不能替代整盘加密（如 FileVault）。</span>
+         <span class="lang-en">Outside this encryption boundary: raw media and media caches, machine-level configuration and run logs. This boundary protects file contents; it does not hide directory names and is not a substitute for full-disk encryption such as FileVault.</span></p>
+      <p><span class="lang-zh">若登录钥匙串中的密钥丢失且没有应用内导出的备份，已加密数据无法解密。迁移到新 Mac 请使用应用内导出，不要直接复制内部加密目录。</span>
+         <span class="lang-en">If the keychain key is lost without an in-app export, encrypted data cannot be decrypted. To move to a new Mac, use in-app export — do not copy the internal encrypted folder directly.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 4 第三方 AI 服务 ===== -->
+  <section id="providers">
+    <h2><span class="clause">4</span><span class="lang-zh">你配置的第三方 AI 服务</span><span class="lang-en">Third-party AI services you configure</span></h2>
+    <div class="clause-body">
+      <!-- 披露范围与 RecognitionPrompts、ProviderPayloadBuilder 和 URLSessionProviderTransport 的实际请求保持一致。 -->
+      <p><span class="lang-zh">识别由你自行选择并配置的 OpenAI 兼容视觉服务完成（包括 Base URL、模型与请求并发等，均可在全局设置中修改）。发起识别时，应用会向该地址发送：</span>
+         <span class="lang-en">Recognition is performed by an OpenAI-compatible vision service that you choose and configure (base URL, model, concurrency and more, all editable in Global Settings). When you start a recognition, the app sends to that address:</span></p>
+      <ul class="plain">
+        <li><span class="lang-zh">本地栅格化得到的场记单页面图片；</span>
+            <span class="lang-en">Slate page images rasterized locally;</span></li>
+        <li><span class="lang-zh">本地 OCR 证据：识别出的文字、置信度与坐标。</span>
+            <span class="lang-en">Local OCR evidence: recognized text, confidence and coordinates.</span></li>
+        <li><span class="lang-zh">识别上下文：源文件名、你填写的项目自定义提示，以及启用时的场记 CSV 记录、版式提示和输出字段设置。</span>
+            <span class="lang-en">Recognition context: the source filename, your project custom prompt, and, when used, slate CSV records, layout hints and output-field settings.</span></li>
+        <li><span class="lang-zh">如已配置 API Key，认证请求头会将该 Key 发送给所选服务。</span>
+            <span class="lang-en">If an API key is configured, an authentication header sends it to the selected service.</span></li>
+      </ul>
+      <p><span class="lang-zh">原始 PDF 文件、完整项目库与其他项目内容不会随识别请求发送；API Key 不写入请求正文，但会用于请求头认证。模型发现（列出可用模型）也只与你配置的服务通信。这些内容一旦发送，其处理受该服务商的隐私政策与条款约束，请在选择服务商时自行确认。</span>
+         <span class="lang-en">The original PDF file, complete Project Library and other projects' content are not sent with recognition requests. The API key stays out of the request body but is used in the authentication header. Model discovery also talks only to your configured service. Once sent, that content is handled under the provider's own privacy policy and terms — please review them when choosing a provider.</span></p>
+      <p><span class="lang-zh">不配置 Provider 时，应用不会为识别产生任何网络请求。</span>
+         <span class="lang-en">With no provider configured, recognition generates no network requests at all.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 5 OCR ===== -->
+  <section id="ocr">
+    <h2><span class="clause">5</span><span class="lang-zh">本地 OCR</span><span class="lang-en">On-device OCR</span></h2>
+    <div class="clause-body">
+      <p><strong>macOS Vision OCR</strong> — <span class="lang-zh">使用系统提供的 Vision 能力，完全在本机运行，数据不离开设备。</span>
+         <span class="lang-en">Uses the system Vision framework, runs entirely on your Mac, and no data leaves the device.</span></p>
+      <p><strong>PaddleOCR</strong>（<span class="lang-zh">可选</span><span class="lang-en">optional</span>）— <span class="lang-zh">推理同样完全在本机运行。应用不携带 Python、虚拟环境或模型文件；安装时需要你提供 Python 3.10+ 环境并联网下载依赖与模型（paddlepaddle / paddleocr 固定版本）。该下载由你在本机主动发起，面向相应软件源，SlateSync 不参与其中数据的后续处理。</span>
+         <span class="lang-en">Inference likewise runs entirely on your Mac. The app bundles no Python, virtualenv or models; installing requires a Python 3.10+ environment you provide and a network download of pinned paddlepaddle / paddleocr dependencies and models. That download is initiated by you on this machine, from the respective package sources; SlateSync does not take part in any downstream handling of it.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 6 运行日志 ===== -->
+  <section id="logs">
+    <h2><span class="clause">6</span><span class="lang-zh">运行日志</span><span class="lang-en">Run logs</span></h2>
+    <div class="clause-body">
+      <p><span class="lang-zh">运行日志只保存在本机 <code>~/Library/Application Support/SlateSync/</code> 下，按天保留 7 天后清理。日志记录脱敏事件，<strong>不包含</strong>凭据、原始请求、媒体路径或模型响应正文，也不会被上传。</span>
+         <span class="lang-en">Run logs are stored only under <code>~/Library/Application Support/SlateSync/</code> on your Mac and pruned after 7 days, by day. They record redacted events and <strong>never</strong> contain credentials, raw requests, media paths or model response bodies, and they are never uploaded.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 7 API Key ===== -->
+  <section id="keys">
+    <h2><span class="clause">7</span><span class="lang-zh">API Key</span><span class="lang-en">API keys</span></h2>
+    <div class="clause-body">
+      <p><span class="lang-zh">服务商 API Key 保存在本机 macOS 钥匙串中，只有原生应用的数据服务可以读取；UI 不直接访问凭据。Key 不会写入项目包、项目库导出、日志或 Git 仓库，也不会回填显示在设置界面。</span>
+         <span class="lang-en">Provider API keys are stored in the local macOS keychain, readable only by the native data service; the UI never touches credentials directly. Keys are never written into project packages, library exports, logs or Git, and never echoed back into the settings UI.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 8 导出与共享 ===== -->
+  <section id="exports">
+    <h2><span class="clause">8</span><span class="lang-zh">导出与共享</span><span class="lang-en">Exports &amp; sharing</span></h2>
+    <div class="clause-body">
+      <p><span class="lang-zh">导出永远由你发起、由你控制去向：</span>
+         <span class="lang-en">Exports are always initiated by you, to destinations you control:</span></p>
+      <ul class="plain">
+        <li><span class="lang-zh">导出的 Resolve CSV 保持通用格式，写入你指定的位置；</span>
+            <span class="lang-en">Exported Resolve CSVs are ordinary files written where you choose;</span></li>
+        <li><span class="lang-zh">项目包与项目库导出包含任务、诊断证据、场记 Profile 与设置，但<strong>不包含</strong>全局配置、API Key、OCR 环境或日志；</span>
+            <span class="lang-en">Project packages and library exports carry tasks, diagnostics, slate profiles and settings, but <strong>never</strong> global configuration, API keys, OCR environments or logs;</span></li>
+        <li><span class="lang-zh">导入项目包到本地项目库后，内容会按第 3 条重新加密。</span>
+            <span class="lang-en">When a package is imported into a local library, its contents are re-encrypted as described in §3.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== 9 数据安全措施 ===== -->
+  <section id="security">
+    <h2><span class="clause">9</span><span class="lang-zh">安全措施</span><span class="lang-en">Security measures</span></h2>
+    <div class="clause-body">
+      <ul class="plain">
+        <li><span class="lang-zh">项目库执行路径边界校验，拒绝越界路径与符号链接；</span>
+            <span class="lang-en">The Project Library enforces path-boundary checks and rejects out-of-bounds paths and symlinks;</span></li>
+        <li><span class="lang-zh">文件写入使用临时文件与原子替换，项目包导入执行版本、路径与内容校验；</span>
+            <span class="lang-en">Writes use temporary files with atomic replacement; package imports are validated for version, paths and content;</span></li>
+        <li><span class="lang-zh">内部 SQLite 在内存中查询并以加密快照原子落盘，避免新增明文数据库日志。</span>
+            <span class="lang-en">The internal SQLite engine queries in memory and persists as atomic encrypted snapshots, avoiding new plaintext database logs.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== 10 未成年人 ===== -->
+  <section id="children">
+    <h2><span class="clause">10</span><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></h2>
+    <div class="clause-body">
+      <p><span class="lang-zh">SlateSync 是面向影视后期专业工作流程的生产力工具，不面向儿童营销，也不有意收集任何用户的个人信息（包括儿童）。</span>
+         <span class="lang-en">SlateSync is a productivity tool for professional film post-production workflows. It is not marketed to children and does not knowingly collect personal information from any user, including children.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 11 政策变更 ===== -->
+  <section id="changes">
+    <h2><span class="clause">11</span><span class="lang-zh">政策变更</span><span class="lang-en">Changes to this policy</span></h2>
+    <div class="clause-body">
+      <p><span class="lang-zh">若数据处理方式发生变化（例如应用引入新的联网功能），我们会更新本政策并修订生效日期，并通过应用内帮助或发布说明提示。重大变化会在新版本发布前明确说明。</span>
+         <span class="lang-en">If how data is handled ever changes (for example, a new networked feature), we will update this policy and its effective date, and surface it through in-app Help or release notes. Material changes will be called out before a new version ships.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 12 联系我们 ===== -->
+  <section id="contact">
+    <h2><span class="clause">12</span><span class="lang-zh">联系我们</span><span class="lang-en">Contact us</span></h2>
+    <div class="clause-body">
+      <div class="card">
+        <p>
+          <span class="lang-zh">对本政策或数据处理的任何问题：</span><span class="lang-en">Any question about this policy or data handling: </span>
+          <a href="https://github.com/RaSteaks/SlateSync/issues" target="_blank" rel="noopener">github.com/RaSteaks/SlateSync/issues</a><br>
+          <span class="lang-zh">支持页面：</span><span class="lang-en">Support page: </span>
+          <a href="support.html"><span class="lang-zh">SlateSync 支持</span><span class="lang-en">SlateSync Support</span></a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  © 2026 SlateSync · <span class="lang-zh">SlateSync 隐私政策</span><span class="lang-en">SlateSync Privacy Policy</span>
+</footer>
+
+<script>
+  // 语言切换：写入 <html data-lang>，持久化到 localStorage；任何存储异常都静默回退中文。
+  (function () {
+    var root = document.documentElement;
+    var button = document.getElementById('langToggle');
+    var saved = null;
+    try { saved = localStorage.getItem('slatesync-support-lang'); } catch (e) { /* 隐私模式下忽略 */ }
+    if (saved === 'en') { root.dataset.lang = 'en'; button.setAttribute('aria-pressed', 'true'); }
+
+    button.addEventListener('click', function () {
+      var next = root.dataset.lang === 'en' ? 'zh' : 'en';
+      if (next === 'en') { root.dataset.lang = 'en'; } else { delete root.dataset.lang; }
+      button.setAttribute('aria-pressed', next === 'en' ? 'true' : 'false');
+      try { localStorage.setItem('slatesync-support-lang', next); } catch (e) { /* 忽略 */ }
+    });
+  })();
+</script>
+</body>
+</html>
