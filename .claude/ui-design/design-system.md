@@ -171,6 +171,7 @@ HTML 原型和 Figma 预览需要显式表现面板/分隔线层级,以下值只
 | **WorkTabs(三段工作页)** | 优先复用 SwiftUI 原生 `Picker(.segmented)`;若未来需要自定义外观,必须保留 selected、键盘、VoiceOver 和 guard 行为;圆点只是“有新结果”提示,不抢焦点 |
 | **SlateStatusBar(状态栏)** | 复用现有共享组件,作为异步操作的唯一全局发言人;底部状态不与局部 toast 或第二套状态条竞争 |
 | **CredentialChip(凭据状态)** | 四态:已配置(ok)/ 缺失(text-3)/ 需要授权(warn)/ 读取失败(danger);禁止把"取消授权"显示成"缺失" |
+| **CapabilityChip(能力状态)** | 四态:已验证(ok)/ 验证失败(danger)/ 未验证(text-3)/ 需要注意(warn);复用 slateGlassSurface 胶囊，始终同时显示符号和文字 |
 | **WarnRow(告警行)** | 问题行 = `warn/danger` 的 dim 底 + 3px 左缘 + 行尾"校对"按钮;告警徽章可点击过滤 |
 | **ConfirmDialog(确认弹层)** | 危险操作需**输入项目名**解锁按钮(沿用现有文案机制);Esc = 取消 |
 | **SlateEmptyState(空态)** | 灯箱变体:中央放一个斜纹小图形 + 一句"去做什么"(如「创建项目后即可导入场记单」)+ 主操作按钮,不放插画 |

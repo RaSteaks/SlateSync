@@ -2,6 +2,25 @@ import XCTest
 @testable import SlateSyncDomain
 
 final class GlobalSettingsTests: XCTestCase {
+    func testProviderPairsRequireBothMembersAndOrderedUniqueBackups() throws {
+        // Optional keys preserve old snapshots, but an authored partial pair
+        // must fail before it reaches persistence or runtime routing.
+        XCTAssertNoThrow(try GlobalSettingsValidator.validateProviderSelections(.init()))
+        XCTAssertThrowsError(try GlobalSettingsValidator.validateProviderSelections(
+            .init([.defaultProviderID: "openai"])))
+        let chain = try ProviderModelSelection.encodeChain([
+            .init(providerID: "openai", modelID: "vision"),
+            .init(providerID: "openrouter", modelID: "other")
+        ])
+        let values = GlobalSettingValues([
+            .defaultProviderID: "openai", .defaultModelID: "vision",
+            .recognitionFailoverChain: chain
+        ])
+        XCTAssertNoThrow(try GlobalSettingsValidator.validateProviderSelections(values))
+        XCTAssertEqual(try JSONDecoder().decode(GlobalSettingValues.self,
+            from: JSONEncoder().encode(values)), values)
+    }
+
     func testDefaultsCoverEveryDeclaredGlobalSetting() {
         XCTAssertEqual(GlobalSettingsValidator.defaults.values.count, GlobalSettingKey.allCases.count)
         for key in GlobalSettingKey.allCases {

@@ -422,9 +422,8 @@ public final class RecognitionModel {
 
     private nonisolated static func isEligible(_ model: ModelData) -> Bool {
         if model.verifiedAvailable == false { return false }
-        switch model.capabilityStatus {
-        case .failed, .unsupported, .canceled, .pending: return false
-        default: return true
-        }
+        // The workbench can dispatch only a probe-confirmed pair. Discovery
+        // declarations are shown in Settings but never treated as validation.
+        return model.capabilityStatus == .verified
     }
 }

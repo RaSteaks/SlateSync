@@ -137,6 +137,8 @@ public struct CustomProviderCapabilityVerification: Codable, Hashable, Sendable 
     public let transport: ProviderTransport?
     public let capabilitySource: String?
     public let message: String?
+    /// The mode that passed the synthetic vision and JSON probe.
+    public let jsonMode: ProviderJSONMode?
 
     // A missing or malformed revision must remain distinguishable from an
     // explicit revision 1. The validator uses this bit to discard legacy cache
@@ -150,7 +152,8 @@ public struct CustomProviderCapabilityVerification: Codable, Hashable, Sendable 
         checkedAt: String? = nil,
         transport: ProviderTransport? = nil,
         capabilitySource: String? = nil,
-        message: String? = nil
+        message: String? = nil,
+        jsonMode: ProviderJSONMode? = nil
     ) {
         self.status = status
         self.revision = revision
@@ -158,6 +161,7 @@ public struct CustomProviderCapabilityVerification: Codable, Hashable, Sendable 
         self.transport = transport
         self.capabilitySource = capabilitySource
         self.message = message
+        self.jsonMode = jsonMode
         self.hasExplicitRevision = true
     }
 
@@ -168,6 +172,7 @@ public struct CustomProviderCapabilityVerification: Codable, Hashable, Sendable 
         case transport
         case capabilitySource
         case message
+        case jsonMode
     }
 
     public init(from decoder: any Decoder) throws {
@@ -186,6 +191,7 @@ public struct CustomProviderCapabilityVerification: Codable, Hashable, Sendable 
         }
         capabilitySource = try? values.decode(String.self, forKey: .capabilitySource)
         message = try? values.decode(String.self, forKey: .message)
+        jsonMode = try? values.decode(ProviderJSONMode.self, forKey: .jsonMode)
     }
 
     private static func decodeRevision(
@@ -223,6 +229,9 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
     public let manualModelIds: [String]
     public let revision: Int
     public let capabilityCache: [String: CustomProviderCapabilityVerification]?
+    /// Display metadata never affects the request configuration revision.
+    public let notes: String?
+    public let sourcePresetID: String?
 
     public init(
         id: String,
@@ -234,7 +243,9 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
         imageDetail: ImageDetail = .high,
         manualModelIds: [String] = [],
         revision: Int = 1,
-        capabilityCache: [String: CustomProviderCapabilityVerification]? = nil
+        capabilityCache: [String: CustomProviderCapabilityVerification]? = nil,
+        notes: String? = nil,
+        sourcePresetID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -246,6 +257,8 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
         self.manualModelIds = manualModelIds
         self.revision = revision
         self.capabilityCache = capabilityCache
+        self.notes = notes
+        self.sourcePresetID = sourcePresetID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -263,6 +276,8 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
         case capabilityCache
         case verification
         case capabilityVerification
+        case notes
+        case sourcePresetID
     }
 
     public init(from decoder: any Decoder) throws {
@@ -303,7 +318,9 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
                 imageDetail: Self.decodeImageDetail(values),
                 manualModelIds: decodedModels,
                 revision: Self.decodeRevision(values),
-                capabilityCache: decodedCache
+                capabilityCache: decodedCache,
+                notes: try values.decodeIfPresent(String.self, forKey: .notes),
+                sourcePresetID: try values.decodeIfPresent(String.self, forKey: .sourcePresetID)
             )
         )
         id = normalized.id
@@ -316,6 +333,8 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
         manualModelIds = normalized.manualModelIds
         revision = normalized.revision
         capabilityCache = normalized.capabilityCache
+        notes = normalized.notes
+        sourcePresetID = normalized.sourcePresetID
     }
 
     private static func decodeTransport(
@@ -373,6 +392,8 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
         try values.encode(manualModelIds, forKey: .manualModelIds)
         try values.encode(revision, forKey: .revision)
         try values.encodeIfPresent(capabilityCache, forKey: .capabilityCache)
+        try values.encodeIfPresent(notes, forKey: .notes)
+        try values.encodeIfPresent(sourcePresetID, forKey: .sourcePresetID)
     }
 
     public func summary(keyConfigured: Bool = false) -> CustomProviderSummary {
@@ -387,7 +408,9 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
             manualModelIds: manualModelIds,
             revision: revision,
             keyConfigured: keyConfigured,
-            capabilityCache: capabilityCache
+            capabilityCache: capabilityCache,
+            notes: notes,
+            sourcePresetID: sourcePresetID
         )
     }
 }
@@ -404,6 +427,8 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
     public let revision: Int
     public let keyConfigured: Bool
     public let capabilityCache: [String: CustomProviderCapabilityVerification]?
+    public let notes: String?
+    public let sourcePresetID: String?
 
     public init(
         id: String,
@@ -416,7 +441,9 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
         manualModelIds: [String] = [],
         revision: Int = 1,
         keyConfigured: Bool = false,
-        capabilityCache: [String: CustomProviderCapabilityVerification]? = nil
+        capabilityCache: [String: CustomProviderCapabilityVerification]? = nil,
+        notes: String? = nil,
+        sourcePresetID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -429,6 +456,8 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
         self.revision = revision
         self.keyConfigured = keyConfigured
         self.capabilityCache = capabilityCache
+        self.notes = notes
+        self.sourcePresetID = sourcePresetID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -443,6 +472,8 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
         case revision
         case keyConfigured
         case capabilityCache
+        case notes
+        case sourcePresetID
     }
 
     public init(from decoder: any Decoder) throws {
@@ -459,6 +490,8 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
         revision = try values.decodeIfPresent(Int.self, forKey: .revision) ?? 1
         keyConfigured = try values.decodeIfPresent(Bool.self, forKey: .keyConfigured) ?? false
         capabilityCache = try values.decodeIfPresent([String: CustomProviderCapabilityVerification].self, forKey: .capabilityCache)
+        notes = try values.decodeIfPresent(String.self, forKey: .notes)
+        sourcePresetID = try values.decodeIfPresent(String.self, forKey: .sourcePresetID)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -474,6 +507,8 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
         try values.encode(revision, forKey: .revision)
         try values.encode(keyConfigured, forKey: .keyConfigured)
         try values.encodeIfPresent(capabilityCache, forKey: .capabilityCache)
+        try values.encodeIfPresent(notes, forKey: .notes)
+        try values.encodeIfPresent(sourcePresetID, forKey: .sourcePresetID)
     }
 
     public var persistedConfiguration: CustomProviderConfiguration {
@@ -487,7 +522,9 @@ public struct CustomProviderSummary: Codable, Hashable, Sendable {
             imageDetail: imageDetail,
             manualModelIds: manualModelIds,
             revision: revision,
-            capabilityCache: capabilityCache
+            capabilityCache: capabilityCache,
+            notes: notes,
+            sourcePresetID: sourcePresetID
         )
     }
 }
@@ -501,6 +538,8 @@ public struct CustomProviderConfigRequest: Codable, Hashable, Sendable {
     public let jsonMode: ProviderJSONMode?
     public let imageDetail: ImageDetail?
     public let manualModelIds: [String]?
+    public let notes: String?
+    public let sourcePresetID: String?
     /// Transient input only; this field is part of the IPC request wire shape
     /// but is never accepted by a persisted configuration snapshot.
     public let apiKey: String?
@@ -516,6 +555,8 @@ public struct CustomProviderConfigRequest: Codable, Hashable, Sendable {
         jsonMode: ProviderJSONMode? = nil,
         imageDetail: ImageDetail? = nil,
         manualModelIds: [String]? = nil,
+        notes: String? = nil,
+        sourcePresetID: String? = nil,
         apiKey: String? = nil,
         replaceApiKey: Bool? = nil,
         clearApiKey: Bool? = nil
@@ -528,6 +569,8 @@ public struct CustomProviderConfigRequest: Codable, Hashable, Sendable {
         self.jsonMode = jsonMode
         self.imageDetail = imageDetail
         self.manualModelIds = manualModelIds
+        self.notes = notes
+        self.sourcePresetID = sourcePresetID
         self.apiKey = apiKey
         self.replaceApiKey = replaceApiKey
         self.clearApiKey = clearApiKey
@@ -542,6 +585,8 @@ public struct CustomProviderConfigRequest: Codable, Hashable, Sendable {
         case jsonMode
         case imageDetail
         case manualModelIds
+        case notes
+        case sourcePresetID
         case apiKey
         case replaceApiKey
         case clearApiKey
@@ -557,6 +602,8 @@ public struct CustomProviderConfigRequest: Codable, Hashable, Sendable {
         jsonMode = try values.decodeIfPresent(ProviderJSONMode.self, forKey: .jsonMode)
         imageDetail = try values.decodeIfPresent(ImageDetail.self, forKey: .imageDetail)
         manualModelIds = try values.decodeIfPresent([String].self, forKey: .manualModelIds)
+        notes = try values.decodeIfPresent(String.self, forKey: .notes)
+        sourcePresetID = try values.decodeIfPresent(String.self, forKey: .sourcePresetID)
         apiKey = try values.decodeIfPresent(String.self, forKey: .apiKey)
         replaceApiKey = try values.decodeIfPresent(Bool.self, forKey: .replaceApiKey)
         clearApiKey = try values.decodeIfPresent(Bool.self, forKey: .clearApiKey)
@@ -572,6 +619,8 @@ public struct CustomProviderConfigRequest: Codable, Hashable, Sendable {
         try values.encodeIfPresent(jsonMode, forKey: .jsonMode)
         try values.encodeIfPresent(imageDetail, forKey: .imageDetail)
         try values.encodeIfPresent(manualModelIds, forKey: .manualModelIds)
+        try values.encodeIfPresent(notes, forKey: .notes)
+        try values.encodeIfPresent(sourcePresetID, forKey: .sourcePresetID)
         // This is the transient IPC boundary. GlobalConfigStore only accepts
         // CustomProviderConfiguration, which deliberately has no apiKey field.
         try values.encodeIfPresent(apiKey, forKey: .apiKey)
@@ -592,6 +641,8 @@ public struct UpdateCustomProviderRequest: Codable, Hashable, Sendable {
     public let jsonMode: ProviderJSONMode?
     public let imageDetail: ImageDetail?
     public let manualModelIds: [String]?
+    public let notes: String?
+    public let sourcePresetID: String?
     public let apiKey: String?
     public let replaceApiKey: Bool?
     public let clearApiKey: Bool?
@@ -605,6 +656,8 @@ public struct UpdateCustomProviderRequest: Codable, Hashable, Sendable {
         jsonMode = request.jsonMode
         imageDetail = request.imageDetail
         manualModelIds = request.manualModelIds
+        notes = request.notes
+        sourcePresetID = request.sourcePresetID
         apiKey = request.apiKey
         replaceApiKey = request.replaceApiKey
         clearApiKey = request.clearApiKey
@@ -620,6 +673,8 @@ public struct UpdateCustomProviderRequest: Codable, Hashable, Sendable {
             jsonMode: jsonMode,
             imageDetail: imageDetail,
             manualModelIds: manualModelIds,
+            notes: notes,
+            sourcePresetID: sourcePresetID,
             apiKey: apiKey,
             replaceApiKey: replaceApiKey,
             clearApiKey: clearApiKey
@@ -635,6 +690,8 @@ public struct UpdateCustomProviderRequest: Codable, Hashable, Sendable {
         case jsonMode
         case imageDetail
         case manualModelIds
+        case notes
+        case sourcePresetID
         case apiKey
         case replaceApiKey
         case clearApiKey
@@ -650,6 +707,8 @@ public struct UpdateCustomProviderRequest: Codable, Hashable, Sendable {
         jsonMode = try values.decodeIfPresent(ProviderJSONMode.self, forKey: .jsonMode)
         imageDetail = try values.decodeIfPresent(ImageDetail.self, forKey: .imageDetail)
         manualModelIds = try values.decodeIfPresent([String].self, forKey: .manualModelIds)
+        notes = try values.decodeIfPresent(String.self, forKey: .notes)
+        sourcePresetID = try values.decodeIfPresent(String.self, forKey: .sourcePresetID)
         apiKey = try values.decodeIfPresent(String.self, forKey: .apiKey)
         replaceApiKey = try values.decodeIfPresent(Bool.self, forKey: .replaceApiKey)
         clearApiKey = try values.decodeIfPresent(Bool.self, forKey: .clearApiKey)
@@ -665,6 +724,8 @@ public struct UpdateCustomProviderRequest: Codable, Hashable, Sendable {
         try values.encodeIfPresent(jsonMode, forKey: .jsonMode)
         try values.encodeIfPresent(imageDetail, forKey: .imageDetail)
         try values.encodeIfPresent(manualModelIds, forKey: .manualModelIds)
+        try values.encodeIfPresent(notes, forKey: .notes)
+        try values.encodeIfPresent(sourcePresetID, forKey: .sourcePresetID)
         // Keep update requests wire-compatible while leaving persistence to
         // the separate non-secret configuration record.
         try values.encodeIfPresent(apiKey, forKey: .apiKey)

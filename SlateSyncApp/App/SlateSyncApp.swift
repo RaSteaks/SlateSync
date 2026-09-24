@@ -226,7 +226,8 @@ private struct SlateSyncWindowRoot: View {
             help: help,
             settingsNavigation: settingsNavigation,
             termination: termination,
-            settingsRevision: globalSettings.revision
+            settingsRevision: globalSettings.revision,
+            globalSettings: globalSettings
         )
         .task {
             await configureWindowLifecycle()

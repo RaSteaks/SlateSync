@@ -342,8 +342,10 @@ public struct ModelCapabilityProbeResult: Codable, Hashable, Sendable {
     public let checkedAt: String
     public let message: String
     public let capabilityStatus: ModelCapabilityStatus
+    /// The successful response format recorded for later recognition.
+    public let jsonMode: ProviderJSONMode?
 
-    public init(supported: Bool, model: String, transport: ProviderTransport, status: Int? = nil, checkedAt: String, message: String, capabilityStatus: ModelCapabilityStatus) {
+    public init(supported: Bool, model: String, transport: ProviderTransport, status: Int? = nil, checkedAt: String, message: String, capabilityStatus: ModelCapabilityStatus, jsonMode: ProviderJSONMode? = nil) {
         self.supported = supported
         self.model = model
         self.transport = transport
@@ -351,6 +353,7 @@ public struct ModelCapabilityProbeResult: Codable, Hashable, Sendable {
         self.checkedAt = checkedAt
         self.message = message
         self.capabilityStatus = capabilityStatus
+        self.jsonMode = jsonMode
     }
 }
 

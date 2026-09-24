@@ -5,15 +5,31 @@ public struct GlobalConfigSnapshot: Codable, Hashable, Sendable {
     public let version: Int
     public let values: GlobalSettingValues
     public let customProviders: [CustomProviderConfiguration]
+    public let builtinCapabilities: [String: BuiltinProviderCapabilityCache]
 
     public init(
         version: Int = 2,
         values: GlobalSettingValues = .init(),
-        customProviders: [CustomProviderConfiguration] = []
+        customProviders: [CustomProviderConfiguration] = [],
+        builtinCapabilities: [String: BuiltinProviderCapabilityCache] = [:]
     ) {
         self.version = version
         self.values = values
         self.customProviders = customProviders
+        self.builtinCapabilities = builtinCapabilities
+    }
+    private enum CodingKeys: String, CodingKey {
+        case version, values, customProviders, builtinCapabilities
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        values = try container.decode(GlobalSettingValues.self, forKey: .values)
+        customProviders = try container.decode([CustomProviderConfiguration].self, forKey: .customProviders)
+        // Existing v2 snapshots predate durable built-in probe results.
+        builtinCapabilities = try container.decodeIfPresent(
+            [String: BuiltinProviderCapabilityCache].self, forKey: .builtinCapabilities) ?? [:]
     }
 }
 
@@ -78,8 +94,10 @@ public actor GlobalConfigStore {
                 rawValues.removeValue(forKey: key)
             }
         }
+        let normalized = GlobalSettingsValidator.sanitize(rawValues)
+        try GlobalSettingsValidator.validateProviderSelections(normalized)
         return try publish(
-            values: GlobalSettingsValidator.sanitize(rawValues),
+            values: normalized,
             customProviders: current.customProviders
         )
     }
@@ -100,10 +118,12 @@ public actor GlobalConfigStore {
         } else {
             current = try readSnapshot()
         }
+        let normalized = GlobalSettingsValidator.sanitize(
+            Dictionary(uniqueKeysWithValues: values.map { ($0.rawValue, $1) })
+        )
+        try GlobalSettingsValidator.validateProviderSelections(normalized)
         return try publish(
-            values: GlobalSettingsValidator.sanitize(
-                Dictionary(uniqueKeysWithValues: values.map { ($0.rawValue, $1) })
-            ),
+            values: normalized,
             customProviders: current.customProviders
         )
     }
@@ -113,6 +133,7 @@ public actor GlobalConfigStore {
         values: [GlobalSettingKey: String],
         customProviders: [CustomProviderConfiguration]
     ) throws -> GlobalConfigSnapshot {
+        try GlobalSettingsValidator.validateProviderSelections(GlobalSettingValues(values))
         let normalizedProviders = try Self.validateProviders(customProviders)
         return try publish(
             values: GlobalSettingsValidator.sanitize(
@@ -133,14 +154,38 @@ public actor GlobalConfigStore {
         return try publish(values: .init(), customProviders: current.customProviders)
     }
 
+    /// Update one provider atomically without overwriting unrelated settings or proofs.
+    public func saveBuiltinCapabilities(_ cache: BuiltinProviderCapabilityCache) throws {
+        let current = try readSnapshot()
+        var proofs = current.builtinCapabilities
+        proofs[cache.provider.id] = cache
+        _ = try publish(values: current.values, customProviders: current.customProviders,
+                        builtinCapabilities: proofs)
+    }
+
+    /// Called before credential mutation, including a denied Keychain write.
+    public func invalidateBuiltinCapabilities(providerID: String) throws {
+        let current = try readSnapshot()
+        var proofs = current.builtinCapabilities
+        proofs.removeValue(forKey: providerID)
+        _ = try publish(values: current.values, customProviders: current.customProviders,
+                        builtinCapabilities: proofs)
+    }
+
     private func publish(
         values: GlobalSettingValues,
-        customProviders: [CustomProviderConfiguration]
+        customProviders: [CustomProviderConfiguration],
+        builtinCapabilities: [String: BuiltinProviderCapabilityCache]? = nil
     ) throws -> GlobalConfigSnapshot {
+        let previous = try readSnapshot()
+        let proofs = builtinCapabilities ?? previous.builtinCapabilities.filter { _, proof in
+            proof.settingKeys.allSatisfy { previous.values[$0] == values[$0] }
+        }
         let snapshot = GlobalConfigSnapshot(
             version: Self.currentVersion,
             values: values,
-            customProviders: customProviders
+            customProviders: customProviders,
+            builtinCapabilities: proofs
         )
         let data = try JSONEncoder().encode(snapshot)
         try writer.writeAtomically(data, to: fileURL, permissions: 0o600)
@@ -171,7 +216,11 @@ public actor GlobalConfigStore {
             return GlobalConfigSnapshot(
                 version: Self.currentVersion,
                 values: GlobalSettingsValidator.sanitize(rawValues),
-                customProviders: customProviders
+                customProviders: customProviders,
+                builtinCapabilities: object["builtinCapabilities"].flatMap {
+                    try? JSONDecoder().decode([String: BuiltinProviderCapabilityCache].self,
+                        from: JSONEncoder().encode($0))
+                } ?? [:]
             )
         } catch let error as SlateSyncError where error.code == "PERSISTENCE_PERMISSIONS" {
             // Global config contains no credential material. A permissions

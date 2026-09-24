@@ -194,10 +194,13 @@ buttons or containers.
 `SlatePanelHeading`, `SlateSearchField`, `SlateEmptyState` and `SlateStatusBar`
 own repeated headings, local clearable search, empty guidance and feedback.
 Status bars preserve feature-owned operation lifetimes and never add toast timers.
-`SlateBadge`, `TakeMark`, `LeaderProgress`, `LightTable`, `CredentialChip` and
+`SlateBadge`, `TakeMark`, `LeaderProgress`, `LightTable`, `CredentialChip`, `CapabilityChip` and
 `WarnRow` extend the shared kit for the 2026-09-14 workspace direction (dated
 section below); every color comes from `SlateSyncTheme`, and each stays quiet
 outside its owning business state.
+`CapabilityChip` reuses the credential badge's capsule surface for verified,
+failed, unverified and attention states; its symbol and label carry meaning
+independently of color.
 Recognition progress remains visible across routes in the app shell.
 Buttons combine safe/danger intent with native emphasis. Forms keep visible
 labels and inline recovery. Project rows/cards expose one primary open action and

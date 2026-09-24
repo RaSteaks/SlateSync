@@ -70,6 +70,7 @@ public struct WorkspaceView: View {
     @State private var scenarioID = ""
     @State private var accuracy = ProjectSettings.AccuracyMode.high
     private let settingsRevision: Int
+    private let globalSettings: GlobalSettingsModel?
     private let entryPoint: WorkspaceEntryPoint
     private let onSectionChanged: (WorkspaceSection) -> Void
     private let onEntryPointConsumed: () -> Void
@@ -81,6 +82,7 @@ public struct WorkspaceView: View {
         metadata: MetadataScanModel,
         media: MediaInputModel,
         settingsRevision: Int = 0,
+        globalSettings: GlobalSettingsModel? = nil,
         entryPoint: WorkspaceEntryPoint = .input,
         unseenSections: Binding<Set<WorkspaceSection>> = .constant([]),
         onSectionChanged: @escaping (WorkspaceSection) -> Void = { _ in },
@@ -92,6 +94,7 @@ public struct WorkspaceView: View {
         self.metadata = metadata
         self.media = media
         self.settingsRevision = settingsRevision
+        self.globalSettings = globalSettings
         self.entryPoint = entryPoint
         self._unseenSections = unseenSections
         self.onSectionChanged = onSectionChanged
@@ -203,6 +206,7 @@ public struct WorkspaceView: View {
             return true
         }
         .task {
+            await globalSettings?.load()
             await recognition.loadOptions()
             adoptTaskRecognitionOptions()
         }
@@ -466,6 +470,22 @@ public struct WorkspaceView: View {
                         }
                         ForEach(recognition.availableModels(providerID: providerID), id: \.id) {
                             Text($0.label).tag($0.id)
+                        }
+                    }
+                    HStack {
+                        if globalSettings?.live?.values[.defaultProviderID] == providerID,
+                           globalSettings?.live?.values[.defaultModelID] == modelID,
+                           !providerID.isEmpty {
+                            Text(L10n.tr("默认")).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Menu(L10n.tr("设为默认…")) {
+                            Button(L10n.tr("将当前服务商和模型设为全局默认")) {
+                                guard let globalSettings else { return }
+                                Task { _ = await globalSettings.setDefaultPair(providerID: providerID, modelID: modelID) }
+                            }
+                            .disabled(globalSettings == nil || globalSettings?.operation.isRunning == true
+                                || !recognition.canRecognize(providerID: providerID, modelID: modelID))
                         }
                     }
                     if unavailableProvider || unavailableModel || providerID.isEmpty || modelID.isEmpty {
@@ -886,6 +906,15 @@ public struct WorkspaceView: View {
         )
         providerID = selection.providerID
         modelID = selection.modelID
+        if providerID.isEmpty, modelID.isEmpty,
+           let defaultProvider = globalSettings?.live?.values[.defaultProviderID],
+           let defaultModel = globalSettings?.live?.values[.defaultModelID],
+           recognition.canRecognize(providerID: defaultProvider, modelID: defaultModel) {
+            // A global default seeds an empty task without persisting a task
+            // override or mixing its fields with an incomplete project pair.
+            providerID = defaultProvider
+            modelID = defaultModel
+        }
     }
 }
 

@@ -126,6 +126,37 @@ public final class GlobalSettingsModel {
     public func value(_ key: GlobalSettingKey) -> String { draft[key] ?? "" }
     public func setValue(_ value: String, for key: GlobalSettingKey) { draft[key] = value }
 
+    /// The workbench changes only the committed default pair. Rebase on the
+    /// live snapshot so unrelated unsaved Settings drafts keep their barrier.
+    public func setDefaultPair(providerID: String, modelID: String) async -> Bool {
+        guard beginOperation() else { return false }
+        defer { endOperation() }
+        guard !operation.isRunning else { return false }
+        guard let snapshot = live,
+              snapshot.models.contains(where: {
+                  $0.providers.contains(providerID) && $0.id == modelID
+                      && $0.capabilityStatus == .verified && $0.verifiedAvailable != false
+              }) else {
+            operation = .failed(.init(code: "MODEL_NOT_VERIFIED", message: L10n.tr("请先在全局设置验证所选模型。")))
+            return false
+        }
+        var values = snapshot.values
+        values[.defaultProviderID] = providerID
+        values[.defaultModelID] = modelID
+        operation = .running(label: L10n.tr("正在保存默认组合…"))
+        do {
+            let saved = try await service.saveGlobalSettings(values: values, customProviders: snapshot.customProviders)
+            refreshPreservingDraft(saved)
+            draft[.defaultProviderID] = providerID
+            draft[.defaultModelID] = modelID
+            operation = .succeeded(message: L10n.tr("默认组合已保存"))
+            return true
+        } catch {
+            operation = .failed(ProductPrivacy.error(error))
+            return false
+        }
+    }
+
     public func save() async {
         guard beginOperation() else { return }
         defer { endOperation() }
@@ -138,6 +169,16 @@ public final class GlobalSettingsModel {
             // Explicit UI saves validate every entered field before any write.
             for (key, value) in values.values {
                 _ = try GlobalSettingsValidator.normalizedPatchValue(value, for: key)
+            }
+            try GlobalSettingsValidator.validateProviderSelections(values)
+            let defaultProvider = values[.defaultProviderID] ?? ""
+            let defaultModel = values[.defaultModelID] ?? ""
+            let selected = (try? ProviderModelSelection.decodeAndValidateChain(values[.recognitionFailoverChain] ?? "[]")) ?? []
+            let allPairs = selected + (defaultProvider.isEmpty ? [] : [.init(providerID: defaultProvider, modelID: defaultModel)])
+            for pair in allPairs {
+                guard isVerifiedPair(pair, customProviders: providers) else {
+                    throw SlateSyncError(code: "MODEL_NOT_VERIFIED", message: L10n.tr("默认或备用模型尚未验证，请先在 Provider 设置完成验证。"))
+                }
             }
             let saved = try await service.saveGlobalSettings(values: values, customProviders: providers)
             if draft == values, customProviders == providers { publish(saved) }
@@ -154,6 +195,24 @@ public final class GlobalSettingsModel {
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }
+    }
+
+    private func isVerifiedPair(
+        _ pair: ProviderModelSelection,
+        customProviders: [CustomProviderConfiguration]
+    ) -> Bool {
+        if let custom = customProviders.first(where: { $0.id == pair.providerID }) {
+            let modelID = custom.id == ProviderKind.openAICompatible.rawValue
+                && pair.modelID == ProviderKind.openAICompatible.rawValue + "/custom"
+                ? custom.manualModelIds.first ?? pair.modelID : pair.modelID
+            let proof = custom.capabilityCache?[modelID]
+            return custom.manualModelIds.contains(modelID)
+                && proof?.revision == custom.revision && proof?.status == .verified
+        }
+        return live?.models.contains(where: {
+            $0.providers.contains(pair.providerID) && $0.id == pair.modelID
+                && $0.capabilityStatus == .verified && $0.verifiedAvailable != false
+        }) == true
     }
 
     public func storeCredential(_ value: String?, providerID: String) async throws {
@@ -239,6 +298,25 @@ public final class GlobalSettingsModel {
                 message: L10n.tr("配置未保存：{0}", [String(describing: L10n.message(sanitized.message))]),
                 error: sanitized
             )
+        }
+
+        let requestKeys = baseURLKeys.union([
+            .openAICompatibleModel, .openAICompatibleAPIMode,
+            .openAICompatibleJSONMode, .openAICompatibleImageDetail,
+            .openRouterSiteUrl, .openRouterAppTitle,
+        ])
+        if requestKeys.contains(where: { (live?.values[$0]) != candidate[$0] }) {
+            // An endpoint, wire mode, model, or request-header edit removes
+            // policy references until a fresh probe confirms the new route.
+            if candidate[.defaultProviderID] == providerID {
+                candidate[.defaultProviderID] = nil
+                candidate[.defaultModelID] = nil
+            }
+            if let raw = candidate[.recognitionFailoverChain],
+               let chain = try? ProviderModelSelection.decodeAndValidateChain(raw),
+               let encoded = try? ProviderModelSelection.encodeChain(chain.filter { $0.providerID != providerID }) {
+                candidate[.recognitionFailoverChain] = encoded
+            }
         }
 
         let saved: GlobalSettingsProjection
@@ -448,11 +526,20 @@ public final class GlobalSettingsModel {
         modelIDs: String,
         transport: ProviderTransport,
         jsonMode: ProviderJSONMode,
-        imageDetail: ImageDetail
+        imageDetail: ImageDetail,
+        notes: String? = nil,
+        sourcePresetID: String? = nil
     ) async -> Bool {
         guard beginOperation() else { return false }
         defer { endOperation() }
-        if let existing {
+        let parsedModels = modelIDs.split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if let existing,
+           existing.baseUrl != (try? CustomProviderValidator.normalizeBaseURL(baseURL))
+            || existing.transport != transport || existing.jsonMode != jsonMode
+            || existing.imageDetail != imageDetail
+            || existing.manualModelIds != parsedModels {
             providerRequests[existing.id] = nil
             await service.cancelModelProbe(providerID: existing.id)
             providerOperations[existing.id] = nil
@@ -465,7 +552,9 @@ public final class GlobalSettingsModel {
             modelIDs: modelIDs,
             transport: transport,
             jsonMode: jsonMode,
-            imageDetail: imageDetail
+            imageDetail: imageDetail,
+            notes: notes,
+            sourcePresetID: sourcePresetID
         )
     }
 
@@ -476,7 +565,9 @@ public final class GlobalSettingsModel {
         modelIDs: String,
         transport: ProviderTransport,
         jsonMode: ProviderJSONMode,
-        imageDetail: ImageDetail
+        imageDetail: ImageDetail,
+        notes: String? = nil,
+        sourcePresetID: String? = nil
     ) -> Bool {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -496,6 +587,12 @@ public final class GlobalSettingsModel {
             // from SM-07 merely because creation originated in SwiftUI.
             let provider: CustomProviderConfiguration
             if let existing {
+                // A display-only edit preserves both revision and verified
+                // capability cache; request-affecting edits invalidate both.
+                let requestChanged = existing.baseUrl != (try? CustomProviderValidator.normalizeBaseURL(cleanURL))
+                    || existing.transport != transport || existing.jsonMode != jsonMode
+                    || existing.imageDetail != imageDetail
+                    || existing.manualModelIds != models
                 provider = try CustomProviderValidator.normalize(
                     CustomProviderConfiguration(
                         id: existing.id,
@@ -505,10 +602,24 @@ public final class GlobalSettingsModel {
                         jsonMode: jsonMode,
                         imageDetail: imageDetail,
                         manualModelIds: models,
-                        revision: existing.revision + 1,
-                        capabilityCache: nil
+                        revision: existing.revision + (requestChanged ? 1 : 0),
+                        capabilityCache: requestChanged ? nil : existing.capabilityCache,
+                        notes: notes,
+                        sourcePresetID: sourcePresetID ?? existing.sourcePresetID
                     )
                 )
+                if requestChanged {
+                    // A request edit cannot leave a formerly verified pair
+                    // active in the same draft. Re-add it after probing.
+                    if draft[.defaultProviderID] == existing.id {
+                        draft[.defaultProviderID] = ""
+                        draft[.defaultModelID] = ""
+                    }
+                    if let chain = try? ProviderModelSelection.decodeAndValidateChain(draft[.recognitionFailoverChain] ?? "[]"),
+                       let encoded = try? ProviderModelSelection.encodeChain(chain.filter { $0.providerID != existing.id }) {
+                        draft[.recognitionFailoverChain] = encoded
+                    }
+                }
             } else {
                 provider = try CustomProviderValidator.normalizeRequest(
                     CustomProviderConfigRequest(
@@ -517,7 +628,9 @@ public final class GlobalSettingsModel {
                         transport: transport,
                         jsonMode: jsonMode,
                         imageDetail: imageDetail,
-                        manualModelIds: models
+                        manualModelIds: models,
+                        notes: notes,
+                        sourcePresetID: sourcePresetID
                     )
                 )
             }
@@ -544,6 +657,15 @@ public final class GlobalSettingsModel {
         providerRequests[id] = nil
         await service.cancelModelProbe(providerID: id)
         customProviders.removeAll { $0.id == id }
+        // Remove references in the same unsaved draft transaction as deletion.
+        if draft[.defaultProviderID] == id {
+            draft[.defaultProviderID] = ""
+            draft[.defaultModelID] = ""
+        }
+        if let chain = try? ProviderModelSelection.decodeAndValidateChain(draft[.recognitionFailoverChain] ?? "[]"),
+           let encoded = try? ProviderModelSelection.encodeChain(chain.filter { $0.providerID != id }) {
+            draft[.recognitionFailoverChain] = encoded
+        }
         discoveryResults[id] = nil
         providerOperations[id] = nil
         probeProgress[id] = nil
