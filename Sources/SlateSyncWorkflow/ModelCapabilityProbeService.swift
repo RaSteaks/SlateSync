@@ -13,15 +13,17 @@ public actor ModelCapabilityProbeService {
     private let registry: ProviderRegistry
     private let client: ProviderRecognitionClient
     private let save: Save?
+    private let saveBuiltin: (@Sendable (BuiltinProviderCapabilityCache) async throws -> Void)?
     private let now: @Sendable () -> Date
     private var batches: [String: Task<ModelProbeResult, Error>] = [:]
 
-    public init(registry: ProviderRegistry, client: ProviderRecognitionClient, save: Save? = nil, now: @escaping @Sendable () -> Date = Date.init) {
-        self.registry = registry; self.client = client; self.save = save; self.now = now
+    public init(registry: ProviderRegistry, client: ProviderRecognitionClient, save: Save? = nil, saveBuiltin: (@Sendable (BuiltinProviderCapabilityCache) async throws -> Void)? = nil, now: @escaping @Sendable () -> Date = Date.init) {
+        self.registry = registry; self.client = client; self.save = save; self.saveBuiltin = saveBuiltin; self.now = now
     }
 
     public func probe(providerID: String, modelIDs: [String], progress: ProgressSink? = nil) async throws -> ModelProbeResult {
         guard batches[providerID] == nil else { throw RecognitionFailure.probeBusy }
+        let generation = await registry.currentGeneration()
         let provider = try await registry.descriptor(providerID: providerID)
         // Preserve caller order while filtering duplicates; completion order
         // may differ, but result/progress model indexes remain deterministic.
@@ -51,18 +53,36 @@ public actor ModelCapabilityProbeService {
             // results so callers can display deterministic progress. Preserve
             // the parent task's state separately for the batch-level result.
             let canceled = Task.isCancelled || values.contains { $0.capabilityStatus == .canceled }
-            return ModelProbeResult(canceled: canceled, revision: provider.revision, results: values, completed: values.count, total: ids.count)
-        }
-        batches[providerID] = task
-        defer { batches.removeValue(forKey: providerID) }
-        do {
-            let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            let result = ModelProbeResult(canceled: canceled, revision: provider.revision, results: values,
+                                          completed: values.count, total: ids.count)
             // An explicitly canceled batch is terminal but must not race a
             // later provider edit by publishing its stale capability cache.
             guard !result.canceled else { return result }
-            guard (try? await registry.descriptor(providerID: providerID).revision) == provider.revision else { return .init(canceled: true, revision: provider.revision, results: result.results, completed: result.completed, total: result.total) }
-            if let save { try await save(providerID, revision, result.results) }
+            guard await registry.currentGeneration() == generation,
+                  (try? await registry.descriptor(providerID: providerID).revision) == provider.revision else {
+                return .init(canceled: true, revision: provider.revision, results: result.results, completed: result.completed, total: result.total)
+            }
+            // Legacy compatible providers already have a durable custom cache.
+            // Other built-ins need their own proof store, independent of discovery.
+            if provider.origin == .builtin, await registry.customConfiguration(providerID: providerID) == nil {
+                guard let proof = await registry.mergingBuiltinProbeResults(
+                    provider: provider, results: result.results, generation: generation) else {
+                    return .init(canceled: true, revision: provider.revision, results: result.results,
+                                 completed: result.completed, total: result.total)
+                }
+                if let saveBuiltin { try await saveBuiltin(proof) }
+                await registry.restoreBuiltinCapabilities(proof, generation: generation)
+            } else if let save {
+                try await save(providerID, revision, result.results)
+            }
             return result
+        }
+        // The retained task owns publication as well as HTTP work. Closing a
+        // runtime must join durable writes before credentials/config can change.
+        batches[providerID] = task
+        defer { batches.removeValue(forKey: providerID) }
+        do {
+            return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
         } catch is CancellationError { return .init(canceled: true, revision: provider.revision, results: [], completed: 0, total: ids.count) }
     }
 
@@ -91,17 +111,23 @@ public actor ModelCapabilityProbeService {
                 ]),
                 "required": .array([.string("ok"), .string("marker")]),
             ])
-            let response = try await client.recognize(.init(
+            let result = try await client.recognizeStructured(.init(
                 provider: provider, model: model, stage: .review,
                 filename: "SlateSync capability probe", providerImages: [image],
                 systemPrompt: "请识别图片中唯一的黑色大写文本，并仅返回 JSON；ok 必须为 true，marker 必须是你读到的文本的小写形式。",
                 schema: schema, timeoutMilliseconds: timeoutMilliseconds,
                 maximumTimeoutRetries: 0
-            ))
-            let value = try ProviderRecognitionClient.structuredJSON(from: response.text)
-            guard case .object(let fields) = value, case .boolean(true)? = fields["ok"],
-                  case .string(marker)? = fields["marker"] else { throw RecognitionFailure.invalidStructuredJSON }
-            return .init(supported: true, model: id, transport: provider.transport, checkedAt: checkedAt, message: "视觉与结构化输出验证通过", capabilityStatus: .verified)
+            ), validate: { value in
+                // The exact visual marker must be read from the image; a
+                // schema-shaped answer without it is not a vision pass.
+                guard case .object(let fields) = value,
+                      case .boolean(true)? = fields["ok"],
+                      case .string(Self.marker)? = fields["marker"] else {
+                    throw RecognitionFailure.invalidStructuredJSON
+                }
+                return true
+            })
+            return .init(supported: true, model: id, transport: provider.transport, checkedAt: checkedAt, message: "视觉与结构化输出验证通过", capabilityStatus: .verified, jsonMode: result.response.formatMode)
         } catch is CancellationError {
             return .init(supported: false, model: id, transport: provider.transport, checkedAt: checkedAt, message: "验证已取消", capabilityStatus: .canceled)
         } catch let error as SlateSyncError {

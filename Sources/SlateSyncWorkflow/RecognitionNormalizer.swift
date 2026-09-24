@@ -1,6 +1,13 @@
 import Foundation
 import SlateSyncDomain
 
+/// Field failures are keyed by stable page-local record ID so later merges
+/// can preserve the review marker without changing the raw model response.
+public struct RecognitionNormalizationReport: Sendable, Equatable {
+    public var degradedFields: [String: [String]] = [:]
+    public init() {}
+}
+
 /// Reproduces the retained JavaScript normalization boundary before page
 /// results are merged or persisted, including UTF-16-compatible field rules.
 public enum RecognitionNormalizer {
@@ -41,6 +48,49 @@ public enum RecognitionNormalizer {
             )
         }
         return RecognitionSheet(sheetTitle: sheetTitle, records: records, warnings: warnings)
+    }
+
+    public static func normalize(
+        _ value: JSONValue,
+        pageNumber: Int,
+        report: inout RecognitionNormalizationReport
+    ) throws -> RecognitionSheet {
+        let original = try normalize(value, pageNumber: pageNumber)
+        guard case .object(let root) = value,
+              case .array(let rows)? = root["records"] else { return original }
+        var warnings = original.warnings
+        let records = original.records.enumerated().map { index, record -> RecognitionRecord in
+            guard rows.indices.contains(index), case .object(let raw) = rows[index] else { return record }
+            let normalized: [String: Bool] = [
+                "cardNumber": record.cardNumber != nil,
+                "videoCode": record.videoCode != nil,
+                "scene": record.scene != nil,
+                "shot": record.shot != nil,
+                "take": record.take != nil,
+                "takeStatus": record.takeStatus != nil,
+            ]
+            let degraded = normalized.keys.sorted().filter { key in
+                guard normalized[key] == false, let rawValue = raw[key], rawValue != .null else { return false }
+                if case .string(let text) = rawValue {
+                    return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                return true
+            }
+            guard !degraded.isEmpty else { return record }
+            report.degradedFields[record.id] = degraded
+            warnings.append("第 \(pageNumber) 页第 \(index + 1) 条记录的 \(degraded.joined(separator: "、")) 无法规范化，请人工核对。")
+            let review = Array(Set((record.reviewRequiredFields ?? []) + degraded)).sorted()
+            return RecognitionRecord(
+                id: record.id, sourcePage: record.sourcePage,
+                cardNumber: record.cardNumber, videoCode: record.videoCode,
+                scene: record.scene, shot: record.shot, take: record.take,
+                takeStatus: record.takeStatus, description: record.description,
+                comments: record.comments, shotSize: record.shotSize,
+                cameraPosition: record.cameraPosition, confidence: record.confidence,
+                reviewRequiredFields: review
+            )
+        }
+        return RecognitionSheet(sheetTitle: original.sheetTitle, records: records, warnings: warnings)
     }
 
     public static func format(_ sheet: RecognitionSheet, formats: ResolveFieldFormats) -> RecognitionSheet {

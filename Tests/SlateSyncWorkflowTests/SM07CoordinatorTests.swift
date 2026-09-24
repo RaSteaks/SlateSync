@@ -263,14 +263,22 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
         await coordinator.close()
     }
 
-    func testFLW05FLW07GlobalFailFastAndProjectCancellationDrain() async throws {
+    func testFLW05FLW07GlobalQueueAndProjectCancellationDrain() async throws {
         let transport = SM07CoordinatorTransport(.stall), preparation = SM07CoordinatorPreparation(), ocr = SM07CoordinatorOCR()
         let limiter = RecognitionLimiter(limit: 1)
         let coordinator = runtime(transport: transport, preparation: preparation, ocr: ocr, limiter: limiter)
         let first = Task { try await coordinator.recognize(request(projectID: "project-a")) }
         await transport.waitUntilStarted()
-        do { _ = try await coordinator.recognize(request(projectID: "project-b")); XCTFail() }
-        catch { XCTAssertEqual((error as? SlateSyncError)?.code, "RECOGNITION_BUSY"); XCTAssertEqual((error as? SlateSyncError)?.status, 429) }
+        let queued = Task { try await coordinator.recognize(request(projectID: "project-b")) }
+        // The second task remains registered for cancellation while the
+        // limiter keeps its network dispatch queued behind project A.
+        while await coordinator.activeOperationCount() < 2 { await Task.yield() }
+        let inFlight = await limiter.activeCount()
+        XCTAssertEqual(inFlight, 1)
+        let canceledQueued = await coordinator.cancelAndWait(projectID: "project-b")
+        XCTAssertTrue(canceledQueued)
+        do { _ = try await queued.value; XCTFail() }
+        catch { XCTAssertEqual((error as? SlateSyncError)?.code, "RECOGNITION_CANCELED") }
 
         let canceled = await coordinator.cancelAndWait(projectID: "project-a")
         XCTAssertTrue(canceled)

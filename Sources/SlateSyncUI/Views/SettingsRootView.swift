@@ -12,6 +12,9 @@ public struct SettingsRootView: View {
     @Bindable private var paddleInstaller: PaddleInstallerModel
     @State private var credentialProvider: ProviderSummary?
     @State private var showsCustomProvider = false
+    @State private var showsPresetPicker = false
+    @State private var pendingPreset: ProviderPreset?
+    @State private var editingPreset: ProviderPreset?
     @State private var providerPendingDeletion: CustomProviderConfiguration?
     @State private var providerEditing: CustomProviderConfiguration?
     @State private var category = SettingsCategory.general
@@ -112,6 +115,18 @@ public struct SettingsRootView: View {
         }
         .sheet(isPresented: $showsCustomProvider) {
             CustomProviderSheet(settings: settings)
+        }
+        .sheet(isPresented: $showsPresetPicker, onDismiss: {
+            editingPreset = pendingPreset
+            pendingPreset = nil
+        }) {
+            PresetPickerSheet { preset in
+                pendingPreset = preset
+                showsPresetPicker = false
+            }
+        }
+        .sheet(item: $editingPreset) { preset in
+            CustomProviderSheet(settings: settings, preset: preset)
         }
         .sheet(
             isPresented: Binding(
@@ -250,46 +265,9 @@ public struct SettingsRootView: View {
     private var providers: some View {
         VStack(spacing: 0) {
             List {
-                Section(L10n.tr("内建 Provider")) {
-                    ForEach((settings.live?.providers ?? []).filter { $0.type != .custom }, id: \.id) { provider in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(L10n.providerLabel(provider))
-                                Text(provider.id).font(.caption.monospaced()).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            credentialStatusChip(provider.id)
-                            Button(L10n.tr("刷新模型")) { Task { await settings.discover(providerID: provider.id) } }
-                                .disabled(
-                                    settings.providerOperations[provider.id]?.isRunning == true || !provider.configured)
-                            Button(L10n.tr("配置…")) { credentialProvider = provider }
-                        }
-                        providerStatus(provider.id)
-                    }
-                }
-                Section(L10n.tr("自定义 Provider")) {
-                    ForEach(settings.customProviders, id: \.id) { provider in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(provider.label ?? provider.name)
-                                Text(provider.baseUrl).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            if let summary = settings.live?.providers.first(where: { $0.id == provider.id }) {
-                                Button(L10n.tr("刷新模型")) { Task { await settings.discover(providerID: provider.id) } }
-                                    .disabled(
-                                        settings.providerOperations[provider.id]?.isRunning == true
-                                            || !summary.configured)
-                                Button(L10n.tr("配置…")) { credentialProvider = summary }
-                            }
-                            Button(L10n.tr("编辑…")) { providerEditing = provider }
-                            Button(L10n.tr("删除…"), role: .destructive) { providerPendingDeletion = provider }
-                        }
-                        providerStatus(provider.id)
-                    }
-                    Button(L10n.tr("添加自定义 Provider…"), systemImage: "plus") { showsCustomProvider = true }
-                }
+                defaultProviderSection
+                backupProviderSection
+                providerListSection
             }
             HStack {
                 Spacer()
@@ -298,6 +276,202 @@ public struct SettingsRootView: View {
                     .disabled(settings.operation.isRunning)
             }.padding(10)
         }
+    }
+
+    private var defaultProviderSection: some View {
+        Section(L10n.tr("默认组合")) {
+                    Picker(L10n.tr("默认 Provider"), selection: Binding(
+                        get: { settings.value(.defaultProviderID) },
+                        set: {
+                            settings.setValue($0, for: .defaultProviderID)
+                            settings.setValue("", for: .defaultModelID)
+                        }
+                    )) {
+                        Text(L10n.tr("未设置")).tag("")
+                        ForEach(providerEntries.filter(\.configured), id: \.id) { provider in
+                            Text(L10n.providerLabel(provider)).tag(provider.id)
+                        }
+                    }
+                    Picker(L10n.tr("默认模型"), selection: Binding(
+                        get: { settings.value(.defaultModelID) },
+                        set: { settings.setValue($0, for: .defaultModelID) }
+                    )) {
+                        Text(L10n.tr("未设置")).tag("")
+                        ForEach(verifiedModels(for: settings.value(.defaultProviderID)), id: \.id) {
+                            Text($0.label).tag($0.id)
+                        }
+                    }
+        }
+    }
+
+    private var backupProviderSection: some View {
+        Section(L10n.tr("备用组合")) {
+            ForEach(backupChain, id: \.self) { pair in backupRow(pair) }
+            backupAddMenu
+        }
+    }
+
+    private func backupRow(_ pair: ProviderModelSelection) -> some View {
+        let index = backupChain.firstIndex(of: pair) ?? 0
+        let label = providerEntries.first(where: { $0.id == pair.providerID }).map { L10n.providerLabel($0) } ?? pair.providerID
+        return HStack {
+            Text("\(label) · \(pair.modelID)").lineLimit(1)
+            Spacer()
+            Button(L10n.tr("上移"), systemImage: "arrow.up") { moveBackup(index, by: -1) }
+                .disabled(index == 0)
+            Button(L10n.tr("下移"), systemImage: "arrow.down") { moveBackup(index, by: 1) }
+                .disabled(index == backupChain.count - 1)
+            Button(L10n.tr("移除"), systemImage: "minus.circle", role: .destructive) {
+                var chain = backupChain; chain.remove(at: index); setBackupChain(chain)
+            }
+        }
+    }
+
+    private var backupAddMenu: some View {
+        Menu(L10n.tr("添加备用组合…"), systemImage: "plus") {
+            ForEach(providerEntries.filter(\.configured), id: \.id) { provider in
+                Menu(L10n.providerLabel(provider)) {
+                    ForEach(verifiedModels(for: provider.id), id: \.id) { model in
+                        Button(model.label) {
+                            let pair = ProviderModelSelection(providerID: provider.id, modelID: model.id)
+                            guard !backupChain.contains(pair), backupChain.count < 8 else { return }
+                            setBackupChain(backupChain + [pair])
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var providerListSection: some View {
+        Section(L10n.tr("Provider 列表")) {
+                    ForEach(providerEntries, id: \.id) { provider in
+                        providerRow(provider)
+                        providerStatus(provider.id)
+                    }
+                    Menu(L10n.tr("添加 Provider…"), systemImage: "plus") {
+                        Button(L10n.tr("从预设库添加…")) { showsPresetPicker = true }
+                        Menu(L10n.tr("添加内建 Provider…")) {
+                            ForEach(providerEntries.filter { $0.type != .custom }, id: \.id) { provider in
+                                Button(L10n.providerLabel(provider)) { credentialProvider = provider }
+                            }
+                        }
+                        Button(L10n.tr("添加自定义 Provider…")) { showsCustomProvider = true }
+                    }
+        }
+    }
+
+    private var providerEntries: [ProviderSummary] {
+        let builtin = (settings.live?.providers ?? []).filter { $0.type != .custom }
+        let builtinIDs = Set(builtin.map(\.id))
+        let custom = settings.customProviders.filter { !builtinIDs.contains($0.id) }.map { custom in
+            settings.live?.providers.first(where: { $0.id == custom.id })
+                ?? ProviderSummary(id: custom.id, label: custom.name, configured: true, type: .custom, editable: true)
+        }
+        return builtin + custom
+    }
+
+    private func verifiedModels(for providerID: String) -> [ModelData] {
+        (settings.live?.models ?? []).filter {
+            $0.providers.contains(providerID) && $0.capabilityStatus == .verified && $0.verifiedAvailable != false
+        }
+    }
+
+    private var backupChain: [ProviderModelSelection] {
+        (try? ProviderModelSelection.decodeAndValidateChain(settings.value(.recognitionFailoverChain))) ?? []
+    }
+
+    private func setBackupChain(_ chain: [ProviderModelSelection]) {
+        if let value = try? ProviderModelSelection.encodeChain(chain) {
+            settings.setValue(value, for: .recognitionFailoverChain)
+        }
+    }
+
+    private func moveBackup(_ index: Int, by offset: Int) {
+        var chain = backupChain
+        let target = index + offset
+        guard chain.indices.contains(index), chain.indices.contains(target) else { return }
+        chain.swapAt(index, target)
+        setBackupChain(chain)
+    }
+
+    private func providerRow(_ provider: ProviderSummary) -> some View {
+        let materialized = settings.customProviders.first { $0.id == provider.id }
+        let custom = provider.type == .custom ? materialized : nil
+        let source: String = switch ProviderSourceBadge.source(for: custom) {
+        case .builtin: L10n.tr("内建")
+        case .preset: L10n.tr("预设")
+        case .custom: L10n.tr("自定义")
+        }
+        let baseURL = materialized?.baseUrl
+            ?? ProviderCatalog.definition(id: provider.id).map { settings.value($0.baseURLSetting).isEmpty ? $0.defaultBaseURL : settings.value($0.baseURLSetting) }
+            ?? ""
+        let capability = capabilityState(for: provider, custom: custom)
+        return HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(L10n.providerLabel(provider))
+                    Text(source).font(.caption).foregroundStyle(.secondary)
+                    if settings.value(.defaultProviderID) == provider.id {
+                        Text(L10n.tr("默认")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text(baseURL).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            credentialStatusChip(provider.id)
+            CapabilityChip(capability)
+            Menu(L10n.tr("操作")) {
+                Button(L10n.tr("刷新模型")) { Task { await settings.discover(providerID: provider.id) } }
+                    .disabled(settings.providerOperations[provider.id]?.isRunning == true || !provider.configured)
+                Button(L10n.tr("配置…")) { credentialProvider = provider }
+                Menu(L10n.tr("设为默认组合")) {
+                    ForEach(verifiedModels(for: provider.id), id: \.id) { model in
+                        Button(model.label) {
+                            settings.setValue(provider.id, for: .defaultProviderID)
+                            settings.setValue(model.id, for: .defaultModelID)
+                        }
+                    }
+                }
+                Menu(L10n.tr("添加到备用列表")) {
+                    ForEach(verifiedModels(for: provider.id), id: \.id) { model in
+                        Button(model.label) {
+                            let pair = ProviderModelSelection(providerID: provider.id, modelID: model.id)
+                            guard !backupChain.contains(pair), backupChain.count < 8 else { return }
+                            setBackupChain(backupChain + [pair])
+                        }
+                    }
+                }
+                if let custom {
+                    Button(L10n.tr("编辑…")) { providerEditing = custom }
+                    Button(L10n.tr("删除…"), role: .destructive) { providerPendingDeletion = custom }
+                }
+            }
+        }
+    }
+
+    private func capabilityState(
+        for provider: ProviderSummary,
+        custom: CustomProviderConfiguration?
+    ) -> CapabilityChip.State {
+        if let custom {
+            let checks = custom.manualModelIds.compactMap { id -> CustomProviderCapabilityVerification? in
+                guard let entry = custom.capabilityCache?[id], entry.revision == custom.revision else { return nil }
+                return entry
+            }
+            let verified = checks.filter { $0.status == .verified }
+            if verified.contains(where: { $0.jsonMode != nil && $0.jsonMode != custom.jsonMode }) { return .attention }
+            return CapabilityChip.state(verified: verified.count,
+                failed: checks.filter { $0.status == .failed }.count,
+                pending: max(0, custom.manualModelIds.count - checks.count))
+        }
+        let models = (settings.live?.models ?? []).filter { $0.providers.contains(provider.id) }
+        if case .failed = settings.providerOperations[provider.id] { return .attention }
+        return CapabilityChip.state(
+            verified: models.filter { $0.capabilityStatus == .verified }.count,
+            failed: models.filter { $0.capabilityStatus == .failed }.count,
+            pending: models.filter { $0.capabilityStatus != .verified && $0.capabilityStatus != .failed }.count
+        )
     }
 
     private var recognition: some View {
@@ -499,6 +673,14 @@ public struct SettingsRootView: View {
                                 providerID: providerID,
                                 modelIDs: pending.map { $0.apiId ?? $0.id }
                             )
+                        }
+                    }
+                }
+                let candidates = result.models + (result.pendingModels ?? []) + (result.failedModels ?? [])
+                Menu(L10n.tr("验证模型…")) {
+                    ForEach(candidates, id: \.id) { model in
+                        Button(model.label) {
+                            Task { await settings.probe(providerID: providerID, modelIDs: [model.apiId ?? model.id]) }
                         }
                     }
                 }
@@ -1056,9 +1238,53 @@ private struct CredentialSheet: View {
     }
 }
 
+/// The catalog is a draft source, not a configured Provider. Selecting one
+/// leaves credentials empty and still requires a model probe before use.
+private struct PresetPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let usePreset: (ProviderPreset) -> Void
+    @State private var category: ProviderPreset.Category = .direct
+    @State private var selectedID = ProviderPresets.all[0].id
+
+    private var selected: ProviderPreset {
+        ProviderPresets.all.first(where: { $0.id == selectedID }) ?? ProviderPresets.all[0]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L10n.tr("从预设库添加 Provider")).font(.title2.bold())
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading) {
+                    Button(L10n.tr("直连厂商")) { category = .direct; selectedID = ProviderPresets.all.first(where: { $0.category == .direct })!.id }
+                    Button(L10n.tr("聚合中转")) { category = .aggregator; selectedID = ProviderPresets.all.first(where: { $0.category == .aggregator })!.id }
+                }.frame(width: 120, alignment: .leading)
+                List(ProviderPresets.all.filter { $0.category == category }, id: \.id, selection: $selectedID) {
+                    Text($0.name).tag($0.id)
+                }.frame(width: 210)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(selected.name).font(.headline)
+                    Text(selected.baseURL).font(.caption.monospaced()).textSelection(.enabled)
+                    LabeledContent(L10n.tr("建议 JSON 档位"), value: selected.jsonMode.rawValue)
+                    Text(L10n.message(selected.notes)).font(.caption).foregroundStyle(.secondary)
+                    Link(L10n.tr("官网"), destination: selected.websiteURL)
+                    Link(L10n.tr("获取 API Key"), destination: selected.keyURL)
+                    Link(L10n.tr("接口文档"), destination: selected.documentationURL)
+                    Spacer()
+                    HStack {
+                        Button(L10n.tr("取消"), role: .cancel) { dismiss() }
+                        Button(L10n.tr("使用此预设")) { usePreset(selected) }
+                            .slatePrimaryActionStyle()
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }.padding(24).frame(width: 730, height: 430)
+    }
+}
+
 private struct CustomProviderSheet: View {
     let settings: GlobalSettingsModel
     let provider: CustomProviderConfiguration?
+    let preset: ProviderPreset?
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var baseURL: String
@@ -1066,16 +1292,19 @@ private struct CustomProviderSheet: View {
     @State private var transport: ProviderTransport
     @State private var jsonMode: ProviderJSONMode
     @State private var imageDetail: ImageDetail
+    @State private var notes: String
 
-    init(settings: GlobalSettingsModel, provider: CustomProviderConfiguration? = nil) {
+    init(settings: GlobalSettingsModel, provider: CustomProviderConfiguration? = nil, preset: ProviderPreset? = nil) {
         self.settings = settings
         self.provider = provider
-        _name = State(initialValue: provider?.name ?? "")
-        _baseURL = State(initialValue: provider?.baseUrl ?? "")
-        _modelIDs = State(initialValue: provider?.manualModelIds.joined(separator: ", ") ?? "")
-        _transport = State(initialValue: provider?.transport ?? .chatCompletions)
-        _jsonMode = State(initialValue: provider?.jsonMode ?? .jsonSchema)
+        self.preset = preset
+        _name = State(initialValue: provider?.name ?? preset?.name ?? "")
+        _baseURL = State(initialValue: provider?.baseUrl ?? preset?.baseURL ?? "")
+        _modelIDs = State(initialValue: provider?.manualModelIds.joined(separator: ", ") ?? preset?.suggestedModelID ?? "")
+        _transport = State(initialValue: provider?.transport ?? preset?.transport ?? .chatCompletions)
+        _jsonMode = State(initialValue: provider?.jsonMode ?? preset?.jsonMode ?? .jsonSchema)
         _imageDetail = State(initialValue: provider?.imageDetail ?? .high)
+        _notes = State(initialValue: provider?.notes ?? preset?.notes ?? "")
     }
 
     var body: some View {
@@ -1085,6 +1314,7 @@ private struct CustomProviderSheet: View {
                 TextField(L10n.tr("名称"), text: $name)
                 TextField("HTTP(S) Base URL", text: $baseURL)
                 TextField(L10n.tr("手动模型 ID（逗号分隔）"), text: $modelIDs)
+                TextField(L10n.tr("备注"), text: $notes, axis: .vertical)
                 Picker(L10n.tr("传输"), selection: $transport) {
                     Text("Chat Completions").tag(ProviderTransport.chatCompletions)
                     Text("Responses").tag(ProviderTransport.responses)
@@ -1117,7 +1347,9 @@ private struct CustomProviderSheet: View {
                             modelIDs: modelIDs,
                             transport: transport,
                             jsonMode: jsonMode,
-                            imageDetail: imageDetail
+                            imageDetail: imageDetail,
+                            notes: notes,
+                            sourcePresetID: preset?.id ?? provider?.sourcePresetID
                         ) {
                             dismiss()
                         }

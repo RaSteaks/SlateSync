@@ -28,6 +28,7 @@ public struct AppRootView: View {
     private let settingsNavigation: SettingsNavigationModel
     private let termination: TerminationCoordinator
     private let settingsRevision: Int
+    private let globalSettings: GlobalSettingsModel?
 
     public init(
         session: AppSessionModel,
@@ -42,7 +43,8 @@ public struct AppRootView: View {
         help: HelpModel,
         settingsNavigation: SettingsNavigationModel,
         termination: TerminationCoordinator,
-        settingsRevision: Int = 0
+        settingsRevision: Int = 0,
+        globalSettings: GlobalSettingsModel? = nil
     ) {
         self.session = session
         self.projects = projects
@@ -57,6 +59,7 @@ public struct AppRootView: View {
         self.settingsNavigation = settingsNavigation
         self.termination = termination
         self.settingsRevision = settingsRevision
+        self.globalSettings = globalSettings
     }
 
     public var body: some View {
@@ -154,6 +157,7 @@ public struct AppRootView: View {
                 metadata: metadata,
                 media: media,
                 settingsRevision: settingsRevision,
+                globalSettings: globalSettings,
                 entryPoint: workspaceEntryPoint,
                 unseenSections: unseenSectionsBinding,
                 onSectionChanged: { activeWorkspaceSection = $0 },

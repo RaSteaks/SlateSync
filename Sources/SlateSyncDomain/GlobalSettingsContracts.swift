@@ -12,6 +12,11 @@ public enum GlobalSettingKey: String, CaseIterable, Codable, Hashable, Sendable 
     case openAICompatibleAPIMode = "OPENAI_COMPATIBLE_API_MODE"
     case openAICompatibleJSONMode = "OPENAI_COMPATIBLE_JSON_MODE"
     case openAICompatibleImageDetail = "OPENAI_COMPATIBLE_IMAGE_DETAIL"
+    // Provider/model defaults are stored as a pair; an absent member never
+    // borrows its counterpart from a different settings precedence layer.
+    case defaultProviderID = "DEFAULT_PROVIDER_ID"
+    case defaultModelID = "DEFAULT_MODEL_ID"
+    case recognitionFailoverChain = "RECOGNITION_FAILOVER_CHAIN"
     case slateSyncConfigPath = "SLATESYNC_CONFIG_PATH"
     case maxBodyMB = "MAX_BODY_MB"
     case modelRequestTimeoutMS = "MODEL_REQUEST_TIMEOUT_MS"
@@ -172,6 +177,25 @@ public struct ResolvedGlobalSetting: Codable, Hashable, Sendable {
 }
 
 public enum GlobalSettingsValidator {
+    /// Validate the cross-key pair before persistence strips empty overrides.
+    /// The failover JSON remains an ordered single-value transaction.
+    public static func validateProviderSelections(_ values: GlobalSettingValues) throws {
+        let provider = values[.defaultProviderID]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let model = values[.defaultModelID]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard provider.isEmpty == model.isEmpty else {
+            throw SlateSyncError(code: "GLOBAL_CONFIG_INVALID", message: "默认 Provider 与模型必须同时设置")
+        }
+        if !provider.isEmpty {
+            guard ProviderModelSelection.isValidIdentifier(provider),
+                  ProviderModelSelection.isValidIdentifier(model) else {
+                throw SlateSyncError(code: "GLOBAL_CONFIG_INVALID", message: "默认 Provider 与模型组合无效")
+            }
+        }
+        if let chain = values[.recognitionFailoverChain], !chain.isEmpty {
+            _ = try ProviderModelSelection.decodeAndValidateChain(chain)
+        }
+    }
+
     public static let defaults = GlobalSettingValues([
         .openAIBaseUrl: "https://api.openai.com/v1",
         .openRouterBaseUrl: "https://openrouter.ai/api/v1",
@@ -184,6 +208,9 @@ public enum GlobalSettingsValidator {
         .openAICompatibleAPIMode: "chat-completions",
         .openAICompatibleJSONMode: "json_object",
         .openAICompatibleImageDetail: "high",
+        .defaultProviderID: "",
+        .defaultModelID: "",
+        .recognitionFailoverChain: "[]",
         .slateSyncConfigPath: "slatesync.config.json",
         .maxBodyMB: "80",
         .modelRequestTimeoutMS: "180000",
@@ -324,6 +351,17 @@ public enum GlobalSettingsValidator {
         }
 
         switch key {
+        case .recognitionFailoverChain:
+            // The ordered list is a single setting so saving or canceling a
+            // draft cannot publish a partially reordered failover policy.
+            return try ProviderModelSelection.encodeChain(
+                ProviderModelSelection.decodeAndValidateChain(value)
+            )
+        case .defaultProviderID, .defaultModelID:
+            guard ProviderModelSelection.isValidIdentifier(value) else {
+                throw invalid("\(key.rawValue) 组合标识无效")
+            }
+            return value
         case .maxBodyMB: return try integer(value, key, range: 20...200)
         case .modelRequestTimeoutMS: return try integer(value, key, range: 30_000...3_600_000)
         case .modelRequestMaxRetries: return try integer(value, key, range: 0...3)

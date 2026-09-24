@@ -373,7 +373,8 @@ public actor SlateSyncWorkflowFacade:
         await resetSettingsProviders()
         let saved = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
         let snapshot = await runtime.refreshConfiguration()
-        try await modelRegistry().replace(settings: snapshot.configuration.values, customProviders: saved.customProviders)
+        try await modelRegistry().replace(settings: snapshot.configuration.values, customProviders: saved.customProviders,
+            builtinCapabilities: saved.builtinCapabilities)
         await record(.info, category: "settings", event: "saved", message: "全局设置已保存")
         let nextPath = snapshot.configuration.values[.slateSyncConfigPath] ?? ""
         return try await globalSettings(restartRequired: previousPath != nextPath)
@@ -382,9 +383,42 @@ public actor SlateSyncWorkflowFacade:
     public func setProviderCredential(_ value: String?, providerID: String) async throws {
         try await resetRecognition()
         await resetSettingsProviders()
-        try await runtime.setProviderKey(value, for: providerID)
-        // Credentials invalidate eligibility even when the endpoint is unchanged.
+        // A changed secret is part of a custom provider's probe identity.
+        // Rotate its revision so persisted model proofs cannot be reused.
+        let config = try await runtime.globalConfigStore.load()
+        var values = config.values.values
+        if values[.defaultProviderID] == providerID {
+            values.removeValue(forKey: .defaultProviderID)
+            values.removeValue(forKey: .defaultModelID)
+        }
+        if let rawChain = values[.recognitionFailoverChain],
+           let chain = try? ProviderModelSelection.decodeAndValidateChain(rawChain) {
+            values[.recognitionFailoverChain] = try ProviderModelSelection.encodeChain(
+                chain.filter { $0.providerID != providerID }
+            )
+        }
+        var providers = config.customProviders
+        if let index = config.customProviders.firstIndex(where: { $0.id == providerID }) {
+            let old = config.customProviders[index]
+            providers[index] = CustomProviderConfiguration(
+                id: old.id, name: old.name, label: old.label, baseUrl: old.baseUrl,
+                transport: old.transport, jsonMode: old.jsonMode,
+                imageDetail: old.imageDetail, manualModelIds: old.manualModelIds,
+                revision: old.revision + 1, capabilityCache: nil,
+                notes: old.notes, sourcePresetID: old.sourcePresetID
+            )
+        }
+        if values != config.values.values || providers != config.customProviders {
+            _ = try await runtime.globalConfigStore.save(values: values, customProviders: providers)
+            let refreshed = await runtime.refreshConfiguration()
+            await sharedRegistry?.replace(settings: refreshed.configuration.values, customProviders: providers)
+        }
+        try await runtime.globalConfigStore.invalidateBuiltinCapabilities(providerID: providerID)
         await sharedRegistry?.invalidate(providerID: providerID)
+        // Invalidate durable proofs before a Keychain write. A denied or
+        // interrupted Keychain operation may cost a re-probe but cannot leave
+        // a changed secret paired with stale persisted verification.
+        try await runtime.setProviderKey(value, for: providerID)
         await record(.info, category: "settings", event: "credential-updated", message: "Provider 凭据状态已更新")
     }
 
@@ -511,6 +545,9 @@ public actor SlateSyncWorkflowFacade:
                     revision: revision,
                     results: results
                 )
+            },
+            saveBuiltin: { [runtime] proof in
+                try await runtime.globalConfigStore.saveBuiltinCapabilities(proof)
             }
         )
         let value = SettingsProviderRuntime(
@@ -561,7 +598,8 @@ public actor SlateSyncWorkflowFacade:
                 checkedAt: result.checkedAt,
                 transport: result.transport,
                 capabilitySource: "synthetic-image-probe",
-                message: result.message
+                message: result.message,
+                jsonMode: result.jsonMode
             )
         }
         var providers = config.customProviders
@@ -575,7 +613,9 @@ public actor SlateSyncWorkflowFacade:
             imageDetail: original.imageDetail,
             manualModelIds: original.manualModelIds,
             revision: original.revision,
-            capabilityCache: cache
+            capabilityCache: cache,
+            notes: original.notes,
+            sourcePresetID: original.sourcePresetID
         )
         _ = try await runtime.globalConfigStore.save(
             values: config.values.values,
@@ -598,7 +638,8 @@ public actor SlateSyncWorkflowFacade:
                 let snapshot = await runtime.bootstrap()
                 let config = try await runtime.globalConfigStore.load()
                 return ProviderRegistry(settings: snapshot.configuration.values,
-                    customProviders: config.customProviders, credentials: runtime.keychainStore)
+                    customProviders: config.customProviders, credentials: runtime.keychainStore,
+                    builtinCapabilities: config.builtinCapabilities)
             }
             registryBuild = build
         }

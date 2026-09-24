@@ -102,7 +102,51 @@ public actor ProviderRecognitionClient {
                     method: .post, body: body, timeoutMilliseconds: request.timeoutMilliseconds,
                     maximumTimeoutRetries: request.maximumTimeoutRetries
                 ))
+                // A transport may deliver bytes after cancellation; those
+                // bytes must not become a winning stage response.
+                try Task.checkCancellation()
                 return try Self.extract(response.body, transport: request.provider.transport, mode: mode)
+            } catch is CancellationError {
+                throw RecognitionFailure.canceled
+            } catch let error as SlateSyncError {
+                guard let next = Self.nextMode(mode, error: error) else { throw error }
+                mode = next
+            }
+        }
+    }
+
+    /// Parse and validate inside the stage retry boundary. A malformed JSON
+    /// body or missing required stage shape gets one same-mode resend in total.
+    public func recognizeStructured<Value: Sendable>(
+        _ request: RecognitionStageRequest,
+        validate: @Sendable (JSONValue) throws -> Value
+    ) async throws -> (value: Value, response: RecognitionStageResponse, actions: [RepairAction]) {
+        var mode = request.model.jsonMode
+        var repairRetryUsed = false
+        while true {
+            try Task.checkCancellation()
+            do {
+                let body = try ProviderPayloadBuilder.payload(request, mode: mode)
+                let wire = try await transport.send(.init(
+                    provider: request.provider,
+                    purpose: request.stage == .primary ? .recognition : .probe,
+                    method: .post, body: body, timeoutMilliseconds: request.timeoutMilliseconds,
+                    maximumTimeoutRetries: request.maximumTimeoutRetries
+                ))
+                try Task.checkCancellation()
+                let response = try Self.extract(wire.body, transport: request.provider.transport, mode: mode)
+                do {
+                    let decoded = try TolerantStructuredJSON.decode(response.text)
+                    let value = try validate(decoded.value)
+                    try Task.checkCancellation()
+                    return (value, response, decoded.actions)
+                } catch {
+                    if !repairRetryUsed {
+                        repairRetryUsed = true
+                        continue
+                    }
+                    throw error
+                }
             } catch is CancellationError {
                 throw RecognitionFailure.canceled
             } catch let error as SlateSyncError {
@@ -163,15 +207,7 @@ public actor ProviderRecognitionClient {
     }
 
     public nonisolated static func structuredJSON(from text: String) throws -> JSONValue {
-        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.range(of: #"^```(?:json)?\s*"#, options: [.regularExpression, .caseInsensitive]) != nil {
-            value = value.replacingOccurrences(of: #"^```(?:json)?\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
-            value = value.replacingOccurrences(of: #"\s*```$"#, with: "", options: .regularExpression)
-        }
-        guard let data = value.data(using: .utf8), let decoded = try? JSONDecoder().decode(JSONValue.self, from: data) else {
-            throw RecognitionFailure.invalidStructuredJSON
-        }
-        return decoded
+        try TolerantStructuredJSON.decode(text).value
     }
 
     private nonisolated static func chatText(_ value: JSONValue?) -> String? {

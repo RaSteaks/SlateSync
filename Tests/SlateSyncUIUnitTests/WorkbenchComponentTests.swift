@@ -10,6 +10,22 @@ import XCTest
 // the component initializers MainActor-isolated, so the suite runs there.
 @MainActor
 final class WorkbenchComponentTests: XCTestCase {
+    func testCapabilityAndSourceBadgesKeepDistinctStates() {
+        // Mixed probe outcomes need a warning rather than a verified badge;
+        // preset provenance is metadata and leaves provider type unchanged.
+        XCTAssertEqual(CapabilityChip.state(verified: 1, failed: 1, pending: 0), .attention)
+        XCTAssertEqual(CapabilityChip.state(verified: 0, failed: 1, pending: 0), .failed)
+        XCTAssertEqual(CapabilityChip.state(verified: 0, failed: 0, pending: 1), .unverified)
+        XCTAssertEqual(CapabilityChip.state(verified: 1, failed: 0, pending: 0), .verified)
+        XCTAssertEqual(ProviderSourceBadge.source(for: nil), .builtin)
+        let custom = CustomProviderConfiguration(id: "openai-compatible", name: "Test",
+            baseUrl: "https://example.com/v1")
+        let preset = CustomProviderConfiguration(id: "openai-compatible", name: "Preset",
+            baseUrl: "https://example.com/v1", sourcePresetID: "stepfun")
+        XCTAssertEqual(ProviderSourceBadge.source(for: custom), .custom)
+        XCTAssertEqual(ProviderSourceBadge.source(for: preset), .preset)
+    }
+
     func testTakeMarkMapsEveryTakeStatus() {
         XCTAssertEqual(TakeMark(nil).phase, .pending)
         XCTAssertEqual(TakeMark(.passed).phase, .circled)

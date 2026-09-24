@@ -289,6 +289,81 @@ public struct LightTable<Content: View>: View {
 
 // MARK: - CredentialChip(凭据状态)
 
+/// Source badges describe how a row was created, not a new wire provider kind.
+public enum ProviderSourceBadge: Equatable, Sendable {
+    case builtin, preset, custom
+
+    public static func source(for configuration: CustomProviderConfiguration?) -> Self {
+        guard let configuration else { return .builtin }
+        return configuration.sourcePresetID == nil ? .custom : .preset
+    }
+}
+
+/// Capability reflects the current probe projection and includes a symbol
+/// and label, so verification never depends on color alone.
+public struct CapabilityChip: View {
+    public enum State: Equatable, Sendable {
+        case verified, failed, unverified, attention
+    }
+
+    public let state: State
+    public init(_ state: State) { self.state = state }
+
+    public static func state(verified: Int, failed: Int, pending: Int) -> State {
+        if failed > 0, verified > 0 { return .attention }
+        if failed > 0 { return .failed }
+        if verified > 0, pending > 0 { return .attention }
+        return verified > 0 ? .verified : .unverified
+    }
+
+    private var title: String {
+        switch state {
+        case .verified: L10n.tr("已验证")
+        case .failed: L10n.tr("验证失败")
+        case .unverified: L10n.tr("未验证")
+        case .attention: L10n.tr("需要注意")
+        }
+    }
+
+    private var symbol: String {
+        switch state {
+        case .verified: "checkmark.seal"
+        case .failed: "xmark.octagon"
+        case .unverified: "questionmark.circle"
+        case .attention: "exclamationmark.triangle"
+        }
+    }
+
+    private var color: Color {
+        switch state {
+        case .verified: SlateSyncTheme.success
+        case .failed: SlateSyncTheme.danger
+        case .unverified: SlateSyncTheme.secondary
+        case .attention: SlateSyncTheme.warning
+        }
+    }
+
+    private var tone: SlateGlassTone {
+        switch state {
+        case .verified: .success
+        case .failed: .error
+        case .unverified: .info
+        case .attention: .warning
+        }
+    }
+
+    public var body: some View {
+        Label(title, systemImage: symbol)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .slateGlassSurface(.status(tone), shape: .capsule, border: .accessibilityOnly)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(L10n.tr("能力状态 {0}", [String(describing: title)]))
+    }
+}
+
 /// Four credential states for Provider rows. 取消授权 must surface as
 /// 需要授权 or 读取失败 — never silently as 缺失 (DESIGN.md 2026-09-11 rule).
 /// Color is never the only signal; each state pairs a symbol.

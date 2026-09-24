@@ -12,28 +12,58 @@ public actor ProviderRegistry {
     private let credentials: (any ProviderCredentialReading)?
     private var registrations: [String: Registration] = [:]
     private var generation = 0
+    private var builtinCapabilities: [String: BuiltinProviderCapabilityCache]
 
     public init(
         settings: GlobalSettingValues = .init(),
         customProviders: [CustomProviderConfiguration] = [],
-        credentials: (any ProviderCredentialReading)? = nil
+        credentials: (any ProviderCredentialReading)? = nil,
+        builtinCapabilities: [String: BuiltinProviderCapabilityCache] = [:]
     ) {
         self.settings = settings
         self.customProviders = CustomProviderValidator.sanitize(customProviders)
         self.credentials = credentials
+        self.builtinCapabilities = builtinCapabilities
     }
 
-    /// Replacing a settings snapshot invalidates every registration. This is
-    /// deliberately broad: endpoint, transport, JSON mode, image detail, key,
-    /// and model edits must never leave a stale model eligible for execution.
+    /// Keep proofs across display/default edits. Endpoint, protocol, JSON
+    /// mode, image detail, request headers, model IDs and revision changes
+    /// still invalidate the affected provider's registration.
     public func replace(
         settings: GlobalSettingValues,
-        customProviders: [CustomProviderConfiguration]
+        customProviders: [CustomProviderConfiguration],
+        builtinCapabilities: [String: BuiltinProviderCapabilityCache]? = nil
     ) {
+        let ids = Set(ProviderCatalog.definitions.map(\.id)
+            + self.customProviders.map(\.id) + customProviders.map(\.id))
+        let oldSettings = self.settings
+        let before = Dictionary(uniqueKeysWithValues: ids.map { ($0, try? descriptor(providerID: $0)) })
         self.settings = settings
         self.customProviders = CustomProviderValidator.sanitize(customProviders)
-        generation += 1
-        registrations.removeAll()
+        let changed = ids.filter { id in
+            (id == ProviderKind.openAICompatible.rawValue
+                && oldSettings[.openAICompatibleModel] != settings[.openAICompatibleModel])
+                || !Self.sameRoute(before[id] ?? nil, try? descriptor(providerID: id))
+        }
+        if !changed.isEmpty { generation += 1 }
+        for id in changed {
+            registrations.removeValue(forKey: id)
+            self.builtinCapabilities.removeValue(forKey: id)
+        }
+        if let builtinCapabilities { self.builtinCapabilities = builtinCapabilities }
+        self.builtinCapabilities = self.builtinCapabilities.filter { id, proof in
+            guard let current = try? descriptor(providerID: id) else { return false }
+            return proof.matches(current, configuredModel: configuredModel(for: id))
+        }
+    }
+
+    private static func sameRoute(_ old: ProviderDescriptor?, _ new: ProviderDescriptor?) -> Bool {
+        guard let old, let new else { return old == nil && new == nil }
+        return old.baseURL == new.baseURL && old.transport == new.transport
+            && old.jsonMode == new.jsonMode && old.imageDetail == new.imageDetail
+            && old.revision == new.revision
+            && old.openRouterSiteURL == new.openRouterSiteURL
+            && old.openRouterTitle == new.openRouterTitle
     }
 
     public func currentGeneration() -> Int { generation }
@@ -97,23 +127,75 @@ public actor ProviderRegistry {
         )
     }
 
+    private func configuredModel(for id: String) -> String? {
+        id == ProviderKind.openAICompatible.rawValue ? settings[.openAICompatibleModel] : nil
+    }
+
+    private func builtinProof(providerID: String) -> BuiltinProviderCapabilityCache? {
+        guard let proof = builtinCapabilities[providerID],
+              let current = try? descriptor(providerID: providerID),
+              proof.matches(current, configuredModel: configuredModel(for: providerID)) else { return nil }
+        return proof
+    }
+
+    /// Merge only the probed physical IDs; discovery is a separate projection
+    /// and cannot erase either successful or negative explicit probe results.
+    public func mergingBuiltinProbeResults(provider: ProviderDescriptor,
+        results: [ModelCapabilityProbeResult], generation expected: Int
+    ) -> BuiltinProviderCapabilityCache? {
+        guard expected == generation, provider.origin == .builtin,
+              let current = try? descriptor(providerID: provider.id),
+              Self.sameRoute(provider, current) else { return nil }
+        var proof = builtinProof(providerID: provider.id) ?? .init(
+            provider: current, configuredModel: configuredModel(for: provider.id))
+        for result in results { proof.results[result.model] = result }
+        return proof
+    }
+
+    public func restoreBuiltinCapabilities(_ proof: BuiltinProviderCapabilityCache, generation expected: Int) {
+        guard expected == generation, let current = try? descriptor(providerID: proof.provider.id),
+              proof.matches(current, configuredModel: configuredModel(for: proof.provider.id)) else { return }
+        builtinCapabilities[proof.provider.id] = proof
+    }
+
+    private func probedModel(_ result: ModelCapabilityProbeResult, provider: ProviderDescriptor) -> ResolvedModel {
+        let fixed = ProviderCatalog.resolveFixed(providerID: provider.id, modelID: result.model)
+        // Preserve the public catalog alias used by already-persisted tasks.
+        let publicID = provider.isLegacyCompatible ? provider.id + "/custom" : fixed?.publicID ?? result.model
+        return .init(publicID: publicID, apiID: result.model, providerID: provider.id,
+            label: fixed?.label ?? result.model, imageDetail: fixed?.imageDetail ?? provider.imageDetail,
+            jsonMode: result.jsonMode ?? provider.jsonMode, capabilityStatus: result.capabilityStatus,
+            revision: provider.revision)
+    }
+
     public func resolveModel(providerID: String, modelID: String) throws -> ResolvedModel {
-        if let fixed = ProviderCatalog.resolveFixed(providerID: providerID, modelID: modelID) { return fixed }
         let descriptor = try descriptor(providerID: providerID)
+        let apiID = ProviderCatalog.resolveFixed(providerID: providerID, modelID: modelID)?.apiID
+            ?? (descriptor.isLegacyCompatible && modelID == providerID + "/custom"
+                ? configuredModel(for: providerID) : nil) ?? modelID
+        if let result = builtinProof(providerID: providerID)?.results[apiID] {
+            guard result.capabilityStatus == .verified else { throw RecognitionFailure.unsupportedModel }
+            return probedModel(result, provider: descriptor)
+        }
         if let registration = registrations[providerID], registration.revision == descriptor.revision,
            let registered = registration.models[modelID], registered.isUsable { return registered }
+        if let fixed = ProviderCatalog.resolveFixed(providerID: providerID, modelID: modelID) { return fixed }
 
         if ProviderKind(id: providerID) == .openAICompatible {
-            let persisted = customProviders.first(where: { $0.id == providerID })?.manualModelIds.first
+            let materialized = customProviders.first(where: { $0.id == providerID })
+            let persisted = materialized?.manualModelIds.first
             let configured = settings[.openAICompatibleModel]?.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let apiID = persisted ?? configured, ProviderCatalog.isValidModelID(apiID) else {
                 throw RecognitionFailure.unsupportedModel
             }
+            let proof = materialized?.capabilityCache?[apiID]
+            let verified = proof?.revision == materialized?.revision && proof?.status == .verified
             return ResolvedModel(
                 publicID: ProviderKind.openAICompatible.rawValue + "/custom", apiID: apiID,
                 providerID: providerID, label: apiID,
-                imageDetail: descriptor.imageDetail, jsonMode: descriptor.jsonMode,
-                capabilityStatus: .declared, revision: descriptor.revision
+                imageDetail: descriptor.imageDetail, jsonMode: verified ? (proof?.jsonMode ?? descriptor.jsonMode) : descriptor.jsonMode,
+                capabilityStatus: verified ? .verified : .declared,
+                revision: descriptor.revision
             )
         }
 
@@ -125,7 +207,7 @@ public actor ProviderRegistry {
             return ResolvedModel(
                 publicID: modelID, apiID: modelID, providerID: providerID,
                 label: modelID, imageDetail: custom.imageDetail,
-                jsonMode: custom.jsonMode, capabilityStatus: .verified,
+                jsonMode: verification.jsonMode ?? custom.jsonMode, capabilityStatus: .verified,
                 revision: custom.revision
             )
         }
@@ -161,7 +243,7 @@ public actor ProviderRegistry {
             models = models.filter { $0.value.apiID != id }
             if verification.status == .verified {
                 models[id] = ResolvedModel(publicID: id, apiID: id, providerID: provider.id,
-                    label: id, imageDetail: provider.imageDetail, jsonMode: provider.jsonMode,
+                    label: id, imageDetail: provider.imageDetail, jsonMode: verification.jsonMode ?? provider.jsonMode,
                     capabilityStatus: .verified, revision: provider.revision)
             }
         }
@@ -170,8 +252,13 @@ public actor ProviderRegistry {
 
     public func invalidate(providerID: String? = nil) {
         generation += 1
-        if let providerID { registrations.removeValue(forKey: providerID) }
-        else { registrations.removeAll() }
+        if let providerID {
+            registrations.removeValue(forKey: providerID)
+            builtinCapabilities.removeValue(forKey: providerID)
+        } else {
+            registrations.removeAll()
+            builtinCapabilities.removeAll()
+        }
     }
 
     public func providerSummaries(credentialStatuses: [String: CredentialStatus]? = nil) async -> [ProviderSummary] {
@@ -198,7 +285,7 @@ public actor ProviderRegistry {
     }
 
     public func publicModels() -> [ModelData] {
-        var values = ProviderCatalog.models
+        var values = ProviderCatalog.definitions.flatMap { ProviderCatalog.fixedModels(providerID: $0.id) }
         for provider in customProviders {
             for modelID in provider.manualModelIds {
                 let verification = provider.capabilityCache?[modelID]
@@ -224,6 +311,19 @@ public actor ProviderRegistry {
                     description: "", providers: [model.providerID], imageDetail: model.imageDetail,
                     apiId: model.apiID, discovered: true, verifiedAvailable: model.isUsable,
                     capabilityStatus: model.capabilityStatus))
+            }
+        }
+        // Explicit probes override discovery, including a failed re-probe.
+        // Both aliases resolve to one physical model in the picker projection.
+        for id in builtinCapabilities.keys {
+            guard let proof = builtinProof(providerID: id) else { continue }
+            for result in proof.results.values {
+                let model = probedModel(result, provider: proof.provider)
+                values.removeAll { $0.providers.contains(id) && ($0.apiId ?? $0.id) == model.apiID }
+                values.append(ModelData(id: model.publicID, label: model.label, description: "",
+                    providers: [id], imageDetail: model.imageDetail, apiId: model.apiID,
+                    verifiedAvailable: result.capabilityStatus == .verified,
+                    capabilityStatus: result.capabilityStatus))
             }
         }
         // Physical API identity, not the compatibility alias, controls public

@@ -26,7 +26,9 @@ public enum CustomProviderValidator {
                 transport: request.transport ?? .chatCompletions,
                 jsonMode: request.jsonMode ?? .jsonSchema,
                 imageDetail: request.imageDetail ?? .high,
-                manualModelIds: request.manualModelIds ?? []
+                manualModelIds: request.manualModelIds ?? [],
+                notes: request.notes,
+                sourcePresetID: request.sourcePresetID
             )
         )
     }
@@ -49,7 +51,10 @@ public enum CustomProviderValidator {
             imageDetail: provider.imageDetail,
             manualModelIds: normalizeModelIDs(provider.manualModelIds),
             revision: revision,
-            capabilityCache: normalizeCapabilityCache(provider.capabilityCache, revision: revision)
+            capabilityCache: normalizeCapabilityCache(provider.capabilityCache, revision: revision),
+            // User-authored notes are display data and round-trip verbatim.
+            notes: provider.notes,
+            sourcePresetID: provider.sourcePresetID.map { truncateUTF16($0, maximumLength: 120) }
         )
     }
 
@@ -164,7 +169,8 @@ public enum CustomProviderValidator {
                 } ?? "probe",
                 message: entry.message.map {
                     truncateUTF16(StructuredLogRedactor.redactText($0), maximumLength: 500)
-                }
+                },
+                jsonMode: entry.jsonMode
             )
         }
         return result

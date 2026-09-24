@@ -4,6 +4,52 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ConfigurationStoreTests: XCTestCase {
+    func testProviderDisplayMetadataRoundTripsAndLegacySnapshotDefaultsToNil() async throws {
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = GlobalConfigStore(applicationSupportRoot: root)
+        let provider = CustomProviderConfiguration(
+            id: "openai-compatible:123e4567-e89b-42d3-a456-426614174000",
+            name: "Preset Gateway", baseUrl: "https://example.com/v1",
+            notes: "user note", sourcePresetID: "stepfun"
+        )
+        _ = try await store.save(values: [.defaultProviderID: provider.id,
+            .defaultModelID: "vision", .recognitionFailoverChain: "[]"],
+            customProviders: [provider])
+        let roundTrip = try await GlobalConfigStore(applicationSupportRoot: root).load()
+        XCTAssertEqual(roundTrip.customProviders[0].notes, "user note")
+        XCTAssertEqual(roundTrip.customProviders[0].sourcePresetID, "stepfun")
+        XCTAssertEqual(roundTrip.values[.defaultModelID], "vision")
+
+        // v2 records without the optional display fields decode unchanged.
+        let legacy = try JSONDecoder().decode(CustomProviderConfiguration.self, from:
+            Data(#"{"id":"openai-compatible:123e4567-e89b-42d3-a456-426614174000","name":"Old","baseUrl":"https://example.com/v1"}"#.utf8))
+        XCTAssertNil(legacy.notes)
+        XCTAssertNil(legacy.sourcePresetID)
+    }
+
+    func testBuiltinProofsSurviveUnrelatedWritesAndLegacySnapshotDecoding() async throws {
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = GlobalConfigStore(applicationSupportRoot: root)
+        let proof = BuiltinProviderCapabilityCache(provider: .init(id: "openrouter", label: "Router",
+            origin: .builtin, providerKind: .openRouter, baseURL: URL(string: "https://example.test/v1")!,
+            transport: .chatCompletions))
+        try await store.saveBuiltinCapabilities(proof)
+        _ = try await store.save(GlobalSettingsPatch([.maxBodyMB: "100"]))
+        _ = try await store.save(values: [.maxBodyMB: "120"])
+        _ = try await store.save(values: [:], customProviders: [])
+        let retained = try await GlobalConfigStore(applicationSupportRoot: root).load()
+        XCTAssertEqual(retained.builtinCapabilities["openrouter"], proof)
+        // Request-header edits invalidate persisted proofs even if no endpoint changes.
+        _ = try await store.save(GlobalSettingsPatch([.openRouterAppTitle: "New title"]))
+        let invalidated = try await store.load()
+        XCTAssertTrue(invalidated.builtinCapabilities.isEmpty)
+        let legacy = try JSONDecoder().decode(GlobalConfigSnapshot.self,
+            from: Data(#"{"version":2,"values":{},"customProviders":[]}"#.utf8))
+        XCTAssertTrue(legacy.builtinCapabilities.isEmpty)
+    }
+
     func testMachineSettingsRoundTripUsesIsolatedRootAndPrivateFile() async throws {
         let root = try makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

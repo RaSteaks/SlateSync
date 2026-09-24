@@ -5,14 +5,43 @@ import SlateSyncMedia
 public actor RecognitionLimiter {
     private var limit: Int
     private var active = Set<UUID>()
+    private var waiting: [(UUID, CheckedContinuation<Void, Error>)] = []
 
     public init(limit: Int = 1) { self.limit = min(16, max(1, limit)) }
     public func acquire(_ id: UUID) throws {
         guard active.count < limit else { throw RecognitionFailure.globalBusy }
         active.insert(id)
     }
-    public func release(_ id: UUID) { active.remove(id) }
-    public func setLimit(_ value: Int) { limit = min(16, max(1, value)) }
+    public func acquireQueued(_ id: UUID) async throws {
+        try Task.checkCancellation()
+        if active.count < limit { active.insert(id); return }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                waiting.append((id, continuation))
+                if Task.isCancelled { cancelWaiting(id) }
+            }
+        } onCancel: { Task { await self.cancelWaiting(id) } }
+    }
+    private func cancelWaiting(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
+        waiting.remove(at: index).1.resume(throwing: CancellationError())
+    }
+    public func release(_ id: UUID) {
+        cancelWaiting(id)
+        guard active.remove(id) != nil else { return }
+        dispatchWaiting()
+    }
+    private func dispatchWaiting() {
+        while active.count < limit, !waiting.isEmpty {
+            let (next, continuation) = waiting.removeFirst()
+            active.insert(next)
+            continuation.resume()
+        }
+    }
+    public func setLimit(_ value: Int) {
+        limit = min(16, max(1, value))
+        dispatchWaiting()
+    }
     public func activeCount() -> Int { active.count }
 }
 
@@ -33,6 +62,8 @@ public actor RecognitionCoordinator: RecognitionServing {
     private let limiter: RecognitionLimiter
     private let settings: GlobalSettingValues
     private let clock: any ProviderClock
+    private let failoverState = RecognitionFailoverState()
+    private let recoveryCache = RecognitionRecoveryCache()
     private var observers: [String: [UUID: AsyncStream<RecognitionProgress>.Continuation]] = [:]
     private var operations: [UUID: ActiveOperation] = [:]
     private var lastPercent: [UUID: Int] = [:]
@@ -82,21 +113,26 @@ public actor RecognitionCoordinator: RecognitionServing {
             throw SlateSyncError(code: "RECOGNITION_CONFIGURATION", message: "识别运行时尚未配置", status: 500)
         }
         let id = UUID()
-        try await limiter.acquire(id)
         let scenarioPersistence = scenarioPersistence, persistence = persistence
         let settings = settings, clock = clock
+        let failoverState = failoverState, recoveryCache = recoveryCache, limiter = limiter
         let coordinator = self
         let task = Task<RecognitionData, Error> {
             do {
+                try await limiter.acquireQueued(id)
                 let result = try await Self.perform(
                     request: request, operationID: id, registry: registry,
                     pipeline: pipeline, media: mediaFactory(),
                     scenarioPersistence: scenarioPersistence, persistence: persistence,
-                    settings: settings, clock: clock,
+                    settings: settings, clock: clock, failoverState: failoverState,
+                    recoveryCache: recoveryCache,
                     publish: { event in await coordinator.publish(operationID: id, projectID: request.projectID, event: event) }
                 )
                 await coordinator.finishOperation(id)
                 return result
+            } catch is CancellationError {
+                await coordinator.finishOperation(id)
+                throw RecognitionFailure.canceled
             } catch {
                 await coordinator.finishOperation(id)
                 throw error
@@ -122,11 +158,12 @@ public actor RecognitionCoordinator: RecognitionServing {
     public func close() async {
         if let closeTask { await closeTask.value; return }
         closed = true
-        let tasks = operations.values.map(\.task), client = client
+        let tasks = operations.values.map(\.task), client = client, recoveryCache = recoveryCache
         let task = Task {
             tasks.forEach { $0.cancel() }
             for value in tasks { _ = try? await value.value }
             if let client { await client.close() }
+            await recoveryCache.clearAll()
         }
         closeTask = task
         await task.value
@@ -152,6 +189,7 @@ public actor RecognitionCoordinator: RecognitionServing {
     private func finishOperation(_ id: UUID) async {
         operations.removeValue(forKey: id); lastPercent.removeValue(forKey: id)
         await limiter.release(id)
+        if operations.isEmpty { await failoverState.reset() }
     }
 
     private func removeObserver(projectID: String, id: UUID) {
@@ -169,6 +207,8 @@ public actor RecognitionCoordinator: RecognitionServing {
         persistence: (any RecognitionPersistence)?,
         settings globalSettings: GlobalSettingValues,
         clock: any ProviderClock,
+        failoverState: RecognitionFailoverState,
+        recoveryCache: RecognitionRecoveryCache,
         publish: @escaping @Sendable (RecognitionProgress) async -> Void
     ) async throws -> RecognitionData {
         let started = clock.nowMilliseconds()
@@ -178,10 +218,22 @@ public actor RecognitionCoordinator: RecognitionServing {
             let project = try await persistence?.recognitionProject(projectID: request.projectID)
             try Task.checkCancellation()
             let projectSettings = request.settings ?? project?.settings ?? .init()
-            guard let providerID = nonempty(request.providerID) ?? nonempty(projectSettings.providerId),
-                  let modelID = nonempty(request.modelID) ?? nonempty(projectSettings.modelId) else { throw RecognitionFailure.providerNotConfigured }
+            let selected = try RecognitionRouteResolver.resolve(
+                request: try pair(request.providerID, request.modelID),
+                project: try pair(projectSettings.providerId, projectSettings.modelId),
+                global: globalSettings
+            )
+            let providerID = selected.providerID, modelID = selected.modelID
             let provider = try await registry.descriptor(providerID: providerID)
             let model = try await registry.resolveModel(providerID: providerID, modelID: modelID)
+            let backups = try ProviderModelSelection.decodeAndValidateChain(
+                nonempty(globalSettings[.recognitionFailoverChain]) ?? "[]"
+            )
+            if (!backups.isEmpty || nonempty(globalSettings[.defaultProviderID]) != nil),
+               model.capabilityStatus != .verified {
+                throw SlateSyncError(code: "MODEL_NOT_VERIFIED", message: "所选模型尚未在当前配置下验证", status: 400)
+            }
+            let candidates = FailoverChain.plan(primary: selected, chain: backups)
             let accuracy = projectSettings.accuracyMode
             let basePrompt = RecognitionPrompts.compose(base: RecognitionPrompts.system, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments)
             let measure: @Sendable (PreparedDocument) throws -> Int = { document in
@@ -228,7 +280,10 @@ public actor RecognitionCoordinator: RecognitionServing {
                 pageConcurrency: RecognitionRuntimeOptions.pageConcurrency(globalSettings[.modelPageConcurrency]),
                 timeoutMilliseconds: RecognitionRuntimeOptions.timeoutMilliseconds(globalSettings[.modelRequestTimeoutMS]),
                 maximumTimeoutRetries: RecognitionRuntimeOptions.maximumTimeoutRetries(globalSettings[.modelRequestMaxRetries]),
-                filename: request.filename, progress: { event in Task { await publish(event) } }
+                filename: request.filename, progress: { event in Task { await publish(event) } },
+                candidates: candidates, registry: registry, failoverState: failoverState,
+                recoveryCache: recoveryCache,
+                recoveryID: request.taskID.map { "\(request.projectID):\($0)" }
             )
             await media.close()
             try Task.checkCancellation()
@@ -304,6 +359,13 @@ public actor RecognitionCoordinator: RecognitionServing {
 
     private nonisolated static func nonempty(_ value: String?) -> String? {
         guard let value else { return nil }; let text = value.trimmingCharacters(in: .whitespacesAndNewlines); return text.isEmpty ? nil : text
+    }
+
+    private nonisolated static func pair(_ provider: String?, _ model: String?) throws -> ProviderModelSelection? {
+        let provider = nonempty(provider), model = nonempty(model)
+        if provider == nil, model == nil { return nil }
+        guard let provider, let model else { throw RecognitionFailure.providerNotConfigured }
+        return .init(providerID: provider, modelID: model)
     }
 }
 
