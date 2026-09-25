@@ -820,7 +820,8 @@ private struct BuiltinProviderConfigurationSheet: View {
             }
             Button(L10n.tr("取消"), role: .cancel) {}
         } message: {
-            Text(L10n.tr("删除后不会修改 Base URL 或模型配置；之后需要重新输入 API Key 才能连接。"))
+            // Local removal cannot revoke the credential at its issuing provider.
+            Text(L10n.tr("只删除本机保存的 API Key，不会在服务商平台注销。Base URL 和模型配置保持不变；再次连接需重新输入 API Key。"))
         }
     }
 
