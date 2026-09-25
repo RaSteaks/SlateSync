@@ -55,10 +55,10 @@ struct SlateSyncApp: App {
         }
         preferences = isolated ? (isolatedPreferences ?? .standard) : .standard
         L10n.configure(preferences: preferences)
+        // File credentials inherit the isolated root; no Provider Keychain adapter is needed.
         let runtime = SlateSyncRuntime(
             locator: locator,
-            environment: isolated ? [:] : ProcessInfo.processInfo.environment,
-            keychainBackend: isolated ? IsolatedAppKeychain() : nil
+            environment: isolated ? [:] : ProcessInfo.processInfo.environment
         )
         let library = ProjectLibraryStartupService(
             locator: locator,
@@ -134,33 +134,6 @@ struct SlateSyncApp: App {
         // Settings keeps a readable default while permitting longer forms.
         .defaultSize(width: 780, height: 620)
         .windowResizability(.contentMinSize)
-    }
-}
-
-/// Ephemeral credentials for explicitly isolated launches. This backend never
-/// calls Security.framework or writes secret bytes to the fixture directory.
-private actor IsolatedAppKeychain: KeychainBackend {
-    private struct Item { let data: Data; let ownership: Data }
-    private var items: [String: [String: Item]] = [:]
-    // Mirror production metadata queries without reading any credential bytes.
-    func status(service: String, account: String) -> CredentialStatus {
-        items[service]?[account] == nil ? .missing : .configured
-    }
-    func read(service: String, account: String) -> Data? { items[service]?[account]?.data }
-    func write(_ data: Data, service: String, account: String) {
-        items[service, default: [:]][account] = Item(data: data, ownership: Data(UUID().uuidString.utf8))
-    }
-    func createIfAbsent(_ data: Data, service: String, account: String) -> KeychainCreateResult {
-        guard items[service]?[account] == nil else { return .alreadyExists }
-        write(data, service: service, account: account)
-        return .created(ownership: items[service]![account]!.ownership)
-    }
-    func delete(service: String, account: String) { items[service]?[account] = nil }
-    func deleteIfMatching(_ expected: Data, service: String, account: String, ownership: Data?) -> KeychainConditionalDeleteResult {
-        guard let item = items[service]?[account] else { return .notFound }
-        guard item.data == expected, ownership == nil || ownership == item.ownership else { return .valueChanged }
-        delete(service: service, account: account)
-        return .removed
     }
 }
 

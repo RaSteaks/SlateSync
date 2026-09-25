@@ -78,16 +78,16 @@
     "id": "providers",
     "title": "Provider 配置",
     "symbol": "key.horizontal",
-    "body": "Provider 配置页同时说明服务用途、官方入口、Base URL、API Key、模型发现和视觉能力。普通配置与密钥分别由现有全局设置和 macOS 钥匙串保存；密钥不会回填显示。",
+    "body": "Provider 配置页同时说明服务用途、官方入口、Base URL、API Key、模型发现和视觉能力。普通配置与密钥分别由现有全局设置和本地 AES-256-GCM 加密文件保存；密钥不会回填显示。",
     "englishTitle": "Provider configuration",
-    "englishBody": "Provider configuration explains the service, official links, Base URL, API Key, model discovery, and vision capability. Ordinary settings use the existing global store and keys use macOS Keychain; saved secrets are never filled back into the UI.",
+    "englishBody": "Provider configuration explains the service, official links, Base URL, API Key, model discovery, and vision capability. Ordinary settings use the existing global store and keys use local AES-256-GCM encrypted files; saved secrets are never filled back into the UI.",
     "paragraphs": [
-      "Provider 配置页同时说明服务用途、官方入口、Base URL、API Key、模型发现和视觉能力。普通配置与密钥分别由现有全局设置和 macOS 钥匙串保存；密钥不会回填显示。",
-      "API Key 输入框留空表示保留当前密钥。删除密钥是独立操作并需要确认；如果钥匙串授权被取消或读取失败，页面会保留相应状态，而不是显示成“未配置”。"
+      "Provider 配置页同时说明服务用途、官方入口、Base URL、API Key、模型发现和视觉能力。普通配置与密钥分别由现有全局设置和本地 AES-256-GCM 加密文件保存；密钥不会回填显示。",
+      "API Key 输入框留空表示保留当前密钥。删除密钥是独立操作并需要确认；如果本地凭据文件读取失败，页面会保留相应状态，而不是显示成“未配置”。"
     ],
     "englishParagraphs": [
-      "Provider configuration explains the service, official links, Base URL, API Key, model discovery, and vision capability. Ordinary settings use the existing global store and keys use macOS Keychain; saved secrets are never filled back into the UI.",
-      "Leaving the API Key field blank preserves the current key. Deleting a key is a separate confirmed action. If Keychain authorization is canceled or reading fails, the page keeps that state instead of calling it missing."
+      "Provider configuration explains the service, official links, Base URL, API Key, model discovery, and vision capability. Ordinary settings use the existing global store and keys use local AES-256-GCM encrypted files; saved secrets are never filled back into the UI.",
+      "Leaving the API Key field blank preserves the current key. Deleting a key is a separate confirmed action. If reading the local credential file fails, the page keeps that state instead of calling it missing."
     ],
     "steps": [
       { "id": "provider-service", "title": "先看服务说明", "detail": "通过官网、密钥获取入口和官方文档确认账号权限与服务范围。", "englishTitle": "Read the service information", "englishDetail": "Use the website, key creation entry point, and official documentation to confirm account access and service scope." },

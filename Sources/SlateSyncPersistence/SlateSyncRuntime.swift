@@ -1,43 +1,6 @@
 import Foundation
 import SlateSyncDomain
 
-public enum SlateSyncRuntimeMigrationStatus: String, Codable, Hashable, Sendable {
-    case notRun
-    case awaitingAuthorization
-    case sourceMissing
-    case noCredentials
-    case migrated
-    case failed
-}
-
-/// Secret-free migration state suitable for SwiftUI and diagnostics. The
-/// source path is useful for remediation, while credential bytes never enter
-/// this snapshot.
-public struct SlateSyncRuntimeMigrationState: Codable, Hashable, Sendable {
-    public let status: SlateSyncRuntimeMigrationStatus
-    public let sourceURL: URL
-    public let verifiedProviderIDs: [String]
-    public let writtenProviderIDs: [String]
-    public let errorCode: String?
-    public let errorMessage: String?
-
-    public init(
-        status: SlateSyncRuntimeMigrationStatus,
-        sourceURL: URL,
-        verifiedProviderIDs: [String] = [],
-        writtenProviderIDs: [String] = [],
-        errorCode: String? = nil,
-        errorMessage: String? = nil
-    ) {
-        self.status = status
-        self.sourceURL = sourceURL
-        self.verifiedProviderIDs = verifiedProviderIDs
-        self.writtenProviderIDs = writtenProviderIDs
-        self.errorCode = errorCode
-        self.errorMessage = errorMessage
-    }
-}
-
 public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
     public let isBootstrapped: Bool
     public let configuration: ResolvedConfiguration
@@ -48,7 +11,6 @@ public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
     /// provider created at startup and deliberately ignores later setting
     /// changes until the process restarts.
     public let workflowConfigPath: String
-    public let migration: SlateSyncRuntimeMigrationState
     public let lastError: SlateSyncError?
 
     public init(
@@ -58,7 +20,6 @@ public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
         globalConfigVersion: Int,
         environmentFileLoaded: Bool,
         workflowConfigPath: String = "",
-        migration: SlateSyncRuntimeMigrationState,
         lastError: SlateSyncError? = nil
     ) {
         self.isBootstrapped = isBootstrapped
@@ -67,24 +28,22 @@ public struct SlateSyncRuntimeSnapshot: Codable, Hashable, Sendable {
         self.globalConfigVersion = globalConfigVersion
         self.environmentFileLoaded = environmentFileLoaded
         self.workflowConfigPath = workflowConfigPath
-        self.migration = migration
         self.lastError = lastError
     }
 }
 
 /// Native startup composition root for machine settings, global overrides,
-/// environment fallback, and legacy provider-key migration. The actor keeps
+/// environment fallback, and encrypted-file Provider credentials. The actor keeps
 /// the snapshot mutation single-writer while the injected stores remain
 /// independently testable.
 public actor SlateSyncRuntime: SettingsServing {
     public nonisolated let locator: ApplicationSupportLocator
     public nonisolated let machineSettingsStore: MachineSettingsStore
     public nonisolated let globalConfigStore: GlobalConfigStore
-    public nonisolated let keychainStore: KeychainCredentialStore
+    public nonisolated let credentialStore: EncryptedFileCredentialStore
 
     private let processEnvironment: [String: String]
     private let environmentFileURL: URL
-    private let legacyCredentialURL: URL
     private let workflowConfigEnvironment: WorkflowConfigPathEnvironment
     private let logger: SlateSyncLogger
     private var snapshot: SlateSyncRuntimeSnapshot
@@ -97,14 +56,12 @@ public actor SlateSyncRuntime: SettingsServing {
         locator: ApplicationSupportLocator,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
-        keychainBackend: (any KeychainBackend)? = nil,
         loggerCategory: String = "runtime",
         workflowConfigEnvironment: WorkflowConfigPathEnvironment = .live()
     ) {
         self.locator = locator
         processEnvironment = environment
         environmentFileURL = locator.url.appending(path: ".env")
-        legacyCredentialURL = locator.url.appending(path: "provider-keys.json")
         self.workflowConfigEnvironment = workflowConfigEnvironment
         logger = SlateSyncLogger(category: loggerCategory)
         let machineSettingsStore = MachineSettingsStore(locator: locator, writer: writer)
@@ -114,24 +71,11 @@ public actor SlateSyncRuntime: SettingsServing {
             fileURL: ConfigPathResolver.globalConfigFileURL(applicationSupportRoot: locator.url),
             writer: writer
         )
-        let backend = keychainBackend ?? SecurityKeychainBackend(
-            coordinationDirectory: locator.url.appending(
-                path: ".locks",
-                directoryHint: .isDirectory
-            )
-        )
-        let keychainStore = KeychainCredentialStore(
-            backend: backend,
-            service: KeychainCredentialStore.service
-        )
+        // Provider secrets use files; project encryption owns its separate Keychain backend.
         self.machineSettingsStore = machineSettingsStore
         self.globalConfigStore = globalConfigStore
-        self.keychainStore = keychainStore
+        self.credentialStore = EncryptedFileCredentialStore(locator: locator, writer: writer)
 
-        let migration = SlateSyncRuntimeMigrationState(
-            status: .notRun,
-            sourceURL: legacyCredentialURL
-        )
         self.snapshot = SlateSyncRuntimeSnapshot(
             isBootstrapped: false,
             configuration: ConfigurationResolver.resolveAll(
@@ -140,21 +84,18 @@ public actor SlateSyncRuntime: SettingsServing {
             machineSettings: MachineSettings(),
             globalConfigVersion: GlobalConfigStore.currentVersion,
             environmentFileLoaded: false,
-            migration: migration
         )
     }
 
     public init(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         writer: any AtomicFileWriting = FileManagerAtomicFileWriter(),
-        keychainBackend: (any KeychainBackend)? = nil,
         loggerCategory: String = "runtime"
     ) throws {
         try self.init(
             locator: ApplicationSupportLocator(environment: environment),
             environment: environment,
             writer: writer,
-            keychainBackend: keychainBackend,
             loggerCategory: loggerCategory
         )
     }
@@ -164,13 +105,10 @@ public actor SlateSyncRuntime: SettingsServing {
     }
 
     /// Bootstrap is deliberately non-throwing: an unreadable non-secret store
-    /// falls back to defaults, and a failed legacy secret migration is retained
-    /// as a retryable status so the App can still open.
+    /// falls back to defaults so the App can still open. No legacy secrets are imported.
     @discardableResult
-    public func bootstrap(
-        retryFailedMigration: Bool = false
-    ) async -> SlateSyncRuntimeSnapshot {
-        if snapshot.isBootstrapped && !retryFailedMigration {
+    public func bootstrap() async -> SlateSyncRuntimeSnapshot {
+        if snapshot.isBootstrapped {
             return snapshot
         }
 
@@ -198,16 +136,8 @@ public actor SlateSyncRuntime: SettingsServing {
             effectiveWorkflowConfigPath = workflowConfigURL.standardizedFileURL.path
         }
 
-        var migration = snapshot.migration
-        if !snapshot.isBootstrapped || retryFailedMigration || migration.status == .notRun {
-            // Legacy import can read existing secrets to compare values. Defer
-            // it to the explicit settings action instead of prompting at launch.
-            if !retryFailedMigration && FileManager.default.fileExists(atPath: legacyCredentialURL.path) {
-                migration = SlateSyncRuntimeMigrationState(status: .awaitingAuthorization, sourceURL: legacyCredentialURL)
-            } else {
-                migration = await migrateLegacyCredentials()
-            }
-        }
+        // Existing secrets are deliberately not imported. Users re-enter keys
+        // in the encrypted-file store, without triggering legacy authorization.
 
         snapshot = SlateSyncRuntimeSnapshot(
             isBootstrapped: true,
@@ -216,7 +146,6 @@ public actor SlateSyncRuntime: SettingsServing {
             globalConfigVersion: globalSnapshot.version,
             environmentFileLoaded: environment.loaded,
             workflowConfigPath: effectiveWorkflowConfigPath,
-            migration: migration,
             lastError: environment.error
         )
         logger.info(
@@ -225,19 +154,13 @@ public actor SlateSyncRuntime: SettingsServing {
                 "globalConfigVersion": .number(Double(globalSnapshot.version)),
                 "resolvedSettingCount": .number(Double(resolvedConfiguration.values.values.count)),
                 "environmentFileLoaded": .boolean(environment.loaded),
-                "migrationStatus": .string(migration.status.rawValue),
             ]
         )
         return snapshot
     }
 
-    public func retryLegacyMigration() async -> SlateSyncRuntimeSnapshot {
-        await bootstrap(retryFailedMigration: true)
-    }
-
     /// Re-resolves non-secret configuration after the Settings façade commits
-    /// an atomic GlobalConfigStore snapshot. Credential migration state is
-    /// retained and never rerun merely because a preference changed.
+    /// an atomic GlobalConfigStore snapshot; no credential import is performed.
     public func refreshConfiguration() async -> SlateSyncRuntimeSnapshot {
         snapshot = SlateSyncRuntimeSnapshot(
             isBootstrapped: false,
@@ -246,7 +169,6 @@ public actor SlateSyncRuntime: SettingsServing {
             globalConfigVersion: snapshot.globalConfigVersion,
             environmentFileLoaded: snapshot.environmentFileLoaded,
             workflowConfigPath: snapshot.workflowConfigPath,
-            migration: snapshot.migration,
             lastError: snapshot.lastError
         )
         return await bootstrap()
@@ -308,17 +230,16 @@ public actor SlateSyncRuntime: SettingsServing {
             globalConfigVersion: globalSnapshot.version,
             environmentFileLoaded: environment.loaded,
             workflowConfigPath: snapshot.workflowConfigPath,
-            migration: snapshot.migration,
             lastError: environment.error
         )
     }
 
     public func providerKey(for providerID: String) async throws -> String? {
-        try await keychainStore.value(providerID: providerID)
+        try await credentialStore.value(providerID: providerID)
     }
 
     public func setProviderKey(_ value: String?, for providerID: String) async throws {
-        try await keychainStore.setValue(value, providerID: providerID)
+        try await credentialStore.setValue(value, providerID: providerID)
     }
 
     private func loadEnvironment() -> EnvironmentLoad {
@@ -341,66 +262,10 @@ public actor SlateSyncRuntime: SettingsServing {
         }
     }
 
-    private func migrateLegacyCredentials() async -> SlateSyncRuntimeMigrationState {
-        do {
-            let report = try await keychainStore.migrateLegacyCredentials(at: legacyCredentialURL)
-            return SlateSyncRuntimeMigrationState(
-                status: SlateSyncRuntimeMigrationStatus(report.status),
-                sourceURL: report.sourceURL,
-                verifiedProviderIDs: report.verifiedProviderIDs,
-                writtenProviderIDs: report.writtenProviderIDs
-            )
-        } catch is CancellationError {
-            return SlateSyncRuntimeMigrationState(
-                status: .failed,
-                sourceURL: legacyCredentialURL,
-                errorCode: "CANCELLED",
-                errorMessage: "旧凭据迁移已取消，源文件已保留"
-            )
-        } catch let error as SlateSyncError {
-            logger.warning(
-                "legacy credential migration failed",
-                metadata: [
-                    "path": .string(legacyCredentialURL.path),
-                    "errorCode": .string(error.code),
-                ]
-            )
-            return SlateSyncRuntimeMigrationState(
-                status: .failed,
-                sourceURL: legacyCredentialURL,
-                errorCode: error.code,
-                errorMessage: "旧凭据迁移失败，源文件已保留，可重试"
-            )
-        } catch {
-            logger.warning(
-                "legacy credential migration failed",
-                metadata: [
-                    "path": .string(legacyCredentialURL.path),
-                    "errorCode": .string("KEYCHAIN_MIGRATION_FAILED"),
-                ]
-            )
-            return SlateSyncRuntimeMigrationState(
-                status: .failed,
-                sourceURL: legacyCredentialURL,
-                errorCode: "KEYCHAIN_MIGRATION_FAILED",
-                errorMessage: "旧凭据迁移失败，源文件已保留，可重试"
-            )
-        }
-    }
 
     private struct EnvironmentLoad {
         let values: [String: String]
         let loaded: Bool
         let error: SlateSyncError?
-    }
-}
-
-private extension SlateSyncRuntimeMigrationStatus {
-    init(_ status: CredentialMigrationStatus) {
-        switch status {
-        case .sourceMissing: self = .sourceMissing
-        case .noCredentials: self = .noCredentials
-        case .migrated: self = .migrated
-        }
     }
 }

@@ -170,7 +170,7 @@ private struct RecognitionSettingsFake: GlobalSettingsWorkflowServing {
         configuredCredentialProviderIDs: [],
         visionAvailable: true,
         paddleAvailable: false,
-        runtime: .init(resolvedSettingCount: 0, globalConfigVersion: 1, environmentFileLoaded: false, migrationStatus: .sourceMissing)
+        runtime: .init(resolvedSettingCount: 0, globalConfigVersion: 1, environmentFileLoaded: false)
     )
 
     private static let model = ModelData(
@@ -181,7 +181,8 @@ private struct RecognitionSettingsFake: GlobalSettingsWorkflowServing {
     func globalSettings() async throws -> GlobalSettingsProjection { Self.projection }
     func saveGlobalSettings(values: GlobalSettingValues, customProviders: [CustomProviderConfiguration]) async throws -> GlobalSettingsProjection { Self.projection }
     func setProviderCredential(_ value: String?, providerID: String) async throws {}
-    func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection { Self.projection }
+
+
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult {
         throw SlateSyncError(code: "TEST_UNREACHABLE", message: "not part of this fixture", status: 500)
     }

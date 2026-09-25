@@ -364,12 +364,12 @@ public struct CapabilityChip: View {
     }
 }
 
-/// Four credential states for Provider rows. 取消授权 must surface as
+/// Credential states for Provider rows distinguish temporary contention. 取消授权 must surface as
 /// 需要授权 or 读取失败 — never silently as 缺失 (DESIGN.md 2026-09-11 rule).
 /// Color is never the only signal; each state pairs a symbol.
 public struct CredentialChip: View {
     public enum State: Equatable, Sendable {
-        case configured, missing, needsAuthorization, readFailed
+        case configured, missing, needsAuthorization, readFailed, temporarilyUnavailable
     }
 
     let state: State
@@ -384,6 +384,7 @@ public struct CredentialChip: View {
         case .missing: L10n.tr("缺失")
         case .needsAuthorization: L10n.tr("需要授权")
         case .readFailed: L10n.tr("读取失败")
+        case .temporarilyUnavailable: L10n.tr("暂时不可用")
         }
     }
 
@@ -393,6 +394,7 @@ public struct CredentialChip: View {
         case .missing: "minus.circle"
         case .needsAuthorization: "lock.open"
         case .readFailed: "exclamationmark.triangle"
+        case .temporarilyUnavailable: "clock"
         }
     }
 
@@ -402,6 +404,7 @@ public struct CredentialChip: View {
         case .missing: SlateSyncTheme.secondary
         case .needsAuthorization: SlateSyncTheme.warning
         case .readFailed: SlateSyncTheme.danger
+        case .temporarilyUnavailable: SlateSyncTheme.warning
         }
     }
 
@@ -411,6 +414,7 @@ public struct CredentialChip: View {
         case .missing: .info
         case .needsAuthorization: .warning
         case .readFailed: .error
+        case .temporarilyUnavailable: .warning
         }
     }
 

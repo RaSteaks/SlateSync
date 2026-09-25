@@ -9,7 +9,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="SlateSync 隐私政策：本地优先的数据处理、AES-256-GCM 本地加密、钥匙串保管的 API Key，以及识别时发送给你自己配置的模型服务的内容范围。">
+<meta name="description" content="SlateSync 隐私政策：本地优先的数据处理、AES-256-GCM 本地加密、本地加密的 API Key，以及识别时发送给你自己配置的模型服务的内容范围。">
 <title>SlateSync 隐私政策 · Privacy Policy</title>
 <style>
   /* ===== 设计令牌：来源 DESIGN.md / SlateSyncTheme（冷灰 + 钨丝琥珀，2026-09-16 版）===== */
@@ -305,7 +305,7 @@
     <div class="flow-stay">
       <b><span class="lang-zh">始终留在本机：</span><span class="lang-en">Always on your Mac:</span></b>
       <span><span class="lang-zh">项目库（AES-256-GCM 加密）</span><span class="lang-en">Project Library (AES-256-GCM)</span></span>
-      <span><span class="lang-zh">API Key（登录钥匙串）</span><span class="lang-en">API keys (login keychain)</span></span>
+      <span><span class="lang-zh">API Key（本地加密文件）</span><span class="lang-en">API keys (local encrypted file)</span></span>
       <span><span class="lang-zh">运行日志（7 天 · 脱敏）</span><span class="lang-en">Run logs (7 days · redacted)</span></span>
       <span><span class="lang-zh">全局设置</span><span class="lang-en">Global settings</span></span>
     </div>
@@ -394,8 +394,8 @@
   <section id="keys">
     <h2><span class="clause">7</span><span class="lang-zh">API Key</span><span class="lang-en">API keys</span></h2>
     <div class="clause-body">
-      <p><span class="lang-zh">服务商 API Key 保存在本机 macOS 钥匙串中，只有原生应用的数据服务可以读取；UI 不直接访问凭据。Key 不会写入项目包、项目库导出、日志或 Git 仓库，也不会回填显示在设置界面。</span>
-         <span class="lang-en">Provider API keys are stored in the local macOS keychain, readable only by the native data service; the UI never touches credentials directly. Keys are never written into project packages, library exports, logs or Git, and never echoed back into the settings UI.</span></p>
+      <p><span class="lang-zh">服务商 API Key 使用 AES-256-GCM 加密保存在本机，随机主密钥保存在独立文件，均仅当前用户可读写。同时取得两文件的人仍可解密；不提供钥匙串的应用访问隔离。UI 不读取已保存凭据。Key 不会写入项目包、项目库导出、日志或 Git 仓库，也不会回填显示在设置界面。</span>
+         <span class="lang-en">Provider API keys are stored locally with AES-256-GCM encryption and a separate random master-key file, both restricted to the current user. Anyone with both files can decrypt the keys; this does not provide Keychain application isolation. The UI never reads saved credentials. Keys are never written into project packages, library exports, logs or Git, and never echoed back into the settings UI.</span></p>
     </div>
   </section>
 

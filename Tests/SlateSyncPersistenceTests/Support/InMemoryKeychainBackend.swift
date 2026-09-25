@@ -6,6 +6,9 @@ import SlateSyncDomain
 /// the test target prevents production code from accidentally selecting an
 /// in-memory credential store.
 actor InMemoryKeychainBackend: KeychainBackend {
+    // Historical namespace is test data only; production no longer reads it.
+    static let service = "com.slatesync.app.provider-key"
+
     var failNextRead = false
     var failNextReadAfterWrite = false
     var failNextWrite = false
@@ -20,7 +23,7 @@ actor InMemoryKeychainBackend: KeychainBackend {
     init(values: [String: String] = [:]) {
         self.values = Dictionary(uniqueKeysWithValues: values.map {
             (
-                "\(KeychainCredentialStore.service)\u{1F}\($0.key)",
+                "\(InMemoryKeychainBackend.service)\u{1F}\($0.key)",
                 StoredValue(data: Data($0.value.utf8), ownership: nil)
             )
         })
@@ -135,12 +138,12 @@ actor InMemoryKeychainBackend: KeychainBackend {
         cancelNextReadAfterWrite = true
     }
 
-    func value(service: String = KeychainCredentialStore.service, account: String) -> String? {
+    func value(service: String = InMemoryKeychainBackend.service, account: String) -> String? {
         guard let data = values[key(service: service, account: account)]?.data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
-    func storedValues(service: String = KeychainCredentialStore.service) -> [String: String] {
+    func storedValues(service: String = InMemoryKeychainBackend.service) -> [String: String] {
         values.reduce(into: [:]) { result, entry in
             guard entry.key.hasPrefix("\(service)\u{1F}"),
                   let value = String(data: entry.value.data, encoding: .utf8) else { return }

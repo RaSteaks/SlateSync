@@ -81,7 +81,7 @@ public actor SlateSyncWorkflowFacade:
         self.paddleInstaller = paddleInstaller
         self.allowsExternalOperations = allowsExternalOperations
         self.providerTransportFactory = providerTransportFactory ?? {
-            URLSessionProviderTransport(credentials: runtime.keychainStore)
+            URLSessionProviderTransport(credentials: runtime.credentialStore)
         }
     }
 
@@ -256,7 +256,6 @@ public actor SlateSyncWorkflowFacade:
         // the row-only probe avoids loading its potentially large media payload.
         let taskID = try NativeRecognitionPersistence.requireTaskID(request.taskID)
         try await library.projectRuntime().requireTaskExists(projectID: request.projectID, taskID: taskID)
-        await runtime.keychainStore.beginUserOperation(providerID: request.providerID)
         let cancellationTicket = recognitionCancellations.ticket(for: request.projectID)
         try recognitionCancellations.requirePermit(cancellationTicket, for: request.projectID)
         let coordinator = try await recognitionCoordinator()
@@ -326,11 +325,10 @@ public actor SlateSyncWorkflowFacade:
         let runtimeSnapshot = await runtime.bootstrap()
         let config = try await runtime.globalConfigStore.load()
         let registry = try await modelRegistry()
-        // Query attributes once, never secrets, while building settings state.
-        var credentialStatuses: [String: CredentialStatus] = [:]
-        for id in Set(ProviderCatalog.definitions.map(\.id) + config.customProviders.map(\.id)) {
-            credentialStatuses[id] = await runtime.keychainStore.status(providerID: id)
-        }
+        // Publish only availability; decrypted file contents never enter UI projections.
+        let credentialStatuses = try await runtime.credentialStore.statuses(
+            for: Array(Set(ProviderCatalog.definitions.map(\.id) + config.customProviders.map(\.id)))
+        )
         let providers = await registry.providerSummaries(credentialStatuses: credentialStatuses)
         let credentialIDs = Set(credentialStatuses.filter { $0.value == .configured }.map(\.key))
         let vision = VisionOCRService(configuration: VisionOCRConfiguration(runtimeSnapshot.configuration.values))
@@ -350,8 +348,6 @@ public actor SlateSyncWorkflowFacade:
                 resolvedSettingCount: runtimeSnapshot.configuration.values.values.count,
                 globalConfigVersion: runtimeSnapshot.globalConfigVersion,
                 environmentFileLoaded: runtimeSnapshot.environmentFileLoaded,
-                migrationStatus: Self.migrationStatus(runtimeSnapshot.migration.status),
-                migrationErrorMessage: runtimeSnapshot.migration.errorMessage.map(Self.redactedMessage),
                 workflowConfigPath: runtimeSnapshot.workflowConfigPath.isEmpty
                     ? nil
                     : runtimeSnapshot.workflowConfigPath
@@ -415,24 +411,52 @@ public actor SlateSyncWorkflowFacade:
         }
         try await runtime.globalConfigStore.invalidateBuiltinCapabilities(providerID: providerID)
         await sharedRegistry?.invalidate(providerID: providerID)
-        // Invalidate durable proofs before a Keychain write. A denied or
-        // interrupted Keychain operation may cost a re-probe but cannot leave
+        // Invalidate durable proofs before an encrypted-file write. A failed or
+        // interrupted file operation may cost a re-probe but cannot leave
         // a changed secret paired with stale persisted verification.
         try await runtime.setProviderKey(value, for: providerID)
         await record(.info, category: "settings", event: "credential-updated", message: "Provider 凭据状态已更新")
     }
 
-    public func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection {
-        _ = await runtime.retryLegacyMigration()
-        return try await globalSettings()
+    /// Invalidate proofs before resetting secrets, just as individual key edits
+    /// do. Interrupted reset cannot leave a new key with an old verified route.
+    public func resetLocalProviderCredentials() async throws {
+        try await resetRecognition()
+        await resetSettingsProviders()
+        let config = try await runtime.globalConfigStore.load()
+        var values = config.values.values
+        values.removeValue(forKey: .defaultProviderID)
+        values.removeValue(forKey: .defaultModelID)
+        values[.recognitionFailoverChain] = "[]"
+        var providers = config.customProviders
+        for index in providers.indices {
+            let old = providers[index]
+            providers[index] = CustomProviderConfiguration(
+                id: old.id, name: old.name, label: old.label, baseUrl: old.baseUrl,
+                transport: old.transport, jsonMode: old.jsonMode, imageDetail: old.imageDetail,
+                manualModelIds: old.manualModelIds, revision: old.revision + 1,
+                capabilityCache: nil, notes: old.notes, sourcePresetID: old.sourcePresetID
+            )
+        }
+        _ = try await runtime.globalConfigStore.save(values: values, customProviders: providers)
+        for definition in ProviderCatalog.definitions {
+            try await runtime.globalConfigStore.invalidateBuiltinCapabilities(providerID: definition.id)
+        }
+        // A credential reset changes identity even when the endpoint is the
+        // same; route-only replace would retain in-memory verified models.
+        await sharedRegistry?.invalidate()
+        try await runtime.credentialStore.reset()
+        let refreshed = await runtime.refreshConfiguration()
+        await sharedRegistry?.replace(settings: refreshed.configuration.values, customProviders: providers)
     }
+
+
 
     public func discoverModels(
         providerID: String,
         forceRefresh: Bool
     ) async throws -> ModelDiscoveryResult {
         try requireExternalOperations()
-        await runtime.keychainStore.beginUserOperation(providerID: providerID)
         return try await settingsProviderRuntime().discovery.discover(
             providerID: providerID,
             forceRefresh: forceRefresh
@@ -445,7 +469,6 @@ public actor SlateSyncWorkflowFacade:
         progress: @escaping @Sendable (ModelProbeProgress) -> Void
     ) async throws -> ModelProbeResult {
         try requireExternalOperations()
-        await runtime.keychainStore.beginUserOperation(providerID: providerID)
         let value = try await settingsProviderRuntime().probe.probe(
             providerID: providerID,
             modelIDs: modelIDs,
@@ -638,7 +661,7 @@ public actor SlateSyncWorkflowFacade:
                 let snapshot = await runtime.bootstrap()
                 let config = try await runtime.globalConfigStore.load()
                 return ProviderRegistry(settings: snapshot.configuration.values,
-                    customProviders: config.customProviders, credentials: runtime.keychainStore,
+                    customProviders: config.customProviders, credentials: runtime.credentialStore,
                     builtinCapabilities: config.builtinCapabilities)
             }
             registryBuild = build
@@ -791,16 +814,4 @@ public actor SlateSyncWorkflowFacade:
         ProductPrivacy.message(raw)
     }
 
-    private nonisolated static func migrationStatus(
-        _ status: SlateSyncRuntimeMigrationStatus
-    ) -> LegacyCredentialMigrationStatus {
-        switch status {
-        case .notRun: .notRun
-        case .awaitingAuthorization: .awaitingAuthorization
-        case .sourceMissing: .sourceMissing
-        case .noCredentials: .noCredentials
-        case .migrated: .migrated
-        case .failed: .failed
-        }
-    }
 }

@@ -57,6 +57,23 @@ final class BuiltinProviderCapabilityTests: XCTestCase {
         try await restarted.drain()
     }
 
+    func testLocalCredentialResetClearsKeysAndDurableProofs() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "builtin-reset-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let facade = makeFacade(root: root, transport: BuiltinProofTransport())
+        try await facade.setProviderCredential("synthetic", providerID: "openai")
+        _ = try await facade.probeModels(providerID: "openai", modelIDs: ["gpt-4o-mini"], progress: { _ in })
+        try await facade.resetLocalProviderCredentials()
+        let projection = try await facade.globalSettings()
+        XCTAssertEqual(projection.credentialStatuses["openai"], .missing)
+        XCTAssertNil(projection.values[.defaultProviderID])
+        XCTAssertEqual(projection.values[.recognitionFailoverChain], "[]")
+        let model = try await facade.modelRegistry().resolveModel(providerID: "openai", modelID: "gpt-4o-mini")
+        XCTAssertEqual(model.capabilityStatus, .declared)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appending(path: "Credentials/master.key").path))
+        try await facade.drain()
+    }
+
     func testRouteAndCredentialChangesInvalidateDurableProofs() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "builtin-invalidate-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -69,10 +86,11 @@ final class BuiltinProviderCapabilityTests: XCTestCase {
         let invalidated = try await registry.resolveModel(providerID: "openai", modelID: "gpt-4o-mini")
         XCTAssertEqual(invalidated.capabilityStatus, .declared)
         _ = try await facade.probeModels(providerID: "openai", modelIDs: ["gpt-4o-mini"], progress: { _ in })
-        do {
-            try await facade.setProviderCredential("synthetic", providerID: "openai")
-            XCTFail("The offline Keychain rejects writes")
-        } catch { /* Even denied credential writes revoke proofs before mutation. */ }
+        // The injected rejecting Keychain is deliberately unused: file-backed
+        // credentials save offline and still revoke durable model proofs.
+        try await facade.setProviderCredential("synthetic", providerID: "openai")
+        let credentialState = try await facade.globalSettings().credentialStatuses["openai"]
+        XCTAssertEqual(credentialState, .configured)
         try await facade.drain()
         let restarted = makeFacade(root: root, transport: BuiltinProofTransport())
         let model = try await restarted.modelRegistry().resolveModel(providerID: "openai", modelID: "gpt-4o-mini")
@@ -118,7 +136,7 @@ final class BuiltinProviderCapabilityTests: XCTestCase {
 
     private func makeFacade(root: URL, transport: BuiltinProofTransport) -> SlateSyncWorkflowFacade {
         let locator = ApplicationSupportLocator(root: root)
-        let runtime = SlateSyncRuntime(locator: locator, environment: [:], keychainBackend: ProofKeychain())
+        let runtime = SlateSyncRuntime(locator: locator, environment: [:])
         let library = ProjectLibraryStartupService(locator: locator, machineSettings: runtime.machineSettingsStore,
             environment: [:], forceIsolatedRoot: true)
         return SlateSyncWorkflowFacade(library: library, runtime: runtime,
@@ -145,13 +163,4 @@ private actor BuiltinProofTransport: ProviderHTTPTransporting {
         return .init(status: 200, body: try JSONEncoder().encode(envelope))
     }
     func close() {}
-}
-
-private struct ProofKeychain: KeychainBackend {
-    func status(service: String, account: String) async -> CredentialStatus { .missing }
-    func read(service: String, account: String) async throws -> Data? { nil }
-    func write(_ data: Data, service: String, account: String) async throws { throw CancellationError() }
-    func createIfAbsent(_ data: Data, service: String, account: String) async throws -> KeychainCreateResult { throw CancellationError() }
-    func delete(service: String, account: String) async throws { throw CancellationError() }
-    func deleteIfMatching(_ expected: Data, service: String, account: String, ownership: Data?) async throws -> KeychainConditionalDeleteResult { .notFound }
 }

@@ -21,7 +21,6 @@ final class GlobalSettingsRestartStatusTests: XCTestCase {
                 resolvedSettingCount: 1,
                 globalConfigVersion: 2,
                 environmentFileLoaded: false,
-                migrationStatus: .sourceMissing,
                 workflowConfigPath: "/tmp/next.json"
             ),
             restartRequired: restartRequired
@@ -53,7 +52,8 @@ final class GlobalSettingsRestartStatusTests: XCTestCase {
             customProviders: [CustomProviderConfiguration]
         ) async throws -> GlobalSettingsProjection { saveResponse }
         func setProviderCredential(_ value: String?, providerID: String) async throws {}
-        func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection { loadResponse }
+
+
         func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult {
             throw SlateSyncError(code: "TEST_UNREACHABLE", message: "not part of this fixture", status: 500)
         }

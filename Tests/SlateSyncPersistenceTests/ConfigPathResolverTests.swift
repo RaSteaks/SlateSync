@@ -94,7 +94,6 @@ final class WorkflowConfigPathRuntimeTests: XCTestCase {
         SlateSyncRuntime(
             locator: ApplicationSupportLocator(root: root),
             environment: environment,
-            keychainBackend: InMemoryKeychainBackend(),
             workflowConfigEnvironment: .init(
                 isPackaged: false,
                 developmentRoot: root,

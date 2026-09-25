@@ -71,6 +71,8 @@ public protocol RecognitionServing: Sendable {
 /// Secret-free credential availability. Authorization failure is not absence.
 public enum CredentialStatus: String, Codable, Hashable, Sendable {
     case configured, missing, authorizationRequired, unavailable
+    /// Lock contention is retryable; unreadable vaults need explicit recovery.
+    case temporarilyUnavailable, unreadable
 }
 
 public protocol ProviderCredentialReading: Sendable {

@@ -6,7 +6,7 @@ import SlateSyncDomain
 
 /// Result of the Provider panel's two persistence transactions. Keeping the
 /// two flags separate lets the UI explain a successful ordinary-config write
-/// when a subsequent Keychain write fails.
+/// when a subsequent encrypted-file write fails.
 public struct BuiltinProviderSaveResult: Hashable, Sendable {
     public let configurationSaved: Bool
     public let credentialUpdateRequested: Bool
@@ -118,6 +118,8 @@ public final class GlobalSettingsModel {
             let value = try await service.globalSettings()
             publish(value)
             operation = .idle
+        } catch is CancellationError {
+            operation = .canceled
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }
@@ -219,7 +221,7 @@ public final class GlobalSettingsModel {
         guard beginOperation() else { throw SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试")) }
         defer { endOperation() }
         try await service.setProviderCredential(value, providerID: providerID)
-        // Keychain edits refresh configured status without discarding unrelated
+        // encrypted-file edits refresh configured status without discarding unrelated
         // typed settings or an unsaved custom Provider revision.
         refreshPreservingDraft(try await service.globalSettings())
     }
@@ -368,6 +370,11 @@ public final class GlobalSettingsModel {
                 credentialSaved: true,
                 message: L10n.tr("Provider 配置与 API Key 已保存")
             )
+        } catch is CancellationError {
+            // Cancellation before admission is not a credential-file failure.
+            operation = .canceled
+            return .init(configurationSaved: true, credentialUpdateRequested: true,
+                         credentialSaved: false, message: L10n.tr("已取消"))
         } catch {
             let sanitized = ProductPrivacy.error(error)
             operation = .failed(sanitized)
@@ -397,6 +404,9 @@ public final class GlobalSettingsModel {
             discoveryResults[providerID] = nil
             providerOperations[providerID] = nil
             operation = .succeeded(message: L10n.tr("{0} 的 API Key 已删除", [String(describing: providerID)]))
+        } catch is CancellationError {
+            operation = .canceled
+            throw CancellationError()
         } catch {
             let sanitized = ProductPrivacy.error(error)
             operation = .failed(sanitized)
@@ -404,17 +414,133 @@ public final class GlobalSettingsModel {
         }
     }
 
-    public func retryLegacyCredentialMigration() async {
+    public func resetLocalCredentials() async {
         guard beginOperation() else { return }
         defer { endOperation() }
-        operation = .running(label: L10n.tr("正在重试旧凭据迁移…"))
+        operation = .running(label: L10n.tr("正在重置本地凭据…"))
+        providerRequests.removeAll()
         do {
-            refreshPreservingDraft(try await service.retryLegacyCredentialMigration())
-            operation = .idle
-        } catch {
-            operation = .failed(ProductPrivacy.error(error))
-        }
+            try await service.resetLocalProviderCredentials()
+            discoveryResults.removeAll()
+            providerOperations.removeAll()
+            probeProgress.removeAll()
+            probingProviderIDs.removeAll()
+            draft[.defaultProviderID] = ""
+            draft[.defaultModelID] = ""
+            draft[.recognitionFailoverChain] = "[]"
+            let refreshed = try await service.globalSettings()
+            refreshPreservingDraft(refreshed)
+            // Preserve unsaved metadata without preserving proofs made with
+            // credentials that have just been removed.
+            customProviders = customProviders.map { old in
+                let revision = max(old.revision + 1, refreshed.customProviders.first { $0.id == old.id }?.revision ?? 1)
+                return CustomProviderConfiguration(id: old.id, name: old.name, label: old.label,
+                    baseUrl: old.baseUrl, transport: old.transport, jsonMode: old.jsonMode,
+                    imageDetail: old.imageDetail, manualModelIds: old.manualModelIds,
+                    revision: revision, capabilityCache: nil, notes: old.notes, sourcePresetID: old.sourcePresetID)
+            }
+            operation = .succeeded(message: L10n.tr("本地凭据已重置，请重新填写 API Key。"))
+        } catch is CancellationError { operation = .canceled }
+        catch { operation = .failed(ProductPrivacy.error(error)) }
     }
+
+    /// The draft identity is returned even after partial failure so retries edit
+    /// that same Provider. Secrets are arguments only, never observable state.
+    public func saveCustomProviderConfiguration(
+        existing: CustomProviderConfiguration?, name: String, baseURL: String,
+        modelIDs: String, transport: ProviderTransport, jsonMode: ProviderJSONMode,
+        imageDetail: ImageDetail, notes: String?, sourcePresetID: String?, apiKey: String?
+    ) async -> CustomProviderSaveResult {
+        guard !operation.isRunning, beginOperation() else {
+            return .init(provider: existing, configurationSaved: false, credentialSaved: false, isComplete: false)
+        }
+        defer { endOperation() }
+        if let apiKey, apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            operation = .failed(.init(code: "CREDENTIAL_EMPTY", message: L10n.tr("API Key 不能只包含空白字符")))
+            return .init(provider: existing, configurationSaved: false, credentialSaved: false, isComplete: false)
+        }
+        operation = .running(label: L10n.tr("正在保存 Provider…"))
+        if let existing {
+            providerRequests[existing.id] = nil
+            await service.cancelModelProbe(providerID: existing.id)
+            providerOperations[existing.id] = nil
+            probingProviderIDs.remove(existing.id)
+        }
+        let previousDraftProviders = customProviders
+        let previousDraft = draft
+        guard saveCustomProviderDraft(existing: existing, name: name, baseURL: baseURL,
+            modelIDs: modelIDs, transport: transport, jsonMode: jsonMode,
+            imageDetail: imageDetail, notes: notes, sourcePresetID: sourcePresetID),
+            let provider = customProviders.first(where: { $0.id == existing?.id || $0.name == name.trimmingCharacters(in: .whitespacesAndNewlines) }) else {
+            return .init(provider: existing, configurationSaved: false, credentialSaved: false, isComplete: false)
+        }
+        let editedDraft = draft
+        operation = .running(label: L10n.tr("正在保存 Provider…"))
+        do {
+            // Commit this Provider and its invalidated references, while unrelated
+            // settings remain drafts. Never persist an API key in ordinary config.
+            var values = live?.values ?? GlobalSettingValues()
+            if let persistedProvider = live?.customProviders.first(where: { $0.id == provider.id }),
+               persistedProvider.revision != provider.revision {
+                if values[.defaultProviderID] == provider.id {
+                    values[.defaultProviderID] = nil; values[.defaultModelID] = nil
+                }
+                let chain = (try? ProviderModelSelection.decodeAndValidateChain(values[.recognitionFailoverChain] ?? "[]")) ?? []
+                values[.recognitionFailoverChain] = try ProviderModelSelection.encodeChain(chain.filter { $0.providerID != provider.id })
+            }
+            var persisted = live?.customProviders ?? []
+            persisted.removeAll { $0.id == provider.id }
+            persisted.append(provider)
+            refreshPreservingDraft(try await service.saveGlobalSettings(values: values, customProviders: persisted))
+        } catch {
+            // Failed immediate saves must not leave a phantom new entry that a
+            // later page-level Save could accidentally commit after Cancel.
+            customProviders.removeAll { $0.id == provider.id }
+            if let old = previousDraftProviders.first(where: { $0.id == provider.id }) { customProviders.append(old) }
+            for key: GlobalSettingKey in [.defaultProviderID, .defaultModelID, .recognitionFailoverChain]
+                where draft[key] == editedDraft[key] {
+                draft[key] = previousDraft[key]
+            }
+            operation = .failed(ProductPrivacy.error(error))
+            return .init(provider: provider, configurationSaved: false, credentialSaved: false, isComplete: false)
+        }
+        if let apiKey {
+            do {
+                try await service.setProviderCredential(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), providerID: provider.id)
+            } catch is CancellationError {
+                operation = .canceled
+                return .init(provider: provider, configurationSaved: true, credentialSaved: false, isComplete: false)
+            } catch {
+                let sanitized = ProductPrivacy.error(error)
+                operation = .failed(.init(code: sanitized.code,
+                    message: L10n.tr("普通配置已保存，但 API Key 保存失败：{0}", [L10n.message(sanitized.message)])))
+                return .init(provider: provider, configurationSaved: true, credentialSaved: false, isComplete: false)
+            }
+            // A completed write remains successful even if its status refresh
+            // fails. Keep the editor open without claiming the key was lost.
+            do {
+                let refreshed = try await service.globalSettings()
+                refreshPreservingDraft(refreshed)
+                if let current = refreshed.customProviders.first(where: { $0.id == provider.id }),
+                   let index = customProviders.firstIndex(where: { $0.id == provider.id }) {
+                    customProviders[index] = current
+                }
+            } catch is CancellationError {
+                operation = .canceled
+                return .init(provider: provider, configurationSaved: true, credentialSaved: true, isComplete: false)
+            } catch {
+                let sanitized = ProductPrivacy.error(error)
+                operation = .failed(.init(code: sanitized.code,
+                    message: L10n.tr("Provider 配置与 API Key 已保存，但状态刷新失败：{0}", [L10n.message(sanitized.message)])))
+                return .init(provider: provider, configurationSaved: true, credentialSaved: true, isComplete: false)
+            }
+        }
+        operation = .succeeded(message: L10n.tr("Provider 配置已保存"))
+        return .init(provider: customProviders.first { $0.id == provider.id } ?? provider,
+                     configurationSaved: true, credentialSaved: apiKey != nil, isComplete: true)
+    }
+
+
 
     public func discover(providerID: String, forceRefresh: Bool = true) async {
         guard beginOperation() else { return }
@@ -506,58 +632,7 @@ public final class GlobalSettingsModel {
         providerOperations[providerID] = .canceled
     }
 
-    @discardableResult
-    public func addCustomProvider(name: String, baseURL: String, modelID: String) -> Bool {
-        saveCustomProviderDraft(
-            existing: nil,
-            name: name,
-            baseURL: baseURL,
-            modelIDs: modelID,
-            transport: .chatCompletions,
-            jsonMode: .jsonSchema,
-            imageDetail: .high
-        )
-    }
-
-    public func saveCustomProvider(
-        existing: CustomProviderConfiguration?,
-        name: String,
-        baseURL: String,
-        modelIDs: String,
-        transport: ProviderTransport,
-        jsonMode: ProviderJSONMode,
-        imageDetail: ImageDetail,
-        notes: String? = nil,
-        sourcePresetID: String? = nil
-    ) async -> Bool {
-        guard beginOperation() else { return false }
-        defer { endOperation() }
-        let parsedModels = modelIDs.split(whereSeparator: { $0 == "," || $0 == "\n" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        if let existing,
-           existing.baseUrl != (try? CustomProviderValidator.normalizeBaseURL(baseURL))
-            || existing.transport != transport || existing.jsonMode != jsonMode
-            || existing.imageDetail != imageDetail
-            || existing.manualModelIds != parsedModels {
-            providerRequests[existing.id] = nil
-            await service.cancelModelProbe(providerID: existing.id)
-            providerOperations[existing.id] = nil
-            probingProviderIDs.remove(existing.id)
-        }
-        return saveCustomProviderDraft(
-            existing: existing,
-            name: name,
-            baseURL: baseURL,
-            modelIDs: modelIDs,
-            transport: transport,
-            jsonMode: jsonMode,
-            imageDetail: imageDetail,
-            notes: notes,
-            sourcePresetID: sourcePresetID
-        )
-    }
-
+    /// Shared validation for the single immediate-save entry point; never a second public draft API.
     private func saveCustomProviderDraft(
         existing: CustomProviderConfiguration?,
         name: String,
@@ -687,7 +762,7 @@ public final class GlobalSettingsModel {
         }
     }
 
-    /// Writes are never canceled mid-Keychain/config transaction. Quit stops
+    /// Writes are never canceled mid-encrypted-file/config transaction. Quit stops
     /// admission, cancels network probes, then joins all active service calls.
     public func drain() async {
         acceptsOperations = false
@@ -732,4 +807,12 @@ public final class GlobalSettingsModel {
         live = value
         revision += 1
     }
+}
+
+/// Separate transaction outcomes keep retry behavior explicit in the editor.
+public struct CustomProviderSaveResult: Sendable {
+    public let provider: CustomProviderConfiguration?
+    public let configurationSaved: Bool
+    public let credentialSaved: Bool
+    public let isComplete: Bool
 }

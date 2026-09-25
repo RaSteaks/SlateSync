@@ -207,8 +207,7 @@ private actor AdmissionSettingsFake: GlobalSettingsWorkflowServing {
         runtime: .init(
             resolvedSettingCount: 0,
             globalConfigVersion: 1,
-            environmentFileLoaded: false,
-            migrationStatus: .sourceMissing
+            environmentFileLoaded: false
         )
     )
 
@@ -217,7 +216,8 @@ private actor AdmissionSettingsFake: GlobalSettingsWorkflowServing {
         Self.projection
     }
     func setProviderCredential(_ value: String?, providerID: String) async throws {}
-    func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection { Self.projection }
+
+
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult {
         throw SlateSyncError(code: "TEST", message: "unused")
     }

@@ -52,15 +52,15 @@ public enum SecureFilePermissions {
     }
 }
 
-/// A small advisory lock shared by native writers that coordinate a
-/// compare-and-delete or legacy-file removal. The lock is intentionally kept
-/// as a sidecar rather than in the secret payload; callers that do not use
-/// this process-wide convention are outside the migration's atomicity claim.
+/// Advisory sidecar lock for cooperating native processes performing atomic
+/// file transactions or Keychain compare-and-delete. This is synchronous;
+/// asynchronous credential callers must dispatch it to their I/O queue.
 enum CrossProcessFileLock {
     static func withExclusiveLock<Value>(
         at url: URL,
         timeout: TimeInterval = 5,
         isolation: isolated (any Actor)? = #isolation,
+        checkCancellation: () throws -> Void = {},
         _ operation: () throws -> Value
     ) throws -> Value {
         do {
@@ -77,11 +77,19 @@ enum CrossProcessFileLock {
             throw SlateSyncError(code: "FILE_LOCK", message: "无法建立文件协调锁目录")
         }
 
-        let descriptor = open(url.path, O_CREAT | O_RDWR, mode_t(S_IRUSR | S_IWUSR))
+        let descriptor = open(url.path, O_CREAT | O_RDWR | O_NOFOLLOW, mode_t(S_IRUSR | S_IWUSR))
         guard descriptor >= 0 else {
             throw SlateSyncError(code: "FILE_LOCK", message: "无法建立文件协调锁")
         }
         defer { close(descriptor) }
+        // Credential locks must not follow symlinks or operate on devices and
+        // hard-linked files; validate the opened inode before changing metadata.
+        var lockInfo = stat()
+        guard fstat(descriptor, &lockInfo) == 0,
+              (lockInfo.st_mode & S_IFMT) == S_IFREG,
+              lockInfo.st_nlink == 1, lockInfo.st_uid == getuid() else {
+            throw SlateSyncError(code: "FILE_LOCK", message: "文件协调锁类型无效")
+        }
 
         guard fchmod(descriptor, mode_t(S_IRUSR | S_IWUSR)) == 0 else {
             throw SlateSyncError(code: "FILE_LOCK", message: "无法保护文件协调锁")
@@ -89,6 +97,7 @@ enum CrossProcessFileLock {
         let timeoutNanoseconds = UInt64(max(0, timeout) * 1_000_000_000)
         let deadline = DispatchTime.now().uptimeNanoseconds &+ timeoutNanoseconds
         while true {
+            try checkCancellation()
             if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { break }
             if errno == EINTR { continue }
             guard errno == EWOULDBLOCK || errno == EAGAIN else {
@@ -97,8 +106,8 @@ enum CrossProcessFileLock {
             guard DispatchTime.now().uptimeNanoseconds < deadline else {
                 throw SlateSyncError(code: "FILE_LOCK_TIMEOUT", message: "取得文件协调锁超时")
             }
-            // Keep the bounded wait cooperative; this path is only a
-            // cross-process safety net and never holds the Swift actor.
+            // This synchronous wait blocks its caller. Credential operations
+            // call from their dedicated I/O queue, with cancellation checks.
             Thread.sleep(forTimeInterval: 0.01)
         }
         defer { _ = flock(descriptor, LOCK_UN) }
