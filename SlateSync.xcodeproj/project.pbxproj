@@ -32,7 +32,6 @@
 		F10000000000000000000001 /* SlateSyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateSyncApp.swift; sourceTree = "<group>"; };
 		F10000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F10000000000000000000003 /* SlateSync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SlateSync.entitlements; sourceTree = "<group>"; };
-		F10000000000000000000013 /* SlateSyncAppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SlateSyncAppStore.entitlements; sourceTree = "<group>"; };
 		F10000000000000000000004 /* SlateSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateSyncTests.swift; sourceTree = "<group>"; };
 		F10000000000000000000005 /* SlateSyncUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlateSyncUITests.swift; sourceTree = "<group>"; };
 		F10000000000000000000006 /* SlateSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SlateSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -42,6 +41,7 @@
 		F10000000000000000000010 /* build/slatesync.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = build/slatesync.icon; sourceTree = SOURCE_ROOT; };
 		F10000000000000000000011 /* SlateSyncApp/Resources/PaddleOCR */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SlateSyncApp/Resources/PaddleOCR; sourceTree = SOURCE_ROOT; };
 		F10000000000000000000012 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json"; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000013 /* SlateSyncAppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SlateSyncAppStore.entitlements; sourceTree = "<group>"; };
 		F10000000000000000000020 /* Configuration/Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Signing.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -368,6 +368,7 @@
 				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.slatesync.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 			};
 			name = Debug;
@@ -463,10 +464,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = slatesync;
 				CODE_SIGN_ENTITLEMENTS = SlateSyncApp/SlateSyncAppStore.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Distribution";
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = HF4Y6246CT;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -479,6 +481,7 @@
 				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.slatesync.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 			};
 			name = AppStore;
 		};
