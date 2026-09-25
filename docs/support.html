@@ -366,8 +366,8 @@
       </li>
       <li>
         <h3><span class="lang-zh">配置 Provider</span><span class="lang-en">Configure a provider</span></h3>
-        <p><span class="lang-zh">在全局设置中添加 OpenAI 兼容视觉服务：Base URL、模型、并发与超时可调，API Key 存入 macOS 钥匙串。</span>
-           <span class="lang-en">In Global Settings, add an OpenAI-compatible vision service: base URL, model, concurrency and timeout are adjustable; the API key is stored in the macOS keychain.</span></p>
+        <p><span class="lang-zh">在全局设置中添加 OpenAI 兼容视觉服务：Base URL、模型、并发与超时可调，API Key 存入本地 AES-256-GCM 加密文件。</span>
+           <span class="lang-en">In Global Settings, add an OpenAI-compatible vision service: base URL, model, concurrency and timeout are adjustable; the API key is stored in a local AES-256-GCM encrypted file.</span></p>
       </li>
       <li>
         <h3><span class="lang-zh">导入场记单</span><span class="lang-en">Import a slate</span></h3>
@@ -533,8 +533,8 @@
     <details>
       <summary><span class="lang-zh">我的 API Key 保存在哪里？安全吗？</span><span class="lang-en">Where is my API key stored?</span></summary>
       <div class="answer">
-        <span class="lang-zh">API Key 由 macOS 钥匙串保存，不会写入项目包、项目库导出或 Git 仓库，也不会回填显示在设置界面；只有原生应用的数据服务会读取它。</span>
-        <span class="lang-en">Keys are stored in the macOS keychain — never written into project packages, library exports or Git, and never echoed back into the settings UI. Only the native data service can read them.</span>
+        <span class="lang-zh">API Key 以 AES-256-GCM 加密文件保存在本机，主密钥为独立文件，权限均限制为当前用户。两文件同时泄露仍可被解密。API Key 不进入项目包、项目库导出或 Git，也不回填到界面；旧钥匙串凭据需重新填写。</span>
+        <span class="lang-en">Keys are stored in a local AES-256-GCM encrypted file with a separate master-key file, both restricted to the current user. Possession of both files allows decryption. Keys are excluded from project packages, library exports and Git, and never echoed back into settings. Old Keychain credentials must be entered again.</span>
       </div>
     </details>
 

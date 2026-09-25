@@ -275,8 +275,7 @@ final class SM08OwnershipTests: XCTestCase {
                 runtime: .init(
                     resolvedSettingCount: 0,
                     globalConfigVersion: 1,
-                    environmentFileLoaded: false,
-                    migrationStatus: .sourceMissing
+                    environmentFileLoaded: false
                 )
             )
         }
@@ -557,35 +556,10 @@ final class SM08OwnershipTests: XCTestCase {
         let service = GlobalSettingsFake()
         let model = GlobalSettingsModel(service: service)
         await model.load()
-        XCTAssertTrue(model.addCustomProvider(
-            name: "本地接口",
-            baseURL: "http://localhost:11434/v1/",
-            modelID: "vision-test"
-        ))
-        XCTAssertTrue(model.customProviders.last?.id.hasPrefix(CustomProviderValidator.idPrefix) == true)
-        XCTAssertEqual(model.customProviders.last?.baseUrl, "http://localhost:11434/v1")
-
-        let created = try? XCTUnwrap(model.customProviders.last)
-        let saved = await model.saveCustomProvider(
-            existing: created,
-            name: "本地接口 2",
-            baseURL: "http://localhost:11434/v1",
-            modelIDs: "vision-test, vision-backup",
-            transport: .responses,
-            jsonMode: .jsonObject,
-            imageDetail: .original
-        )
-        XCTAssertTrue(saved)
-        XCTAssertEqual(model.customProviders.last?.id, created?.id)
-        XCTAssertEqual(model.customProviders.last?.revision, (created?.revision ?? 0) + 1)
-        XCTAssertNil(model.customProviders.last?.capabilityCache)
-        XCTAssertEqual(model.customProviders.last?.manualModelIds, ["vision-test", "vision-backup"])
-
         let revisionBeforeDiscovery = model.revision
         await model.discover(providerID: "custom-test")
         // Existing workspaces observe this token to refresh their model picker.
         XCTAssertGreaterThan(model.revision, revisionBeforeDiscovery)
-        XCTAssertEqual(model.customProviders.last?.name, "本地接口 2")
         XCTAssertEqual(model.discoveryResults["custom-test"]?.models.map(\.id), ["vision-test"])
         await model.probe(providerID: "custom-test", modelIDs: ["vision-test"])
         let discoveryCount = await service.discoveryCount
@@ -1314,7 +1288,8 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
         customProviders: [CustomProviderConfiguration]
     ) async throws -> GlobalSettingsProjection { saveCount += 1; return Self.projection }
     func setProviderCredential(_ value: String?, providerID: String) async throws { await credentialGate?.wait() }
-    func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection { Self.projection }
+
+
 
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult {
         discoveryCount += 1
@@ -1383,8 +1358,7 @@ private actor GlobalSettingsFake: GlobalSettingsWorkflowServing {
         runtime: .init(
             resolvedSettingCount: 0,
             globalConfigVersion: 1,
-            environmentFileLoaded: false,
-            migrationStatus: .sourceMissing
+            environmentFileLoaded: false
         )
     )
 }

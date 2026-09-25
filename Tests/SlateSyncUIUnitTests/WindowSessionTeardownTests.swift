@@ -210,9 +210,8 @@ private actor TeardownSettingsFake: GlobalSettingsWorkflowServing {
         throw SlateSyncError(code: "TEST", message: "unused")
     }
     func setProviderCredential(_ value: String?, providerID: String) async throws {}
-    func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection {
-        throw SlateSyncError(code: "TEST", message: "unused")
-    }
+
+
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult {
         throw SlateSyncError(code: "TEST", message: "unused")
     }

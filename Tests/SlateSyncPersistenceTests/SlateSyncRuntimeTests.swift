@@ -8,8 +8,7 @@ final class SlateSyncRuntimeTests: XCTestCase {
         let root = try makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let runtime = SlateSyncRuntime(locator: ApplicationSupportLocator(root: root),
-                                       environment: ["PADDLEOCR_PYTHON": "/environment/python"],
-                                       keychainBackend: InMemoryKeychainBackend())
+                                       environment: ["PADDLEOCR_PYTHON": "/environment/python"])
         let before = await runtime.bootstrap()
         // Diagnostics preview follows normal precedence but does not commit.
         let preview = await runtime.resolveSettingsDraft(.init([.paddleOCRPython: "/draft/python", .visionOCRLanguage: "en-US"]))
@@ -23,13 +22,12 @@ final class SlateSyncRuntimeTests: XCTestCase {
         XCTAssertEqual(fallback[.paddleOCRPython], "/environment/python")
     }
 
-    func testBootstrapLoadsStoresResolvesDynamicDefaultsAndReportsMissingSource() async throws {
+    func testBootstrapLoadsStoresAndResolvesDynamicDefaults() async throws {
         let root = try makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let runtime = SlateSyncRuntime(
             locator: ApplicationSupportLocator(root: root),
-            environment: [:],
-            keychainBackend: InMemoryKeychainBackend()
+            environment: [:]
         )
 
         let snapshot = await runtime.bootstrap()
@@ -37,7 +35,6 @@ final class SlateSyncRuntimeTests: XCTestCase {
         XCTAssertTrue(snapshot.isBootstrapped)
         XCTAssertEqual(snapshot.globalConfigVersion, GlobalConfigStore.currentVersion)
         XCTAssertFalse(snapshot.environmentFileLoaded)
-        XCTAssertEqual(snapshot.migration.status, .sourceMissing)
         XCTAssertEqual(
             snapshot.configuration.values[.paddlePDXCacheHome],
             root.appending(path: "paddlex").path
@@ -46,66 +43,23 @@ final class SlateSyncRuntimeTests: XCTestCase {
         XCTAssertNil(snapshot.lastError)
     }
 
-    func testBootstrapMigratesLegacyCredentialsThroughTheInjectedBackend() async throws {
+    func testProviderFileStorageNeverReadsOrMigratesOldSecrets() async throws {
         let root = try makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let legacyURL = root.appending(path: "provider-keys.json")
-        try Data(#"{"openai":"sk-runtime-secret","custom":"runtime-custom-secret"}"#.utf8)
-            .write(to: legacyURL)
-        let backend = InMemoryKeychainBackend()
-        let runtime = SlateSyncRuntime(
-            locator: ApplicationSupportLocator(root: root),
-            environment: ["PADDLEOCR_LANGUAGE": "en"],
-            keychainBackend: backend
-        )
-
-        // Bootstrap reports pending migration without touching any secret.
-        let initial = await runtime.bootstrap()
-        XCTAssertEqual(initial.migration.status, .awaitingAuthorization)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
-        let beforeMigration = await backend.value(account: "openai")
-        XCTAssertNil(beforeMigration)
-        let snapshot = await runtime.retryLegacyMigration()
-
-        XCTAssertEqual(snapshot.migration.status, .migrated)
-        XCTAssertEqual(snapshot.migration.verifiedProviderIDs, ["custom", "openai"])
-        XCTAssertEqual(snapshot.configuration.values[.paddleOCRLanguage], "en")
-        XCTAssertEqual(snapshot.configuration.sources[.paddleOCRLanguage], .processEnvironment)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
-        let openAIValue = await backend.value(account: "openai")
-        let customValue = await backend.value(account: "custom")
-        XCTAssertEqual(openAIValue, "sk-runtime-secret")
-        XCTAssertEqual(customValue, "runtime-custom-secret")
-    }
-
-    func testMigrationFailureIsNonBlockingSecretFreeAndRetryable() async throws {
-        let root = try makeTemporaryRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let legacyURL = root.appending(path: "provider-keys.json")
-        let secret = "sk-runtime-failure-secret"
-        try Data("{\"openai\":\"\(secret)\"}".utf8).write(to: legacyURL)
-        let backend = InMemoryKeychainBackend()
-        await backend.failNextWriteOnce()
-        let runtime = SlateSyncRuntime(
-            locator: ApplicationSupportLocator(root: root),
-            environment: [:],
-            keychainBackend: backend
-        )
-
-        let failed = await runtime.retryLegacyMigration()
-        XCTAssertTrue(failed.isBootstrapped)
-        XCTAssertEqual(failed.migration.status, .failed)
-        XCTAssertEqual(failed.migration.errorCode, "KEYCHAIN_MIGRATION_WRITE")
-        XCTAssertEqual(failed.migration.errorMessage, "旧凭据迁移失败，源文件已保留，可重试")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path))
-        let serialized = String(decoding: try JSONEncoder().encode(failed), as: UTF8.self)
-        XCTAssertFalse(serialized.contains(secret))
-
-        let retried = await runtime.retryLegacyMigration()
-        XCTAssertEqual(retried.migration.status, .migrated)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
-        let migratedValue = await backend.value(account: "openai")
-        XCTAssertEqual(migratedValue, secret)
+        let legacy = root.appending(path: "provider-keys.json")
+        let original = Data("{\"openai\":\"old-file-secret\"}".utf8)
+        try original.write(to: legacy)
+        let runtime = SlateSyncRuntime(locator: .init(root: root), environment: [:])
+        // Repeated startup has no legacy-import branch.
+        _ = await runtime.bootstrap()
+        _ = await runtime.bootstrap()
+        let missing = try await runtime.providerKey(for: "openai")
+        XCTAssertNil(missing)
+        try await runtime.setProviderKey("new-file-secret", for: "openai")
+        let fresh = SlateSyncRuntime(locator: .init(root: root), environment: [:])
+        let saved = try await fresh.providerKey(for: "openai")
+        XCTAssertEqual(saved, "new-file-secret")
+        XCTAssertEqual(try Data(contentsOf: legacy), original)
     }
 
     private func makeTemporaryRoot() throws -> URL {

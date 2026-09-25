@@ -48,7 +48,7 @@
 | 识别与理解 | 校对与回填 | 项目与安全 |
 | --- | --- | --- |
 | 支持 macOS Vision OCR、可选 PaddleOCR，以及已配置的 OpenAI/兼容视觉模型。 | 导入 Resolve CSV，校验条号、场镜次序和识别完整性，确认后再导出。 | Project Library 使用 SQLite 保存项目、任务、诊断和场记结构 Profile。 |
-| 根据 OCR 表头、坐标和页面版式学习并复用场记结构 Profile。 | 读取素材目录中的 `slate.txt`，补充 `Camera FPS` 和 `Shoot Day`。 | 项目库和项目包执行路径边界、符号链接和版本校验；API Key 使用 macOS Keychain。 |
+| 根据 OCR 表头、坐标和页面版式学习并复用场记结构 Profile。 | 读取素材目录中的 `slate.txt`，补充 `Camera FPS` 和 `Shoot Day`。 | 项目库和项目包执行路径边界、符号链接和版本校验；API Key 使用本地 AES-256-GCM 加密文件。 |
 | PDF 先在本地逐页准备，模型请求使用页面图片与 OCR evidence。 | 保留原 CSV 的编码、换行和未匹配字段，仅更新匹配到的字段。 | 所有自动测试使用隔离临时数据，不触碰用户项目库、日志或 Keychain。 |
 
 ## 快速开始
@@ -169,7 +169,7 @@ SlateSyncApp/Resources/PaddleOCR
 ```
 
 - `SlateSyncDomain`：领域类型、验证、设置、Provider、OCR、识别和错误合同。
-- `SlateSyncPersistence`：SQLite v1、项目包、Project Library、设置、Keychain 和日志。
+- `SlateSyncPersistence`：SQLite v1、项目包、Project Library、设置、本地加密凭据和日志。
 - `SlateSyncMedia`：PDF/图片准备、Vision/Paddle OCR、OCR 进程与资源生命周期。
 - `SlateSyncWorkflow`：CSV、场景、Provider、识别、版式 Profile 和安装编排。
 - `SlateSyncUI`：原生窗口、项目库、工作区、CSV、设置、帮助和日志界面。
@@ -185,8 +185,9 @@ SlateSyncApp/Resources/PaddleOCR
 ### 全局设置
 
 应用内的“全局设置”用于管理 Provider、Base URL、模型、请求并发/超时、Vision OCR、PaddleOCR
-和模型缓存路径。自定义 OpenAI 兼容接口支持多个连接和手动模型 ID；API Key 由 macOS Keychain
-保存，不写入项目包、项目库或 Git。
+和模型缓存路径。自定义 OpenAI 兼容接口支持多个连接和手动模型 ID；API Key 使用 Apple CryptoKit AES-256-GCM 加密保存到本机 `Credentials/provider-keys.enc`，
+随机主密钥保存在独立 `Credentials/master.key`（目录 0700、文件 0600）。无需钥匙串授权；
+同时取得两文件的人仍可解密。旧密钥不迁移，请重新填写。凭据不写入项目包、项目库或 Git。
 
 机器设置、非敏感配置和日志位于：
 

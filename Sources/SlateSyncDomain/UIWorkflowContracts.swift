@@ -55,23 +55,12 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
     }
 }
 
-public enum LegacyCredentialMigrationStatus: String, Codable, Hashable, Sendable {
-    case notRun
-    case awaitingAuthorization
-    case sourceMissing
-    case noCredentials
-    case migrated
-    case failed
-}
-
 /// Secret-free runtime status exposed across the Workflow boundary without
 /// making SlateSyncUI import Persistence implementation types.
 public struct GlobalRuntimeProjection: Hashable, Sendable {
     public let resolvedSettingCount: Int
     public let globalConfigVersion: Int
     public let environmentFileLoaded: Bool
-    public let migrationStatus: LegacyCredentialMigrationStatus
-    public let migrationErrorMessage: String?
     /// Absolute path of the workflow config in effect (startup-resolved; a
     /// changed setting takes effect only after a restart).
     public let workflowConfigPath: String?
@@ -80,15 +69,11 @@ public struct GlobalRuntimeProjection: Hashable, Sendable {
         resolvedSettingCount: Int,
         globalConfigVersion: Int,
         environmentFileLoaded: Bool,
-        migrationStatus: LegacyCredentialMigrationStatus,
-        migrationErrorMessage: String? = nil,
         workflowConfigPath: String? = nil
     ) {
         self.resolvedSettingCount = resolvedSettingCount
         self.globalConfigVersion = globalConfigVersion
         self.environmentFileLoaded = environmentFileLoaded
-        self.migrationStatus = migrationStatus
-        self.migrationErrorMessage = migrationErrorMessage
         self.workflowConfigPath = workflowConfigPath
     }
 }
@@ -197,7 +182,8 @@ public protocol GlobalSettingsWorkflowServing: Sendable {
     func globalSettings() async throws -> GlobalSettingsProjection
     func saveGlobalSettings(values: GlobalSettingValues, customProviders: [CustomProviderConfiguration]) async throws -> GlobalSettingsProjection
     func setProviderCredential(_ value: String?, providerID: String) async throws
-    func retryLegacyCredentialMigration() async throws -> GlobalSettingsProjection
+    func resetLocalProviderCredentials() async throws
+
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult
     func probeModels(
         providerID: String,
@@ -240,4 +226,12 @@ public protocol ProductLifecycleServing: Sendable {
 // Existing service doubles do not own a platform keychain.
 public extension ProjectLibraryWorkflowServing {
     func retryProjectLibraryUnlock() async {}
+}
+
+// Older workflow adapters may not expose local recovery; never pretend a reset
+// succeeded when there is no implementation behind the destructive action.
+public extension GlobalSettingsWorkflowServing {
+    func resetLocalProviderCredentials() async throws {
+        throw SlateSyncError(code: "CREDENTIAL_RESET", message: "无法重置本地凭据")
+    }
 }

@@ -13,8 +13,11 @@ public struct SettingsRootView: View {
     @State private var credentialProvider: ProviderSummary?
     @State private var showsCustomProvider = false
     @State private var showsPresetPicker = false
-    @State private var pendingPreset: ProviderPreset?
-    @State private var editingPreset: ProviderPreset?
+    @State private var providerSearch = ""
+    @State private var showsUnconfigured = false
+    @State private var showsBackups = false
+    @State private var confirmsCredentialReset = false
+    @AppStorage("providerFileCredentialNoticeDismissed") private var credentialNoticeDismissed = false
     @State private var providerPendingDeletion: CustomProviderConfiguration?
     @State private var providerEditing: CustomProviderConfiguration?
     @State private var category = SettingsCategory.general
@@ -109,24 +112,17 @@ public struct SettingsRootView: View {
                         definition: definition
                     )
                 } else {
-                    CredentialSheet(settings: settings, provider: provider)
+                    if let custom = settings.customProviders.first(where: { $0.id == provider.id }) {
+                        CustomProviderSheet(settings: settings, provider: custom)
+                    }
                 }
             }
         }
         .sheet(isPresented: $showsCustomProvider) {
             CustomProviderSheet(settings: settings)
         }
-        .sheet(isPresented: $showsPresetPicker, onDismiss: {
-            editingPreset = pendingPreset
-            pendingPreset = nil
-        }) {
-            PresetPickerSheet { preset in
-                pendingPreset = preset
-                showsPresetPicker = false
-            }
-        }
-        .sheet(item: $editingPreset) { preset in
-            CustomProviderSheet(settings: settings, preset: preset)
+        .sheet(isPresented: $showsPresetPicker) {
+            ProviderAddSheet(settings: settings)
         }
         .sheet(
             isPresented: Binding(
@@ -257,24 +253,64 @@ public struct SettingsRootView: View {
         case .configured: .configured
         case .missing: .missing
         case .authorizationRequired: .needsAuthorization
-        case .unavailable: .readFailed
+        case .unavailable, .unreadable: .readFailed
+        case .temporarilyUnavailable: .temporarilyUnavailable
         }
         return CredentialChip(chip)
     }
 
     private var providers: some View {
-        VStack(spacing: 0) {
-            List {
-                defaultProviderSection
-                backupProviderSection
-                providerListSection
-            }
+        VStack(spacing: 12) {
             HStack {
+                SlateSearchField(title: L10n.tr("搜索 Provider"), text: $providerSearch, identifier: "providers.search")
+                Button(L10n.tr("添加 Provider"), systemImage: "plus") { showsPresetPicker = true }
+                    .slatePrimaryActionStyle()
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if !credentialNoticeDismissed {
+                        HStack(alignment: .top) {
+                            Label(L10n.tr("凭据存储方式已更新，请重新填写 API Key。"), systemImage: "lock.doc")
+                                .font(.callout)
+                            Spacer()
+                            Button(L10n.tr("知道了")) { credentialNoticeDismissed = true }
+                        }
+                    }
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            defaultProviderSection
+                            Divider()
+                            DisclosureGroup(L10n.tr("备用组合"), isExpanded: $showsBackups) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(backupChain, id: \.self) { backupRow($0) }
+                                    backupAddMenu.disabled(backupChain.count >= 8)
+                                }.padding(.top, 8)
+                            }
+                        }.padding(8)
+                    }
+                    providerListSection
+                }.padding(2)
+            }
+            Divider()
+            HStack {
+                Menu {
+                    Button(L10n.tr("重置本地凭据…"), role: .destructive) { confirmsCredentialReset = true }
+                } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help(L10n.tr("凭据管理")).accessibilityLabel(L10n.tr("凭据管理"))
+                Text(L10n.tr("默认、备用及删除修改需保存生效"))
+                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button(L10n.tr("保存 Provider 设置")) { Task { await settings.save() } }
                     .slatePrimaryActionStyle()
                     .disabled(settings.operation.isRunning)
-            }.padding(10)
+            }
+        }
+        .confirmationDialog(L10n.tr("重置所有本地 API Key？"), isPresented: $confirmsCredentialReset, titleVisibility: .visible) {
+            Button(L10n.tr("重置本地凭据"), role: .destructive) { Task { await settings.resetLocalCredentials() } }
+            Button(L10n.tr("取消"), role: .cancel) {}
+        } message: {
+            Text(L10n.tr("将删除本地保存的全部 API Key 与加密主密钥，并清除默认和备用组合。Provider 配置保留；旧钥匙串不受影响。"))
         }
     }
 
@@ -301,13 +337,6 @@ public struct SettingsRootView: View {
                             Text($0.label).tag($0.id)
                         }
                     }
-        }
-    }
-
-    private var backupProviderSection: some View {
-        Section(L10n.tr("备用组合")) {
-            ForEach(backupChain, id: \.self) { pair in backupRow(pair) }
-            backupAddMenu
         }
     }
 
@@ -343,21 +372,47 @@ public struct SettingsRootView: View {
         }
     }
 
+    /// Group by configured identity, not successful key reads. A damaged vault
+    /// must keep existing Providers visible so their recovery actions are found.
+    private func isAdded(_ provider: ProviderSummary) -> Bool {
+        ProviderListPresentation.isAdded(provider, credentialStatus: settings.live?.credentialStatuses[provider.id])
+    }
+
+    private var matchingProviders: [ProviderSummary] {
+        providerEntries.filter { provider in
+            let custom = settings.customProviders.first { $0.id == provider.id }
+            let url = custom?.baseUrl ?? ProviderCatalog.definition(id: provider.id).map {
+                settings.value($0.baseURLSetting).isEmpty ? $0.defaultBaseURL : settings.value($0.baseURLSetting)
+            } ?? ""
+            return ProviderListPresentation.matches(query: providerSearch, name: L10n.providerLabel(provider), url: url, notes: custom?.notes)
+        }
+    }
+
     private var providerListSection: some View {
-        Section(L10n.tr("Provider 列表")) {
-                    ForEach(providerEntries, id: \.id) { provider in
-                        providerRow(provider)
-                        providerStatus(provider.id)
-                    }
-                    Menu(L10n.tr("添加 Provider…"), systemImage: "plus") {
-                        Button(L10n.tr("从预设库添加…")) { showsPresetPicker = true }
-                        Menu(L10n.tr("添加内建 Provider…")) {
-                            ForEach(providerEntries.filter { $0.type != .custom }, id: \.id) { provider in
-                                Button(L10n.providerLabel(provider)) { credentialProvider = provider }
-                            }
-                        }
-                        Button(L10n.tr("添加自定义 Provider…")) { showsCustomProvider = true }
-                    }
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.tr("Provider 列表") + " · \(matchingProviders.count)").font(.headline)
+            ForEach(matchingProviders.filter { isAdded($0) }, id: \.id) { provider in
+                providerRow(provider)
+            }
+            if !matchingProviders.contains(where: { isAdded($0) }) && providerSearch.isEmpty {
+                Text(L10n.tr("尚未配置 Provider，请添加或展开下方内建服务。"))
+                    .foregroundStyle(.secondary).font(.callout)
+            }
+            if !matchingProviders.filter({ !isAdded($0) }).isEmpty {
+                DisclosureGroup(L10n.tr("未配置的内建服务"), isExpanded: Binding(
+                    get: { showsUnconfigured || !providerSearch.isEmpty },
+                    set: { showsUnconfigured = $0 }
+                )) {
+                    VStack(spacing: 12) {
+                        ForEach(matchingProviders.filter { !isAdded($0) }, id: \.id) { providerRow($0) }
+                    }.padding(.top, 8)
+                }
+            }
+            // An empty catalog is not a failed search; keep the two empty states exclusive.
+            if matchingProviders.isEmpty && !providerSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(L10n.tr("没有匹配的 Provider，请尝试其他关键词。"))
+                    .foregroundStyle(.secondary).padding(.vertical, 16)
+            }
         }
     }
 
@@ -407,24 +462,19 @@ public struct SettingsRootView: View {
             ?? ProviderCatalog.definition(id: provider.id).map { settings.value($0.baseURLSetting).isEmpty ? $0.defaultBaseURL : settings.value($0.baseURLSetting) }
             ?? ""
         let capability = capabilityState(for: provider, custom: custom)
-        return HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(L10n.providerLabel(provider))
-                    Text(source).font(.caption).foregroundStyle(.secondary)
-                    if settings.value(.defaultProviderID) == provider.id {
-                        Text(L10n.tr("默认")).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Text(baseURL).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-            credentialStatusChip(provider.id)
-            CapabilityChip(capability)
-            Menu(L10n.tr("操作")) {
-                Button(L10n.tr("刷新模型")) { Task { await settings.discover(providerID: provider.id) } }
-                    .disabled(settings.providerOperations[provider.id]?.isRunning == true || !provider.configured)
+        return ProviderCard(
+            title: L10n.providerLabel(provider), source: source, baseURL: baseURL,
+            notes: custom?.notes, isDefault: settings.value(.defaultProviderID) == provider.id
+        ) {
+            HStack(spacing: 8) {
+                credentialStatusChip(provider.id)
+                CapabilityChip(capability)
+                Spacer()
                 Button(L10n.tr("配置…")) { credentialProvider = provider }
+                Button(L10n.tr("刷新模型"), systemImage: "arrow.clockwise") {
+                    Task { await settings.discover(providerID: provider.id) }
+                }.disabled(settings.providerOperations[provider.id]?.isRunning == true || !provider.configured)
+                Menu {
                 Menu(L10n.tr("设为默认组合")) {
                     ForEach(verifiedModels(for: provider.id), id: \.id) { model in
                         Button(model.label) {
@@ -446,7 +496,12 @@ public struct SettingsRootView: View {
                     Button(L10n.tr("编辑…")) { providerEditing = custom }
                     Button(L10n.tr("删除…"), role: .destructive) { providerPendingDeletion = custom }
                 }
+                } label: { Image(systemName: "ellipsis") }
+                .menuStyle(.borderlessButton).fixedSize()
+                .accessibilityLabel(L10n.tr("更多操作")).help(L10n.tr("更多操作"))
+                .disabled(settings.operation.isRunning)
             }
+            providerStatus(provider.id)
         }
     }
 
@@ -630,10 +685,7 @@ public struct SettingsRootView: View {
                 Section(L10n.tr("原生启动状态")) {
                     LabeledContent(L10n.tr("配置项"), value: "\(snapshot.resolvedSettingCount)")
                     LabeledContent(L10n.tr("配置版本"), value: "\(snapshot.globalConfigVersion)")
-                    LabeledContent(L10n.tr("旧凭据迁移"), value: migrationStatus(snapshot.migrationStatus))
-                    if snapshot.migrationStatus == .failed || snapshot.migrationStatus == .awaitingAuthorization {
-                        Button(snapshot.migrationStatus == .awaitingAuthorization ? L10n.tr("迁移旧凭据") : L10n.tr("重试旧凭据迁移")) { Task { await settings.retryLegacyCredentialMigration() } }
-                    }
+
                 }
             }
             Button(L10n.tr("保存")) { Task { await settings.save() } }
@@ -663,56 +715,49 @@ public struct SettingsRootView: View {
     }
 
     @ViewBuilder private func providerStatus(_ providerID: String) -> some View {
+        // Operation feedback remains attached to this card even when an older
+        // discovery result exists; errors must never disappear behind that cache.
+        if case .running(let label) = settings.providerOperations[providerID] {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text(L10n.message(label)).font(.caption)
+                Spacer()
+                if settings.probingProviderIDs.contains(providerID) {
+                    Button(L10n.tr("取消"), role: .cancel) { Task { await settings.cancelProbe(providerID: providerID) } }
+                }
+            }
+        }
+        if case .failed(let error) = settings.providerOperations[providerID] {
+            ProviderDiagnostic(message: L10n.message(error.message), isError: true)
+        }
         if let result = settings.discoveryResults[providerID] {
             HStack {
                 Text(L10n.tr("可用 {0}", [String(describing: result.visionModelCount)]))
+                Spacer()
                 if let pending = result.pendingModels, !pending.isEmpty {
                     Button(L10n.tr("验证 {0} 个候选模型", [String(describing: pending.count)])) {
-                        Task {
-                            await settings.probe(
-                                providerID: providerID,
-                                modelIDs: pending.map { $0.apiId ?? $0.id }
-                            )
-                        }
+                        Task { await settings.probe(providerID: providerID, modelIDs: pending.map { $0.apiId ?? $0.id }) }
                     }
                 }
-                let candidates = result.models + (result.pendingModels ?? []) + (result.failedModels ?? [])
                 Menu(L10n.tr("验证模型…")) {
-                    ForEach(candidates, id: \.id) { model in
-                        Button(model.label) {
-                            Task { await settings.probe(providerID: providerID, modelIDs: [model.apiId ?? model.id]) }
-                        }
+                    ForEach(result.models + (result.pendingModels ?? []) + (result.failedModels ?? []), id: \.id) { model in
+                        Button(model.label) { Task { await settings.probe(providerID: providerID, modelIDs: [model.apiId ?? model.id]) } }
                     }
-                }
-                if settings.probingProviderIDs.contains(providerID) {
-                    Button(L10n.tr("取消"), role: .cancel) {
-                        Task { await settings.cancelProbe(providerID: providerID) }
-                    }
-                }
-                if let warning = result.warning { Text(L10n.message(warning)).foregroundStyle(.secondary).lineLimit(2) }
+                }.fixedSize()
             }
             .font(.caption)
-        } else if case .failed(let error) = settings.providerOperations[providerID] {
-            Text(L10n.message(error.message)).font(.caption).foregroundStyle(SlateSyncTheme.danger)
+            .disabled(settings.providerOperations[providerID]?.isRunning == true)
+            if let warning = result.warning { ProviderDiagnostic(message: L10n.message(warning), isError: false) }
         }
     }
 
-    private func migrationStatus(_ status: LegacyCredentialMigrationStatus) -> String {
-        switch status {
-        case .notRun: L10n.tr("未运行")
-        case .awaitingAuthorization: L10n.tr("等待手动迁移")
-        case .sourceMissing: L10n.tr("未发现旧凭据")
-        case .noCredentials: L10n.tr("无可迁移凭据")
-        case .migrated: L10n.tr("已完成")
-        case .failed: L10n.tr("失败")
-        }
-    }
+
 }
 
 /// Built-in Providers share one guided form. It deliberately keeps the API
 /// Key write separate from ordinary settings and never asks the service for a
 /// previously stored secret.
-private struct BuiltinProviderConfigurationSheet: View {
+struct BuiltinProviderConfigurationSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable private var settings: GlobalSettingsModel
     @Environment(\.slateSyncDensity) private var density
@@ -720,6 +765,7 @@ private struct BuiltinProviderConfigurationSheet: View {
     let definition: ProviderCatalog.Definition
     @State private var baseURL: String
     @State private var apiKey = ""
+    @State private var revealsKey = false
     @State private var advancedValues: [GlobalSettingKey: String]
     @State private var initialBaseURL: String
     @State private var initialAdvancedValues: [GlobalSettingKey: String]
@@ -810,6 +856,7 @@ private struct BuiltinProviderConfigurationSheet: View {
         .frame(minWidth: 680, minHeight: 600)
         .disabled(isSaving)
         .interactiveDismissDisabled(isSaving)
+        .onDisappear { apiKey = "" }
         .confirmationDialog(
             L10n.tr("删除 {0} 的 API Key？", [String(describing: L10n.providerLabel(provider))]),
             isPresented: $confirmsKeyDeletion,
@@ -881,8 +928,15 @@ private struct BuiltinProviderConfigurationSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(hasConfiguredKey ? L10n.tr("替换 API Key") : "API Key")
                         .font(.headline)
-                    SecureField(L10n.tr("留空保留当前 API Key"), text: $apiKey)
-                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        if revealsKey { TextField(L10n.tr("留空保留当前 API Key"), text: $apiKey) }
+                        else { SecureField(L10n.tr("留空保留当前 API Key"), text: $apiKey) }
+                        Button { revealsKey.toggle() } label: { Image(systemName: revealsKey ? "eye.slash" : "eye") }
+                            .help(revealsKey ? L10n.tr("隐藏 API Key") : L10n.tr("显示 API Key"))
+                            .accessibilityLabel(revealsKey ? L10n.tr("隐藏 API Key") : L10n.tr("显示 API Key"))
+                    }.textFieldStyle(.roundedBorder)
+                    Text(L10n.tr("凭据使用 AES-256-GCM 加密保存在本机，保存后不会回显。"))
+                        .font(.caption).foregroundStyle(.secondary)
                     Text(L10n.message(definition.apiKeyHint))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -892,8 +946,9 @@ private struct BuiltinProviderConfigurationSheet: View {
                         Button(L10n.tr("删除已保存 API Key"), role: .destructive) {
                             confirmsKeyDeletion = true
                         }
-                    } else if let state = settings.live?.credentialStatuses[provider.id], state == .unavailable {
-                        Label(L10n.tr("钥匙串状态读取失败；请确认授权后重试。"), systemImage: "lock.trianglebadge.exclamationmark")
+                    } else if let state = settings.live?.credentialStatuses[provider.id],
+                              let notice = ProviderListPresentation.credentialNotice(state) {
+                        Label(notice, systemImage: "lock.trianglebadge.exclamationmark")
                             .font(.caption).foregroundStyle(SlateSyncTheme.warning)
                     }
                 }
@@ -1154,7 +1209,7 @@ private struct BuiltinProviderConfigurationSheet: View {
             )
             isSaving = false
             statusMessage = result.message
-            statusIsError = !result.isComplete
+            statusIsError = result.error != nil
             if result.configurationSaved {
                 baseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
                 for option in definition.advancedOptions {
@@ -1191,102 +1246,12 @@ private struct BuiltinProviderConfigurationSheet: View {
     }
 }
 
-private struct CredentialSheet: View {
+/// Editor-local secrets are never read back from storage or copied into drafts.
+struct CustomProviderSheet: View {
     let settings: GlobalSettingsModel
-    let provider: ProviderSummary
-    @Environment(\.dismiss) private var dismiss
-    @State private var credential = ""
-    @State private var error: SlateSyncError?
-    @State private var isSubmitting = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.tr("{0} 凭据", [String(describing: L10n.providerLabel(provider))])).font(.title2.bold())
-            Text(L10n.tr("凭据仅保存在 macOS 钥匙串，保存后不会回显。")).foregroundStyle(.secondary)
-            SecureField(L10n.tr("新凭据"), text: $credential)
-            if let error { Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger) }
-            HStack {
-                Button(L10n.tr("清除凭据"), role: .destructive) { submit(nil) }
-                Spacer()
-                Button(L10n.tr("取消"), role: .cancel) { dismiss() }
-                Button(L10n.tr("保存")) { submit(credential) }
-                    .slatePrimaryActionStyle()
-                    .disabled(credential.isEmpty)
-            }
-        }
-        .padding(24).frame(width: 460)
-        .disabled(isSubmitting)
-        .interactiveDismissDisabled(isSubmitting)
-        .onDisappear { credential = "" }
-    }
-
-    private func submit(_ value: String?) {
-        guard !isSubmitting else { return }
-        // Keep the sheet alive until Keychain acknowledges the one submission.
-        isSubmitting = true
-        credential = ""
-        Task {
-            defer { isSubmitting = false }
-            do {
-                try await settings.storeCredential(value, providerID: provider.id)
-                credential = ""
-                dismiss()
-            } catch {
-                self.error = ProductPrivacy.error(error)
-                credential = ""
-            }
-        }
-    }
-}
-
-/// The catalog is a draft source, not a configured Provider. Selecting one
-/// leaves credentials empty and still requires a model probe before use.
-private struct PresetPickerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let usePreset: (ProviderPreset) -> Void
-    @State private var category: ProviderPreset.Category = .direct
-    @State private var selectedID = ProviderPresets.all[0].id
-
-    private var selected: ProviderPreset {
-        ProviderPresets.all.first(where: { $0.id == selectedID }) ?? ProviderPresets.all[0]
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L10n.tr("从预设库添加 Provider")).font(.title2.bold())
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading) {
-                    Button(L10n.tr("直连厂商")) { category = .direct; selectedID = ProviderPresets.all.first(where: { $0.category == .direct })!.id }
-                    Button(L10n.tr("聚合中转")) { category = .aggregator; selectedID = ProviderPresets.all.first(where: { $0.category == .aggregator })!.id }
-                }.frame(width: 120, alignment: .leading)
-                List(ProviderPresets.all.filter { $0.category == category }, id: \.id, selection: $selectedID) {
-                    Text($0.name).tag($0.id)
-                }.frame(width: 210)
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(selected.name).font(.headline)
-                    Text(selected.baseURL).font(.caption.monospaced()).textSelection(.enabled)
-                    LabeledContent(L10n.tr("建议 JSON 档位"), value: selected.jsonMode.rawValue)
-                    Text(L10n.message(selected.notes)).font(.caption).foregroundStyle(.secondary)
-                    Link(L10n.tr("官网"), destination: selected.websiteURL)
-                    Link(L10n.tr("获取 API Key"), destination: selected.keyURL)
-                    Link(L10n.tr("接口文档"), destination: selected.documentationURL)
-                    Spacer()
-                    HStack {
-                        Button(L10n.tr("取消"), role: .cancel) { dismiss() }
-                        Button(L10n.tr("使用此预设")) { usePreset(selected) }
-                            .slatePrimaryActionStyle()
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }.padding(24).frame(width: 730, height: 430)
-    }
-}
-
-private struct CustomProviderSheet: View {
-    let settings: GlobalSettingsModel
-    let provider: CustomProviderConfiguration?
     let preset: ProviderPreset?
     @Environment(\.dismiss) private var dismiss
+    @State private var savedProvider: CustomProviderConfiguration?
     @State private var name: String
     @State private var baseURL: String
     @State private var modelIDs: String
@@ -1294,11 +1259,16 @@ private struct CustomProviderSheet: View {
     @State private var jsonMode: ProviderJSONMode
     @State private var imageDetail: ImageDetail
     @State private var notes: String
+    @State private var apiKey = ""
+    @State private var revealsKey = false
+    @State private var advanced = false
+    @State private var submitting = false
+    @State private var confirmsDeletion = false
 
     init(settings: GlobalSettingsModel, provider: CustomProviderConfiguration? = nil, preset: ProviderPreset? = nil) {
         self.settings = settings
-        self.provider = provider
         self.preset = preset
+        _savedProvider = State(initialValue: provider)
         _name = State(initialValue: provider?.name ?? preset?.name ?? "")
         _baseURL = State(initialValue: provider?.baseUrl ?? preset?.baseURL ?? "")
         _modelIDs = State(initialValue: provider?.manualModelIds.joined(separator: ", ") ?? preset?.suggestedModelID ?? "")
@@ -1309,55 +1279,113 @@ private struct CustomProviderSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(provider == nil ? L10n.tr("添加自定义 Provider") : L10n.tr("编辑自定义 Provider")).font(.title2.bold())
-            Form {
-                TextField(L10n.tr("名称"), text: $name)
-                TextField("HTTP(S) Base URL", text: $baseURL)
-                TextField(L10n.tr("手动模型 ID（逗号分隔）"), text: $modelIDs)
-                TextField(L10n.tr("备注"), text: $notes, axis: .vertical)
-                Picker(L10n.tr("传输"), selection: $transport) {
-                    Text("Chat Completions").tag(ProviderTransport.chatCompletions)
-                    Text("Responses").tag(ProviderTransport.responses)
-                }
-                Picker(L10n.tr("JSON 模式"), selection: $jsonMode) {
-                    Text("JSON Schema").tag(ProviderJSONMode.jsonSchema)
-                    Text("JSON Object").tag(ProviderJSONMode.jsonObject)
-                    Text("Prompt").tag(ProviderJSONMode.prompt)
-                }
-                Picker(L10n.tr("图像细节"), selection: $imageDetail) {
-                    Text(L10n.tr("自动")).tag(ImageDetail.auto)
-                    Text(L10n.tr("低")).tag(ImageDetail.low)
-                    Text(L10n.tr("高")).tag(ImageDetail.high)
-                    Text(L10n.tr("原始")).tag(ImageDetail.original)
-                }
-            }
-            if case .failed(let error) = settings.operation {
-                Label(L10n.message(error.message), systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(SlateSyncTheme.danger)
-            }
-            HStack {
-                Spacer()
-                Button(L10n.tr("取消"), role: .cancel) { dismiss() }
-                Button(provider == nil ? L10n.tr("添加") : L10n.tr("保存")) {
-                    Task {
-                        if await settings.saveCustomProvider(
-                            existing: provider,
-                            name: name,
-                            baseURL: baseURL,
-                            modelIDs: modelIDs,
-                            transport: transport,
-                            jsonMode: jsonMode,
-                            imageDetail: imageDetail,
-                            notes: notes,
-                            sourcePresetID: preset?.id ?? provider?.sourcePresetID
-                        ) {
-                            dismiss()
+        VStack(alignment: .leading, spacing: 14) {
+            Text(savedProvider == nil ? L10n.tr("添加 Provider") : L10n.tr("编辑自定义 Provider")).font(.title2.bold())
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if let preset {
+                        Text(L10n.message(preset.notes)).font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            Link(L10n.tr("官网"), destination: preset.websiteURL)
+                            Link(L10n.tr("获取 API Key"), destination: preset.keyURL)
+                            Link(L10n.tr("接口文档"), destination: preset.documentationURL)
                         }
                     }
-                }
-                .slatePrimaryActionStyle()
+                    field(L10n.tr("名称"), text: $name)
+                    field("HTTP(S) Base URL", text: $baseURL)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("API Key").font(.headline)
+                        HStack {
+                            if revealsKey { TextField(L10n.tr("留空保留当前 API Key"), text: $apiKey) }
+                            else { SecureField(L10n.tr("留空保留当前 API Key"), text: $apiKey) }
+                            Button { revealsKey.toggle() } label: { Image(systemName: revealsKey ? "eye.slash" : "eye") }
+                                .help(revealsKey ? L10n.tr("隐藏 API Key") : L10n.tr("显示 API Key"))
+                                .accessibilityLabel(revealsKey ? L10n.tr("隐藏 API Key") : L10n.tr("显示 API Key"))
+                        }
+                        Text(L10n.tr("凭据使用 AES-256-GCM 加密保存在本机，保存后不会回显。"))
+                            .font(.caption).foregroundStyle(.secondary)
+                        if let id = savedProvider?.id, let state = settings.live?.credentialStatuses[id],
+                           let notice = ProviderListPresentation.credentialNotice(state) {
+                            // Custom and built-in editors share the same recovery guidance.
+                            Label(notice, systemImage: "exclamationmark.triangle")
+                                .font(.caption).foregroundStyle(SlateSyncTheme.warning)
+                        }
+                        if savedProvider != nil {
+                            Button(L10n.tr("删除已保存 API Key"), role: .destructive) { confirmsDeletion = true }
+                        }
+                    }
+                    field(L10n.tr("手动模型 ID（逗号分隔）"), text: $modelIDs)
+                    field(L10n.tr("备注"), text: $notes)
+                    DisclosureGroup(L10n.tr("高级配置"), isExpanded: $advanced) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Picker(L10n.tr("传输"), selection: $transport) {
+                                Text("Chat Completions").tag(ProviderTransport.chatCompletions)
+                                Text("Responses").tag(ProviderTransport.responses)
+                            }
+                            Picker(L10n.tr("JSON 模式"), selection: $jsonMode) {
+                                Text("JSON Schema").tag(ProviderJSONMode.jsonSchema)
+                                Text("JSON Object").tag(ProviderJSONMode.jsonObject)
+                                Text("Prompt").tag(ProviderJSONMode.prompt)
+                            }
+                            Picker(L10n.tr("图像细节"), selection: $imageDetail) {
+                                Text(L10n.tr("自动")).tag(ImageDetail.auto)
+                                Text(L10n.tr("低")).tag(ImageDetail.low)
+                                Text(L10n.tr("高")).tag(ImageDetail.high)
+                                Text(L10n.tr("原始")).tag(ImageDetail.original)
+                            }
+                        }.padding(.top, 10)
+                    }
+                    if case .failed(let error) = settings.operation {
+                        Label(L10n.message(error.message), systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(SlateSyncTheme.danger).textSelection(.enabled)
+                    }
+                }.textFieldStyle(.roundedBorder).padding(2)
             }
-        }.padding(24).frame(width: 500)
+            Divider()
+            HStack {
+                if submitting { ProgressView().controlSize(.small) }
+                Spacer()
+                Button(L10n.tr("取消"), role: .cancel) { dismiss() }
+                Button(L10n.tr("保存配置")) { save() }.slatePrimaryActionStyle()
+            }
+        }.padding(20).frame(minWidth: 500, idealWidth: 620, minHeight: 440, idealHeight: 540)
+        .disabled(submitting).interactiveDismissDisabled(submitting)
+        .onDisappear { apiKey = "" }
+        .confirmationDialog(L10n.tr("删除 API Key"), isPresented: $confirmsDeletion, titleVisibility: .visible) {
+            Button(L10n.tr("删除 API Key"), role: .destructive) {
+                guard let savedProvider else { return }
+                submitting = true
+                Task {
+                    defer { submitting = false }
+                    do { try await settings.removeProviderCredential(providerID: savedProvider.id) }
+                    catch { /* The settings model owns the sanitized inline error. */ }
+                }
+            }
+        }
+    }
+
+    private func field(_ title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.headline)
+            TextField(title, text: text).labelsHidden().accessibilityLabel(title)
+        }
+    }
+
+    private func save() {
+        guard !submitting else { return }
+        submitting = true
+        Task {
+            defer { submitting = false }
+            let result = await settings.saveCustomProviderConfiguration(
+                existing: savedProvider, name: name, baseURL: baseURL, modelIDs: modelIDs,
+                transport: transport, jsonMode: jsonMode, imageDetail: imageDetail,
+                notes: notes, sourcePresetID: preset?.id ?? savedProvider?.sourcePresetID,
+                apiKey: apiKey.isEmpty ? nil : apiKey
+            )
+            savedProvider = result.provider
+            // A refresh failure must not keep a successfully persisted key in the editor.
+            if result.credentialSaved { apiKey = "" }
+            if result.isComplete { dismiss() }
+        }
     }
 }

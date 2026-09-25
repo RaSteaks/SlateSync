@@ -56,7 +56,7 @@ final class PreparedMediaRestoreTests: XCTestCase {
 
     private func makeFacade(root: URL) throws -> SlateSyncWorkflowFacade {
         let locator = ApplicationSupportLocator(root: root.appending(path: "AppSupport", directoryHint: .isDirectory))
-        let runtime = SlateSyncRuntime(locator: locator, environment: [:], keychainBackend: nil)
+        let runtime = SlateSyncRuntime(locator: locator, environment: [:])
         let library = ProjectLibraryStartupService(
             locator: locator,
             machineSettings: runtime.machineSettingsStore,

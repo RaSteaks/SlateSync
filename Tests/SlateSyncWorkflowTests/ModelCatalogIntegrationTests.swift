@@ -12,7 +12,7 @@ final class ModelCatalogIntegrationTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appending(path: "catalog-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
         let locator = ApplicationSupportLocator(root: root)
-        let runtime = SlateSyncRuntime(locator: locator, environment: [:], keychainBackend: EmptyCatalogKeychain())
+        let runtime = SlateSyncRuntime(locator: locator, environment: [:])
         let library = ProjectLibraryStartupService(locator: locator, machineSettings: runtime.machineSettingsStore,
             environment: [:], forceIsolatedRoot: true)
         let transport = CatalogTransport()
@@ -121,14 +121,7 @@ private actor CatalogTransport: ProviderHTTPTransporting {
     func close() async {}
 }
 
-private struct EmptyCatalogKeychain: KeychainBackend {
-    func status(service: String, account: String) async -> CredentialStatus { .missing }
-    func read(service: String, account: String) async throws -> Data? { nil }
-    func write(_ data: Data, service: String, account: String) async throws { throw CancellationError() }
-    func createIfAbsent(_ data: Data, service: String, account: String) async throws -> KeychainCreateResult { throw CancellationError() }
-    func delete(service: String, account: String) async throws { throw CancellationError() }
-    func deleteIfMatching(_ expected: Data, service: String, account: String, ownership: Data?) async throws -> KeychainConditionalDeleteResult { .notFound }
-}
+
 
 private struct CanceledDiscoveryTransport: ProviderHTTPTransporting {
     func send(_ request: ProviderTransportRequest) async throws -> ProviderTransportResponse { throw RecognitionFailure.canceled }
