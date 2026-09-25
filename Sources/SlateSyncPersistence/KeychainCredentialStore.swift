@@ -473,8 +473,9 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
 
     private let backend: any KeychainBackend
     private let service: String
-    private var cached: [String: String] = [:]
     private var mutations: [String: (id: UUID, task: Task<Void, any Error>)] = [:]
+    // Share only reads that are still in flight; completed secrets never stay
+    // in an actor-level cache between Provider requests.
     private var reads: [String: (id: UUID, task: Task<String?, any Error>)] = [:]
     private var revisions: [String: Int] = [:]
     private var blocked: [String: SlateSyncError] = [:]
@@ -494,7 +495,6 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
             if mutations[providerID]?.id == mutation.id { mutations[providerID] = nil }
             else if mutations[providerID] != nil { return try await self.value(providerID: providerID) }
         }
-        if let value = cached[providerID] { return value }
         if let error = blocked[providerID] { throw error }
         let revision = revisions[providerID, default: 0]
         let pending: (id: UUID, task: Task<String?, any Error>)
@@ -515,7 +515,6 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
             if reads[providerID]?.id == pending.id { reads[providerID] = nil }
             // A late read must not undo a newer save/delete or serve its old key.
             guard revisions[providerID, default: 0] == revision else { return try await self.value(providerID: providerID) }
-            cached[providerID] = value
             return value
         } catch {
             if reads[providerID]?.id == pending.id { reads[providerID] = nil }
@@ -542,8 +541,8 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
         return await backend.status(service: service, account: providerID)
     }
 
-    /// SM-07's transport-facing name makes the secret boundary explicit while
-    /// retaining the existing value(providerID:) API for settings migration.
+    /// Transport reads a secret for its current request; no session-level copy
+    /// remains in this store after the read completes.
     public func credential(for providerID: String) async throws -> String? {
         try await value(providerID: providerID)
     }
@@ -559,14 +558,12 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
         let previousWrite = mutations[providerID]?.task
         let previousRead = reads[providerID]?.task
         revisions[providerID, default: 0] += 1
-        let revision = revisions[providerID, default: 0]
-        cached[providerID] = nil
         reads[providerID] = nil
         blocked[providerID] = nil
         let backend = backend, service = service
         let normalized = value.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-        // Serialize provider mutations, and do not let a read during a pending
-        // write cache the old secret. An ambiguous failure invalidates the cache.
+        // Serialize provider mutations and wait for the previous read so a
+        // late result cannot be returned after a replacement or deletion.
         let token = UUID()
         let task = Task<Void, any Error> {
             _ = try? await previousWrite?.value
@@ -577,7 +574,6 @@ public actor KeychainCredentialStore: ProviderCredentialReading {
         mutations[providerID] = (token, task)
         defer { if mutations[providerID]?.id == token { mutations[providerID] = nil } }
         try await task.value
-        if revisions[providerID, default: 0] == revision { cached[providerID] = normalized }
     }
 
     /// Migrates the Electron `provider-keys.json` shape without exposing key

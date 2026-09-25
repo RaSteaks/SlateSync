@@ -24,8 +24,8 @@
     {
       "role": "english-localization",
       "source": "Sources/SlateSyncUI/Resources/English.json",
-      "bytes": 79556,
-      "sha256": "05b9940cc6bc30949e8227fb2aa944ac0db33b7819f9b66fb30f8ffebc74c717"
+      "bytes": 84498,
+      "sha256": "a80df105201c58951cae5a8077e8a2e42ceaff84779f40dc841cdd82aab5ab55"
     },
     {
       "role": "app-icon-image",

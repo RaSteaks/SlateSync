@@ -37,7 +37,7 @@ private actor CountingKeychain: KeychainBackend {
 }
 
 final class CredentialUnlockTests: XCTestCase {
-    func testStatusNeverReadsSecretAndConcurrentReadsShareOneRequest() async throws {
+    func testStatusNeverReadsSecretAndOnlyConcurrentReadsShareOneRequest() async throws {
         let backend = CountingKeychain()
         try await backend.write(Data("key".utf8), service: KeychainCredentialStore.service, account: "openrouter")
         let store = KeychainCredentialStore(backend: backend)
@@ -54,12 +54,22 @@ final class CredentialUnlockTests: XCTestCase {
         XCTAssertEqual(values, Array(repeating: "key", count: 20))
         let reads = await backend.reads
         XCTAssertEqual(reads, 1)
+        // A completed read cannot satisfy the next Provider request from an
+        // actor-level plaintext cache.
+        let repeatedValue = try await store.value(providerID: "openrouter")
+        XCTAssertEqual(repeatedValue, "key")
+        let repeatedReads = await backend.reads
+        XCTAssertEqual(repeatedReads, reads + 1)
         try await store.setValue("new-key", providerID: "openrouter")
         let changed = try await store.value(providerID: "openrouter")
         XCTAssertEqual(changed, "new-key")
+        let replacedReads = await backend.reads
+        XCTAssertEqual(replacedReads, repeatedReads + 1)
         try await store.setValue(nil, providerID: "openrouter")
         let deleted = try await store.value(providerID: "openrouter")
         XCTAssertNil(deleted)
+        let deletedReads = await backend.reads
+        XCTAssertEqual(deletedReads, replacedReads + 1)
     }
 
     func testWriteSupersedesAnInflightReadAndFailedSaveIsNotCached() async throws {
@@ -77,16 +87,34 @@ final class CredentialUnlockTests: XCTestCase {
         XCTAssertEqual(retained, "new")
     }
 
+    func testDeleteSupersedesAnInflightReadAndDoesNotReturnOldSecret() async throws {
+        let backend = CountingKeychain()
+        try await backend.write(Data("old".utf8), service: KeychainCredentialStore.service, account: "openrouter")
+        let store = KeychainCredentialStore(backend: backend)
+        let reading = Task { try await store.value(providerID: "openrouter") }
+        while await backend.reads == 0 { await Task.yield() }
+        try await store.setValue(nil, providerID: "openrouter")
+        // The read started before deletion, but it must observe the new
+        // revision rather than returning a secret after deletion completes.
+        let lateValue = try await reading.value
+        XCTAssertNil(lateValue)
+        let nextValue = try await store.value(providerID: "openrouter")
+        XCTAssertNil(nextValue)
+    }
+
     func testRefusalStaysLatchedUntilAnExplicitUserOperation() async throws {
         let backend = CountingKeychain()
         try await backend.write(Data("key".utf8), service: KeychainCredentialStore.service, account: "openrouter")
         let store = KeychainCredentialStore(backend: backend)
+        let firstValue = try await store.value(providerID: "openrouter")
+        XCTAssertEqual(firstValue, "key")
+        // A previous successful read must not bypass a later Keychain denial.
         await backend.rejectNextRead()
         for _ in 0..<3 {
             do { _ = try await store.value(providerID: "openrouter"); XCTFail("Authorization must fail") } catch {}
         }
         let reads = await backend.reads
-        XCTAssertEqual(reads, 1)
+        XCTAssertEqual(reads, 2)
         let status = await store.status(providerID: "openrouter")
         XCTAssertEqual(status, .authorizationRequired)
         await store.beginUserOperation(providerID: "openrouter")

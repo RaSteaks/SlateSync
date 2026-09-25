@@ -54,10 +54,11 @@ private final class SM07ManualClock: ProviderClock, Sendable {
     func advance(_ milliseconds: Double) { value.withLock { $0 += milliseconds } }
 }
 private actor SM07TestCredentials: ProviderCredentialReading {
-    let values: [String: String]
+    var values: [String: String]
     init(_ values: [String: String]) { self.values = values }
     func credential(for providerID: String) -> String? { values[providerID] }
     func isCredentialConfigured(for providerID: String) -> Bool { values[providerID]?.isEmpty == false }
+    func setCredential(_ value: String?, for providerID: String) { values[providerID] = value }
 }
 
 private actor SM07FakeTransport: ProviderHTTPTransporting {
@@ -95,6 +96,32 @@ private actor SM07ProbeSaveLog {
         await transport.close()
     }
 
+    func testNET02ReplacementAndDeletionChangeOnlyFutureRequestHeaders() async throws {
+        SM07URLProtocol.configure(.response(200, Data(#"{"ok":true}"#.utf8)))
+        let credentials = SM07TestCredentials(["openrouter": "old-secret"])
+        let transport = URLSessionProviderTransport(credentials: credentials, configuration: configuration(), clock: SM07SlowClock())
+        let request = ProviderTransportRequest(
+            provider: provider(), purpose: .recognition, method: .post,
+            body: Data("{}".utf8), timeoutMilliseconds: 1_000
+        )
+        _ = try await transport.send(request)
+        await credentials.setCredential("new-secret", for: "openrouter")
+        _ = try await transport.send(request)
+        await credentials.setCredential(nil, for: "openrouter")
+        do {
+            _ = try await transport.send(request)
+            XCTFail("A deleted API key must prevent a new Provider request")
+        } catch {
+            XCTAssertEqual((error as? SlateSyncError)?.code, RecognitionFailure.providerNotConfigured.code)
+            XCTAssertFalse(String(describing: error).contains("old-secret"))
+            XCTAssertFalse(String(describing: error).contains("new-secret"))
+        }
+        let captures = SM07URLProtocol.snapshot().captures
+        XCTAssertEqual(captures.count, 2)
+        XCTAssertEqual(captures.map { $0.headers["Authorization"] }, ["Bearer old-secret", "Bearer new-secret"])
+        await transport.close()
+    }
+
     func testNET02OpenRouterTitleCanBeConfiguredAndEmptySiteOmitsReferer() async throws {
         SM07URLProtocol.configure(.response(200, Data(#"{"ok":true}"#.utf8)))
         let transport = URLSessionProviderTransport(credentials: SM07TestCredentials(["openrouter": "secret"]), configuration: configuration(), clock: SM07SlowClock())
@@ -120,7 +147,14 @@ private actor SM07ProbeSaveLog {
         SM07URLProtocol.configure(.response(401, Data(#"{"error":{"message":"bad top-secret"}}"#.utf8)))
         let transport = URLSessionProviderTransport(credentials: SM07TestCredentials(["openrouter": secret]), configuration: configuration(), clock: SM07SlowClock())
         do { _ = try await transport.send(.init(provider: provider(), purpose: .recognition, method: .post, body: Data("{}".utf8), timeoutMilliseconds: 30_000, maximumTimeoutRetries: 3)); XCTFail() }
-        catch { let value = error as? SlateSyncError; XCTAssertEqual(value?.status, 401); XCTAssertFalse(value?.message.contains(secret) ?? true) }
+        catch {
+            let value = error as? SlateSyncError
+            XCTAssertEqual(value?.status, 401)
+            // Provider-controlled error text and its public description must
+            // never return the credential that was attached to the request.
+            XCTAssertFalse(value?.message.contains(secret) ?? true)
+            XCTAssertFalse(String(describing: error).contains(secret))
+        }
         XCTAssertEqual(SM07URLProtocol.snapshot().captures.count, 1)
         await transport.close()
     }
