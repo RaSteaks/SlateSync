@@ -123,6 +123,22 @@ final class ProviderManagementTests: XCTestCase {
         XCTAssertEqual(stored, [try XCTUnwrap(result.provider)])
     }
 
+    func testDraftDiscoveryDoesNotSaveConfigurationOrCredential() async throws {
+        let service = ProviderSaveFake()
+        let model = GlobalSettingsModel(service: service)
+        await model.load()
+        model.setValue("12345", for: .modelRequestTimeoutMS)
+        let ids = try await model.discoverDraftModelIDs(baseURL: "https://example.test/v1", apiKey: "draft-key", savedProviderID: nil)
+        XCTAssertEqual(ids, ["remote-model"])
+        let saves = await service.saves
+        let writes = await service.keyWrites
+        XCTAssertEqual(saves, 0)
+        XCTAssertEqual(writes, 0)
+        XCTAssertTrue(model.customProviders.isEmpty)
+        XCTAssertTrue(model.discoveryResults.isEmpty)
+        XCTAssertEqual(model.value(.modelRequestTimeoutMS), "12345")
+    }
+
     private func save(_ model: GlobalSettingsModel, existing: CustomProviderConfiguration? = nil, key: String?) async -> CustomProviderSaveResult {
         await model.saveCustomProviderConfiguration(existing: existing, name: "Test Service", baseURL: "https://example.test/v1",
             modelIDs: "vision-model", transport: .chatCompletions, jsonMode: .jsonSchema, imageDetail: .high,
@@ -164,6 +180,10 @@ private actor ProviderSaveFake: GlobalSettingsWorkflowServing {
     }
 
 
+    // Draft listing must stay independent of the save transaction exercised above.
+    func discoverDraftModelIDs(baseURL: String, apiKey: String, savedProviderID: String?) async throws -> [String] {
+        ["remote-model"]
+    }
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult { throw unused() }
     func probeModels(providerID: String, modelIDs: [String], progress: @escaping @Sendable (ModelProbeProgress) -> Void) async throws -> ModelProbeResult { throw unused() }
     func cancelModelProbe(providerID: String) async {}

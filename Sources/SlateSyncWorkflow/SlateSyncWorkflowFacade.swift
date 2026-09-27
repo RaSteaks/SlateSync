@@ -44,6 +44,8 @@ public actor SlateSyncWorkflowFacade:
     private let logs: LocalLogStore
     private let paddleInstaller: PaddleOCRInstallerService
     private let allowsExternalOperations: Bool
+    private let allowsProviderOperations: Bool
+    private let draftProviderTransportFactory: @Sendable (any ProviderCredentialReading) -> any ProviderHTTPTransporting
     // All consumers share model eligibility; transports keep independent lifetimes.
     private var sharedRegistry: ProviderRegistry?
     private var registryBuild: Task<ProviderRegistry, Error>?
@@ -72,7 +74,9 @@ public actor SlateSyncWorkflowFacade:
         logs: LocalLogStore,
         paddleInstaller: PaddleOCRInstallerService,
         allowsExternalOperations: Bool = true,
-        providerTransportFactory: (@Sendable () -> any ProviderHTTPTransporting)? = nil
+        providerTransportFactory: (@Sendable () -> any ProviderHTTPTransporting)? = nil,
+        draftProviderTransportFactory: (@Sendable (any ProviderCredentialReading) -> any ProviderHTTPTransporting)? = nil,
+        allowsInjectedProviderOperations: Bool = false
     ) {
         self.library = library
         self.runtime = runtime
@@ -80,6 +84,13 @@ public actor SlateSyncWorkflowFacade:
         self.logs = logs
         self.paddleInstaller = paddleInstaller
         self.allowsExternalOperations = allowsExternalOperations
+        // Isolated fixtures must explicitly supply BOTH transports. No missing
+        // injection may fall through to a production URLSession factory.
+        self.allowsProviderOperations = allowsExternalOperations
+            || (allowsInjectedProviderOperations && providerTransportFactory != nil && draftProviderTransportFactory != nil)
+        self.draftProviderTransportFactory = draftProviderTransportFactory ?? { credentials in
+            URLSessionProviderTransport(credentials: credentials)
+        }
         self.providerTransportFactory = providerTransportFactory ?? {
             URLSessionProviderTransport(credentials: runtime.credentialStore)
         }
@@ -89,6 +100,13 @@ public actor SlateSyncWorkflowFacade:
     /// a production Provider or spawning an installer with network access.
     private func requireExternalOperations() throws {
         guard allowsExternalOperations else {
+            throw SlateSyncError(code: "ISOLATED_OPERATION", message: "隔离验收环境已禁用外部服务", retryable: false)
+        }
+    }
+
+    /// Synthetic Provider requests can be enabled without permitting recognition or installer networking.
+    private func requireProviderOperations() throws {
+        guard allowsProviderOperations else {
             throw SlateSyncError(code: "ISOLATED_OPERATION", message: "隔离验收环境已禁用外部服务", retryable: false)
         }
     }
@@ -452,11 +470,32 @@ public actor SlateSyncWorkflowFacade:
 
 
 
+    /// Draft credentials live only for this request; canceling the editor writes nothing.
+    public func discoverDraftModelIDs(baseURL: String, apiKey: String, savedProviderID: String?) async throws -> [String] {
+        try requireProviderOperations()
+        // Normalize once, before consulting saved credentials or creating a transport.
+        let descriptor = try DraftModelDiscovery.descriptor(baseURL: baseURL)
+        var key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if apiKey.isEmpty, let savedProviderID {
+            key = try await runtime.credentialStore.credential(for: savedProviderID) ?? ""
+        }
+        guard !key.isEmpty else { throw SlateSyncError(code: "CREDENTIAL_EMPTY", message: "请先填写 API Key") }
+        let transport = draftProviderTransportFactory(DraftProviderCredential(value: key))
+        do {
+            let ids = try await DraftModelDiscovery.fetch(provider: descriptor, transport: transport)
+            await transport.close()
+            return ids
+        } catch {
+            await transport.close()
+            throw error
+        }
+    }
+
     public func discoverModels(
         providerID: String,
         forceRefresh: Bool
     ) async throws -> ModelDiscoveryResult {
-        try requireExternalOperations()
+        try requireProviderOperations()
         return try await settingsProviderRuntime().discovery.discover(
             providerID: providerID,
             forceRefresh: forceRefresh
@@ -468,7 +507,7 @@ public actor SlateSyncWorkflowFacade:
         modelIDs: [String],
         progress: @escaping @Sendable (ModelProbeProgress) -> Void
     ) async throws -> ModelProbeResult {
-        try requireExternalOperations()
+        try requireProviderOperations()
         let value = try await settingsProviderRuntime().probe.probe(
             providerID: providerID,
             modelIDs: modelIDs,

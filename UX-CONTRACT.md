@@ -134,3 +134,26 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Credential badges retain capsule geometry; custom outlines appear only for accessibility modes.
 - Search owns its focus/separator outline; the configuration panel owns its full-opacity leading rule, avoiding duplicate helper borders.
 - The library summary uses a canvas-backed fallback, including reduced transparency, distinct from the evidence-surface list.
+
+
+## Model service setup and immediate role changes (2026-09-27)
+
+- `ProviderConfigurationSheet` owns both built-in and custom setup. `ProviderModelList` owns searchable model selection; `ProviderOperationFeedback` owns discovery/probe feedback and recovery. Native Picker, Toggle, Button, SecureField and the existing theme/search primitives remain canonical.
+- Setup saves in stages. Save and fetch models persists configuration and any supplied credential before discovery; save-only performs no network discovery. Success stays in the editor. Closing preserves completed saves and guards only unsaved changes.
+- Config, credential and projection-refresh outcomes remain separate. A committed key is cleared from the input even if refresh fails; retry does not re-submit the successful key. Draft credentials never enter observable feature-model state, logs or ordinary config.
+- Discovery is not recognition proof. Declared/inferred models display as pending; only current verified proof permits default/backup activation. Cancellation does not persist partial probe results. Failed/partial batches must not render as all-success.
+- A custom missing models endpoint permits manual IDs only for 404/405/501; authentication, quota, connection and malformed-response failures retain their categories. Offline catalogs never claim a confirmed connection.
+- Default, backup additions/removals/reordering and service deletion commit immediately against the latest persisted snapshot, preserve unrelated setting drafts, and publish only on success. Controls block duplicate submissions. Destructive service confirmation stays mounted on recoverable failure.
+- Request-affecting changes invalidate proof and remove affected roles according to existing revision rules. Restoration is explicit, requires valid proof and a matching role baseline, and never overwrites intervening role choices. Display-only metadata edits retain proof.
+- Native acceptance now covers nine XCUI scenarios plus the four combinations inside the locale/theme/keyboard matrix at 700×540. The real native controls, keyboard path and AX state are verified with synthetic Provider responses and isolated persistence. This is not a live-vendor integration or a standalone VoiceOver speech audit.
+- Model rows use data-driven identities and independent view bodies so moving from pending to verified refreshes both text and enabled state. Default/backup/restore actions remain in the fixed footer; the backup disclosure header is a full native Button with expanded/collapsed accessibility value.
+- The existing native window probe reapplies the Settings resize affordance after effective-appearance changes, while SwiftUI continues to own frame constraints.
+
+
+### Review hardening (2026-09-27)
+
+- Starting discovery clears transient probe feedback, not durable proof. Current operation feedback and current capability proof have separate lifetimes. API `unsupported` survives static/manual candidates; only valid current proof overrides it. Persisted builtin proof includes its bounded diagnostic and check time.
+- Credential replacement/removal can revoke roles before a failing key write. The editor retains an operation-local expected baseline derived from original selections minus the affected service, and best-effort projection recovery exposes committed revocations. Retries never replace that baseline with a stale snapshot or blindly accept intervening role changes.
+- Canceling discovery/probing as part of deletion terminates its UI state even when deletion cannot persist. The service stays visible and editable; new network work is blocked while a configuration write is running.
+- All picker and save eligibility checks use the same current-proof implementation, including legacy aliases and draft revisions. Credential gating follows the provider requirement; anonymous custom services remain valid.
+- Endpoint-looking Base URL suffixes are advisory. Raw URL validation occurs once before draft credential lookup and transport construction. Isolated synthetic Provider operations require explicit opt-in plus both injected transport factories; installer/real external operations remain disabled.

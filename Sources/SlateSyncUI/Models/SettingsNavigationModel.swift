@@ -14,10 +14,11 @@ public enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Send
 
     public var id: String { rawValue }
 
+    // Product wording changes without renaming persisted navigation routes.
     public var title: String {
         switch self {
         case .general: L10n.tr("通用")
-        case .providers: "Provider"
+        case .providers: L10n.tr("模型服务")
         case .recognition: L10n.tr("识别")
         case .ocr: "OCR"
         case .advanced: L10n.tr("高级")

@@ -184,6 +184,8 @@ public protocol GlobalSettingsWorkflowServing: Sendable {
     func setProviderCredential(_ value: String?, providerID: String) async throws
     func resetLocalProviderCredentials() async throws
 
+    /// Fetches draft model IDs without persisting configuration or capability proofs.
+    func discoverDraftModelIDs(baseURL: String, apiKey: String, savedProviderID: String?) async throws -> [String]
     func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult
     func probeModels(
         providerID: String,
@@ -231,6 +233,10 @@ public extension ProjectLibraryWorkflowServing {
 // Older workflow adapters may not expose local recovery; never pretend a reset
 // succeeded when there is no implementation behind the destructive action.
 public extension GlobalSettingsWorkflowServing {
+    func discoverDraftModelIDs(baseURL: String, apiKey: String, savedProviderID: String?) async throws -> [String] {
+        throw SlateSyncError(code: "DISCOVERY_UNAVAILABLE", message: "模型列表获取不可用")
+    }
+
     func resetLocalProviderCredentials() async throws {
         throw SlateSyncError(code: "CREDENTIAL_RESET", message: "无法重置本地凭据")
     }

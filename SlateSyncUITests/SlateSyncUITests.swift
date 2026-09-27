@@ -67,6 +67,404 @@ final class SlateSyncUITests: XCTestCase {
     }
 
     // XCUIAutomation is MainActor-isolated in the macOS 26 SDK.
+    /// The real native editor and encrypted isolated storage run against synthetic HTTP.
+    @MainActor
+    func testProviderSetupPersistsDefaultWithoutSecondSave() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        _ = openSettingsWindow(app)
+        selectModelSettings(app)
+        app.buttons["添加模型服务"].click()
+        app.buttons["自定义配置"].click()
+        let name = app.textFields["providers.editor.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.click(); name.typeText("Offline Vision")
+        let address = app.textFields["providers.editor.address"]
+        address.click(); address.typeText("https://setup-fixture.invalid/v1")
+        let key = app.secureTextFields["providers.editor.key"]
+        key.click(); key.typeText("synthetic-ui-key")
+        app.buttons["providers.editor.continue"].click()
+        let candidate = app.checkBoxes["providers.model.gpt-4.1"]
+        XCTAssertTrue(candidate.waitForExistence(timeout: 10))
+        XCTAssertTrue(candidate.isEnabled)
+        candidate.click()
+        XCTAssertEqual(candidate.value as? Int, 1)
+        app.buttons["providers.editor.verify"].click()
+        let activate = app.buttons["providers.editor.activate"]
+        XCTAssertTrue(activate.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "enabled == true AND label CONTAINS %@", "识别验证通过"), evaluatedWith: candidate)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.sheets.buttons["添加为备用"].firstMatch.isHittable)
+        attachReview("Provider verified", app: app)
+        activate.click()
+        XCTAssertTrue(app.buttons["providers.default.change"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Offline Vision · gpt-4.1"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["保存 Provider 设置"].exists)
+        attachReview("Provider default saved", app: app)
+        app.terminate(); app.launch(); app.activate()
+        _ = openSettingsWindow(app)
+        selectModelSettings(app)
+        XCTAssertTrue(app.staticTexts["Offline Vision · gpt-4.1"].firstMatch.waitForExistence(timeout: 10))
+        #endif
+    }
+
+    @MainActor
+    func testBuiltinProviderSetupUsesSameVerificationFlow() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        app.buttons["添加模型服务"].click()
+        app.buttons["OpenAI 官方 API"].click()
+        let key = app.secureTextFields["providers.editor.key"]
+        XCTAssertTrue(key.waitForExistence(timeout: 5))
+        key.click(); key.typeText("synthetic-ui-key")
+        app.buttons["providers.editor.continue"].click()
+        let model = app.checkBoxes["providers.model.openai/gpt-4.1"].firstMatch
+        let directModel = app.checkBoxes["providers.model.gpt-4.1"].firstMatch
+        let target = model.waitForExistence(timeout: 3) ? model : directModel
+        XCTAssertTrue(target.waitForExistence(timeout: 5)); XCTAssertTrue(target.isEnabled); target.click()
+        XCTAssertEqual(target.value as? Int, 1)
+        app.buttons["providers.editor.verify"].click()
+        XCTAssertTrue(app.buttons["providers.editor.activate"].waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "enabled == true AND label CONTAINS %@", "识别验证通过"), evaluatedWith: target)
+        waitForExpectations(timeout: 5)
+        attachReview("Built-in model verified", app: app)
+        #endif
+    }
+
+    @MainActor
+    func testProviderAuthenticationFailureOffersCredentialRepair() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        fillCustomProvider(app, name: "Auth fixture", address: "https://auth-fixture.invalid/v1")
+        app.buttons["providers.editor.continue"].click()
+        let repair = app.sheets.buttons["修改密钥"].firstMatch
+        XCTAssertTrue(repair.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["无法获取 /models；请检查基础地址，或手动填写模型 ID 后验证。"].exists)
+        repair.click()
+        XCTAssertTrue(app.secureTextFields["providers.editor.key"].waitForExistence(timeout: 5))
+        attachReview("Credential recovery", app: app)
+        #endif
+    }
+
+    @MainActor
+    func testManualModelFallbackAndSearchPreserveSelection() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        fillCustomProvider(app, name: "Manual fixture", address: "https://manual-fixture.invalid/v1")
+        app.buttons["providers.editor.continue"].click()
+        let manual = app.textFields["providers.editor.models"]
+        XCTAssertTrue(manual.waitForExistence(timeout: 10))
+        manual.click(); manual.typeText("gpt-4.1")
+        let model = app.checkBoxes["providers.model.gpt-4.1"]
+        XCTAssertTrue(model.waitForExistence(timeout: 5)); model.click()
+        let search = app.textFields["providers.models.search"]
+        search.click(); search.typeText("no-such-model")
+        XCTAssertTrue(app.staticTexts["没有匹配的模型，请清除搜索或更改筛选。"].waitForExistence(timeout: 5))
+        search.typeKey("a", modifierFlags: .command); search.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(model.waitForExistence(timeout: 5))
+        XCTAssertEqual(model.value as? Int, 1)
+        app.buttons["providers.editor.verify"].click()
+        XCTAssertTrue(app.buttons["providers.editor.activate"].waitForExistence(timeout: 10))
+        attachReview("Manual model verified", app: app)
+        #endif
+    }
+
+    /// Exercise real locale/appearance preferences and native keyboard focus at the minimum window size.
+    @MainActor
+    func testProviderLayoutAppearanceLanguageAndKeyboardMatrix() {
+        let app = launchIsolatedApp()
+        var settingsWindow = openSettingsWindow(app)
+        for english in [false, true] {
+            if english {
+                app.radioButtons["通用"].click()
+                app.popUpButtons["settings.applicationLanguage"].firstMatch.click()
+                app.menuItems["English"].click()
+                app.terminate(); app.launch(); app.activate()
+                settingsWindow = openSettingsWindow(app)
+            }
+            for dark in [false, true] {
+                app.radioButtons[english ? "General" : "通用"].click()
+                app.popUpButtons["settings.appearance"].firstMatch.click()
+                app.menuItems[english ? (dark ? "Dark" : "Light") : (dark ? "深色" : "浅色")].click()
+                app.popUpButtons["settings.density"].firstMatch.click()
+                app.menuItems[english ? (dark ? "Compact" : "Comfortable") : (dark ? "紧凑" : "舒适")].click()
+                // Match the established Settings resize test: focus native chrome before edge drags.
+                app.activate()
+                // Activation can front the project window; the Settings command raises the target explicitly.
+                app.typeKey(",", modifierFlags: .command)
+                settingsWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+                    .withOffset(CGVector(dx: 0, dy: 16)).click()
+                resize(settingsWindow, to: CGSize(width: 700, height: 540))
+                selectModelSettings(app, english: english)
+                app.buttons[english ? "Add model service" : "添加模型服务"].click()
+                app.buttons[english ? "Custom configuration" : "自定义配置"].click()
+                let name = app.textFields["providers.editor.name"]
+                let key = app.secureTextFields["providers.editor.key"]
+                let next = app.buttons["providers.editor.continue"]
+                XCTAssertTrue(name.waitForExistence(timeout: 5))
+                XCTAssertTrue(name.isHittable); XCTAssertTrue(key.isHittable); XCTAssertTrue(next.isHittable)
+                let keyBefore = key.value as? String
+                name.click(); name.typeText("Long model service name for layout check 1234567890")
+                app.typeKey(.tab, modifierFlags: [])
+                app.typeText("synthetic-layout-key")
+                XCTAssertNotEqual(key.value as? String, keyBefore)
+                XCTAssertEqual(name.value as? String, "Long model service name for layout check 1234567890")
+                let show = app.buttons[english ? "Show API Key" : "显示 API Key"].firstMatch
+                XCTAssertTrue(show.isHittable); show.click()
+                XCTAssertEqual(app.textFields["providers.editor.key"].value as? String, "synthetic-layout-key")
+                app.buttons[english ? "Hide API Key" : "隐藏 API Key"].firstMatch.click()
+                XCTAssertTrue(key.exists)
+                attachReview("Provider-\(english ? "English" : "Chinese")-\(dark ? "Dark-Compact" : "Light-Comfortable")", app: app)
+                app.typeKey(.escape, modifierFlags: [])
+                let keep = app.sheets.buttons[english ? "Keep editing" : "继续编辑"].firstMatch
+                XCTAssertTrue(keep.waitForExistence(timeout: 3)); keep.click()
+                XCTAssertTrue(name.exists)
+                app.typeKey(.escape, modifierFlags: [])
+                app.sheets.buttons[english ? "Discard changes" : "放弃修改"].firstMatch.click()
+                XCTAssertTrue(app.buttons[english ? "Add model service" : "添加模型服务"].waitForExistence(timeout: 5))
+            }
+        }
+    }
+
+    @MainActor
+    func testProviderCancellationDoesNotEnableUnverifiedModel() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        fillCustomProvider(app, name: "Cancel fixture", address: "https://slow-fixture.invalid/v1")
+        app.buttons["providers.editor.continue"].click()
+        let model = app.checkBoxes["providers.model.gpt-4.1"]
+        XCTAssertTrue(model.waitForExistence(timeout: 8)); model.click()
+        app.buttons["providers.editor.verify"].click()
+        let cancel = app.sheets.buttons["取消"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5)); cancel.click()
+        XCTAssertTrue(app.sheets.staticTexts["操作已取消"].firstMatch.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["providers.editor.activate"].exists)
+        attachReview("Provider verification canceled", app: app)
+        #endif
+    }
+
+    @MainActor
+    func testProviderPartialVerificationKeepsSuccessfulModelUsable() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        fillCustomProvider(app, name: "Mixed fixture", address: "https://setup-fixture.invalid/v1")
+        app.buttons["providers.editor.continue"].click()
+        let manual = app.textFields["providers.editor.models"]
+        XCTAssertTrue(manual.waitForExistence(timeout: 8)); manual.click(); manual.typeText("gpt-4.1, failed-model")
+        let success = app.checkBoxes["providers.model.gpt-4.1"]
+        let failure = app.checkBoxes["providers.model.failed-model"]
+        XCTAssertTrue(success.waitForExistence(timeout: 5)); success.click()
+        XCTAssertTrue(failure.waitForExistence(timeout: 5)); failure.click()
+        app.buttons["providers.editor.verify"].click()
+        XCTAssertTrue(app.sheets.staticTexts["通过 1 个，失败 1 个，取消 0 个"].firstMatch.waitForExistence(timeout: 10))
+        failure.click()
+        XCTAssertTrue(app.buttons["providers.editor.activate"].waitForExistence(timeout: 5))
+        attachReview("Provider partial verification", app: app)
+        #endif
+    }
+
+    /// Persisted ordinary config is inspected only after native UI operations; no credential files are read.
+    @MainActor
+    func testProviderBackupOrderAndDeletionCommitImmediately() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        fillCustomProvider(app, name: "Backup fixture", address: "https://setup-fixture.invalid/v1")
+        app.buttons["providers.editor.continue"].click()
+        let manual = app.textFields["providers.editor.models"]
+        XCTAssertTrue(manual.waitForExistence(timeout: 8)); manual.click(); manual.typeText("gpt-4.1, backup-model")
+        let first = app.checkBoxes["providers.model.gpt-4.1"]
+        let second = app.checkBoxes["providers.model.backup-model"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5)); first.click()
+        XCTAssertTrue(second.waitForExistence(timeout: 5)); second.click()
+        app.buttons["providers.editor.verify"].click()
+        XCTAssertTrue(app.sheets.staticTexts["通过 2 个，失败 0 个，取消 0 个"].firstMatch.waitForExistence(timeout: 10))
+        second.click()
+        app.sheets.buttons["添加为备用"].firstMatch.click()
+        let root = testRoot!
+        expectation(for: NSPredicate { _, _ in (try? Self.persistedBackupIDs(root)) == ["gpt-4.1"] }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        first.click(); second.click()
+        app.sheets.buttons["添加为备用"].firstMatch.click()
+        expectation(for: NSPredicate { _, _ in (try? Self.persistedBackupIDs(root)) == ["gpt-4.1", "backup-model"] }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        second.click(); first.click()
+        app.buttons["providers.editor.activate"].click()
+        let backups = app.buttons["备用模型"].firstMatch
+        XCTAssertTrue(backups.waitForExistence(timeout: 8)); backups.click()
+        app.buttons.matching(identifier: "上移").element(boundBy: 1).click()
+        expectation(for: NSPredicate { _, _ in (try? Self.persistedBackupIDs(root)) == ["backup-model", "gpt-4.1"] }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        attachReview("Provider ordered backups saved", app: app)
+        app.terminate(); app.launch(); app.activate()
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        app.buttons["备用模型"].firstMatch.click()
+        XCTAssertEqual(try Self.persistedBackupIDs(root), ["backup-model", "gpt-4.1"])
+        // A changed request revokes roles until both models are verified again.
+        app.buttons["配置…"].firstMatch.click()
+        let changedAddress = app.textFields["providers.editor.address"]
+        XCTAssertTrue(changedAddress.waitForExistence(timeout: 5))
+        changedAddress.click(); changedAddress.typeKey("a", modifierFlags: .command)
+        changedAddress.typeText("https://setup-fixture.invalid/v2")
+        XCTAssertTrue(app.sheets.staticTexts["此修改会撤销旧验证，并停用该服务的默认和备用模型。保存后请重新验证，可恢复原用途。"].firstMatch.exists)
+        app.buttons["providers.editor.continue"].click()
+        XCTAssertTrue(first.waitForExistence(timeout: 8))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: first)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(try Self.persistedBackupIDs(root), [])
+        first.click(); second.click()
+        app.buttons["providers.editor.verify"].click()
+        XCTAssertTrue(app.sheets.staticTexts["通过 2 个，失败 0 个，取消 0 个"].firstMatch.waitForExistence(timeout: 8))
+        second.click()
+        let restore = app.sheets.buttons["恢复原用途"].firstMatch
+        XCTAssertTrue(restore.waitForExistence(timeout: 5)); restore.click()
+        expectation(for: NSPredicate { _, _ in (try? Self.persistedBackupIDs(root)) == ["backup-model", "gpt-4.1"] }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        let closeEditor = app.sheets.buttons["关闭"].firstMatch
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: closeEditor)
+        waitForExpectations(timeout: 5)
+        attachReview("Provider previous roles restored", app: app)
+        closeEditor.click()
+        XCTAssertTrue(app.staticTexts["Backup fixture · gpt-4.1"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["移除"].firstMatch.click()
+        expectation(for: NSPredicate { _, _ in (try? Self.persistedBackupIDs(root)) == ["gpt-4.1"] }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        app.popUpButtons["更多操作"].firstMatch.click()
+        app.menuItems["删除…"].click()
+        let remove = app.sheets.buttons["删除"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5)); remove.click()
+        expectation(for: NSPredicate { _, _ in
+            guard let config = try? Self.persistedProviderConfig(root), let providers = config["customProviders"] as? [Any],
+                  let values = config["values"] as? [String: Any] else { return false }
+            return providers.isEmpty && (values["DEFAULT_PROVIDER_ID"] as? String ?? "").isEmpty
+                && (try? Self.persistedBackupIDs(root)) == []
+        }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["还没有默认模型，请先配置并验证模型服务。"].firstMatch.waitForExistence(timeout: 5))
+        attachReview("Provider deletion persisted", app: app)
+        #endif
+    }
+
+    private static func persistedProviderConfig(_ root: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: root.appending(path: "global-config.json"))
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+    private static func persistedBackupIDs(_ root: URL) throws -> [String] {
+        let config = try persistedProviderConfig(root)
+        let values = try XCTUnwrap(config["values"] as? [String: Any])
+        let raw = values["RECOGNITION_FAILOVER_CHAIN"] as? String ?? "[]"
+        let pairs = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [[String: String]])
+        return pairs.compactMap { $0["modelID"] }
+    }
+
+    @MainActor
+    func testUnconfiguredBuiltinStartsAtCredentialEntry() {
+        let app = launchIsolatedApp()
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        let search = app.textFields["providers.search"]
+        search.click(); search.typeText("OpenAI 官方 API")
+        let openModels = app.buttons["选择并验证模型"].firstMatch
+        XCTAssertTrue(openModels.waitForExistence(timeout: 5)); openModels.click()
+        XCTAssertTrue(app.secureTextFields["providers.editor.key"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["providers.editor.verify"].exists)
+        app.buttons["providers.editor.continue"].click()
+        XCTAssertTrue(app.sheets.staticTexts["请先填写 API Key"].firstMatch.waitForExistence(timeout: 3))
+        app.sheets.buttons["仅保存配置"].firstMatch.click()
+        XCTAssertTrue(app.sheets.staticTexts["配置已保存"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.sheets.buttons["选择并验证模型"].firstMatch.isEnabled)
+        attachReview("Missing credential stays at configuration", app: app)
+    }
+
+    @MainActor
+    func testAdvisoryURLSuffixDoesNotBlockSaveOnly() throws {
+        let app = launchIsolatedApp()
+        fillCustomProvider(app, name: "Proxy route", address: "https://manual-fixture.invalid/v1/chat/completions")
+        app.sheets.buttons["仅保存配置"].firstMatch.click()
+        XCTAssertTrue(app.sheets.staticTexts["配置已保存"].firstMatch.waitForExistence(timeout: 5))
+        let config = try Self.persistedProviderConfig(testRoot)
+        let providers = try XCTUnwrap(config["customProviders"] as? [[String: Any]])
+        XCTAssertEqual(providers.first?["baseUrl"] as? String, "https://manual-fixture.invalid/v1/chat/completions")
+        XCTAssertFalse(app.buttons["providers.editor.verify"].exists, "Save-only must not start discovery")
+        attachReview("Advisory URL preserves saved route", app: app)
+    }
+
+    @MainActor
+    func testOfflineRefreshReplacesOldProbeFeedbackWithoutRevokingProof() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        // Start with an existing endpoint override; this case targets feedback, not disclosure geometry.
+        let seed: [String: Any] = ["version": 2, "values": ["OPENAI_BASE_URL": "https://offline-refresh-fixture.invalid/v1"], "customProviders": []]
+        try JSONSerialization.data(withJSONObject: seed).write(to: testRoot.appending(path: "global-config.json"))
+        let app = launchIsolatedApp(providerFixture: true)
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        app.buttons["添加模型服务"].click(); app.buttons["OpenAI 官方 API"].click()
+        let key = app.secureTextFields["providers.editor.key"]
+        XCTAssertTrue(key.waitForExistence(timeout: 5)); key.click(); key.typeText("synthetic")
+        app.buttons["providers.editor.continue"].click()
+        let model = app.checkBoxes["providers.model.openai/gpt-4o-mini"]
+        XCTAssertTrue(model.waitForExistence(timeout: 8)); model.click()
+        app.buttons["providers.editor.verify"].click()
+        XCTAssertTrue(app.sheets.staticTexts["通过 1 个，失败 0 个，取消 0 个"].firstMatch.waitForExistence(timeout: 8))
+        let refresh = app.sheets.buttons["刷新模型"].firstMatch
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: refresh)
+        waitForExpectations(timeout: 5)
+        refresh.click()
+        XCTAssertTrue(app.sheets.staticTexts["未确认连接，显示本地模型目录"].firstMatch.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.sheets.staticTexts["通过 1 个，失败 0 个，取消 0 个"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["providers.editor.activate"].exists)
+        attachReview("Offline refresh keeps proof and shows latest warning", app: app)
+        #endif
+    }
+
+    @MainActor
+    private func fillCustomProvider(_ app: XCUIApplication, name: String, address: String) {
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        app.buttons["添加模型服务"].click(); app.buttons["自定义配置"].click()
+        let nameField = app.textFields["providers.editor.name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.click(); nameField.typeText(name)
+        app.textFields["providers.editor.address"].click()
+        app.textFields["providers.editor.address"].typeText(address)
+        app.secureTextFields["providers.editor.key"].click()
+        app.secureTextFields["providers.editor.key"].typeText("synthetic-ui-key")
+    }
+
+    @MainActor
+    func testProviderEditorValidationAndDiscardPreserveSavedConfiguration() {
+        let app = launchIsolatedApp()
+        _ = openSettingsWindow(app)
+        selectModelSettings(app)
+        app.buttons["添加模型服务"].click()
+        app.buttons["自定义配置"].click()
+        app.buttons["providers.editor.continue"].click()
+        XCTAssertTrue(app.staticTexts["名称需为 1–60 个字符"].waitForExistence(timeout: 5))
+        let name = app.textFields["providers.editor.name"]
+        name.click(); name.typeText("Unsaved draft")
+        app.buttons["返回预设选择"].click()
+        XCTAssertTrue(app.sheets.buttons["继续编辑"].firstMatch.waitForExistence(timeout: 3))
+        app.sheets.buttons["继续编辑"].firstMatch.click()
+        XCTAssertEqual(name.value as? String, "Unsaved draft")
+        attachReview("Provider draft protected", app: app)
+        app.buttons["返回预设选择"].click()
+        app.sheets.buttons["放弃修改"].firstMatch.click()
+        XCTAssertTrue(app.buttons["自定义配置"].waitForExistence(timeout: 5))
+    }
+
     @MainActor
     func testLaunchesMainWindowAndProjectLibrary() {
         let app = launchIsolatedApp()
@@ -141,7 +539,7 @@ final class SlateSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchIsolatedApp() -> XCUIApplication {
+    private func launchIsolatedApp(providerFixture: Bool = false) -> XCUIApplication {
         // The packaging Gate injects an extracted Release app URL. The same
         // assertions then exercise shipped bytes with a temporary data root.
         let app: XCUIApplication
@@ -168,6 +566,7 @@ final class SlateSyncUITests: XCTestCase {
             try FileManager.default.removeItem(at: root)
         }
         app.launchEnvironment["SLATESYNC_TEST_ROOT"] = testRoot.path
+        if providerFixture { app.launchEnvironment["SLATESYNC_PROVIDER_UI_FIXTURE"] = "setup" }
         // Consecutive Gate runs can persist a prior no-window termination in
         // SwiftUI's restoration domain, which launches only the menu bar.
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
@@ -183,6 +582,20 @@ final class SlateSyncUITests: XCTestCase {
         _ = app.windows.firstMatch.waitForExistence(timeout: 15)
         app.activate()
         return app
+    }
+
+    /// Native macOS segmented Pickers expose radio buttons, not iOS segmented controls.
+    @MainActor
+    private func selectModelSettings(_ app: XCUIApplication, english: Bool = false) {
+        let title = english ? "Model service" : "模型服务"
+        let radio = app.radioButtons[title].firstMatch
+        if radio.waitForExistence(timeout: 3) { radio.click() }
+        else {
+            let button = app.buttons[title].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 3))
+            button.click()
+        }
+        XCTAssertTrue(app.buttons[english ? "Add model service" : "添加模型服务"].waitForExistence(timeout: 5))
     }
 
     @MainActor

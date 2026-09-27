@@ -15,7 +15,7 @@ public struct BuiltinProviderSaveResult: Hashable, Sendable {
     public let error: SlateSyncError?
 
     public var isComplete: Bool {
-        configurationSaved && (!credentialUpdateRequested || credentialSaved)
+        configurationSaved && (!credentialUpdateRequested || credentialSaved) && error == nil
     }
 
     public init(
@@ -96,6 +96,7 @@ public final class GlobalSettingsModel {
     public var customProviders: [CustomProviderConfiguration] = []
     public private(set) var discoveryResults: [String: ModelDiscoveryResult] = [:]
     public private(set) var providerOperations: [String: OperationState] = [:]
+    public private(set) var probeResults: [String: ModelProbeResult] = [:]
     public private(set) var probeProgress: [String: ModelProbeProgress] = [:]
     /// Tracks probe ownership separately from generic provider operations so
     /// the UI can expose cancellation before the first progress callback.
@@ -107,6 +108,13 @@ public final class GlobalSettingsModel {
     private var providerRequests: [String: UUID] = [:]
 
     public init(service: any GlobalSettingsWorkflowServing) { self.service = service }
+
+    /// Keep draft discovery outside saved catalogs and the global save operation state.
+    public func discoverDraftModelIDs(baseURL: String, apiKey: String, savedProviderID: String?) async throws -> [String] {
+        guard beginOperation() else { throw CancellationError() }
+        defer { endOperation() }
+        return try await service.discoverDraftModelIDs(baseURL: baseURL, apiKey: apiKey, savedProviderID: savedProviderID)
+    }
 
     public func load() async {
         guard beginOperation() else { return }
@@ -128,35 +136,53 @@ public final class GlobalSettingsModel {
     public func value(_ key: GlobalSettingKey) -> String { draft[key] ?? "" }
     public func setValue(_ value: String, for key: GlobalSettingKey) { draft[key] = value }
 
-    /// The workbench changes only the committed default pair. Rebase on the
-    /// live snapshot so unrelated unsaved Settings drafts keep their barrier.
+    /// All immediate selection edits share one scoped commit, including workbench callers.
+    @discardableResult
     public func setDefaultPair(providerID: String, modelID: String) async -> Bool {
-        guard beginOperation() else { return false }
+        await commitProviderChange(.setDefault(.init(providerID: providerID, modelID: modelID)))
+    }
+
+    /// Read committed state after admission, then publish only after persistence succeeds.
+    /// Never submit unrelated Settings drafts from a Provider action.
+    @discardableResult
+    public func commitProviderChange(_ change: ProviderSelectionChange) async -> Bool {
+        guard !operation.isRunning, beginOperation() else { return false }
         defer { endOperation() }
-        guard !operation.isRunning else { return false }
-        guard let snapshot = live,
-              snapshot.models.contains(where: {
-                  $0.providers.contains(providerID) && $0.id == modelID
-                      && $0.capabilityStatus == .verified && $0.verifiedAvailable != false
-              }) else {
-            operation = .failed(.init(code: "MODEL_NOT_VERIFIED", message: L10n.tr("请先在全局设置验证所选模型。")))
-            return false
-        }
-        var values = snapshot.values
-        values[.defaultProviderID] = providerID
-        values[.defaultModelID] = modelID
-        operation = .running(label: L10n.tr("正在保存默认组合…"))
+        operation = .running(label: L10n.tr("正在保存模型设置…"))
         do {
-            let saved = try await service.saveGlobalSettings(values: values, customProviders: snapshot.customProviders)
+            if case .removeService(let id) = change {
+                let wasRunning = providerOperations[id]?.isRunning == true
+                providerRequests[id] = nil
+                await service.cancelModelProbe(providerID: id)
+                // Cancellation completed even if the following disk write fails.
+                // Old callbacks have lost ownership and cannot perform this cleanup.
+                probingProviderIDs.remove(id)
+                probeProgress[id] = nil
+                if wasRunning { providerOperations[id] = .canceled }
+            }
+            let snapshot = try await service.globalSettings()
+            let updated = try change.applying(to: snapshot)
+            let saved = try await service.saveGlobalSettings(values: updated.values, customProviders: updated.providers)
             refreshPreservingDraft(saved)
-            draft[.defaultProviderID] = providerID
-            draft[.defaultModelID] = modelID
-            operation = .succeeded(message: L10n.tr("默认组合已保存"))
+            for key: GlobalSettingKey in [.defaultProviderID, .defaultModelID, .recognitionFailoverChain] {
+                draft[key] = saved.values[key]
+            }
+            if case .removeService(let id) = change {
+                customProviders.removeAll { $0.id == id }
+                discoveryResults[id] = nil
+                providerOperations[id] = nil
+                probeProgress[id] = nil
+                probeResults[id] = nil
+                probingProviderIDs.remove(id)
+            }
+            operation = .succeeded(message: L10n.tr("模型设置已保存"))
             return true
+        } catch is CancellationError {
+            operation = .canceled
         } catch {
             operation = .failed(ProductPrivacy.error(error))
-            return false
         }
+        return false
     }
 
     public func save() async {
@@ -178,7 +204,7 @@ public final class GlobalSettingsModel {
             let selected = (try? ProviderModelSelection.decodeAndValidateChain(values[.recognitionFailoverChain] ?? "[]")) ?? []
             let allPairs = selected + (defaultProvider.isEmpty ? [] : [.init(providerID: defaultProvider, modelID: defaultModel)])
             for pair in allPairs {
-                guard isVerifiedPair(pair, customProviders: providers) else {
+                guard let live, ProviderPresentation.isVerified(pair, in: live, customProviders: providers) else {
                     throw SlateSyncError(code: "MODEL_NOT_VERIFIED", message: L10n.tr("默认或备用模型尚未验证，请先在 Provider 设置完成验证。"))
                 }
             }
@@ -199,24 +225,6 @@ public final class GlobalSettingsModel {
         }
     }
 
-    private func isVerifiedPair(
-        _ pair: ProviderModelSelection,
-        customProviders: [CustomProviderConfiguration]
-    ) -> Bool {
-        if let custom = customProviders.first(where: { $0.id == pair.providerID }) {
-            let modelID = custom.id == ProviderKind.openAICompatible.rawValue
-                && pair.modelID == ProviderKind.openAICompatible.rawValue + "/custom"
-                ? custom.manualModelIds.first ?? pair.modelID : pair.modelID
-            let proof = custom.capabilityCache?[modelID]
-            return custom.manualModelIds.contains(modelID)
-                && proof?.revision == custom.revision && proof?.status == .verified
-        }
-        return live?.models.contains(where: {
-            $0.providers.contains(pair.providerID) && $0.id == pair.modelID
-                && $0.capabilityStatus == .verified && $0.verifiedAvailable != false
-        }) == true
-    }
-
     public func storeCredential(_ value: String?, providerID: String) async throws {
         guard beginOperation() else { throw SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试")) }
         defer { endOperation() }
@@ -234,7 +242,7 @@ public final class GlobalSettingsModel {
         values: [GlobalSettingKey: String?],
         apiKey: String?
     ) async -> BuiltinProviderSaveResult {
-        guard beginOperation() else {
+        guard !operation.isRunning, beginOperation() else {
             let error = SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试"))
             return .init(
                 configurationSaved: false,
@@ -323,7 +331,7 @@ public final class GlobalSettingsModel {
 
         let saved: GlobalSettingsProjection
         do {
-            saved = try await service.saveGlobalSettings(values: candidate, customProviders: customProviders)
+            saved = try await service.saveGlobalSettings(values: candidate, customProviders: live?.customProviders ?? [])
             // A changed Base URL or protocol invalidates the old discovery and
             // probe result immediately; the workflow façade also resets its
             // Provider runtime before committing the ordinary configuration.
@@ -331,6 +339,7 @@ public final class GlobalSettingsModel {
             discoveryResults[providerID] = nil
             providerOperations[providerID] = nil
             probeProgress[providerID] = nil
+            probeResults[providerID] = nil
             probingProviderIDs.remove(providerID)
             refreshPreservingDraft(saved)
         } catch {
@@ -357,11 +366,14 @@ public final class GlobalSettingsModel {
 
         do {
             try await service.setProviderCredential(cleanedKey, providerID: providerID)
-            // The write API intentionally returns no secret. Refresh only the
-            // secret-free projection so status changes are visible in both the
-            // list and this still-open configuration panel.
-            if let refreshed = try? await service.globalSettings() {
-                refreshPreservingDraft(refreshed)
+            do {
+                refreshPreservingDraft(try await service.globalSettings())
+            } catch {
+                let sanitized = ProductPrivacy.error(error)
+                let message = L10n.tr("配置与 API Key 已保存，但状态刷新失败：{0}", [L10n.message(sanitized.message)])
+                operation = .failed(.init(code: sanitized.code, message: message))
+                return .init(configurationSaved: true, credentialUpdateRequested: true,
+                             credentialSaved: true, message: message, error: sanitized)
             }
             operation = .succeeded(message: L10n.tr("Provider 配置与 API Key 已保存"))
             return .init(
@@ -372,11 +384,13 @@ public final class GlobalSettingsModel {
             )
         } catch is CancellationError {
             // Cancellation before admission is not a credential-file failure.
+            await refreshAfterCredentialFailure()
             operation = .canceled
             return .init(configurationSaved: true, credentialUpdateRequested: true,
                          credentialSaved: false, message: L10n.tr("已取消"))
         } catch {
             let sanitized = ProductPrivacy.error(error)
+            await refreshAfterCredentialFailure()
             operation = .failed(sanitized)
             return .init(
                 configurationSaved: true,
@@ -388,27 +402,41 @@ public final class GlobalSettingsModel {
         }
     }
 
+    /// A failed key write may already have durably revoked proof and selections.
+    /// Projection recovery is best-effort; it must not hide the original write error.
+    private func refreshAfterCredentialFailure() async {
+        if let refreshed = try? await service.globalSettings() { refreshPreservingDraft(refreshed) }
+    }
+
     /// Key deletion is independent from the blank API Key field. A dedicated
     /// call prevents an accidental empty submit from destroying a valid key.
     public func removeProviderCredential(providerID: String) async throws {
-        guard beginOperation() else {
+        guard !operation.isRunning, beginOperation() else {
             throw SlateSyncError(code: "SETTINGS_CLOSING", message: L10n.tr("设置正在关闭，请稍后重试"))
         }
         defer { endOperation() }
         operation = .running(label: L10n.tr("正在删除 API Key…"))
+        // Deletion uses the same revoke-before-write path as replacement. Old
+        // callbacks and transient proof must not survive a failed credential mutation.
+        providerRequests[providerID] = nil
+        discoveryResults[providerID] = nil
+        probeResults[providerID] = nil
+        probeProgress[providerID] = nil
+        providerOperations[providerID] = nil
+        probingProviderIDs.remove(providerID)
         do {
             try await service.setProviderCredential(nil, providerID: providerID)
             if let refreshed = try? await service.globalSettings() {
                 refreshPreservingDraft(refreshed)
             }
-            discoveryResults[providerID] = nil
-            providerOperations[providerID] = nil
             operation = .succeeded(message: L10n.tr("{0} 的 API Key 已删除", [String(describing: providerID)]))
         } catch is CancellationError {
+            await refreshAfterCredentialFailure()
             operation = .canceled
             throw CancellationError()
         } catch {
             let sanitized = ProductPrivacy.error(error)
+            await refreshAfterCredentialFailure()
             operation = .failed(sanitized)
             throw sanitized
         }
@@ -424,6 +452,7 @@ public final class GlobalSettingsModel {
             discoveryResults.removeAll()
             providerOperations.removeAll()
             probeProgress.removeAll()
+            probeResults.removeAll()
             probingProviderIDs.removeAll()
             draft[.defaultProviderID] = ""
             draft[.defaultModelID] = ""
@@ -464,6 +493,7 @@ public final class GlobalSettingsModel {
             providerRequests[existing.id] = nil
             await service.cancelModelProbe(providerID: existing.id)
             providerOperations[existing.id] = nil
+            probeResults[existing.id] = nil
             probingProviderIDs.remove(existing.id)
         }
         let previousDraftProviders = customProviders
@@ -508,10 +538,12 @@ public final class GlobalSettingsModel {
             do {
                 try await service.setProviderCredential(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), providerID: provider.id)
             } catch is CancellationError {
+                await refreshAfterCredentialFailure()
                 operation = .canceled
                 return .init(provider: provider, configurationSaved: true, credentialSaved: false, isComplete: false)
             } catch {
                 let sanitized = ProductPrivacy.error(error)
+                await refreshAfterCredentialFailure()
                 operation = .failed(.init(code: sanitized.code,
                     message: L10n.tr("普通配置已保存，但 API Key 保存失败：{0}", [L10n.message(sanitized.message)])))
                 return .init(provider: provider, configurationSaved: true, credentialSaved: false, isComplete: false)
@@ -542,10 +574,14 @@ public final class GlobalSettingsModel {
 
 
 
-    public func discover(providerID: String, forceRefresh: Bool = true) async {
-        guard beginOperation() else { return }
+    @discardableResult
+    public func discover(providerID: String, forceRefresh: Bool = true) async -> ModelDiscoveryResult? {
+        guard !operation.isRunning, beginOperation() else { return nil }
         defer { endOperation() }
-        guard providerOperations[providerID]?.isRunning != true else { return }
+        guard providerOperations[providerID]?.isRunning != true else { return nil }
+        // Start a new feedback epoch; durable model proofs remain in the live snapshot.
+        probeResults[providerID] = nil
+        probeProgress[providerID] = nil
         providerOperations[providerID] = .running(label: L10n.tr("正在刷新模型…"))
         let request = UUID()
         providerRequests[providerID] = request
@@ -554,26 +590,33 @@ public final class GlobalSettingsModel {
                 providerID: providerID,
                 forceRefresh: forceRefresh
             )
-            guard providerRequests[providerID] == request else { return }
+            guard providerRequests[providerID] == request else { return nil }
             discoveryResults[providerID] = result
             // Publish the shared catalog revision so already-open workspaces
             // refresh their model pickers without discarding Settings drafts.
             let refreshed = try await service.globalSettings()
-            guard providerRequests[providerID] == request else { return }
+            guard providerRequests[providerID] == request else { return nil }
             refreshPreservingDraft(refreshed)
-            providerOperations[providerID] = .succeeded(message: L10n.tr("发现 {0} 个可用模型", [String(describing: result.visionModelCount)]))
+            providerOperations[providerID] = .succeeded(message: ProviderPresentation.discoverySummary(result))
+            return result
+        } catch is CancellationError {
+            guard providerRequests[providerID] == request else { return nil }
+            providerOperations[providerID] = .canceled
         } catch {
-            guard providerRequests[providerID] == request else { return }
+            guard providerRequests[providerID] == request else { return nil }
             providerOperations[providerID] = .failed(ProductPrivacy.error(error))
         }
+        return nil
     }
 
-    public func probe(providerID: String, modelIDs: [String]) async {
-        guard beginOperation() else { return }
+    @discardableResult
+    public func probe(providerID: String, modelIDs: [String]) async -> ModelProbeResult? {
+        guard !operation.isRunning, beginOperation() else { return nil }
         defer { endOperation() }
-        guard providerOperations[providerID]?.isRunning != true else { return }
+        guard providerOperations[providerID]?.isRunning != true else { return nil }
         providerOperations[providerID] = .running(label: L10n.tr("正在验证视觉能力…"))
         probeProgress[providerID] = nil
+        probeResults[providerID] = nil
         probingProviderIDs.insert(providerID)
         let request = UUID()
         providerRequests[providerID] = request
@@ -599,17 +642,23 @@ public final class GlobalSettingsModel {
                     )
                 }
             }
-            guard providerRequests[providerID] == request else { return }
+            guard providerRequests[providerID] == request else { return nil }
+            probeResults[providerID] = result
             providerOperations[providerID] = result.canceled
                 ? .canceled
-                : .succeeded(message: L10n.tr("模型能力验证完成"))
+                : .succeeded(message: ProviderPresentation.probeSummary(result))
             let refreshed = try await service.globalSettings()
-            guard providerRequests[providerID] == request else { return }
+            guard providerRequests[providerID] == request else { return nil }
             refreshPreservingDraft(refreshed)
+            return result
+        } catch is CancellationError {
+            guard providerRequests[providerID] == request else { return nil }
+            providerOperations[providerID] = .canceled
         } catch {
-            guard providerRequests[providerID] == request else { return }
+            guard providerRequests[providerID] == request else { return nil }
             providerOperations[providerID] = .failed(ProductPrivacy.error(error))
         }
+        return nil
     }
 
     public func cancelProbe(providerID: String) async {
@@ -724,27 +773,10 @@ public final class GlobalSettingsModel {
         }
     }
 
-    public func removeCustomProvider(id: String) async {
-        guard beginOperation() else { return }
-        defer { endOperation() }
-        // Invalidate before the actor hop: a canceled discovery/probe may
-        // finish while deletion waits for its transport to drain.
-        providerRequests[id] = nil
-        await service.cancelModelProbe(providerID: id)
-        customProviders.removeAll { $0.id == id }
-        // Remove references in the same unsaved draft transaction as deletion.
-        if draft[.defaultProviderID] == id {
-            draft[.defaultProviderID] = ""
-            draft[.defaultModelID] = ""
-        }
-        if let chain = try? ProviderModelSelection.decodeAndValidateChain(draft[.recognitionFailoverChain] ?? "[]"),
-           let encoded = try? ProviderModelSelection.encodeChain(chain.filter { $0.providerID != id }) {
-            draft[.recognitionFailoverChain] = encoded
-        }
-        discoveryResults[id] = nil
-        providerOperations[id] = nil
-        probeProgress[id] = nil
-        probingProviderIDs.remove(id)
+    /// Deletion is a committed operation; failure leaves the row and references intact.
+    @discardableResult
+    public func removeCustomProvider(id: String) async -> Bool {
+        await commitProviderChange(.removeService(id))
     }
 
     private func beginOperation() -> Bool {
@@ -782,11 +814,12 @@ public final class GlobalSettingsModel {
         revision += 1
     }
 
-    public func refresh() async {
-        guard beginOperation() else { return }
+    @discardableResult
+    public func refresh() async -> Bool {
+        guard beginOperation() else { return false }
         defer { endOperation() }
-        do { refreshPreservingDraft(try await service.globalSettings()) }
-        catch { operation = .failed(ProductPrivacy.error(error)) }
+        do { refreshPreservingDraft(try await service.globalSettings()); if !operation.isRunning { operation = .idle }; return true }
+        catch { operation = .failed(ProductPrivacy.error(error)); return false }
     }
 
     private func refreshPreservingDraft(_ value: GlobalSettingsProjection) {

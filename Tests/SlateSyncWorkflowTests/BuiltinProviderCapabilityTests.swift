@@ -52,8 +52,14 @@ final class BuiltinProviderCapabilityTests: XCTestCase {
         } catch { XCTAssertEqual((error as? SlateSyncError)?.code, RecognitionFailure.unsupportedModel.code) }
         let other = try await registry.resolveModel(providerID: "openai", modelID: "openai/gpt-5.6-luna")
         XCTAssertEqual(other.capabilityStatus, .verified)
+        // Refreshing a directory after restart must keep the persisted failure reason,
+        // even though the UI has discarded the previous probe operation's feedback.
+        _ = try await restarted.discoverModels(providerID: "openai", forceRefresh: true)
         let models = await registry.publicModels()
-        XCTAssertEqual(models.first { $0.providers == ["openai"] && $0.apiId == "gpt-4o-mini" }?.capabilityStatus, .failed)
+        let failed = try XCTUnwrap(models.first { $0.providers == ["openai"] && $0.apiId == "gpt-4o-mini" })
+        XCTAssertEqual(failed.capabilityStatus, .failed)
+        XCTAssertFalse(failed.capabilityMessage?.isEmpty ?? true)
+        XCTAssertNotNil(failed.capabilityCheckedAt)
         try await restarted.drain()
     }
 
