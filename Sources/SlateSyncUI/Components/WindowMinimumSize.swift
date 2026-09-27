@@ -49,6 +49,12 @@ private struct WindowChromeProbe: NSViewRepresentable {
             super.viewDidMoveToWindow()
             refresh()
         }
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            // The macOS 15 Settings host reapplies its style mask when appearance
+            // changes. Restore the native resize affordance after that update too.
+            refresh()
+        }
         func refresh() {
             // Defer until SwiftUI has installed the native toolbar. This probe
             // neither retains the window nor changes restoration or its frame.

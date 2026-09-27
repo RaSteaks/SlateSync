@@ -323,7 +323,10 @@ public actor ProviderRegistry {
                 values.append(ModelData(id: model.publicID, label: model.label, description: "",
                     providers: [id], imageDetail: model.imageDetail, apiId: model.apiID,
                     verifiedAvailable: result.capabilityStatus == .verified,
-                    capabilityStatus: result.capabilityStatus))
+                    // Diagnostics belong to the durable proof, not the last transient UI operation.
+                    capabilityStatus: result.capabilityStatus, capabilitySource: "probe",
+                    capabilityMessage: bounded(result.message, limit: 500),
+                    capabilityCheckedAt: bounded(result.checkedAt, limit: 80)))
             }
         }
         // Physical API identity, not the compatibility alias, controls public

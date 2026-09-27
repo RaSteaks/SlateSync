@@ -59,8 +59,8 @@ struct ProviderCard<Content: View>: View {
     }
 }
 
-/// A single sheet owns source selection and configuration. Keeping the editor
-/// mounted on Back preserves its draft without publishing secrets to a model.
+/// A single sheet owns source selection and configuration. The child editor owns
+/// the unsaved-change barrier before returning to source selection.
 struct ProviderAddSheet: View {
     let settings: GlobalSettingsModel
     @Environment(\.dismiss) private var dismiss
@@ -78,23 +78,19 @@ struct ProviderAddSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if showsEditor {
-                Button(L10n.tr("返回预设选择"), systemImage: "chevron.left") { showsEditor = false }
-                    .disabled(settings.operation.isRunning)
-            }
             ZStack {
                 selection.opacity(showsEditor ? 0 : 1).allowsHitTesting(!showsEditor).accessibilityHidden(showsEditor)
                 if let route {
                     editor(route).opacity(showsEditor ? 1 : 0).allowsHitTesting(showsEditor).accessibilityHidden(!showsEditor)
                 }
             }
-        }.padding(20).frame(width: 680, height: 600)
-        .interactiveDismissDisabled(settings.operation.isRunning)
+        }.padding(12).frame(minWidth: 620, idealWidth: 680, minHeight: 500, idealHeight: 650)
+
     }
 
     private var selection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.tr("添加 Provider")).font(.title2.bold())
+            Text(L10n.tr("添加模型服务")).font(.title2.bold())
             Text(L10n.tr("选择服务后填写配置和 API Key；模型能力需另行验证。"))
                 .font(.callout).foregroundStyle(.secondary)
             SlateSearchField(title: L10n.tr("搜索预设"), text: $query, identifier: "providers.presets.search")
@@ -116,7 +112,7 @@ struct ProviderAddSheet: View {
                 }.padding(2)
                 if presets.isEmpty && !query.isEmpty && !ProviderCatalog.definitions.contains(where: {
                     (filter == "all" || filter == "builtin") && ProviderListPresentation.matches(query: query, name: $0.label, url: $0.defaultBaseURL, notes: nil)
-                }) { Text(L10n.tr("没有匹配的 Provider，请尝试其他关键词。")).foregroundStyle(.secondary).padding() }
+                }) { Text(L10n.tr("没有匹配的模型服务，请尝试其他关键词。")).foregroundStyle(.secondary).padding() }
             }
             HStack { Spacer(); Button(L10n.tr("取消"), role: .cancel) { dismiss() } }
         }
@@ -139,9 +135,9 @@ struct ProviderAddSheet: View {
     @ViewBuilder private func editor(_ id: String) -> some View {
         if let definition = ProviderCatalog.definition(id: id),
            let provider = settings.live?.providers.first(where: { $0.id == id }) {
-            BuiltinProviderConfigurationSheet(settings: settings, provider: provider, definition: definition)
+            BuiltinProviderConfigurationSheet(settings: settings, provider: provider, definition: definition, onBack: { showsEditor = false; route = nil })
         } else {
-            CustomProviderSheet(settings: settings, preset: ProviderPresets.all.first { "preset:" + $0.id == id })
+            CustomProviderSheet(settings: settings, preset: ProviderPresets.all.first { "preset:" + $0.id == id }, onBack: { showsEditor = false; route = nil })
                 .id(id)
         }
     }

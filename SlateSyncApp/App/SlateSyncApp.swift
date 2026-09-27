@@ -88,7 +88,21 @@ struct SlateSyncApp: App {
             allowsExternalOperations: !isolated
         )
         self.workflow = workflow
+        // Only explicit Debug UI fixtures may use the synthetic Provider transport.
+        // The normal app workflow remains offline in isolation, including OCR installation.
+        #if DEBUG
+        let settingsService: any GlobalSettingsWorkflowServing
+        if isolated && ProcessInfo.processInfo.environment["SLATESYNC_PROVIDER_UI_FIXTURE"] == "setup" {
+            settingsService = SlateSyncWorkflowFacade(library: library, runtime: runtime, logs: localLogs,
+                paddleInstaller: paddleInstaller, allowsExternalOperations: false,
+                providerTransportFactory: { ProviderSetupUITestTransport() },
+                draftProviderTransportFactory: { _ in ProviderSetupUITestTransport() },
+                allowsInjectedProviderOperations: true)
+        } else { settingsService = workflow }
+        _globalSettings = State(initialValue: GlobalSettingsModel(service: settingsService))
+        #else
         _globalSettings = State(initialValue: GlobalSettingsModel(service: workflow))
+        #endif
         _settingsNavigation = State(initialValue: SettingsNavigationModel())
         _paddleInstaller = State(initialValue: PaddleInstallerModel(service: workflow))
         _termination = State(initialValue: TerminationCoordinator(lifecycle: workflow))
@@ -326,3 +340,34 @@ final class SlateSyncAppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 }
+
+#if DEBUG
+/// Offline UI fixture: no URLSession, real credentials or external service is consulted.
+/// Failure variants are selected by synthetic host names entered through the actual editor.
+private actor ProviderSetupUITestTransport: ProviderHTTPTransporting {
+    func send(_ request: ProviderTransportRequest) async throws -> ProviderTransportResponse {
+        try await Task.sleep(for: .milliseconds(150))
+        let host = request.provider.baseURL.host ?? ""
+        if host == "auth-fixture.invalid" { throw SlateSyncError(code: "FIXTURE_AUTH", message: "Unauthorized", status: 401) }
+        // Advertise both sides of the vision contract, matching real discovery metadata.
+        if request.method == .get {
+            // Exercise an offline refresh after a successful probe without any real networking.
+            if host == "offline-refresh-fixture.invalid" { throw RecognitionFailure.timeout }
+            if host == "manual-fixture.invalid" { throw SlateSyncError(code: "FIXTURE_MODELS", message: "Unavailable", status: 404) }
+            return .init(status: 200, body: Data(#"{"data":[{"id":"gpt-4.1","architecture":{"input_modalities":["image","text"],"output_modalities":["text"]}}]}"#.utf8))
+        }
+        // Cancellation/partial failure fixtures exercise real probe lifetimes without network traffic.
+        if host == "slow-fixture.invalid" { try await Task.sleep(for: .seconds(15)) }
+        let failed = request.body.flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }.map { body in
+            if case .object(let fields) = body, case .string("failed-model")? = fields["model"] { return true }
+            return false
+        } ?? false
+        let content = failed ? #"{"ok":false,"marker":"wrong"}"# : #"{"ok":true,"marker":"ss-7q"}"#
+        let response: JSONValue = request.provider.transport == .responses
+            ? .object(["output_text": .string(content)])
+            : .object(["choices": .array([.object(["message": .object(["content": .string(content)])])])])
+        return .init(status: 200, body: try JSONEncoder().encode(response))
+    }
+    func close() async {}
+}
+#endif

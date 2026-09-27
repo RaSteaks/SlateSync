@@ -55,17 +55,20 @@ public actor ModelDiscoveryService {
             try Task.checkCancellation()
             if error.code == RecognitionFailure.canceled.code || error.code == RecognitionFailure.closed.code { throw error }
             if provider.origin == .custom, [404, 405, 501].contains(error.status ?? -1) {
-                let result = try await decode(Data("{}".utf8), provider: provider, modelsEndpointAvailable: false, generation: generation)
+                let result = try await customUnavailable(provider: provider, generation: generation)
                 try Task.checkCancellation()
                 guard await registry.currentGeneration() == generation else { throw CancellationError() }
                 cache[key] = .init(createdAt: clock.nowMilliseconds(), value: result)
                 return result
             }
+            // Custom fallback is limited to the explicit endpoint statuses above.
+            // Authentication, malformed responses and network errors retain their cause.
             // Authentication, account, and endpoint failures must reach the
             // Settings panel instead of looking like a usable offline list.
             // Network/server failures still retain the established static
             // catalog fallback, which keeps configuration possible offline.
-            if provider.origin == .builtin, [400, 401, 402, 403, 404, 429].contains(error.status ?? -1) {
+            if provider.origin == .custom || [400, 401, 402, 403, 404, 429].contains(error.status ?? -1)
+                || error.code == RecognitionFailure.invalidResponse.code {
                 throw error
             }
             // Configuration errors are actionable and must never masquerade as
@@ -90,14 +93,12 @@ public actor ModelDiscoveryService {
         let root: JSONValue
         do { root = try JSONDecoder().decode(JSONValue.self, from: data) }
         catch {
-            if provider.origin == .custom { return try await customUnavailable(provider: provider, generation: generation) }
             throw RecognitionFailure.invalidResponse
         }
         guard case .object(let fields) = root else { throw RecognitionFailure.invalidResponse }
         let candidates: [JSONValue]
         if case .array(let values)? = fields["data"] { candidates = values }
         else if case .array(let values)? = fields["models"] { candidates = values }
-        else if provider.origin == .custom { return try await customUnavailable(provider: provider, generation: generation) }
         else { throw RecognitionFailure.invalidResponse }
 
         let custom = await registry.customConfiguration(providerID: provider.id)
@@ -163,7 +164,7 @@ public actor ModelDiscoveryService {
             return .init(publicID: model.id, apiID: model.apiId ?? model.id, providerID: provider.id, label: model.label, imageDetail: model.imageDetail ?? provider.imageDetail, jsonMode: provider.providerKind == .openRouter && model.openRouterStructuredOutputs == false ? .jsonObject : provider.jsonMode, capabilityStatus: status, revision: provider.revision)
         }
         await registry.register(resolved, providerID: provider.id, revision: provider.revision, generation: generation)
-        return result(provider: provider, source: .api, availableCount: modelsEndpointAvailable ? Set(candidates.compactMap(RemoteModel.rawID)).count : nil, usable: ProviderCatalog.sort(usable), pending: pending, failed: failed, unsupported: unsupported, endpointAvailable: modelsEndpointAvailable, warning: modelsEndpointAvailable ? nil : "接口未提供 /models；请从手动模型 ID 中选择并验证。")
+        return result(provider: provider, source: .api, availableCount: modelsEndpointAvailable ? Set(candidates.compactMap(RemoteModel.rawID)).count : nil, usable: ProviderCatalog.sort(usable), pending: pending, failed: failed, unsupported: unsupported, endpointAvailable: modelsEndpointAvailable, warning: modelsEndpointAvailable ? nil : "无法获取 /models；请检查基础地址，或手动填写模型 ID 后验证。")
     }
 
     private func customUnavailable(provider: ProviderDescriptor, generation: Int) async throws -> ModelDiscoveryResult {
@@ -183,11 +184,10 @@ public actor ModelDiscoveryService {
             ResolvedModel(publicID: $0.id, apiID: $0.apiId ?? $0.id, providerID: provider.id, label: $0.label, imageDetail: $0.imageDetail ?? provider.imageDetail, jsonMode: provider.jsonMode, capabilityStatus: .verified, revision: provider.revision)
         }
         await registry.register(resolved, providerID: provider.id, revision: provider.revision, generation: generation)
-        return result(provider: provider, source: .api, availableCount: nil, usable: usable, pending: pending, failed: failed, unsupported: [], endpointAvailable: false, warning: "接口未提供 /models；请从手动模型 ID 中选择并验证。")
+        return result(provider: provider, source: .staticFallback, availableCount: nil, usable: usable, pending: pending, failed: failed, unsupported: [], endpointAvailable: false, warning: "无法获取 /models；请检查基础地址，或手动填写模型 ID 后验证。")
     }
 
     private func fallback(provider: ProviderDescriptor, warning: String, generation: Int) async throws -> ModelDiscoveryResult {
-        if provider.origin == .custom { return try await customUnavailable(provider: provider, generation: generation) }
         let fixed = ProviderCatalog.fixedModels(providerID: provider.id)
         return result(provider: provider, source: .staticFallback, availableCount: nil, usable: fixed, pending: [], failed: [], unsupported: [], endpointAvailable: true, warning: bounded(warning, 500))
     }
