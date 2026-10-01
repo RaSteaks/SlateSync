@@ -47,12 +47,28 @@ private struct WindowChromeProbe: NSViewRepresentable {
         var report: ((CGFloat) -> Void)?
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            let center = NotificationCenter.default
+            center.removeObserver(self)
+            if let window {
+                // macOS 15/26 的 Settings 宿主会在多个时机重设 styleMask 并剥掉
+                // resizable，不止外观切换一处。窗口 key/main 与遮挡状态变化都
+                // 可能伴随重设，因此在每个事件上补插，保证边缘拖拽始终可用。
+                center.addObserver(self, selector: #selector(windowRestyled),
+                                   name: NSWindow.didBecomeKeyNotification, object: window)
+                center.addObserver(self, selector: #selector(windowRestyled),
+                                   name: NSWindow.didBecomeMainNotification, object: window)
+                center.addObserver(self, selector: #selector(windowRestyled),
+                                   name: NSWindow.didChangeOcclusionStateNotification, object: window)
+            }
             refresh()
         }
         override func viewDidChangeEffectiveAppearance() {
             super.viewDidChangeEffectiveAppearance()
             // The macOS 15 Settings host reapplies its style mask when appearance
             // changes. Restore the native resize affordance after that update too.
+            refresh()
+        }
+        @objc private func windowRestyled() {
             refresh()
         }
         func refresh() {
