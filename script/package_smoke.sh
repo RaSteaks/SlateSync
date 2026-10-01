@@ -48,9 +48,22 @@ if updated!=1: raise RuntimeError('packaged app injection failed')
 p.write_bytes(plistlib.dumps(value))
 PY
 xctestrun=("${smoke_root}"/DerivedData/Build/Products/*.xctestrun)
+# Release 打包内没有 Debug 专用的合成传输，冒烟只跑交付回归清单；
+# 合成 Provider 用例由 Debug 全量测试计划把守（见清单文件头注释）。
+release_tests=("${project_root}"/script/tests/packaged-ui-release-tests.txt)
+expected_count=0
+only_testing=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+  line="${line%%\#*}"
+  line="${line//[[:space:]]/}"
+  [[ -n "$line" ]] || continue
+  only_testing+=(-only-testing:"SlateSyncUITests/SlateSyncUITests/${line}")
+  (( expected_count += 1 ))
+done < "${release_tests[1]}"
+(( expected_count > 0 )) || { print -u2 'packaged release test list is empty'; exit 1; }
 smoke_status=0
 xcodebuild -quiet test-without-building -xctestrun "$xctestrun[1]" \
-  -destination 'platform=macOS' -only-testing:SlateSyncUITests \
+  -destination 'platform=macOS' "${only_testing[@]}" \
   -resultBundlePath "${smoke_root}/Packaged.xcresult" \
   > "${result_dir}/packaged_ui_xcodebuild.log" 2>&1 || smoke_status=$?
 ditto "${smoke_root}/Packaged.xcresult" "${result_dir}/Packaged.xcresult"
@@ -70,13 +83,16 @@ gate_validate_xcode_test_summary "${result_dir}/packaged_ui_summary.json"
 # Read its runner output rather than accepting the harness build as evidence.
 xcrun xcresulttool export diagnostics --path "${smoke_root}/Packaged.xcresult" \
   --output-path "${smoke_root}/diagnostics"
-python3 - "${result_dir}/packaged_ui_summary.json" "${smoke_root}/diagnostics" "$app" <<'PY'
+python3 - "${result_dir}/packaged_ui_summary.json" "${smoke_root}/diagnostics" "$app" "$expected_count" <<'PY'
 import json,pathlib,sys
 value=json.load(open(sys.argv[1]))
+expected=int(sys.argv[4])
 log='\n'.join(p.read_text(errors='replace') for p in pathlib.Path(sys.argv[2]).rglob('StandardOutputAndStandardError.txt'))
-assert log.count('SM09_PACKAGED_APP '+sys.argv[3])>=9, 'packaged app URL witness missing'
-assert value['passedTests']>=9 and value['failedTests']==0 and value['skippedTests']==0
-print('Packaged Release app: nine isolated UI, settings/help/log, task and quit/reopen scenarios passed')
+# 覆盖必须与清单一一对应：少跑、跳过或失败都视为过滤后虚假通过。
+assert log.count('SM09_PACKAGED_APP '+sys.argv[3])>=expected, 'packaged app URL witness missing'
+assert value['passedTests']==expected, f"packaged coverage drift: {value['passedTests']}/{expected}"
+assert value['failedTests']==0 and value['skippedTests']==0
+print(f'Packaged Release app: {expected} delivery regression scenarios passed (window, settings/help/log, task, CSV and quit/reopen)')
 PY
 # Cleanup is part of the success contract, not just an ignored EXIT trap.
 slatesync_stop_executable SlateSync "${app}/Contents/MacOS/SlateSync"
