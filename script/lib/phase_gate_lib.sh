@@ -446,19 +446,31 @@ assert_scan_healthy() {
 # 原生代码的通用负向扫描：冲突标记与被禁止的不安全 Swift 构造。
 # 独立成 lib 函数便于自测注入故障 rg，phase_gate.sh 主流程按同名调用。
 forbidden_items_check() {
-  local -a swift_roots=(Package.swift SlateSyncApp Sources SlateSyncTests SlateSyncUITests Tests)
+  # 产品代码全量禁止不安全构造；测试替身（阻塞/并发模拟）在 Swift 6 下
+  # 常需 @unchecked Sendable，故测试目录仅豁免这一条，其余构造照禁。
+  local -a product_roots=(Package.swift SlateSyncApp Sources)
+  local -a test_roots=(SlateSyncTests SlateSyncUITests Tests)
   rg -n \
     'fatalError\(|preconditionFailure\(|try!|as!|@unchecked[[:space:]]+Sendable' \
-    "${swift_roots[@]}"
+    "${product_roots[@]}"
   local construct_status=$?
   if (( construct_status == 0 )); then
     print -u2 -r -- "forbidden unsafe Swift construct found"
     return 1
   fi
   assert_scan_healthy "forbidden construct scan failed" "$construct_status" || return 1
+  rg -n \
+    'fatalError\(|preconditionFailure\(|try!|as!' \
+    "${test_roots[@]}"
+  construct_status=$?
+  if (( construct_status == 0 )); then
+    print -u2 -r -- "forbidden unsafe Swift construct in tests found"
+    return 1
+  fi
+  assert_scan_healthy "test forbidden construct scan failed" "$construct_status" || return 1
   # Keep the marker expression different from the literal marker text so this
   # Gate can safely audit its own shell sources.
-  rg -n '^(<{7}|={7}|>{7})' "${swift_roots[@]}" script
+  rg -n '^(<{7}|={7}|>{7})' "${product_roots[@]}" "${test_roots[@]}" script
   local marker_status=$?
   if (( marker_status == 0 )); then
     print -u2 -r -- "unresolved merge marker found"
