@@ -109,6 +109,9 @@ struct ProviderModelList: View {
                         }
                     }.padding(4)
                 }.frame(minHeight: 150, idealHeight: 230, maxHeight: 290)
+                    // The list can extend beyond its parent content viewport;
+                    // its AX identity lets tests account for both clipping bounds.
+                    .accessibilityIdentifier("providers.models.list")
             }
         }
     }

@@ -306,21 +306,19 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertTrue(manual.waitForExistence(timeout: 8)); manual.click(); manual.typeText("gpt-4.1, failed-model")
         let success = app.checkBoxes["providers.model.gpt-4.1"]
         let failure = app.checkBoxes["providers.model.failed-model"]
-        setModelCheckbox(success, selected: true, label: "gpt-4.1")
-        setModelCheckbox(failure, selected: true, label: "failed-model")
+        setModelCheckbox(success, selected: true, label: "gpt-4.1", app: app)
+        setModelCheckbox(failure, selected: true, label: "failed-model", app: app)
         app.buttons["providers.editor.verify"].click()
         XCTAssertTrue(app.sheets.staticTexts["通过 1 个，失败 1 个，取消 0 个"].firstMatch.waitForExistence(timeout: 10))
-        // 虚拟机上 XCUI 会持续供用过期的元素快照（日志可见 snapshot
-        // previously cached），勾选值读数可能永不翻转；取消是否生效改以
-        // 应用的真实后果为准——部分验证下只有成功模型保持已选时
-        // activate 才出现，双选或全不选都不会出现。
+        // CI 的 AX 和截图确认失败行在外层视口下方，被固定页脚遮住。
+        // 先滚动到可见区域，再一次取消勾选；状态和实际用途动作都必须成立。
+        setModelCheckbox(failure, selected: false, label: "failed-model", app: app)
+        XCTAssertTrue(checkboxState(success), "成功模型应保持勾选")
         let activate = app.buttons["providers.editor.activate"].firstMatch
-        for _ in 0..<4 {
-            if activate.exists { break }
-            failure.click()
-            Thread.sleep(forTimeInterval: 1)
-        }
-        XCTAssertTrue(activate.waitForExistence(timeout: 5), "取消失败模型后激活按钮未出现")
+        guard waitForModelCheckboxState(
+            { activate.exists && activate.isEnabled && activate.isHittable },
+            element: failure, label: "failed-model", stage: "激活按钮可操作", app: app
+        ) else { return }
         attachReview("Provider partial verification", app: app)
         #endif
     }
@@ -1107,29 +1105,90 @@ final class SlateSyncUITests: XCTestCase {
         return element.isSelected
     }
 
-    /// 等复选框启用后按目标值切换：虚拟机上验证汇总先于配置刷新出现，
-    /// 过早点击会被禁用态吞掉。每次重试前重读当前值再决定是否点击，
-    /// 绝不盲点两次把已选中的模型又取消掉；达不成目标值时保留勾选值、
-    /// 启用态与元素树供 CI 取证。
+    /// Native checkbox labels may span several lines. The square stays at the
+    /// leading edge of the first line; an element-center click can hit text or
+    /// the fixed footer when that label lies outside an ancestor's viewport.
     @MainActor
-    private func setModelCheckbox(_ element: XCUIElement, selected: Bool, label: String) {
-        XCTAssertTrue(element.waitForExistence(timeout: 10), "\(label) 未出现")
-        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: element)
-        waitForExpectations(timeout: 10)
-        for attempt in 0..<4 {
-            if checkboxState(element) == selected { return }
-            element.click()
-            Thread.sleep(forTimeInterval: attempt == 0 ? 0.5 : 1)
+    private func modelCheckboxSquare(_ element: XCUIElement) -> CGRect {
+        CGRect(x: element.frame.minX, y: element.frame.minY, width: 16, height: 16)
+    }
+
+    @MainActor
+    private func modelCheckboxVisible(_ element: XCUIElement, app: XCUIApplication) -> Bool {
+        let content = app.sheets.scrollViews["providers.editor.content"].firstMatch
+        let list = app.sheets.scrollViews["providers.models.list"].firstMatch
+        guard element.exists, content.exists, list.exists else { return false }
+        let viewport = content.frame.intersection(list.frame).insetBy(dx: 2, dy: 2)
+        return !viewport.isEmpty && viewport.contains(modelCheckboxSquare(element))
+    }
+
+    /// Scroll actions are bounded, but a checkbox is clicked at most once.
+    /// Geometry readiness precedes interaction; completion requires its real
+    /// AX value, not a repeated click or a fixed delay that can toggle it back.
+    @MainActor
+    private func setModelCheckbox(_ element: XCUIElement, selected: Bool, label: String, app: XCUIApplication) {
+        let content = app.sheets.scrollViews["providers.editor.content"].firstMatch
+        let list = app.sheets.scrollViews["providers.models.list"].firstMatch
+        guard waitForModelCheckboxState(
+            { element.exists && element.isEnabled && content.exists && list.exists },
+            element: element, label: label, stage: "复选框及滚动区准备完成", app: app
+        ) else { return }
+        for _ in 0..<4 {
+            if modelCheckboxVisible(element, app: app) { break }
+            let clipped = content.frame.intersection(list.frame)
+            let viewport = clipped.isEmpty ? content.frame : clipped
+            let deltaY: CGFloat = modelCheckboxSquare(element).midY > viewport.midY ? -160 : 160
+            if list.frame.minY < content.frame.minY || list.frame.maxY > content.frame.maxY {
+                // The left padding belongs to the outer scroller, so wheel
+                // events cannot be consumed by the nested model list.
+                content.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+                    .withOffset(CGVector(dx: 2, dy: 0)).scroll(byDeltaX: 0, deltaY: deltaY)
+            } else {
+                list.scroll(byDeltaX: 0, deltaY: deltaY)
+            }
         }
+        guard waitForModelCheckboxState(
+            { element.isEnabled && element.isHittable && self.modelCheckboxVisible(element, app: app) },
+            element: element, label: label, stage: "方框位于实际可见视口", app: app
+        ) else { return }
+        if checkboxState(element) != selected {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+                .withOffset(CGVector(dx: 8, dy: 8)).click()
+        }
+        guard waitForModelCheckboxState(
+            { self.checkboxState(element) == selected },
+            element: element, label: label, stage: "目标勾选值 \(selected)", app: app
+        ) else { return }
+    }
+
+    /// Standalone expectations avoid XCTest's double-wait registration trap.
+    /// Failure evidence names the stage and both scroll bounds so clipping and
+    /// disabled-state failures can be diagnosed entirely from the CI artifact.
+    @MainActor
+    private func waitForModelCheckboxState(
+        _ condition: @escaping @MainActor () -> Bool,
+        element: XCUIElement, label: String, stage: String, app: XCUIApplication
+    ) -> Bool {
+        let predicate = NSPredicate { _, _ in MainActor.assumeIsolated { condition() } }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app)
+        if XCTWaiter().wait(for: [expectation], timeout: 10) == .completed { return true }
+        let content = app.sheets.scrollViews["providers.editor.content"].firstMatch
+        let list = app.sheets.scrollViews["providers.models.list"].firstMatch
         let diagnostics = """
-        \(label): value=\(element.value ?? "nil") selected=\(element.isSelected) enabled=\(element.isEnabled)
-        \(element.debugDescription)
+        model=\(label) stage=\(stage)
+        exists=\(element.exists) value=\(element.exists ? String(describing: element.value) : "missing")
+        enabled=\(element.exists && element.isEnabled) hittable=\(element.exists && element.isHittable)
+        checkboxFrame=\(element.exists ? element.frame : .zero)
+        contentFrame=\(content.exists ? content.frame : .zero) listFrame=\(list.exists ? list.frame : .zero)
+        \(app.debugDescription)
         """
         let attachment = XCTAttachment(string: diagnostics)
-        attachment.name = "checkbox-\(label)-target-\(selected)"
+        attachment.name = "checkbox-\(label)-\(stage)"
         attachment.lifetime = .keepAlways
         add(attachment)
-        XCTFail("\(label) 未达到目标勾选值 \(selected)")
+        attachReview("checkbox-\(label)-\(stage)", app: app)
+        XCTFail("\(label) 未完成 \(stage)")
+        return false
     }
 
     @MainActor

@@ -46,15 +46,10 @@ jobs:
       - name: Validate Gate contracts before building
         shell: bash
         run: |
-          # Reject budget/resource/scope drift before spending time on builds or UI.
-          # The positive baseline runs before negative self-tests.
+          # Share the no-window local preflight. Its positive baseline runs
+          # before negative fixtures; pipefail preserves failures through tee.
           set -euo pipefail
-          {
-            python3 -B script/tests/sm09_release_contract.py &&
-            python3 -B script/tests/packaged_ui_contract.py --self-test &&
-            ./script/tests/phase_gate_tests.zsh &&
-            python3 -B script/tests/sm09_native_contract.py --functional
-          } 2>&1 | tee "$RUNNER_TEMP/native-ci-preflight.log"
+          ./script/ci_preflight.sh 2>&1 | tee "$RUNNER_TEMP/native-ci-preflight.log"
 
       - name: Run strict Swift build
         run: swift build -Xswiftc -warnings-as-errors

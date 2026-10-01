@@ -267,6 +267,10 @@ python3 script/tests/sm09_inventory_tests.py
 Debug 合成 Provider 用例必须全部通过，打包 Release 的实际执行名称必须与交付回归清单一致。
 失败诊断工件包含完整 `.xcresult.zip`、测试树、汇总、截图/AX 附件和运行器日志。
 
+日常本机验证优先使用 `./script/ci_preflight.sh`：只运行契约和自测，不启动应用、切换窗口或采集前台画面。
+完整 SM-09 与原生 UI、打包 Release UI 在 GitHub macOS runner 上执行；预检通过仅代表准备完成，
+完整通过以同一提交的远端 `native-test` 和 UI 覆盖证据为准。本机前台验收仅在用户明确安排时进行。
+
 ## 构建与打包
 
 ### 构建 Release 与归档

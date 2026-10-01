@@ -138,6 +138,9 @@ struct ProviderConfigurationSheet: View {
                     }
                 }.padding(4)
             }
+            // Native automation must distinguish this clipped content viewport
+            // from the fixed footer before interacting with a model row.
+            .accessibilityIdentifier("providers.editor.content")
             Divider()
             actions
         }
