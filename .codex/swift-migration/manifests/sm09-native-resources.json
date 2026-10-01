@@ -18,14 +18,14 @@
     {
       "role": "help-content",
       "source": "Sources/SlateSyncUI/Resources/help-sections.json",
-      "bytes": 22402,
-      "sha256": "71bdac20020c3d0d112583cb25fabb4c06a373cce5c17655752d7371339bb348"
+      "bytes": 22449,
+      "sha256": "6cc07bac80b38a2e87ff1ef6f599ccd6340581ae9845d3948906685bab9367c6"
     },
     {
       "role": "english-localization",
       "source": "Sources/SlateSyncUI/Resources/English.json",
-      "bytes": 84498,
-      "sha256": "a80df105201c58951cae5a8077e8a2e42ceaff84779f40dc841cdd82aab5ab55"
+      "bytes": 95477,
+      "sha256": "0c1ceb2512068107ef6103b90e789f8fedb3330a0328491a6ff558d3ad44f0c8"
     },
     {
       "role": "app-icon-image",
