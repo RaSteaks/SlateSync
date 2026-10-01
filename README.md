@@ -254,12 +254,18 @@ swift test
 
 ```sh
 ./script/tests/phase_gate_tests.zsh
+python3 -B script/tests/sm09_release_contract.py
+python3 -B script/tests/packaged_ui_contract.py --self-test
 ./script/tests/release_pipeline_tests.zsh
 python3 script/tests/sm09_coverage_tests.py
 python3 script/tests/sm09_inventory_tests.py
 ```
 
 
+
+修改 workflow、UI 用例或打包清单后，先运行上述契约和 Gate 自测。CI 会在构建前执行预检；
+Debug 合成 Provider 用例必须全部通过，打包 Release 的实际执行名称必须与交付回归清单一致。
+失败诊断工件包含完整 `.xcresult.zip`、测试树、汇总、截图/AX 附件和运行器日志。
 
 ## 构建与打包
 
@@ -282,4 +288,3 @@ python3 script/tests/sm09_inventory_tests.py
 ## License
 
 [MIT](./LICENSE)
-

@@ -1,5 +1,12 @@
 # SlateSync 当前项目方案
 
+## 2026-10-01 CI 预检、UI 覆盖与失败诊断
+
+- 必需 `native-test` 在严格 Swift 构建前执行发布资源/预算契约、UI 清单校验及自测、Gate 自测和原生静态契约。预检日志单独上传，配置或用例范围错误不再等到完整归档/打包后才反馈；功能 Gate 与独立性能 advisory 策略保持现有边界。
+- `script/tests/packaged_ui_contract.py` 校验交付回归清单与全部不依赖合成 Provider 传输的 UI 方法精确一致。当前为 17 个 Release 用例；9 个 Debug 夹具用例从源码推导，并在 Gate 成功后逐项要求实际 PASS。打包结果通过真实 XCTest 测试树核对名称、数量、零失败及零跳过，拒绝仅总数一致的替代覆盖；另存审查 SHA 和清单哈希的 UI 范围证据。
+- CI 失败导出共用 `script/export_xctest_diagnostics.sh`，保留完整 `.xcresult.zip`、summary/tests JSON、failure 附件及 runner diagnostics。即使 `--only-failures` 返回空 manifest，也有原始结果包可恢复 AX 树、截图和运行器输出；保留普通与打包两份结果。
+- 本轮仅编辑未被另一轮修复占用的 CI、校验/诊断脚本及文档，保留工作区已有的 60 分钟预算、17 项打包清单与 UI 勾选同步修复。按 workflow 原始命令执行预检约 7 秒：发布契约 8 项、Gate 自测 135 项、原生静态契约及 UI 范围正例通过；UI 覆盖负例增加到 12 项，包含删除既有 Debug 验收用例的拒绝。诊断脚本在独立目录用真实 `.xcresult` 验证 raw ZIP、summary/tests JSON 和 runner diagnostics，即使失败附件 manifest 为空也保留原始包。Shell 语法与差异检查通过；完整远端 macOS 26 CI 尚未复验，不将静态通过记为完整门禁通过。
+
 ## 2026-10-01 OpenRouter 精简目录与审核测试材料
 
 - 内建 OpenRouter 默认仅提供 `qwen/qwen3.7-flash`、`openai/gpt-5.6-luna`、`openai/gpt-5.6-terra`；刷新远端目录时只投影这三个预设。其他已显式验证的模型继续由持久能力证明投影，保留重启、默认/备用及旧任务的既有解析；OpenAI 直连和自定义接口行为保持现状。

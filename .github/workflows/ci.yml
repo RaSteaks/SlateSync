@@ -43,6 +43,19 @@ jobs:
           fi
           rg --version
 
+      - name: Validate Gate contracts before building
+        shell: bash
+        run: |
+          # Reject budget/resource/scope drift before spending time on builds or UI.
+          # The positive baseline runs before negative self-tests.
+          set -euo pipefail
+          {
+            python3 -B script/tests/sm09_release_contract.py &&
+            python3 -B script/tests/packaged_ui_contract.py --self-test &&
+            ./script/tests/phase_gate_tests.zsh &&
+            python3 -B script/tests/sm09_native_contract.py --functional
+          } 2>&1 | tee "$RUNNER_TEMP/native-ci-preflight.log"
+
       - name: Run strict Swift build
         run: swift build -Xswiftc -warnings-as-errors
 
@@ -51,41 +64,20 @@ jobs:
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
         run: ./script/phase_gate.sh SM-09 --functional
 
-      - name: Export failed XCTest attachments
+      - name: Verify Debug and packaged UI execution coverage
+        run: |
+          # Counts can match while different tests run. Require every named
+          # Release regression and every Debug Provider fixture to have passed.
+          python3 -B script/tests/packaged_ui_contract.py \
+            --gate-root "$RUNNER_TEMP/SlateSync-Gate/SM-09"
+
+      - name: Export failed XCTest diagnostics
         if: failure() || cancelled()
         shell: bash
         run: |
-          # The Gate retains both the ordinary Test Plan bundle and the
-          # Packaged.xcresult produced by package_smoke.sh. Export only
-          # failure-linked attachments so diagnostics stay bounded while both
-          # UI test surfaces remain available to the artifact upload below.
-          set -u -o pipefail
-          gate_root="$RUNNER_TEMP/SlateSync-Gate/SM-09"
-          export_status=0
-          bundle_count=0
-          if [[ -d "$gate_root" ]]; then
-            while IFS= read -r -d '' bundle; do
-              bundle_count=$((bundle_count + 1))
-              bundle_name="$(basename "$bundle")"
-              bundle_kind="ordinary"
-              if [[ "$bundle_name" == "Packaged.xcresult" ]]; then
-                bundle_kind="packaged"
-              fi
-              output_path="$(dirname "$bundle")/xcresult-failure-attachments/$bundle_name"
-              mkdir -p "$output_path"
-              echo "Exporting ${bundle_kind} XCTest failure attachments from ${bundle}"
-              if ! xcrun xcresulttool export attachments \
-                --path "$bundle" \
-                --output-path "$output_path" \
-                --only-failures; then
-                export_status=1
-              fi
-            done < <(find "$gate_root" -type d -name '*.xcresult' -print0)
-          fi
-          if (( bundle_count == 0 )); then
-            echo "No XCTest result bundles were available for failure attachment export" >&2
-          fi
-          exit "$export_status"
+          # Preserve raw xcresult bundles too: --only-failures can return no
+          # attachments even after the test recorded an AX snapshot/screenshot.
+          ./script/export_xctest_diagnostics.sh "$RUNNER_TEMP/SlateSync-Gate/SM-09"
 
       - name: Upload failure diagnostics
         if: failure() || cancelled()
@@ -93,15 +85,23 @@ jobs:
         with:
           name: native-ci-diagnostics
           path: |
+            ${{ runner.temp }}/native-ci-preflight.log
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/native-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_tests.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/ui-scope-evidence.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.xcresult.zip
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.xcresult.summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.xcresult.tests.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/*-manifest.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-failure-attachments/**
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-diagnostics/**
           if-no-files-found: ignore
           retention-days: 7
 
@@ -116,6 +116,9 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/native-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_tests.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/ui-scope-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/sm08-metrics/*.json
           if-no-files-found: ignore
           retention-days: 14
