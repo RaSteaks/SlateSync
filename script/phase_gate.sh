@@ -158,7 +158,9 @@ for target in ("SlateSync", "SlateSyncTests", "SlateSyncUITests"):
     assert f'name = {target};' in project, target
 assert 'buildConfiguration="Debug"' in scheme
 assert '<ProfileAction buildConfiguration="Release"' in scheme
-assert '<ArchiveAction buildConfiguration="Release"' in scheme
+# 归档走 AppStore 沙盒配置（c2584e7 引入）；Release 归档能力仍由
+# sm01_archive 显式 -configuration Release 把守，此处只校验 scheme 意图。
+assert '<ArchiveAction buildConfiguration="AppStore"' in scheme
 test_targets = {entry["target"]["name"] for entry in test_plan["testTargets"]}
 assert test_targets == {"SlateSyncTests", "SlateSyncUITests"}, test_targets
 print("five SwiftPM libraries, macOS 15, Swift 6, Xcode targets, scheme and test plan verified")
