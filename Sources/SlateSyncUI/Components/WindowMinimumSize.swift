@@ -51,8 +51,11 @@ private struct WindowChromeProbe: NSViewRepresentable {
             center.removeObserver(self)
             if let window {
                 // macOS 15/26 的 Settings 宿主会在多个时机重设 styleMask 并剥掉
-                // resizable，不止外观切换一处。窗口 key/main 与遮挡状态变化都
-                // 可能伴随重设，因此在每个事件上补插，保证边缘拖拽始终可用。
+                // resizable（含标题栏点击之后这类没有 key/main 变化的时刻）。
+                // didUpdate 随窗口每个事件触发，把补插延迟压到一个事件周期内，
+                // 拖拽前的任何交互都能先恢复可缩放状态。
+                center.addObserver(self, selector: #selector(windowRestyled),
+                                   name: NSWindow.didUpdateNotification, object: window)
                 center.addObserver(self, selector: #selector(windowRestyled),
                                    name: NSWindow.didBecomeKeyNotification, object: window)
                 center.addObserver(self, selector: #selector(windowRestyled),
