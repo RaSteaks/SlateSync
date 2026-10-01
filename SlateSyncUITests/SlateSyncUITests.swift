@@ -137,6 +137,46 @@ final class SlateSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testOpenRouterCuratedModelsAndManualVerification() throws {
+        #if !DEBUG
+        throw XCTSkip("The synthetic transport is compiled only into Debug builds")
+        #else
+        let app = launchIsolatedApp(providerFixture: true)
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        app.buttons["添加模型服务"].click()
+        let openRouter = app.buttons["OpenRouter API"].firstMatch
+        XCTAssertTrue(openRouter.waitForExistence(timeout: 5)); openRouter.click()
+        let key = app.secureTextFields["providers.editor.key"]
+        XCTAssertTrue(key.waitForExistence(timeout: 5))
+        key.click(); key.typeText("synthetic-ui-key")
+        app.buttons["providers.editor.continue"].click()
+        let manual = app.textFields["providers.editor.openRouterModel"]
+        XCTAssertTrue(manual.waitForExistence(timeout: 10))
+        // The fixture advertises gpt-4.1, but OpenRouter's default choices remain curated.
+        for id in ["qwen/qwen3.7-flash", "openai/gpt-5.6-luna", "openai/gpt-5.6-terra"] {
+            XCTAssertTrue(app.checkBoxes["providers.model." + id].firstMatch.exists)
+        }
+        XCTAssertFalse(app.checkBoxes["providers.model.gpt-4.1"].exists)
+        // Invalid IDs remain in the editor and never become an activatable model.
+        manual.click(); manual.typeText("invalid model id")
+        app.buttons["providers.editor.addOpenRouterModel"].click()
+        XCTAssertTrue(app.staticTexts["模型 ID 格式无效，请检查空格或特殊字符。"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["providers.editor.activate"].exists)
+        manual.click(); manual.typeKey("a", modifierFlags: .command); manual.typeText("example/manual-vision")
+        app.buttons["providers.editor.addOpenRouterModel"].click()
+        let activate = app.buttons["providers.editor.activate"]
+        XCTAssertTrue(activate.waitForExistence(timeout: 10))
+        XCTAssertEqual(manual.value as? String, "")
+        attachReview("OpenRouter manual model verified", app: app)
+        activate.click()
+        XCTAssertTrue(app.staticTexts["OpenRouter API · example/manual-vision"].firstMatch.waitForExistence(timeout: 10))
+        app.terminate(); app.launch(); app.activate()
+        _ = openSettingsWindow(app); selectModelSettings(app)
+        XCTAssertTrue(app.staticTexts["OpenRouter API · example/manual-vision"].firstMatch.waitForExistence(timeout: 10))
+        #endif
+    }
+
+    @MainActor
     func testProviderAuthenticationFailureOffersCredentialRepair() throws {
         #if !DEBUG
         throw XCTSkip("The synthetic transport is compiled only into Debug builds")

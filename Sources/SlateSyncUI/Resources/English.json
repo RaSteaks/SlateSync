@@ -1180,5 +1180,8 @@
   "删除模型服务“{0}”？": "Delete model service “{0}”?",
   "仅删除服务配置及其默认、备用引用，立即生效。": "Remove the service configuration and its default and backup references. This takes effect immediately.",
   "删除": "Delete",
-  "已折叠": "Collapsed"
+  "已折叠": "Collapsed",
+  "默认提供 Qwen、GPT Luna 和 GPT Terra。其他模型请输入 OpenRouter 的完整模型 ID，验证通过后可设为默认或备用。": "Qwen, GPT Luna and GPT Terra are provided by default. Enter the full OpenRouter model ID for another model, then verify it before using it as a default or backup.",
+  "其他 OpenRouter 模型 ID": "Other OpenRouter model ID",
+  "验证并添加模型": "Verify and add model"
 }

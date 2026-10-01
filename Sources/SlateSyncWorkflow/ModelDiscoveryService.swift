@@ -102,15 +102,21 @@ public actor ModelDiscoveryService {
         else { throw RecognitionFailure.invalidResponse }
 
         let custom = await registry.customConfiguration(providerID: provider.id)
+        let fixedModels = ProviderCatalog.fixedModels(providerID: provider.id)
+        let fixedIDs = Set(fixedModels.map { $0.apiId ?? $0.id })
         var usable: [ModelData] = [], pending: [ModelData] = [], failed: [ModelData] = []
         var unsupported: [ModelDiscoveryResult.UnsupportedModel] = []
         for candidate in candidates {
+            // A directory refresh must not repopulate OpenRouter's full catalog.
+            // Explicitly probed IDs remain in the registry's durable capability projection.
+            if provider.origin == .builtin, provider.providerKind == .openRouter,
+               let id = RemoteModel.rawID(candidate), !fixedIDs.contains(id) { continue }
             guard let remote = RemoteModel(candidate), ProviderCatalog.isValidModelID(remote.id) else {
                 if let id = RemoteModel.rawID(candidate) { unsupported.append(.init(id: String(id.prefix(220)), reason: "模型 ID 无效", capabilityStatus: .unsupported)) }
                 continue
             }
             guard !ProviderCatalog.isExcluded(remote.id) else { unsupported.append(.init(id: remote.id, reason: "模型类型不支持场记图片识别", capabilityStatus: .unsupported)); continue }
-            let fixed = ProviderCatalog.fixedModels(providerID: provider.id).first { ($0.apiId ?? $0.id) == remote.id }
+            let fixed = fixedModels.first { ($0.apiId ?? $0.id) == remote.id }
             guard ProviderCatalog.allowsRemote(providerID: provider.id, modelID: remote.id, hasModalities: remote.hasModalities, acceptsVision: remote.acceptsVision, fixed: fixed != nil) else {
                 unsupported.append(.init(id: remote.id, reason: "模型不在当前 Provider 的视觉识别集合中", capabilityStatus: .unsupported))
                 continue

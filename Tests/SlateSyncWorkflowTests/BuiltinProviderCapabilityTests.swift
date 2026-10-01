@@ -108,7 +108,8 @@ final class BuiltinProviderCapabilityTests: XCTestCase {
         let original = ProviderRegistry(settings: .init([.openRouterAppTitle: "Original"]))
         let provider = try await original.descriptor(providerID: "openrouter")
         let generation = await original.currentGeneration()
-        let result = ModelCapabilityProbeResult(supported: true, model: "openai/gpt-4o-mini",
+        // Use a retained OpenRouter default so route invalidation can fall back to its declaration.
+        let result = ModelCapabilityProbeResult(supported: true, model: "openai/gpt-5.6-luna",
             transport: provider.transport, checkedAt: "offline", message: "verified",
             capabilityStatus: .verified, jsonMode: .jsonObject)
         let pending = await original.mergingBuiltinProbeResults(provider: provider,

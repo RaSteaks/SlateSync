@@ -186,11 +186,8 @@ private actor SM07ProbeSaveLog {
         let registry = ProviderRegistry(credentials: SM07TestCredentials(["openrouter": "key"]))
         let clock = SM07ManualClock(), service = ModelDiscoveryService(registry: registry, transport: transport, clock: clock, now: { Date(timeIntervalSince1970: 0) })
         let first = try await service.discover(providerID: "openrouter")
-        XCTAssertEqual(first.models.map(\.id), ["openai/gpt-5.6-luna", "anthropic/claude-4-sonnet"]); XCTAssertEqual(first.unsupportedModelCount, 1)
-        let priced = try XCTUnwrap(first.models.first { $0.id == "anthropic/claude-4-sonnet" })
-        XCTAssertNotNil(priced.valueScore); XCTAssertEqual(priced.valueSource, "接口实时价格")
-        let publicJSON = String(data: try JSONEncoder().encode(priced), encoding: .utf8) ?? ""
-        XCTAssertFalse(publicJSON.contains("pricing")); XCTAssertFalse(publicJSON.contains("pricePerMillion")); XCTAssertFalse(publicJSON.contains("cost"))
+        // Built-in OpenRouter discovery no longer offers or classifies the full remote directory.
+        XCTAssertEqual(first.models.map(\.id), ["openai/gpt-5.6-luna"]); XCTAssertEqual(first.unsupportedModelCount, 0)
         _ = try await service.discover(providerID: "openrouter")
         let cachedCalls = await transport.calls
         XCTAssertEqual(cachedCalls, 1)
@@ -201,6 +198,15 @@ private actor SM07ProbeSaveLog {
         _ = try await service.discover(providerID: "openrouter")
         let expiredCalls = await transport.calls
         XCTAssertEqual(expiredCalls, 3)
+        // Generic endpoints retain the original live-price projection and privacy contract.
+        let custom = try CustomProviderValidator.normalizeRequest(.init(name: "Pricing contract", baseUrl: "https://example.com/v1"))
+        let customService = ModelDiscoveryService(registry: ProviderRegistry(customProviders: [custom]),
+            transport: SM07FakeTransport([.success(payload)]), clock: clock)
+        let customResult = try await customService.discover(providerID: custom.id)
+        let priced = try XCTUnwrap(customResult.models.first { $0.id == "anthropic/claude-4-sonnet" })
+        XCTAssertNotNil(priced.valueScore); XCTAssertEqual(priced.valueSource, "接口实时价格")
+        let publicJSON = String(data: try JSONEncoder().encode(priced), encoding: .utf8) ?? ""
+        XCTAssertFalse(publicJSON.contains("pricing")); XCTAssertFalse(publicJSON.contains("pricePerMillion")); XCTAssertFalse(publicJSON.contains("cost"))
     }
 
     func testDIS03DIS04DIS05CustomPendingFailedAndUnavailable() async throws {

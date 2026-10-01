@@ -138,6 +138,8 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 ## Model service setup and immediate role changes (2026-09-27)
 
+- Built-in OpenRouter defaults are limited to Qwen 3.7 Flash, GPT-5.6 Luna and GPT-5.6 Terra, including after directory refresh. Other models enter through a full model ID and the same explicit capability probe. A successful committed proof enables default/backup selection and survives restart; failed or canceled probes do not enable recognition. Manual input is retained on failure and protected against unsaved dismissal. Custom service discovery keeps its existing behavior.
+
 - `ProviderConfigurationSheet` owns both built-in and custom setup. `ProviderModelList` owns searchable model selection; `ProviderOperationFeedback` owns discovery/probe feedback and recovery. Native Picker, Toggle, Button, SecureField and the existing theme/search primitives remain canonical.
 - Setup saves in stages. Save and fetch models persists configuration and any supplied credential before discovery; save-only performs no network discovery. Success stays in the editor. Closing preserves completed saves and guards only unsaved changes.
 - Config, credential and projection-refresh outcomes remain separate. A committed key is cleared from the input even if refresh fails; retry does not re-submit the successful key. Draft credentials never enter observable feature-model state, logs or ordinary config.

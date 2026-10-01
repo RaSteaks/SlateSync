@@ -57,8 +57,11 @@ struct ProviderConfigurationSheet: View {
     @State private var originalRoles: ProviderSelections?
     @State private var expectedRoles: ProviderSelections?
     @State private var lastProbeIDs: [String] = []
+    // Additional built-in OpenRouter IDs are persisted by successful capability probes,
+    // rather than becoming unverified connection settings or expanding remote discovery.
+    @State private var openRouterModelID = ""
     @FocusState private var focused: Field?
-    private enum Field: Hashable { case name, address, key, models; case option(GlobalSettingKey) }
+    private enum Field: Hashable { case name, address, key, models, openRouterModel; case option(GlobalSettingKey) }
 
     init(settings: GlobalSettingsModel, definition: ProviderCatalog.Definition? = nil,
          provider: CustomProviderConfiguration? = nil, preset: ProviderPreset? = nil, onBack: (() -> Void)? = nil, startsAtModels: Bool = false) {
@@ -89,6 +92,8 @@ struct ProviderConfigurationSheet: View {
     }
 
     private var dirty: Bool { draft != savedDraft || !apiKey.isEmpty }
+    private var enteredOpenRouterModelID: String { openRouterModelID.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var hasManualModelDraft: Bool { definition?.kind == .openRouter && !enteredOpenRouterModelID.isEmpty }
     private var busy: Bool { requestTask != nil || settings.operation.isRunning || providerID.map { settings.providerOperations[$0]?.isRunning == true } == true }
     private var requestChanged: Bool { draft.requestDiffers(from: savedDraft) || !apiKey.isEmpty }
     private var hasKey: Bool { providerID.map { settings.live?.configuredCredentialProviderIDs.contains($0) == true } == true }
@@ -106,7 +111,7 @@ struct ProviderConfigurationSheet: View {
         return result
     }
     private var selectedVerified: ModelData? {
-        guard !dirty, selected.count == 1, let id = selected.first, let providerID, let snapshot = settings.live,
+        guard !dirty, !hasManualModelDraft, selected.count == 1, let id = selected.first, let providerID, let snapshot = settings.live,
               ProviderPresentation.isVerified(.init(providerID: providerID, modelID: id), in: snapshot) else { return nil }
         return models.first { $0.id == id }
     }
@@ -137,7 +142,7 @@ struct ProviderConfigurationSheet: View {
             actions
         }
         .padding(20).frame(minWidth: 560, idealWidth: 640, maxWidth: 780, minHeight: 430, idealHeight: 580)
-        .interactiveDismissDisabled(dirty || busy)
+        .interactiveDismissDisabled(dirty || hasManualModelDraft || busy)
         .confirmationDialog(L10n.tr("放弃未保存的修改？"), isPresented: $confirmExit, titleVisibility: .visible) {
             Button(L10n.tr("放弃修改"), role: .destructive) { finishExit() }
             Button(L10n.tr("继续编辑"), role: .cancel) {}
@@ -289,6 +294,14 @@ struct ProviderConfigurationSheet: View {
                     .font(.caption).foregroundStyle(.secondary)
                 input(L10n.tr("手动模型 ID（逗号分隔）"), text: $draft.modelIDs, field: .models).disabled(busy)
                 if dirty { Text(L10n.tr("模型列表有修改，验证前将先保存。" )).font(.caption).foregroundStyle(.secondary) }
+            } else if definition?.kind == .openRouter {
+                Text(L10n.tr("默认提供 Qwen、GPT Luna 和 GPT Terra。其他模型请输入 OpenRouter 的完整模型 ID，验证通过后可设为默认或备用。"))
+                    .font(.caption).foregroundStyle(.secondary)
+                input(L10n.tr("其他 OpenRouter 模型 ID"), text: $openRouterModelID, field: .openRouterModel)
+                    .disabled(busy)
+                Button(L10n.tr("验证并添加模型")) { verifyOpenRouterModel() }
+                    .disabled(busy || dirty || enteredOpenRouterModelID.isEmpty || !canDiscover)
+                    .accessibilityIdentifier("providers.editor.addOpenRouterModel")
             }
             ProviderModelList(models: models, selected: $selected, busy: busy, verify: verify)
         }
@@ -367,6 +380,9 @@ struct ProviderConfigurationSheet: View {
             }
         case .models:
             errors[field] = draft.parsedModelIDs.contains(where: { !ProviderCatalog.isValidModelID($0) }) ? L10n.tr("模型 ID 格式无效，请检查空格或特殊字符。") : nil
+        case .openRouterModel:
+            errors[field] = !ProviderCatalog.isValidModelID(enteredOpenRouterModelID)
+                ? L10n.tr("模型 ID 格式无效，请检查空格或特殊字符。") : nil
         case .option(let key):
             let value = draft.advanced[key] ?? ""
             if definition?.advancedOptions.first(where: { $0.key == key })?.isRequired == true && value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -483,9 +499,24 @@ struct ProviderConfigurationSheet: View {
             defer { requestTask = nil }
             guard await saveDraft() else { return }
             lastProbeIDs = ids
-            _ = await settings.probe(providerID: providerID, modelIDs: physical)
+            let result = await settings.probe(providerID: providerID, modelIDs: physical)
+            // Clear only a successfully committed manual ID. Failures and cancellation
+            // retain the entry so the existing probe feedback and retry remain actionable.
+            if definition?.kind == .openRouter, physical == [enteredOpenRouterModelID],
+               result?.canceled == false,
+               result?.results.first?.capabilityStatus == .verified {
+                openRouterModelID = ""
+                errors[.openRouterModel] = nil
+            }
             message = nil
         }
+    }
+    private func verifyOpenRouterModel() {
+        guard !busy, !dirty, hasSaved else { return }
+        validateField(.openRouterModel)
+        guard errors[.openRouterModel] == nil else { focused = .openRouterModel; return }
+        // Reuse the same credential gate, synthetic-image probe and persisted proof as every model row.
+        verify([enteredOpenRouterModelID])
     }
     private func retry() {
         if lastProbeIDs.isEmpty { fetch() } else { verify(lastProbeIDs) }
@@ -534,7 +565,7 @@ struct ProviderConfigurationSheet: View {
     }
     private func requestExit(back: Bool) {
         exitToPresets = back
-        if dirty { confirmExit = true } else { finishExit() }
+        if dirty || hasManualModelDraft { confirmExit = true } else { finishExit() }
     }
     private func finishExit() {
         apiKey = ""

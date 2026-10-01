@@ -60,6 +60,16 @@ components:
 
 # SlateSync Design
 
+## OpenRouter model choices (2026-10-01)
+
+The built-in OpenRouter service presents Qwen 3.7 Flash, GPT-5.6 Luna and
+GPT-5.6 Terra by default. Directory refreshes keep that curated selection.
+The shared provider editor adds a visibly labeled model-ID field and a native
+Verify and add model button for other OpenRouter models. It reuses existing
+field errors, operation feedback and verified default/backup actions; pending
+input stays local and is guarded on close. Successful probes retain additional
+models across refreshes and restart. No theme or window geometry changes.
+
 ## Overview
 
 SlateSync is a professional film-production utility used for long, detail-heavy

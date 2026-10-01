@@ -219,7 +219,8 @@ public enum ProviderCatalog {
         model("qwen/qwen3.7-flash", "Qwen 3.7 Flash", "快速中文视觉识别", ["openrouter"], quality: 76, value: 96, structured: false),
         model("openai/gpt-5.6-luna", "GPT-5.6 Luna", "高吞吐视觉识别", ["openai", "openrouter"], direct: "gpt-5.6-luna", detail: .original, quality: 88, value: 78),
         model("openai/gpt-5.6-terra", "GPT-5.6 Terra", "高准确率视觉识别", ["openai", "openrouter"], direct: "gpt-5.6-terra", detail: .original, quality: 95, value: 71),
-        model("openai/gpt-4o-mini", "GPT-4o mini", "稳定基准模型", ["openai", "openrouter"], direct: "gpt-4o-mini", quality: 74, value: 91),
+        // OpenRouter defaults stay limited to Qwen, Luna and Terra; other IDs require an explicit probe.
+        model("openai/gpt-4o-mini", "GPT-4o mini", "稳定基准模型", ["openai"], direct: "gpt-4o-mini", quality: 74, value: 91),
         model("qwen3.7-plus", "Qwen 3.7 Plus", "Token Plan 高质量中文视觉识别", ["tokenplan"], quality: 87, value: 83),
         model("qwen3.8-max", "Qwen 3.8 Max", "百炼多模态旗舰 · 高精度视觉推理", ["tokenplan", "dashscope"], quality: 93, value: 78),
         model("qwen3.7-max", "Qwen 3.7 Max", "百炼多模态视觉理解", ["dashscope"], quality: 91, value: 80),
