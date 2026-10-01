@@ -306,12 +306,16 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertTrue(manual.waitForExistence(timeout: 8)); manual.click(); manual.typeText("gpt-4.1, failed-model")
         let success = app.checkBoxes["providers.model.gpt-4.1"]
         let failure = app.checkBoxes["providers.model.failed-model"]
-        XCTAssertTrue(success.waitForExistence(timeout: 5)); success.click()
-        XCTAssertTrue(failure.waitForExistence(timeout: 5)); failure.click()
+        setModelCheckbox(success, selected: true, label: "gpt-4.1")
+        setModelCheckbox(failure, selected: true, label: "failed-model")
         app.buttons["providers.editor.verify"].click()
         XCTAssertTrue(app.sheets.staticTexts["通过 1 个，失败 1 个，取消 0 个"].firstMatch.waitForExistence(timeout: 10))
-        failure.click()
-        // CI 虚拟机高负载下表格勾选与按钮刷新需要更长时间，放宽等待而非放松断言。
+        setModelCheckbox(failure, selected: false, label: "failed-model")
+        // 取消失败模型后确认勾选状态落定：失败模型为未选、成功模型保持
+        // 已选，激活按钮才允许出现。汇总先现、配置后刷的窗口里过早点击
+        // 会被禁用态吞掉，虚拟机上这里曾是主要失败点。
+        XCTAssertFalse(checkboxState(failure), "失败模型应已取消勾选")
+        XCTAssertTrue(checkboxState(success), "成功模型应保持勾选")
         XCTAssertTrue(app.buttons["providers.editor.activate"].waitForExistence(timeout: 10))
         attachReview("Provider partial verification", app: app)
         #endif
@@ -1087,6 +1091,41 @@ final class SlateSyncUITests: XCTestCase {
         screenshot.name = "UI-\(name)-actual-\(Int(size.width))x\(Int(size.height))"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    /// 读取模型复选框的勾选状态：实测 SwiftUI checkbox 的 value 暴露为
+    /// 1/0（NSNumber 或字符串桥接不定），isSelected 恒为 false，因此按
+    /// 数值与字符串两种形态判读，均不成立时退回 isSelected。
+    @MainActor
+    private func checkboxState(_ element: XCUIElement) -> Bool {
+        if let flag = element.value as? Int { return flag == 1 }
+        if let text = element.value as? String { return text == "1" }
+        return element.isSelected
+    }
+
+    /// 等复选框启用后按目标值切换：虚拟机上验证汇总先于配置刷新出现，
+    /// 过早点击会被禁用态吞掉。每次重试前重读当前值再决定是否点击，
+    /// 绝不盲点两次把已选中的模型又取消掉；达不成目标值时保留勾选值、
+    /// 启用态与元素树供 CI 取证。
+    @MainActor
+    private func setModelCheckbox(_ element: XCUIElement, selected: Bool, label: String) {
+        XCTAssertTrue(element.waitForExistence(timeout: 10), "\(label) 未出现")
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: element)
+        waitForExpectations(timeout: 10)
+        for attempt in 0..<4 {
+            if checkboxState(element) == selected { return }
+            element.click()
+            Thread.sleep(forTimeInterval: attempt == 0 ? 0.5 : 1)
+        }
+        let diagnostics = """
+        \(label): value=\(element.value ?? "nil") selected=\(element.isSelected) enabled=\(element.isEnabled)
+        \(element.debugDescription)
+        """
+        let attachment = XCTAttachment(string: diagnostics)
+        attachment.name = "checkbox-\(label)-target-\(selected)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTFail("\(label) 未达到目标勾选值 \(selected)")
     }
 
     @MainActor
