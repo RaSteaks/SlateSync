@@ -124,7 +124,9 @@ def validate_workflows(ci: str, release: str) -> None:
         combined.count("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer") == 3,
         "Xcode selection drift",
     )
-    require(combined.count("timeout-minutes: 45") == 2, "native Gate execution budget drift")
+    # 功能与发布 workflow 共用同一门禁预算；预算调整必须两份文件与
+    # 本断言同一提交更新，防止单边漂移。
+    require(combined.count("timeout-minutes: 60") == 2, "native Gate execution budget drift")
     forbidden = re.compile(
         r"actions/setup-node|\bnpm\b|\bnpx\b|\bnode\b|electron-builder|\bgh\s+release\b|"
         r"CSC_LINK|APPLE_APP_SPECIFIC_PASSWORD|notarytool",
