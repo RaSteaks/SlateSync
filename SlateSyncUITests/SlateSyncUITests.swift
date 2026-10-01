@@ -311,7 +311,8 @@ final class SlateSyncUITests: XCTestCase {
         app.buttons["providers.editor.verify"].click()
         XCTAssertTrue(app.sheets.staticTexts["通过 1 个，失败 1 个，取消 0 个"].firstMatch.waitForExistence(timeout: 10))
         failure.click()
-        XCTAssertTrue(app.buttons["providers.editor.activate"].waitForExistence(timeout: 5))
+        // CI 虚拟机高负载下表格勾选与按钮刷新需要更长时间，放宽等待而非放松断言。
+        XCTAssertTrue(app.buttons["providers.editor.activate"].waitForExistence(timeout: 10))
         attachReview("Provider partial verification", app: app)
         #endif
     }
@@ -383,7 +384,11 @@ final class SlateSyncUITests: XCTestCase {
         app.buttons["移除"].firstMatch.click()
         expectation(for: NSPredicate { _, _ in (try? Self.persistedBackupIDs(root)) == ["gpt-4.1"] }, evaluatedWith: app)
         waitForExpectations(timeout: 5)
-        app.popUpButtons["更多操作"].firstMatch.click()
+        // macOS 26 把 SwiftUI Menu 暴露为不同元素类型，用固定标识符做类型无关查询。
+        let moreActions = app.descendants(matching: .any)
+            .matching(identifier: "providers.moreActions").firstMatch
+        XCTAssertTrue(moreActions.waitForExistence(timeout: 8))
+        moreActions.click()
         app.menuItems["删除…"].click()
         let remove = app.sheets.buttons["删除"].firstMatch
         XCTAssertTrue(remove.waitForExistence(timeout: 5)); remove.click()

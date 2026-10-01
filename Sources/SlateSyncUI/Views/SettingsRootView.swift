@@ -486,6 +486,9 @@ public struct SettingsRootView: View {
                 } label: { Image(systemName: "ellipsis") }
                 .menuStyle(.borderlessButton).fixedSize()
                 .accessibilityLabel(L10n.tr("更多操作")).help(L10n.tr("更多操作"))
+                // SwiftUI Menu 在 macOS 15 与 26 上暴露的元素类型不同
+                // （PopUpButton / menuButton），测试用固定标识符做类型无关查询。
+                .accessibilityIdentifier("providers.moreActions")
                 .disabled(settings.operation.isRunning)
             }
             providerStatus(provider.id)
