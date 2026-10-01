@@ -310,7 +310,6 @@ final class SlateSyncUITests: XCTestCase {
         setModelCheckbox(failure, selected: true, label: "failed-model")
         app.buttons["providers.editor.verify"].click()
         XCTAssertTrue(app.sheets.staticTexts["通过 1 个，失败 1 个，取消 0 个"].firstMatch.waitForExistence(timeout: 10))
-        setModelCheckbox(failure, selected: false, label: "failed-model")
         // 虚拟机上 XCUI 会持续供用过期的元素快照（日志可见 snapshot
         // previously cached），勾选值读数可能永不翻转；取消是否生效改以
         // 应用的真实后果为准——部分验证下只有成功模型保持已选时
