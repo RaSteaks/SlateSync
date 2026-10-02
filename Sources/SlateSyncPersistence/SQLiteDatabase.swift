@@ -184,13 +184,16 @@ public actor SQLiteDatabase {
     func saveTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting, replacingKeys: Set<String>? = nil) throws {
         try mutateTaskSnapshot(id, snapshotURL: snapshotURL, writer: writer) { database in
             var object = try PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
-            if let replacingKeys, let text = try database.rowsUnlocked(
-                "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil {
+            if let replacingKeys, let row = try database.rowsUnlocked(
+                "SELECT data_json, created_at FROM tasks WHERE id = ?;", bindings: [id]).first,
+               let text = row["data_json"] ?? nil {
                 let previous = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
                 // Missing known fields intentionally clear old values. Unknown
                 // extension fields survive native decode/edit/save round trips.
                 for (key, value) in previous where !replacingKeys.contains(key) { object[key] = value }
-                object["createdAt"] = previous["createdAt"]
+                // Legacy JSON can omit this optional field. SQLite's non-null
+                // column is authoritative and must survive a native edit.
+                object["createdAt"] = row["created_at"] ?? nil
             }
             let merged = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
             _ = try database.executeUnlocked("""
@@ -305,12 +308,14 @@ public actor SQLiteDatabase {
     /// writer's fields or resurrect a task deleted before this transaction.
     func patchTask(_ id: String, patch: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
         try mutateTaskSnapshot(id, snapshotURL: snapshotURL, writer: writer) { database in
-            guard let text = try database.rowsUnlocked(
-                "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil else {
+            guard let row = try database.rowsUnlocked(
+                "SELECT data_json, created_at FROM tasks WHERE id = ?;", bindings: [id]).first,
+                let text = row["data_json"] ?? nil else {
                 throw SlateSyncError(code: "ENOENT", message: "任务不存在")
             }
             var object = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
-            let createdAt = object["createdAt"]
+            // Patches share the same canonical timestamp rule as native saves.
+            let createdAt = row["created_at"] ?? nil
             let changes = try PersistenceJSON.object(from: patch, errorCode: "TASK_INVALID")
             for (key, value) in changes { object[key] = value }
             let now = PersistenceJSON.timestamp()

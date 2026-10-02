@@ -67,6 +67,37 @@ final class TaskSnapshotTransactionTests: XCTestCase {
         try await reopened.close()
     }
 
+    func testNativeEditsPreserveSQLTimestampWhenLegacyJSONOmitsIt() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("legacy-task-timestamp")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let snapshots = root.appending(path: "tasks")
+        try FileManager.default.createDirectory(at: snapshots, withIntermediateDirectories: true)
+        for (id, timestamp) in [("missing", ""), ("null", ",\"createdAt\":null")] {
+            let json = "{\"id\":\"\(id)\",\"unknownFutureField\":true\(timestamp)}"
+            try Data(json.utf8).write(to: snapshots.appending(path: "\(id).json"))
+        }
+        let store = try ProjectTaskStore(projectDirectory: root)
+        for id in ["missing", "null"] {
+            let original = try await store.loadTask(id)
+            let typed = try JSONDecoder().decode(TaskData.self, from: original)
+            XCTAssertNil(typed.createdAt)
+            // The import keeps an authoritative timestamp in SQLite even when
+            // the legacy JSON projection omitted it or explicitly stored null.
+            if id == "null" {
+                _ = try await store.updateTask(id, patch: Data(#"{"customPrompt":"edited"}"#.utf8))
+            } else {
+                _ = try await store.saveTask(JSONEncoder().encode(TaskData(id: id, customPrompt: "edited")),
+                    taskID: id, replacingKeys: TaskData.persistenceFieldNames)
+            }
+            let bytes = try await store.loadTask(id)
+            let object = try PersistenceTestSupport.jsonObject(bytes)
+            XCTAssertEqual(object["createdAt"] as? String, "1970-01-01T00:00:00.000Z")
+            XCTAssertEqual(object["unknownFutureField"] as? Bool, true)
+            XCTAssertEqual(object["customPrompt"] as? String, "edited")
+        }
+        try await store.close()
+    }
+
     func testInterruptedSnapshotIsReconciledBeforeLegacyImport() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("snapshot-recovery")
         defer { try? FileManager.default.removeItem(at: root) }
