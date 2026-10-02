@@ -14,9 +14,13 @@ import re
 import subprocess
 import tempfile
 import unittest
+from functools import lru_cache
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFESTS = ROOT / '.codex/swift-migration/manifests'
+CURRENT_ACCEPTANCE = ROOT / 'script/fixtures/sm09-current-acceptance.json'
+HISTORICAL_PLAN = ROOT / 'Tests/SlateSyncUIUnitTests/Fixtures/SM09/sm09-native-evidence-plan.json'
 PERFORMANCE_ONLY_TESTS = frozenset({'SlateSyncUIUnitTests.SM08NativeSurfaceTests/testForegroundCSVMeetsDisplayCadenceBudget'})
 
 BASE = '52b2a78f6619145b0999bdccf588d83a95349e7c'
@@ -215,6 +219,119 @@ def pass_line(log, reference):
     return lines[-1]
 
 
+def test_source_path(reference):
+    require(re.fullmatch(r'\w+\.\w+/test\w+', reference), f'invalid test reference: {reference}')
+    target, suite = reference.split('/')[0].split('.')
+    folder = ROOT / target if target == 'SlateSyncUITests' else ROOT / 'Tests' / target
+    return folder / f'{suite}.swift'
+
+
+def source_has_test(source, reference):
+    suite, method = reference.split('/')[0].split('.')[1], reference.split('/')[1]
+    # This is a fast source-presence check, not execution evidence. The actual
+    # log must still contain each named PASS, including in functional mode.
+    source = re.sub(r'/\*.*?\*/|//[^\n]*', '', source, flags=re.DOTALL)
+    return (re.search(r'\bclass\s+' + re.escape(suite) + r'\s*:\s*XCTestCase\b', source) is not None
+            and re.search(r'^\s*func\s+' + re.escape(method) + r'\s*\(\s*\)', source, re.MULTILINE) is not None)
+
+
+@lru_cache(maxsize=None)
+def historical_test_source(commit, path):
+    # A deleted file is expected after an approved retirement; other Git errors
+    # must remain fatal. The parent proves the old test existed at the decision.
+    if not git('ls-tree', '--name-only', commit, '--', path).strip():
+        return ''
+    return git('show', f'{commit}:{path}').decode()
+
+
+def current_acceptance(contract, evolution=None):
+    """Apply explicit decisions without rewriting sealed fixtures or history."""
+    evolution = document(CURRENT_ACCEPTANCE) if evolution is None else evolution
+    require(evolution.get('schemaVersion') == 1, 'unsupported current acceptance schema')
+    plan = document(HISTORICAL_PLAN)
+    baseline = contract['requiredSwiftTests']
+    transitions = evolution['testTransitions']
+    require(set(transitions) <= set(baseline), 'transition outside baseline')
+    decisions = set()
+    for reference, change in transitions.items():
+        commit = change.get('decisionCommit', '')
+        require(re.fullmatch(r'[0-9a-f]{40}', commit) and change.get('reason', '').strip(),
+                f'missing decision evidence: {reference}')
+        if commit not in decisions:
+            git('merge-base', '--is-ancestor', commit, 'HEAD')
+            decisions.add(commit)
+        path = str(test_source_path(reference).relative_to(ROOT))
+        require(source_has_test(historical_test_source(commit + '^', path), reference),
+                f'decision did not own original test: {reference}')
+        require(not source_has_test(historical_test_source(commit, path), reference),
+                f'decision did not remove original test: {reference}')
+        status, replacement = change.get('status'), change.get('replacement')
+        require(status in ('moved', 'revised', 'retired'), f'invalid transition: {reference}')
+        if status == 'retired':
+            # Retirement is narrowly authorized for the removed Provider import
+            # path; unrelated tests cannot be waived by adding an empty mapping.
+            require(commit == '41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8' and replacement is None
+                    and (reference.startswith('SlateSyncPersistenceTests.KeychainMigrationTests/')
+                         or reference in {
+                             'SlateSyncPersistenceTests.SlateSyncRuntimeTests/testBootstrapMigratesLegacyCredentialsThroughTheInjectedBackend',
+                             'SlateSyncPersistenceTests.SlateSyncRuntimeTests/testMigrationFailureIsNonBlockingSecretFreeAndRetryable'}),
+                    f'unauthorized retirement: {reference}')
+            require(not reference.endswith(('testConditionalDeletePreservesAValueChangedByAnotherWriter',
+                                            'testCreateIfAbsentReturnsOwnershipAndRejectsWrongOwnerCompensation')),
+                    'shared Keychain ownership cannot retire')
+        else:
+            require(isinstance(replacement, str) and replacement != reference, f'missing successor: {reference}')
+            replacement_path = str(test_source_path(replacement).relative_to(ROOT))
+            require(source_has_test(historical_test_source(commit, replacement_path), replacement),
+                    f'successor absent from decision: {replacement}')
+
+    additional = evolution['requiredAdditionalTests']
+    require(additional and len(additional) == len(set(additional)), 'empty or duplicate current credential coverage')
+    # Keep the current storage safety floor even if an acceptance entry is edited.
+    credential_floor = {
+        'SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/' + name for name in (
+            'testRoundTripRestartNoncePermissionsAndDeletion', 'testTamperingAndMissingKeyNeverOverwriteVault',
+            'testIndependentStoresSerializeReadModifyWrite', 'testSymlinkAndUnsafeFileRejection',
+            'testFailedPayloadWritePreservesPreviousCredentials', 'testCancellationWhileWaitingForLockPreservesVault',
+            'testQueuedCancellationAndCancellationAfterCommitBoundary', 'testMissingMasterKeyAndAccessFailuresRemainDistinct',
+            'testBatchUsesOneSnapshotAndPreservesMissingProviders', 'testLockTimeoutIsTransientAndBatchWaitsOnlyOnce',
+            'testAnotherProcessHoldingLockCanRecoverWithoutReset')}
+    credential_floor.add('SlateSyncPersistenceTests.SlateSyncRuntimeTests/testProviderFileStorageNeverReadsOrMigratesOldSecrets')
+    require(credential_floor <= set(additional), 'current credential coverage shrank')
+    required = [transitions.get(ref, {}).get('replacement', ref) for ref in baseline]
+    required = [ref for ref in required if ref is not None] + additional
+    require(len(required) == len(set(required)), 'duplicate effective required test')
+    for key, item in plan.items():
+        item['tests'] = [transitions.get(ref, {}).get('replacement', ref) for ref in item['tests']]
+        item['tests'] = [ref for ref in item['tests'] if ref is not None]
+    for key, update in evolution['acceptanceUpdates'].items():
+        require(key in plan and update.get('decisionCommit') in decisions and update.get('expected', '').strip(),
+                f'invalid acceptance decision: {key}')
+        require(set(update) <= {'decisionCommit', 'expected', 'tests'}, f'unsupported acceptance override: {key}')
+        plan[key].update({k: v for k, v in update.items() if k != 'decisionCommit'})
+    require(set(additional) <= set(plan['SET-02']['tests']), 'SET-02 omits current credential coverage')
+    require('queue' in plan['REC-05']['expected'].lower() and 'fail-fast' not in plan['REC-05']['expected'].lower(),
+            'REC-05 still describes retired admission policy')
+    coverage = document(ROOT / 'Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-coverage.json')
+    require(set(plan) == set(coverage['manualOrGate']) - {'GOV-01'}, 'UI acceptance coverage gap')
+    references = set(required)
+    for key, item in plan.items():
+        require(item['runner'] in ('swift', 'xcode') and item['tests'], f'empty acceptance: {key}')
+        require(len(item['tests']) == len(set(item['tests'])), f'duplicate acceptance test: {key}')
+        require(all(ref.startswith('SlateSyncUITests.') == (item['runner'] == 'xcode') for ref in item['tests']),
+                f'wrong acceptance runner: {key}')
+        references.update(item['tests'])
+    sources, missing = {}, []
+    for ref in sorted(references):
+        path = test_source_path(ref)
+        if path not in sources:
+            sources[path] = path.read_text() if path.is_file() else ''
+        if not source_has_test(sources[path], ref):
+            missing.append(ref)
+    require(not missing, 'missing current test declarations:\n' + '\n'.join(missing))
+    return {**contract, 'requiredSwiftTests': required}, plan, evolution
+
+
 def validate_metrics(name, value, budget, enforce_timing=True):
     require(value.get('fixtureRows', 10000) == 10000, 'CSV fixture size drift')
     if name == 'native-csv-foreground.json':
@@ -240,7 +357,15 @@ def validate_metrics(name, value, budget, enforce_timing=True):
         require(value['retainedResidentBytes'] <= budget['csv10000']['retainedResidentDeltaBytes'], 'retained memory budget')
 
 
-def validate_execution(result_dir, contract, functional=False):
+def validate_execution(result_dir, contract, functional=False, replay_commit=None):
+    contract, plan, evolution = current_acceptance(contract)
+    head = git('rev-parse', 'HEAD').decode().strip()
+    if replay_commit:
+        # Replays consume copies of a recorded run and never claim evidence for
+        # the candidate commit. The original run result supplies the source SHA.
+        require(re.fullmatch(r'[0-9a-f]{40}', replay_commit), 'invalid replay commit')
+        require(document(result_dir / 'result.json')['reviewCommit'] == replay_commit, 'replay source commit mismatch')
+        git('merge-base', '--is-ancestor', replay_commit, 'HEAD')
     swift = (result_dir / 'swift_test.log').read_text()
     xcode = (result_dir / 'xcode_test_plan_xcodebuild.log').read_text()
     summary = document(result_dir / 'xcode_test_summary.json')
@@ -256,9 +381,6 @@ def validate_execution(result_dir, contract, functional=False):
             pass_line(swift, reference)
     require(re.search(r'SM06_RESOURCES .*active=0 pending=0 processes=0', swift), 'media owners did not drain')
     require(re.search(r'SM06_VISION_SMOKE .*revision=[1-9]', swift), 'native Vision evidence missing')
-    plan = json.loads(read('Tests/SlateSyncUIUnitTests/Fixtures/SM09/sm09-native-evidence-plan.json'))
-    coverage = json.loads(read('Tests/SlateSyncUIUnitTests/Fixtures/SM08/sm08-coverage.json'))
-    require(set(plan) == set(coverage['manualOrGate']) - {'GOV-01'}, 'UI acceptance coverage gap')
     budget = json.loads(read('Tests/SlateSyncUIUnitTests/Fixtures/SM08/performance-budget.json'))
     artifacts = {}
     for name in ['real-sqlite-scale.json', 'native-project-task-scale.json', 'native-csv-scale.json', 'native-csv-foreground.json']:
@@ -270,6 +392,8 @@ def validate_execution(result_dir, contract, functional=False):
     # Each acceptance owns its observations and source hashes, preserving all
     # 45 interaction/measurement mappings rather than only static ID names.
     inputs = {p.name: digest(p.read_bytes()) for p in [result_dir/'swift_test.log', result_dir/'xcode_test_plan_xcodebuild.log', result_dir/'xcode_test_summary.json']}
+    if replay_commit:
+        inputs['result.json'] = digest((result_dir / 'result.json').read_bytes())
     acceptance = {}
     for key, item in plan.items():
         log = xcode if item['runner'] == 'xcode' else swift
@@ -281,15 +405,20 @@ def validate_execution(result_dir, contract, functional=False):
             'deferredTests': deferred_tests,
             'metrics': {name: artifacts[name] for name in item.get('metrics', [])
                         if not functional or name != 'native-csv-foreground.json'}}
-    report = {'schemaVersion': 1, 'phase': 'SM-09', 'commit': git('rev-parse','HEAD').decode().strip(),
+    report = {'schemaVersion': 2, 'phase': 'SM-09', 'commit': head,
+              'executionMode': 'offline-replay' if replay_commit else 'native-gate',
+              'evidenceCommit': replay_commit or head,
               'scope': 'functional' if functional else 'full',
               'performancePolicy': 'advisory' if functional else 'required',
-              'completeAcceptance': not functional,
+              'completeAcceptance': not functional and not replay_commit,
+              'contractInputs': {str(p.relative_to(ROOT)): digest(p.read_bytes()) for p in
+                                 [Path(__file__), CURRENT_ACCEPTANCE, HISTORICAL_PLAN, MANIFESTS / 'sm09-native-contract.json']},
+              'testTransitions': evolution['testTransitions'],
               'sourceInputs': inputs, 'acceptance': acceptance}
     (result_dir / 'native-evidence.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
 
 
-def run(result_dir=None, before_removal=False, functional=False):
+def run(result_dir=None, before_removal=False, functional=False, replay_commit=None):
     contract = document(MANIFESTS / 'sm09-native-contract.json')
     cutover = document(MANIFESTS / 'sm09-cutover.json')
     seal_bytes = (MANIFESTS/'sm09-final-pre-cutover.json').read_bytes()
@@ -309,15 +438,81 @@ def run(result_dir=None, before_removal=False, functional=False):
     validate_fixtures(contract)
     validate_oracles()
     validate_source_boundaries()
+    # Detect stale references before any Swift build or foreground CI work.
+    current_acceptance(contract)
     if not before_removal:
         validate_tree(cutover)
     if result_dir:
-        validate_execution(result_dir, contract, functional=functional)
-    print('SM-09 native functional coverage (timing advisory): PASS' if functional else
+        validate_execution(result_dir, contract, functional=functional, replay_commit=replay_commit)
+    print('SM-09 offline replay: PASS (not current-commit CI acceptance)' if replay_commit else
+          'SM-09 native functional coverage (timing advisory): PASS' if functional else
           'SM-09 native provenance, fixtures, ownership and acceptance: PASS')
 
 
 class ContractTests(unittest.TestCase):
+    def test_current_mapping_preserves_baseline_and_retirement_evidence(self):
+        baseline = document(MANIFESTS / 'sm09-native-contract.json')
+        before = copy.deepcopy(baseline)
+        effective, plan, evolution = current_acceptance(baseline)
+        self.assertEqual(baseline, before)
+        self.assertEqual(len(evolution['testTransitions']), 16)
+        self.assertEqual(sum(v['status'] == 'retired' for v in evolution['testTransitions'].values()), 12)
+        self.assertEqual(len(effective['requiredSwiftTests']), 235)
+        self.assertEqual(len(plan), len(document(HISTORICAL_PLAN)))
+        untouched = set(baseline['requiredSwiftTests']) - set(evolution['testTransitions'])
+        self.assertTrue(untouched <= set(effective['requiredSwiftTests']))
+
+    def test_unresolved_references_report_all_missing_declarations(self):
+        baseline = document(MANIFESTS / 'sm09-native-contract.json')
+        evolution = document(CURRENT_ACCEPTANCE)
+        evolution['testTransitions'] = {}
+        # Retain a coherent current plan so the declaration check can report
+        # all old baseline references together before any expensive execution.
+        evolution['acceptanceUpdates'] = {}
+        document_original = document
+        plan = document(HISTORICAL_PLAN)
+        with patch(__name__ + '.document') as read_document:
+            plan['REC-05']['tests'] = ['SlateSyncMediaTests.OCRPolicyTests/testRequiredOptionalDisabledAndCancellationPolicies']
+            plan['REC-05']['expected'] = 'queued admission and cancellation'
+            plan['SET-02']['tests'] = evolution['requiredAdditionalTests']
+            read_document.side_effect = lambda path: plan if path == HISTORICAL_PLAN else document_original(path)
+            with self.assertRaisesRegex(AssertionError, 'missing current test declarations') as failure:
+                current_acceptance(baseline, evolution)
+        self.assertIn('testCancellationCompensatesCreatedItemsAndPreservesLegacySource', str(failure.exception))
+        self.assertIn('testFLW05FLW07GlobalFailFastAndProjectCancellationDrain', str(failure.exception))
+
+    def test_invalid_decisions_and_coverage_reductions_rejected(self):
+        baseline = document(MANIFESTS / 'sm09-native-contract.json')
+        original = document(CURRENT_ACCEPTANCE)
+        moved = next(ref for ref, value in original['testTransitions'].items() if value['status'] == 'moved')
+        retired = next(ref for ref, value in original['testTransitions'].items() if value['status'] == 'retired')
+        mutations = [
+            lambda value: value['testTransitions'][retired].update(reason=''),
+            lambda value: value['testTransitions'][retired].update(decisionCommit='22e351ff1c03ae9f1821f3581784aa2269862fb4'),
+            lambda value: value['testTransitions'][moved].update(status='retired', replacement=None),
+            lambda value: value['testTransitions'][moved].update(replacement='SlateSyncPersistenceTests.KeychainBackendTests/testMissing'),
+            lambda value: value['requiredAdditionalTests'].pop(),
+            lambda value: value['acceptanceUpdates']['SET-02'].update(tests=[]),
+            lambda value: value['acceptanceUpdates'].pop('REC-05'),
+        ]
+        for mutate in mutations:
+            value = copy.deepcopy(original)
+            mutate(value)
+            with self.assertRaises((AssertionError, subprocess.CalledProcessError)):
+                current_acceptance(baseline, value)
+
+    def test_deleted_current_successor_is_caught_before_execution(self):
+        baseline = document(MANIFESTS / 'sm09-native-contract.json')
+        read_text = Path.read_text
+        def without_test(path, *args, **kwargs):
+            source = read_text(path, *args, **kwargs)
+            if path.name == 'KeychainBackendTests.swift':
+                return source.replace('func testConditionalDeletePreservesAValueChangedByAnotherWriter(', 'func removedTest(')
+            return source
+        with patch.object(Path, 'read_text', without_test):
+            with self.assertRaisesRegex(AssertionError, 'missing current test declarations'):
+                current_acceptance(baseline)
+
     def test_decision_mapping_mutations_rejected(self):
         original = document(MANIFESTS / 'sm09-cutover.json')
         validate_decisions(original)
@@ -383,8 +578,11 @@ if __name__ == '__main__':
     parser.add_argument('--before-removal', action='store_true')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--functional', action='store_true', help='Validate merge coverage; defer timing budgets explicitly')
+    parser.add_argument('--replay-commit', help='Original evidence SHA; replay in a copied result directory without claiming current CI acceptance')
     args = parser.parse_args()
+    if args.replay_commit and not args.result_dir:
+        parser.error('--replay-commit requires --result-dir')
     if args.self_test:
         result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(ContractTests))
         raise SystemExit(0 if result.wasSuccessful() else 1)
-    run(args.result_dir, args.before_removal, args.functional)
+    run(args.result_dir, args.before_removal, args.functional, args.replay_commit)

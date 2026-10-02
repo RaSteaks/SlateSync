@@ -37,13 +37,13 @@ class CIPolicyTests(unittest.TestCase):
             native.validate_metrics('native-project-task-scale.json', self.list_metrics, self.budget, enforce_timing=False)
 
     def test_functional_evidence_does_not_claim_full_acceptance(self):
-        contract = native.document(native.MANIFESTS / 'sm09-native-contract.json')
+        baseline = native.document(native.MANIFESTS / 'sm09-native-contract.json')
+        contract, plan, _ = native.current_acceptance(baseline)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             swift = '\n'.join(f"Test Case '-[{ref.replace('/', ' ')}]' passed" for ref in contract['requiredSwiftTests'] if ref not in native.PERFORMANCE_ONLY_TESTS)
             swift += '\nSM06_RESOURCES active=0 pending=0 processes=0\nSM06_VISION_SMOKE revision=3\n'
-            plan = native.document(ROOT / 'Tests/SlateSyncUIUnitTests/Fixtures/SM09/sm09-native-evidence-plan.json')
-            # Supplement every existing plan reference, while deliberately omitting FPS.
+            # Supplement the effective current plan, while deliberately omitting FPS.
             for item in plan.values():
                 if item['runner'] != 'xcode':
                     for ref in item['tests']:
@@ -66,17 +66,36 @@ class CIPolicyTests(unittest.TestCase):
             }
             for name, value in values.items():
                 (metrics/name).write_text(json.dumps(value))
-            native.validate_execution(root, contract, functional=True)
+            native.validate_execution(root, baseline, functional=True)
             result = json.loads((root/'native-evidence.json').read_text())
             self.assertFalse(result['completeAcceptance'])
             self.assertEqual(result['performancePolicy'], 'advisory')
             self.assertTrue(any(item['deferredTests'] for item in result['acceptance'].values()))
+            self.assertEqual(result['executionMode'], 'native-gate')
+            self.assertEqual(len(result['testTransitions']), 16)
+            # Historical evidence is useful for a replay but cannot certify a
+            # new commit or a full release, even when every functional check passes.
+            evidence_commit = 'c4111fed1a46289b3b002090d295fe3684547884'
+            (root/'result.json').write_text(json.dumps({'reviewCommit': evidence_commit}))
+            native.validate_execution(root, baseline, functional=True, replay_commit=evidence_commit)
+            replay = json.loads((root/'native-evidence.json').read_text())
+            self.assertEqual(replay['evidenceCommit'], evidence_commit)
+            self.assertEqual(replay['executionMode'], 'offline-replay')
+            self.assertFalse(replay['completeAcceptance'])
+            with self.assertRaisesRegex(AssertionError, 'source commit mismatch'):
+                native.validate_execution(root, baseline, functional=True, replay_commit='0'*40)
             with self.assertRaises(AssertionError):
-                native.validate_execution(root, contract)
+                native.validate_execution(root, baseline)
+            # Removing any new credential PASS must fail rather than merely
+            # relying on the old suite or overall executed test count.
+            for ref in native.document(native.CURRENT_ACCEPTANCE)['requiredAdditionalTests']:
+                (root/'swift_test.log').write_text(swift.replace(f"Test Case '-[{ref.replace('/', ' ')}]' passed", ''))
+                with self.assertRaisesRegex(AssertionError, 'missing executed PASS'):
+                    native.validate_execution(root, baseline, functional=True)
             # Functional coverage cannot silently omit an ordinary test.
             (root/'swift_test.log').write_text('')
             with self.assertRaises(AssertionError):
-                native.validate_execution(root, contract, functional=True)
+                native.validate_execution(root, baseline, functional=True)
 
     def test_report_preserves_failure_and_overrides_functional_environment(self):
         captured = {}

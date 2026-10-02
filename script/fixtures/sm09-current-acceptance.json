@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "description": "Current acceptance layered over the immutable SM-09 cutover contract and evidence plan. Retirement is historical scope, never an executed PASS.",
+  "testTransitions": {
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testConditionalDeletePreservesAValueChangedByAnotherWriter": {
+      "status": "moved",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Shared Keychain ownership primitives remain required for project encryption.",
+      "replacement": "SlateSyncPersistenceTests.KeychainBackendTests/testConditionalDeletePreservesAValueChangedByAnotherWriter"
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testCreateIfAbsentReturnsOwnershipAndRejectsWrongOwnerCompensation": {
+      "status": "moved",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Shared Keychain ownership primitives remain required for project encryption.",
+      "replacement": "SlateSyncPersistenceTests.KeychainBackendTests/testCreateIfAbsentReturnsOwnershipAndRejectsWrongOwnerCompensation"
+    },
+    "SlateSyncPersistenceTests.SlateSyncRuntimeTests/testBootstrapLoadsStoresResolvesDynamicDefaultsAndReportsMissingSource": {
+      "status": "revised",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Bootstrap and dynamic defaults remain required; legacy Provider migration diagnostics were retired.",
+      "replacement": "SlateSyncPersistenceTests.SlateSyncRuntimeTests/testBootstrapLoadsStoresAndResolvesDynamicDefaults"
+    },
+    "SlateSyncWorkflowTests.SM07CoordinatorTests/testFLW05FLW07GlobalFailFastAndProjectCancellationDrain": {
+      "status": "revised",
+      "decisionCommit": "22e351ff1c03ae9f1821f3581784aa2269862fb4",
+      "reason": "Global recognition admission now queues work; queued and in-flight project cancellation must drain owners.",
+      "replacement": "SlateSyncWorkflowTests.SM07CoordinatorTests/testFLW05FLW07GlobalQueueAndProjectCancellationDrain"
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testCancellationCompensatesCreatedItemsAndPreservesLegacySource": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testEqualExistingKeyIsRetainedAndConflictingKeyAbortsWithoutOverwrite": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testLegacyCredentialSourceRepairsExistingPermissionsBeforeRead": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testLegacyCredentialsMigrateAndRemoveSourceOnlyAfterVerification": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testLegacyScannerRejectsExcessiveNestedDepthWithoutDeletingSource": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testLegacySourceChangeIsDetectedBeforeRemoval": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testMalformedEmptyAndDuplicateLegacyFilesNeverExposeSecrets": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testRollbackFailureKeepsSourceAndAllowsAReadOnlyRetry": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testSourceRemovalFailureLeavesVerifiedKeychainAndSourceForRetry": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.KeychainMigrationTests/testWriteAndReadbackFailuresCompensateAndKeepLegacySource": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.SlateSyncRuntimeTests/testBootstrapMigratesLegacyCredentialsThroughTheInjectedBackend": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    },
+    "SlateSyncPersistenceTests.SlateSyncRuntimeTests/testMigrationFailureIsNonBlockingSecretFreeAndRetryable": {
+      "status": "retired",
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "reason": "Approved Provider migration removal recorded in AGENT.md (2026-09-25 second batch): new encrypted file storage never imports or deletes old Provider secrets. Project encryption Keychain ownership remains covered separately.",
+      "replacement": null
+    }
+  },
+  "requiredAdditionalTests": [
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testBatchUsesOneSnapshotAndPreservesMissingProviders",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testLockTimeoutIsTransientAndBatchWaitsOnlyOnce",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testAnotherProcessHoldingLockCanRecoverWithoutReset",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testCancellationWhileWaitingForLockPreservesVault",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testQueuedCancellationAndCancellationAfterCommitBoundary",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testMissingMasterKeyAndAccessFailuresRemainDistinct",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testRoundTripRestartNoncePermissionsAndDeletion",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testTamperingAndMissingKeyNeverOverwriteVault",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testIndependentStoresSerializeReadModifyWrite",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testSymlinkAndUnsafeFileRejection",
+    "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testFailedPayloadWritePreservesPreviousCredentials",
+    "SlateSyncPersistenceTests.SlateSyncRuntimeTests/testProviderFileStorageNeverReadsOrMigratesOldSecrets"
+  ],
+  "acceptanceUpdates": {
+    "REC-05": {
+      "decisionCommit": "22e351ff1c03ae9f1821f3581784aa2269862fb4",
+      "expected": "required/optional OCR remains compatible; global recognition queues work and drains queued and active project operations on cancellation"
+    },
+    "SET-02": {
+      "decisionCommit": "41fa10bf54c2ca111ab43b7888c0f8c85ec8efe8",
+      "tests": [
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testBatchUsesOneSnapshotAndPreservesMissingProviders",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testLockTimeoutIsTransientAndBatchWaitsOnlyOnce",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testAnotherProcessHoldingLockCanRecoverWithoutReset",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testCancellationWhileWaitingForLockPreservesVault",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testQueuedCancellationAndCancellationAfterCommitBoundary",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testMissingMasterKeyAndAccessFailuresRemainDistinct",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testRoundTripRestartNoncePermissionsAndDeletion",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testTamperingAndMissingKeyNeverOverwriteVault",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testIndependentStoresSerializeReadModifyWrite",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testSymlinkAndUnsafeFileRejection",
+        "SlateSyncPersistenceTests.EncryptedFileCredentialStoreTests/testFailedPayloadWritePreservesPreviousCredentials",
+        "SlateSyncPersistenceTests.SlateSyncRuntimeTests/testProviderFileStorageNeverReadsOrMigratesOldSecrets"
+      ],
+      "expected": "Provider encrypted file credentials survive restart with authenticated encryption, private permissions, serialized writes, cancellation and failure preservation; old secrets remain untouched and are never migrated"
+    }
+  }
+}
