@@ -11,5 +11,8 @@ cd "$project_root"
 python3 -B script/tests/sm09_release_contract.py
 python3 -B script/tests/packaged_ui_contract.py --self-test
 ./script/tests/phase_gate_tests.zsh
+# Packaging self-tests use mock inspection/signing/mount tools and disposable
+# bundles; no application or foreground test is launched by this check.
+./script/tests/release_pipeline_tests.zsh
 python3 -B script/tests/sm09_native_contract.py --functional
 print 'Headless preflight: PASS; complete SM-09 requires the remote functional Gate and UI coverage checks.'

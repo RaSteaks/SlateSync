@@ -51,10 +51,24 @@ create_app() {
 PLIST
   print '#!/bin/zsh' > "${app}/Contents/MacOS/SlateSync"
   chmod +x "${app}/Contents/MacOS/SlateSync"
-  cp "${project_root}/SlateSyncApp/Resources/PaddleOCR/paddleocr_runner.py" \
-    "${app}/Contents/Resources/PaddleOCR/paddleocr_runner.py"
-  cp "${project_root}/SlateSyncApp/Resources/PaddleOCR/requirements-ocr.txt" \
-    "${app}/Contents/Resources/PaddleOCR/requirements-ocr.txt"
+  # The same current manifest drives real bundle verification and the fixture.
+  # A newly shipped resource must not make every positive self-test fail.
+  python3 - "$project_root" "$app" <<'PYRESOURCE'
+import json
+import pathlib
+import shutil
+import sys
+
+root, app = map(pathlib.Path, sys.argv[1:])
+manifest = json.loads((root / ".codex/swift-migration/manifests/sm09-native-resources.json").read_text())
+for entry in manifest["resources"]:
+    if bundle := entry.get("bundle"):
+        relative = pathlib.PurePosixPath(bundle)
+        assert not relative.is_absolute() and ".." not in relative.parts
+        target = app / "Contents/Resources" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / entry["source"], target)
+PYRESOURCE
 }
 
 # Fake only platform inspection/signing tools. Real filesystem, plist, hashing,
@@ -137,6 +151,17 @@ bad_resource="${fixture_root}/bad-resource/SlateSync.app"
 /usr/bin/ditto "$app" "$bad_resource"
 print 'drift' >> "${bad_resource}/Contents/Resources/PaddleOCR/requirements-ocr.txt"
 assert_failure "resource drift is rejected" "${project_root}/script/verify_bundle.sh" "$bad_resource" 1.1.0 2 adhoc
+
+# Missing or altered native defaults must remain a packaging failure.
+missing_config="${fixture_root}/missing-config/SlateSync.app"
+/usr/bin/ditto "$app" "$missing_config"
+rm "${missing_config}/Contents/Resources/slatesync.config.json"
+assert_failure "missing native workflow defaults are rejected" "${project_root}/script/verify_bundle.sh" "$missing_config" 1.1.0 2 adhoc
+
+bad_config="${fixture_root}/bad-config/SlateSync.app"
+/usr/bin/ditto "$app" "$bad_config"
+print '{}' > "${bad_config}/Contents/Resources/slatesync.config.json"
+assert_failure "native workflow default drift is rejected" "${project_root}/script/verify_bundle.sh" "$bad_config" 1.1.0 2 adhoc
 
 symlink_app="${fixture_root}/symlink/SlateSync.app"
 /usr/bin/ditto "$app" "$symlink_app"
