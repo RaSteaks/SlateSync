@@ -220,14 +220,16 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
                 // and explicitly close every other retained context.
                 contexts[id] = context
                 refusesNewOperations = true
-                throw error
+                // Every caller, including Library archive/delete, must learn
+                // that a partially closed runtime cannot accept more edits.
+                throw SlateSyncError.wrapped(error).requiringRestart()
             }
         }
     }
 
     public func deleteProject(_ projectID: String) async throws -> String {
         guard !refusesNewOperations, closeTask == nil else {
-            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭")
+            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭", requiresRestart: true)
         }
         let id = try PersistenceIdentifiers.project(projectID)
         guard id != ProjectLibraryStore.defaultProjectID else {
@@ -243,7 +245,9 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
                 // Preserve the failed owner for terminal close() to retry.
                 contexts[id] = context
                 refusesNewOperations = true
-                throw error
+                // Every caller, including Library archive/delete, must learn
+                // that a partially closed runtime cannot accept more edits.
+                throw SlateSyncError.wrapped(error).requiringRestart()
             }
         }
         return try await library.deleteProject(id)
@@ -264,7 +268,7 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
             // Keep admission closed, but permit a later shutdown retry to
             // release owners whose close failed instead of caching failure.
             closeTask = nil
-            throw error
+            throw SlateSyncError.wrapped(error).requiringRestart()
         }
     }
 
@@ -294,7 +298,7 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
 
     private func acquire(_ projectID: String) async throws -> ProjectPersistenceContext {
         guard !refusesNewOperations, closeTask == nil else {
-            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭")
+            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭", requiresRestart: true)
         }
         let id = try PersistenceIdentifiers.project(projectID)
         guard !deletingProjects.contains(id) else {
@@ -306,7 +310,7 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
         // while they are in flight, so recheck the terminal state before a
         // context or lease can be published after close() has returned.
         guard !refusesNewOperations, closeTask == nil else {
-            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭")
+            throw SlateSyncError(code: "PROJECT_RUNTIME_CLOSED", message: "项目运行时已关闭", requiresRestart: true)
         }
         guard !deletingProjects.contains(id) else {
             throw SlateSyncError(code: "PROJECT_DELETING", message: "项目正在删除")

@@ -71,8 +71,7 @@ public final class ProjectLibraryModel {
             operation = .idle
         } catch {
             guard generation == loadGeneration else { return }
-            self.error = ProductPrivacy.error(error)
-            operation = .failed(ProductPrivacy.error(error))
+            publishFailure(error)
         }
     }
 
@@ -82,7 +81,7 @@ public final class ProjectLibraryModel {
             error = .init(code: "PROJECT_NAME_REQUIRED", message: L10n.tr("请输入项目名称"))
             return nil
         }
-        guard !operation.isRunning else { return nil }
+        guard !operation.isRunning, !libraryRestartRequired else { return nil }
         operation = .running(label: L10n.tr("正在创建项目…"))
         error = nil
         do {
@@ -102,8 +101,7 @@ public final class ProjectLibraryModel {
             operation = .succeeded(message: L10n.tr("项目已创建"))
             return project.summary
         } catch {
-            self.error = ProductPrivacy.error(error)
-            operation = .failed(ProductPrivacy.error(error))
+            publishFailure(error)
             return nil
         }
     }
@@ -190,7 +188,7 @@ public final class ProjectLibraryModel {
         success: String,
         action: @escaping @MainActor () async throws -> Void
     ) async {
-        guard !operation.isRunning else { return }
+        guard !operation.isRunning, !libraryRestartRequired else { return }
         operation = .running(label: label)
         error = nil
         do {
@@ -207,8 +205,7 @@ public final class ProjectLibraryModel {
         } catch is CancellationError {
             operation = .canceled
         } catch {
-            self.error = ProductPrivacy.error(error)
-            operation = .failed(ProductPrivacy.error(error))
+            publishFailure(error)
         }
     }
 
@@ -234,15 +231,20 @@ public final class ProjectLibraryModel {
         } catch is CancellationError {
             operation = .canceled
         } catch {
-            let failure = ProductPrivacy.error(error)
-            // Rollback restores data, not a runtime that has already closed.
-            if failure.requiresRestart == true {
-                libraryRestartRequired = true
-                didRequireRestart?()
-            }
-            self.error = failure
-            operation = .failed(failure)
+            publishFailure(error)
         }
+    }
+
+    private func publishFailure(_ error: any Error) {
+        let failure = ProductPrivacy.error(error)
+        // Archive/delete can also close only part of a runtime. All mutation
+        // paths share the same terminal projection and admission policy.
+        if failure.requiresRestart == true {
+            libraryRestartRequired = true
+            didRequireRestart?()
+        }
+        self.error = failure
+        operation = .failed(failure)
     }
 
     private func refreshAfterMutation() async throws {

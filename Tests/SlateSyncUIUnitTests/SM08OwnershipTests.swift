@@ -105,6 +105,32 @@ final class SM08OwnershipTests: XCTestCase {
     }
 
     @MainActor
+    func testArchiveAndDeleteTerminalFailuresFreezeFurtherMutations() async {
+        for deletes in [false, true] {
+            let service = ProjectLibraryFake()
+            await service.failMutations(.init(code: "SQLITE_CLOSE", message: "Partial close", requiresRestart: true))
+            let model = ProjectLibraryModel(service: service)
+            var requestedRestart = false
+            model.didRequireRestart = { requestedRestart = true }
+            let project = service.projectSummary
+            if deletes {
+                model.requestDeletion(project)
+                model.deletionConfirmation = project.name
+                await model.confirmDeletion()
+            } else {
+                await model.archive(project)
+            }
+            XCTAssertTrue(model.libraryRestartRequired)
+            XCTAssertTrue(requestedRestart)
+            XCTAssertEqual(model.error?.code, "SQLITE_CLOSE")
+            // Late callbacks cannot start another mutation after partial close.
+            await model.restore(project)
+            let calls = await service.mutationCalls
+            XCTAssertEqual(calls, [deletes ? "delete" : "archive"])
+        }
+    }
+
+    @MainActor
     func testHelpIsFrozenToSevenOfflineSearchableSections() {
         let help = HelpModel()
         XCTAssertEqual(help.sections.count, 7)
@@ -1034,6 +1060,8 @@ private actor ProjectLibraryFake: ProjectLibraryWorkflowServing , ProjectContext
         updatedAt: "2026-09-05T00:00:00Z"
     )
     private(set) var mutationCalls: [String] = []
+    private var mutationFailure: SlateSyncError?
+    func failMutations(_ failure: SlateSyncError) { mutationFailure = failure }
     private let refreshGate: SM08TestGate?
     private let projectCount: Int
     init(refreshGate: SM08TestGate? = nil, projectCount: Int = 1) { self.refreshGate = refreshGate; self.projectCount = projectCount }
@@ -1061,13 +1089,17 @@ private actor ProjectLibraryFake: ProjectLibraryWorkflowServing , ProjectContext
     }
     func archiveProject(id: String) async throws -> ProjectData {
         mutationCalls.append("archive")
+        if let mutationFailure { throw mutationFailure }
         return ProjectData(summary: projectSummary)
     }
     func restoreProject(id: String) async throws -> ProjectData {
         mutationCalls.append("restore")
         return ProjectData(summary: projectSummary)
     }
-    func deleteProject(id: String) async throws { mutationCalls.append("delete") }
+    func deleteProject(id: String) async throws {
+        mutationCalls.append("delete")
+        if let mutationFailure { throw mutationFailure }
+    }
     func importProject(from packageURL: URL) async throws -> ProjectData {
         mutationCalls.append("import-project")
         return ProjectData(summary: projectSummary)

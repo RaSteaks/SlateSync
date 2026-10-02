@@ -378,6 +378,7 @@ final class ProjectLibraryStoreTests: XCTestCase {
             XCTFail("a completed single-flight close must keep the runtime terminal")
         } catch let error as SlateSyncError {
             XCTAssertEqual(error.code, "PROJECT_RUNTIME_CLOSED")
+            XCTAssertEqual(error.requiresRestart, true, "Closed runtimes must expose their terminal state")
         }
         try await library.close()
     }
@@ -403,6 +404,7 @@ final class ProjectLibraryStoreTests: XCTestCase {
             XCTFail("an acquisition resumed after close must not publish a new context")
         } catch let error as SlateSyncError {
             XCTAssertEqual(error.code, "PROJECT_RUNTIME_CLOSED")
+            XCTAssertEqual(error.requiresRestart, true, "Closed runtimes must expose their terminal state")
         }
         try await library.close()
     }
