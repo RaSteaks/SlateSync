@@ -31,6 +31,7 @@ struct RecognitionCancellationLedger: Sendable {
 public actor SlateSyncWorkflowFacade:
     ProjectLibraryWorkflowServing,
     WorkspaceWorkflowServing,
+    ProjectContextWorkflowServing,
     MediaInputWorkflowServing,
     ResolveExportWorkflowServing,
     LocalSlateWorkflowServing,
@@ -44,28 +45,10 @@ public actor SlateSyncWorkflowFacade:
     private let logs: LocalLogStore
     private let paddleInstaller: PaddleOCRInstallerService
     private let allowsExternalOperations: Bool
-    private let allowsProviderOperations: Bool
-    private let draftProviderTransportFactory: @Sendable (any ProviderCredentialReading) -> any ProviderHTTPTransporting
-    // All consumers share model eligibility; transports keep independent lifetimes.
-    private var sharedRegistry: ProviderRegistry?
-    private var registryBuild: Task<ProviderRegistry, Error>?
     private let providerTransportFactory: @Sendable () -> any ProviderHTTPTransporting
-    private var recognition: RecognitionCoordinator?
-    private var settingsProviders: SettingsProviderRuntime?
-    private var recognitionBuild: Task<RecognitionCoordinator, Error>?
-    private var recognitionReset: Task<Void, Never>?
-    private var recognitionGeneration = 0
+    private let recognitionRuntime: RecognitionRuntimeLifecycle
+    private let providerSettings: ProviderSettingsCoordinator
     private var recognitionCancellations = RecognitionCancellationLedger()
-    private var settingsBuild: Task<SettingsProviderRuntime, Error>?
-    private var settingsReset: Task<Void, Never>?
-    private var settingsGeneration = 0
-
-    private struct SettingsProviderRuntime {
-        let registry: ProviderRegistry
-        let transport: any ProviderHTTPTransporting
-        let discovery: ModelDiscoveryService
-        let probe: ModelCapabilityProbeService
-    }
 
     public init(
         library: ProjectLibraryStartupService,
@@ -86,27 +69,22 @@ public actor SlateSyncWorkflowFacade:
         self.allowsExternalOperations = allowsExternalOperations
         // Isolated fixtures must explicitly supply BOTH transports. No missing
         // injection may fall through to a production URLSession factory.
-        self.allowsProviderOperations = allowsExternalOperations
+        let allowsProviderOperations = allowsExternalOperations
             || (allowsInjectedProviderOperations && providerTransportFactory != nil && draftProviderTransportFactory != nil)
-        self.draftProviderTransportFactory = draftProviderTransportFactory ?? { credentials in
-            URLSessionProviderTransport(credentials: credentials)
-        }
-        self.providerTransportFactory = providerTransportFactory ?? {
-            URLSessionProviderTransport(credentials: runtime.credentialStore)
-        }
+        let transport = providerTransportFactory ?? { URLSessionProviderTransport(credentials: runtime.credentialStore) }
+        self.providerTransportFactory = transport
+        let recognitionRuntime = RecognitionRuntimeLifecycle()
+        self.recognitionRuntime = recognitionRuntime
+        self.providerSettings = ProviderSettingsCoordinator(runtime: runtime, logs: logs,
+            recognitionRuntime: recognitionRuntime, allowsProviderOperations: allowsProviderOperations,
+            providerTransportFactory: transport,
+            draftProviderTransportFactory: draftProviderTransportFactory ?? { URLSessionProviderTransport(credentials: $0) })
     }
 
     /// Isolated app launches can exercise persistence and UI without reaching
     /// a production Provider or spawning an installer with network access.
     private func requireExternalOperations() throws {
         guard allowsExternalOperations else {
-            throw SlateSyncError(code: "ISOLATED_OPERATION", message: "隔离验收环境已禁用外部服务", retryable: false)
-        }
-    }
-
-    /// Synthetic Provider requests can be enabled without permitting recognition or installer networking.
-    private func requireProviderOperations() throws {
-        guard allowsProviderOperations else {
             throw SlateSyncError(code: "ISOLATED_OPERATION", message: "隔离验收环境已禁用外部服务", retryable: false)
         }
     }
@@ -122,7 +100,8 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func createProject(name: String, description: String) async throws -> ProjectData {
-        let project = try await library.createProject(name: name, description: description)
+        let config = try await runtime.workflowConfigProvider().current()
+        let project = try await library.createProject(name: name, description: description, settings: .init(resolve: config.resolve))
         await record(.info, category: "project", event: "created", message: "项目已创建")
         return project
     }
@@ -193,8 +172,8 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func saveTask(projectID: String, taskID: String?, task: TaskData) async throws -> String {
-        let data = try JSONEncoder().encode(task)
-        return try await library.projectRuntime().saveTask(projectID: projectID, taskID: taskID, payload: data)
+        // Preserve compatibility extensions through the native projection boundary.
+        return try await library.projectRuntime().saveTaskProjection(projectID: projectID, taskID: taskID, task: task)
     }
 
     public func deleteTask(projectID: String, taskID: String) async throws {
@@ -214,7 +193,12 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func scanMetadata(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult {
-        try await sm05.scanMetadata(directory: directory, options: options)
+        // The native workflow owns the scan-depth policy; the low-level
+        // scanner continues to accept explicit options for independent callers.
+        let config = try await runtime.workflowConfigProvider().current()
+        var effective = options
+        effective.maxDepth = config.slate.maxDirectoryDepth
+        return try await sm05.scanMetadata(directory: directory, options: effective)
     }
 
     public func decodeSlateCSV(_ data: Data) async throws -> [SlateCsvRecord] { try await SlateCSVWorkflow().decode(data) }
@@ -306,15 +290,7 @@ public actor SlateSyncWorkflowFacade:
 
     public func cancelRecognition(projectID: String) async {
         recognitionCancellations.cancel(projectID: projectID)
-        let current = recognition
-        let building = recognitionBuild
-        if let current { await current.cancel(projectID: projectID) }
-        // Joining an in-flight factory makes cancellation deterministic for a
-        // request already waiting on construction. The ticket above prevents
-        // that request from starting if cancellation wins the join race.
-        if let building, let value = try? await building.value {
-            await value.cancel(projectID: projectID)
-        }
+        await recognitionRuntime.cancel(projectID: projectID)
     }
 
     public func closeProject(id: String) async throws {
@@ -323,7 +299,7 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func globalSettings() async throws -> GlobalSettingsProjection {
-        try await globalSettings(restartRequired: false)
+        try await providerSettings.globalSettings()
     }
 
     /// Probe the editor's effective configuration without saving its draft or
@@ -339,193 +315,23 @@ public actor SlateSyncWorkflowFacade:
             environment: ProcessInfo.processInfo.environment)
     }
 
-    private func globalSettings(restartRequired: Bool) async throws -> GlobalSettingsProjection {
-        let runtimeSnapshot = await runtime.bootstrap()
-        let config = try await runtime.globalConfigStore.load()
-        let registry = try await modelRegistry()
-        // Publish only availability; decrypted file contents never enter UI projections.
-        let credentialStatuses = try await runtime.credentialStore.statuses(
-            for: Array(Set(ProviderCatalog.definitions.map(\.id) + config.customProviders.map(\.id)))
-        )
-        let providers = await registry.providerSummaries(credentialStatuses: credentialStatuses)
-        let credentialIDs = Set(credentialStatuses.filter { $0.value == .configured }.map(\.key))
-        let vision = VisionOCRService(configuration: VisionOCRConfiguration(runtimeSnapshot.configuration.values))
-        let visionAvailable = await vision.isAvailable()
-        await vision.close()
-        let python = runtimeSnapshot.configuration.values[.paddleOCRPython] ?? ""
-        let paddleAvailable = !python.isEmpty && FileManager.default.isExecutableFile(atPath: python)
-        return GlobalSettingsProjection(
-            values: config.values,
-            customProviders: config.customProviders,
-            providers: providers,
-            models: await registry.publicModels(),
-            configuredCredentialProviderIDs: credentialIDs,
-            visionAvailable: visionAvailable,
-            paddleAvailable: paddleAvailable,
-            runtime: GlobalRuntimeProjection(
-                resolvedSettingCount: runtimeSnapshot.configuration.values.values.count,
-                globalConfigVersion: runtimeSnapshot.globalConfigVersion,
-                environmentFileLoaded: runtimeSnapshot.environmentFileLoaded,
-                workflowConfigPath: runtimeSnapshot.workflowConfigPath.isEmpty
-                    ? nil
-                    : runtimeSnapshot.workflowConfigPath
-            ),
-            restartRequired: restartRequired,
-            credentialStatuses: credentialStatuses
-        )
+    public func saveGlobalSettings(values: GlobalSettingValues, customProviders: [CustomProviderConfiguration]) async throws -> GlobalSettingsProjection {
+        try await providerSettings.saveGlobalSettings(values: values, customProviders: customProviders)
     }
-
-    public func saveGlobalSettings(
-        values: GlobalSettingValues,
-        customProviders: [CustomProviderConfiguration]
-    ) async throws -> GlobalSettingsProjection {
-        // Old save-global-settings compared the effective SLATESYNC_CONFIG_PATH
-        // before and after the write: the workflow provider is constructed once
-        // at startup, so a changed path cannot hot-switch and needs a relaunch.
-        let previousPath = await runtime.currentSnapshot().configuration.values[.slateSyncConfigPath] ?? ""
-        try await resetRecognition()
-        await resetSettingsProviders()
-        let saved = try await runtime.globalConfigStore.save(values: values.values, customProviders: customProviders)
-        let snapshot = await runtime.refreshConfiguration()
-        try await modelRegistry().replace(settings: snapshot.configuration.values, customProviders: saved.customProviders,
-            builtinCapabilities: saved.builtinCapabilities)
-        await record(.info, category: "settings", event: "saved", message: "全局设置已保存")
-        let nextPath = snapshot.configuration.values[.slateSyncConfigPath] ?? ""
-        return try await globalSettings(restartRequired: previousPath != nextPath)
-    }
-
     public func setProviderCredential(_ value: String?, providerID: String) async throws {
-        try await resetRecognition()
-        await resetSettingsProviders()
-        // A changed secret is part of a custom provider's probe identity.
-        // Rotate its revision so persisted model proofs cannot be reused.
-        let config = try await runtime.globalConfigStore.load()
-        var values = config.values.values
-        if values[.defaultProviderID] == providerID {
-            values.removeValue(forKey: .defaultProviderID)
-            values.removeValue(forKey: .defaultModelID)
-        }
-        if let rawChain = values[.recognitionFailoverChain],
-           let chain = try? ProviderModelSelection.decodeAndValidateChain(rawChain) {
-            values[.recognitionFailoverChain] = try ProviderModelSelection.encodeChain(
-                chain.filter { $0.providerID != providerID }
-            )
-        }
-        var providers = config.customProviders
-        if let index = config.customProviders.firstIndex(where: { $0.id == providerID }) {
-            let old = config.customProviders[index]
-            providers[index] = CustomProviderConfiguration(
-                id: old.id, name: old.name, label: old.label, baseUrl: old.baseUrl,
-                transport: old.transport, jsonMode: old.jsonMode,
-                imageDetail: old.imageDetail, manualModelIds: old.manualModelIds,
-                revision: old.revision + 1, capabilityCache: nil,
-                notes: old.notes, sourcePresetID: old.sourcePresetID
-            )
-        }
-        if values != config.values.values || providers != config.customProviders {
-            _ = try await runtime.globalConfigStore.save(values: values, customProviders: providers)
-            let refreshed = await runtime.refreshConfiguration()
-            await sharedRegistry?.replace(settings: refreshed.configuration.values, customProviders: providers)
-        }
-        try await runtime.globalConfigStore.invalidateBuiltinCapabilities(providerID: providerID)
-        await sharedRegistry?.invalidate(providerID: providerID)
-        // Invalidate durable proofs before an encrypted-file write. A failed or
-        // interrupted file operation may cost a re-probe but cannot leave
-        // a changed secret paired with stale persisted verification.
-        try await runtime.setProviderKey(value, for: providerID)
-        await record(.info, category: "settings", event: "credential-updated", message: "Provider 凭据状态已更新")
+        try await providerSettings.setProviderCredential(value, providerID: providerID)
     }
-
-    /// Invalidate proofs before resetting secrets, just as individual key edits
-    /// do. Interrupted reset cannot leave a new key with an old verified route.
-    public func resetLocalProviderCredentials() async throws {
-        try await resetRecognition()
-        await resetSettingsProviders()
-        let config = try await runtime.globalConfigStore.load()
-        var values = config.values.values
-        values.removeValue(forKey: .defaultProviderID)
-        values.removeValue(forKey: .defaultModelID)
-        values[.recognitionFailoverChain] = "[]"
-        var providers = config.customProviders
-        for index in providers.indices {
-            let old = providers[index]
-            providers[index] = CustomProviderConfiguration(
-                id: old.id, name: old.name, label: old.label, baseUrl: old.baseUrl,
-                transport: old.transport, jsonMode: old.jsonMode, imageDetail: old.imageDetail,
-                manualModelIds: old.manualModelIds, revision: old.revision + 1,
-                capabilityCache: nil, notes: old.notes, sourcePresetID: old.sourcePresetID
-            )
-        }
-        _ = try await runtime.globalConfigStore.save(values: values, customProviders: providers)
-        for definition in ProviderCatalog.definitions {
-            try await runtime.globalConfigStore.invalidateBuiltinCapabilities(providerID: definition.id)
-        }
-        // A credential reset changes identity even when the endpoint is the
-        // same; route-only replace would retain in-memory verified models.
-        await sharedRegistry?.invalidate()
-        try await runtime.credentialStore.reset()
-        let refreshed = await runtime.refreshConfiguration()
-        await sharedRegistry?.replace(settings: refreshed.configuration.values, customProviders: providers)
-    }
-
-
-
-    /// Draft credentials live only for this request; canceling the editor writes nothing.
+    public func resetLocalProviderCredentials() async throws { try await providerSettings.resetLocalProviderCredentials() }
     public func discoverDraftModelIDs(baseURL: String, apiKey: String, savedProviderID: String?) async throws -> [String] {
-        try requireProviderOperations()
-        // Normalize once, before consulting saved credentials or creating a transport.
-        let descriptor = try DraftModelDiscovery.descriptor(baseURL: baseURL)
-        var key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if apiKey.isEmpty, let savedProviderID {
-            key = try await runtime.credentialStore.credential(for: savedProviderID) ?? ""
-        }
-        guard !key.isEmpty else { throw SlateSyncError(code: "CREDENTIAL_EMPTY", message: "请先填写 API Key") }
-        let transport = draftProviderTransportFactory(DraftProviderCredential(value: key))
-        do {
-            let ids = try await DraftModelDiscovery.fetch(provider: descriptor, transport: transport)
-            await transport.close()
-            return ids
-        } catch {
-            await transport.close()
-            throw error
-        }
+        try await providerSettings.discoverDraftModelIDs(baseURL: baseURL, apiKey: apiKey, savedProviderID: savedProviderID)
     }
-
-    public func discoverModels(
-        providerID: String,
-        forceRefresh: Bool
-    ) async throws -> ModelDiscoveryResult {
-        try requireProviderOperations()
-        return try await settingsProviderRuntime().discovery.discover(
-            providerID: providerID,
-            forceRefresh: forceRefresh
-        )
+    public func discoverModels(providerID: String, forceRefresh: Bool) async throws -> ModelDiscoveryResult {
+        try await providerSettings.discoverModels(providerID: providerID, forceRefresh: forceRefresh)
     }
-
-    public func probeModels(
-        providerID: String,
-        modelIDs: [String],
-        progress: @escaping @Sendable (ModelProbeProgress) -> Void
-    ) async throws -> ModelProbeResult {
-        try requireProviderOperations()
-        let value = try await settingsProviderRuntime().probe.probe(
-            providerID: providerID,
-            modelIDs: modelIDs,
-            progress: progress
-        )
-        // The probe callback persists only a revision-matching cache. Rebuild
-        // this settings-only runtime after completion so the next discovery
-        // cannot reuse the pre-probe registry snapshot.
-        await resetSettingsProviders()
-        return value
+    public func probeModels(providerID: String, modelIDs: [String], progress: @escaping @Sendable (ModelProbeProgress) -> Void) async throws -> ModelProbeResult {
+        try await providerSettings.probeModels(providerID: providerID, modelIDs: modelIDs, progress: progress)
     }
-
-    public func cancelModelProbe(providerID: String) async {
-        _ = await settingsProviders?.probe.cancel(providerID: providerID)
-        // Reset also cancels an in-flight discovery transport. Provider edit
-        // and delete therefore share one bounded drain path.
-        await resetSettingsProviders()
-    }
+    public func cancelModelProbe(providerID: String) async { await providerSettings.cancelModelProbe(providerID: providerID) }
 
     public func installPaddleOCR(
         progress: @escaping @Sendable (PaddleOcrInstallProgress) -> Void
@@ -564,183 +370,15 @@ public actor SlateSyncWorkflowFacade:
     public func drain() async throws {
         await paddleInstaller.cancelAndDrain()
         try await resetRecognition()
-        await resetSettingsProviders()
+        await providerSettings.drain()
         try await library.close()
     }
 
-    private func settingsProviderRuntime() async throws -> SettingsProviderRuntime {
-        guard settingsReset == nil else { throw CancellationError() }
-        if let settingsProviders { return settingsProviders }
-        let generation = settingsGeneration
-        let build: Task<SettingsProviderRuntime, Error>
-        if let settingsBuild { build = settingsBuild }
-        else {
-            build = Task { try await self.makeSettingsProviderRuntime() }
-            settingsBuild = build
-        }
-        do {
-            let value = try await build.value
-            guard generation == settingsGeneration else { throw CancellationError() }
-            settingsProviders = value
-            settingsBuild = nil
-            return value
-        } catch {
-            if generation == settingsGeneration { settingsBuild = nil }
-            throw error
-        }
-    }
-
-    /// Discovery and probe across multiple Provider rows share one retained
-    /// transport; reset also joins construction suspended in config loading.
-    private func makeSettingsProviderRuntime() async throws -> SettingsProviderRuntime {
-        let registry = try await modelRegistry()
-        let transport = providerTransportFactory()
-        let client = ProviderRecognitionClient(transport: transport)
-        let discovery = ModelDiscoveryService(registry: registry, transport: transport)
-        let probe = ModelCapabilityProbeService(
-            registry: registry,
-            client: client,
-            save: { [weak self] providerID, revision, results in
-                guard let self else { return }
-                try await self.persistProbeResults(
-                    providerID: providerID,
-                    revision: revision,
-                    results: results
-                )
-            },
-            saveBuiltin: { [runtime] proof in
-                try await runtime.globalConfigStore.saveBuiltinCapabilities(proof)
-            }
-        )
-        let value = SettingsProviderRuntime(
-            registry: registry,
-            transport: transport,
-            discovery: discovery,
-            probe: probe
-        )
-        return value
-    }
-
-    private func resetSettingsProviders() async {
-        if let settingsReset { await settingsReset.value; return }
-        settingsGeneration += 1
-        let current = settingsProviders
-        let building = settingsBuild
-        settingsProviders = nil
-        settingsBuild = nil
-        let reset = Task {
-            if let current { await Self.closeSettingsProviderRuntime(current) }
-            if let building, let value = try? await building.value { await Self.closeSettingsProviderRuntime(value) }
-        }
-        settingsReset = reset
-        await reset.value
-        settingsReset = nil
-    }
-
-    private static func closeSettingsProviderRuntime(_ value: SettingsProviderRuntime) async {
-        await value.probe.close()
-        await value.transport.close()
-    }
-
-    private func persistProbeResults(
-        providerID: String,
-        revision: Int,
-        results: [ModelCapabilityProbeResult]
-    ) async throws {
-        let config = try await runtime.globalConfigStore.load()
-        guard let index = config.customProviders.firstIndex(where: {
-            $0.id == providerID && $0.revision == revision
-        }) else { return }
-        let original = config.customProviders[index]
-        var cache = original.capabilityCache ?? [:]
-        for result in results {
-            cache[result.model] = CustomProviderCapabilityVerification(
-                status: result.capabilityStatus,
-                revision: revision,
-                checkedAt: result.checkedAt,
-                transport: result.transport,
-                capabilitySource: "synthetic-image-probe",
-                message: result.message,
-                jsonMode: result.jsonMode
-            )
-        }
-        var providers = config.customProviders
-        providers[index] = CustomProviderConfiguration(
-            id: original.id,
-            name: original.name,
-            label: original.label,
-            baseUrl: original.baseUrl,
-            transport: original.transport,
-            jsonMode: original.jsonMode,
-            imageDetail: original.imageDetail,
-            manualModelIds: original.manualModelIds,
-            revision: original.revision,
-            capabilityCache: cache,
-            notes: original.notes,
-            sourcePresetID: original.sourcePresetID
-        )
-        _ = try await runtime.globalConfigStore.save(
-            values: config.values.values,
-            customProviders: providers
-        )
-        _ = await runtime.refreshConfiguration()
-        // Publish into the registry already retained by active coordinators;
-        // do not cancel another window's recognition to refresh capabilities.
-        try await modelRegistry().refreshCapabilities(providers[index])
-    }
-
-    /// Join concurrent first-use requests so Settings and recognition cannot
-    /// construct separate catalogs while configuration I/O is suspended.
-    func modelRegistry() async throws -> ProviderRegistry {
-        if let sharedRegistry { return sharedRegistry }
-        let build: Task<ProviderRegistry, Error>
-        if let registryBuild { build = registryBuild }
-        else {
-            build = Task { [runtime] in
-                let snapshot = await runtime.bootstrap()
-                let config = try await runtime.globalConfigStore.load()
-                return ProviderRegistry(settings: snapshot.configuration.values,
-                    customProviders: config.customProviders, credentials: runtime.credentialStore,
-                    builtinCapabilities: config.builtinCapabilities)
-            }
-            registryBuild = build
-        }
-        do {
-            let registry = try await build.value
-            sharedRegistry = registry
-            registryBuild = nil
-            return registry
-        } catch {
-            registryBuild = nil
-            throw error
-        }
-    }
+    // Kept as an internal observation seam for module integration tests.
+    func modelRegistry() async throws -> ProviderRegistry { try await providerSettings.modelRegistry() }
 
     private func recognitionCoordinator() async throws -> RecognitionCoordinator {
-        if recognitionReset != nil {
-            throw SlateSyncError(code: "RECOGNITION_RECONFIGURING", message: "识别配置正在更新，请稍后重试", retryable: true)
-        }
-        if let recognition { return recognition }
-        // Actor isolation does not serialize across await. Stream subscription
-        // and request dispatch must join one factory or they create independent
-        // limiters/transports and cancellation misses one of the operations.
-        let generation = recognitionGeneration
-        let build: Task<RecognitionCoordinator, Error>
-        if let recognitionBuild { build = recognitionBuild }
-        else {
-            build = Task { try await self.makeRecognitionCoordinator() }
-            recognitionBuild = build
-        }
-        do {
-            let value = try await build.value
-            guard generation == recognitionGeneration else { throw CancellationError() }
-            recognition = value
-            recognitionBuild = nil
-            return value
-        } catch {
-            if generation == recognitionGeneration { recognitionBuild = nil }
-            throw error
-        }
+        try await recognitionRuntime.coordinator { try await self.makeRecognitionCoordinator() }
     }
 
     private func makeRecognitionCoordinator() async throws -> RecognitionCoordinator {
@@ -757,6 +395,7 @@ public actor SlateSyncWorkflowFacade:
         let paddleAvailable = paddlePaths.map { paths in
             (try? paths.validate()) != nil
         } ?? false
+        let workflowConfig = await runtime.workflowConfigProvider()
         let coordinator = RecognitionCoordinator(
             registry: registry,
             client: client,
@@ -776,7 +415,8 @@ public actor SlateSyncWorkflowFacade:
             },
             scenarioPersistence: projectRuntime,
             persistence: NativeRecognitionPersistence(runtime: projectRuntime),
-            settings: values
+            settings: values,
+            workflowConfiguration: { try await workflowConfig.current() }
         )
         return coordinator
     }
@@ -813,21 +453,7 @@ public actor SlateSyncWorkflowFacade:
         }
     }
 
-    private func resetRecognition() async throws {
-        if let recognitionReset { await recognitionReset.value; return }
-        recognitionGeneration += 1
-        let current = recognition
-        let building = recognitionBuild
-        recognition = nil
-        recognitionBuild = nil
-        let reset = Task {
-            if let current { await current.close() }
-            if let building, let value = try? await building.value { await value.close() }
-        }
-        recognitionReset = reset
-        await reset.value
-        recognitionReset = nil
-    }
+    private func resetRecognition() async throws { await recognitionRuntime.reset() }
 
     private func record(
         _ severity: ProductLogSeverity,

@@ -69,6 +69,12 @@ public actor ProjectLibraryStartupService: ProjectLibraryServing {
         try await activeLibrary().createProject(name: name, description: description)
     }
 
+    /// New projects inherit the current workflow defaults once; existing
+    /// project settings remain authoritative after subsequent config edits.
+    public func createProject(name: String, description: String, settings: ProjectSettings) async throws -> ProjectData {
+        try await activeLibrary().createProject(name: name, description: description, settings: settings)
+    }
+
     /// SM-08 workflow entry points remain on this lazy owner so the UI never
     /// opens a second Library database or constructs a project store directly.
     public func projectLibrary() async throws -> ProjectLibraryProjection {

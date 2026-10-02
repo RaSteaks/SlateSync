@@ -129,7 +129,10 @@ public actor SlateSyncRuntime: SettingsServing {
         var effectiveWorkflowConfigPath = snapshot.workflowConfigPath
         if workflowConfigProviderInstance == nil {
             let workflowConfigURL = ConfigPathResolver.workflowConfigURL(
-                configured: resolvedConfiguration.values[.slateSyncConfigPath],
+                // Only the implicit default can use native bundled defaults;
+                // an explicitly selected missing path must still fail closed.
+                configured: resolvedConfiguration.sources[.slateSyncConfigPath] == .defaults
+                    ? nil : resolvedConfiguration.values[.slateSyncConfigPath],
                 environment: workflowConfigEnvironment
             )
             workflowConfigProviderInstance = WorkflowConfigProvider(url: workflowConfigURL)

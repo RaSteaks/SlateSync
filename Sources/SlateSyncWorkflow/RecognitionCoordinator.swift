@@ -62,6 +62,7 @@ public actor RecognitionCoordinator: RecognitionServing {
     private let limiter: RecognitionLimiter
     private let settings: GlobalSettingValues
     private let clock: any ProviderClock
+    private let workflowConfiguration: @Sendable () async throws -> WorkflowConfig
     private let failoverState = RecognitionFailoverState()
     private let recoveryCache = RecognitionRecoveryCache()
     private var observers: [String: [UUID: AsyncStream<RecognitionProgress>.Continuation]] = [:]
@@ -75,7 +76,7 @@ public actor RecognitionCoordinator: RecognitionServing {
     public init() {
         registry = nil; pipeline = nil; client = nil; mediaFactory = nil
         scenarioPersistence = nil; persistence = nil; limiter = RecognitionLimiter()
-        settings = .init(); clock = SystemProviderClock()
+        settings = .init(); clock = SystemProviderClock(); workflowConfiguration = { .init() }
     }
 
     public init(
@@ -86,7 +87,8 @@ public actor RecognitionCoordinator: RecognitionServing {
         persistence: (any RecognitionPersistence)? = nil,
         settings: GlobalSettingValues = .init(),
         limiter: RecognitionLimiter? = nil,
-        clock: any ProviderClock = SystemProviderClock()
+        clock: any ProviderClock = SystemProviderClock(),
+        workflowConfiguration: @escaping @Sendable () async throws -> WorkflowConfig = { .init() }
     ) {
         self.registry = registry; self.client = client
         pipeline = RecognitionPagePipeline(client: client); self.mediaFactory = mediaFactory
@@ -94,6 +96,7 @@ public actor RecognitionCoordinator: RecognitionServing {
         self.settings = settings
         self.limiter = limiter ?? RecognitionLimiter(limit: RecognitionRuntimeOptions.globalConcurrency(settings[.maxConcurrentRecognitions]))
         self.clock = clock
+        self.workflowConfiguration = workflowConfiguration
     }
 
     public func progress(for projectID: String) -> AsyncStream<RecognitionProgress> {
@@ -114,7 +117,7 @@ public actor RecognitionCoordinator: RecognitionServing {
         }
         let id = UUID()
         let scenarioPersistence = scenarioPersistence, persistence = persistence
-        let settings = settings, clock = clock
+        let settings = settings, clock = clock, workflowConfiguration = workflowConfiguration
         let failoverState = failoverState, recoveryCache = recoveryCache, limiter = limiter
         let coordinator = self
         let task = Task<RecognitionData, Error> {
@@ -124,7 +127,7 @@ public actor RecognitionCoordinator: RecognitionServing {
                     request: request, operationID: id, registry: registry,
                     pipeline: pipeline, media: mediaFactory(),
                     scenarioPersistence: scenarioPersistence, persistence: persistence,
-                    settings: settings, clock: clock, failoverState: failoverState,
+                    settings: settings, workflowConfiguration: workflowConfiguration, clock: clock, failoverState: failoverState,
                     recoveryCache: recoveryCache,
                     publish: { event in await coordinator.publish(operationID: id, projectID: request.projectID, event: event) }
                 )
@@ -206,6 +209,7 @@ public actor RecognitionCoordinator: RecognitionServing {
         scenarioPersistence: (any ScenarioMatchingPersistence)?,
         persistence: (any RecognitionPersistence)?,
         settings globalSettings: GlobalSettingValues,
+        workflowConfiguration: @Sendable () async throws -> WorkflowConfig,
         clock: any ProviderClock,
         failoverState: RecognitionFailoverState,
         recoveryCache: RecognitionRecoveryCache,
@@ -217,7 +221,10 @@ public actor RecognitionCoordinator: RecognitionServing {
             await publish(.init(phase: "starting", completed: 0, total: 0, message: "正在准备识别", percent: 0))
             let project = try await persistence?.recognitionProject(projectID: request.projectID)
             try Task.checkCancellation()
-            let projectSettings = request.settings ?? project?.settings ?? .init()
+            // Reload content at operation admission; its path remains frozen
+            // for this process. Invalid first reads fail before external work.
+            let workflow = try await workflowConfiguration()
+            let projectSettings = request.settings ?? project?.settings ?? .init(resolve: workflow.resolve)
             let selected = try RecognitionRouteResolver.resolve(
                 request: try pair(request.providerID, request.modelID),
                 project: try pair(projectSettings.providerId, projectSettings.modelId),
@@ -261,7 +268,7 @@ public actor RecognitionCoordinator: RecognitionServing {
                 )
             } catch { await media.close(); throw error }
             try Task.checkCancellation()
-            let scenario = try await scenarioSelection(explicitID: projectSettings.scenarioId, projectID: request.projectID, artifact: artifact, resolve: projectSettings.resolve, persistence: scenarioPersistence)
+            let scenario = try await scenarioSelection(explicitID: projectSettings.scenarioId, projectID: request.projectID, artifact: artifact, resolve: projectSettings.resolve, matching: workflow.scenario.matching, persistence: scenarioPersistence)
             try Task.checkCancellation()
             let engine = ScenarioProfileEngine()
             let scenarioPrompt = if let profile = scenario.profile { await engine.promptInstruction(profile) } else { "" }
@@ -328,7 +335,7 @@ public actor RecognitionCoordinator: RecognitionServing {
         }
     }
 
-    private nonisolated static func scenarioSelection(explicitID: String?, projectID: String, artifact: MediaOCRArtifact, resolve: ProjectSettings.ResolveSettings, persistence: (any ScenarioMatchingPersistence)?) async throws -> (profile: ScenarioProfile?, selection: ScenarioSelection?) {
+    private nonisolated static func scenarioSelection(explicitID: String?, projectID: String, artifact: MediaOCRArtifact, resolve: ProjectSettings.ResolveSettings, matching: ScenarioMatchingConfig, persistence: (any ScenarioMatchingPersistence)?) async throws -> (profile: ScenarioProfile?, selection: ScenarioSelection?) {
         guard let persistence else { return (nil, nil) }
         if let explicitID = nonempty(explicitID) {
             do {
@@ -340,7 +347,7 @@ public actor RecognitionCoordinator: RecognitionServing {
         guard artifact.outcome.result?.blockCount ?? 0 > 0 else { return (nil, .init(match: "fallback", score: 0, warning: "本次没有可用 OCR 结构证据，未自动匹配场记结构。")) }
         do {
             let service = ScenarioMatchingService(projectID: projectID, persistence: persistence)
-            let result = try await service.matchAndSave(input: artifact.observation, resolve: resolve)
+            let result = try await service.matchAndSave(input: artifact.observation, resolve: resolve, matching: matching)
             let data = result.profile
             let profile = ScenarioProfile(schemaVersion: data.schemaVersion, fingerprintVersion: data.fingerprintVersion, fingerprint: data.fingerprint, label: data.label, layout: data.layout, fields: data.fields, recognition: data.recognition, output: data.output)
             return (profile, .init(id: data.id, match: result.match, score: result.score, fingerprint: data.fingerprint))

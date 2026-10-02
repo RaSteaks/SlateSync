@@ -164,9 +164,8 @@ public struct FileManagerAtomicFileWriter: AtomicFileWriting, Sendable {
         } else {
             try fileManager.moveItem(at: temporaryURL, to: url)
         }
-        try fileManager.setAttributes(
-            [.posixPermissions: NSNumber(value: permissions)],
-            ofItemAtPath: url.path
-        )
+        // The replacement inherits the already-validated temporary metadata.
+        // Keep rename as the final fallible step: reporting a permission error
+        // after publication would mislabel a committed write as uncommitted.
     }
 }

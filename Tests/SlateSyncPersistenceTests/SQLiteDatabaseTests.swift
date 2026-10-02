@@ -4,6 +4,24 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class SQLiteDatabaseTests: XCTestCase {
+    func testNewConnectionWaitsForJournalSetupLock() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("journal-contention")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appending(path: "project.sqlite")
+        let holder = try SQLiteDatabase(url: url)
+        try await holder.executeScript("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE; CREATE TABLE held (id INTEGER);")
+        // Construction has synchronous SQLite work; keep it off this task so
+        // the existing writer can release its lock while busy_timeout waits.
+        let opening = Task.detached { try SQLiteDatabase(url: url) }
+        try await Task.sleep(for: .milliseconds(100))
+        try await holder.executeScript("COMMIT;")
+        try await holder.close()
+        let opened = try await opening.value
+        let mode = try await opened.scalar("PRAGMA journal_mode;")
+        XCTAssertEqual(mode, "wal")
+        try await opened.close()
+    }
+
     func testBootstrapRestoresMissingIndexWithoutLosingTasks() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("schema-repair")
         defer { try? FileManager.default.removeItem(at: root) }

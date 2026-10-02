@@ -678,6 +678,44 @@ public struct TaskData: Codable, Hashable, Sendable {
     public let createdAt: String?
     public let updatedAt: String?
 
+    // The complete replacement schema also defines which fields a native edit
+    // owns. Persistence retains every other top-level compatibility field.
+    public enum CodingKeys: String, CodingKey, CaseIterable {
+        case id
+        case projectId
+        case projectSettingsSnapshot
+        case status
+        case filename
+        case fileType
+        case fileSize
+        case pageCount
+        case imageDataGroups
+        case resolveCsvBase64
+        case resolveCsvFilename
+        case resolveCsvTable
+        case resolveCsvEdits
+        case slateMetadata
+        case slateWarnings
+        case missingMetadataKeys
+        case slateDirectoryName
+        case scenarioId
+        case scenarioMatch
+        case scenarioFingerprint
+        case provider
+        case model
+        case customPrompt
+        case accuracyMode
+        case result
+        case usage
+        case durationMs
+        case ocrSummary
+        case diagnosticSessionId
+        case editedRecords
+        case createdAt
+        case updatedAt
+    }
+    public static var persistenceFieldNames: Set<String> { Set(CodingKeys.allCases.map(\.rawValue)) }
+
     public init(
         id: String? = nil,
         projectId: String? = nil,

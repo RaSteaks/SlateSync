@@ -24,7 +24,8 @@ public enum ProductPrivacy {
             message: value.providerError == true ? "Provider 请求失败，请检查设置后重试" : message(value.message),
             retryable: value.retryable,
             status: value.status,
-            providerError: value.providerError
+            providerError: value.providerError,
+            requiresRestart: value.requiresRestart
         )
     }
 

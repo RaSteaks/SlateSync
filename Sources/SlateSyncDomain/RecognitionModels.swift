@@ -165,7 +165,8 @@ public enum LegacyTakeStatusAdapter {
 public enum RecognitionRuntimeOptions {
     public static func timeoutMilliseconds(_ raw: String?) -> Int {
         guard let raw, let value = Double(raw), value.isFinite, value > 0 else { return 180_000 }
-        return min(3_600_000, max(30_000, Int(value.rounded())))
+        // Clamp in floating-point space before narrowing to a machine integer.
+        return Int(min(3_600_000, max(30_000, value.rounded())))
     }
 
     public static func maximumTimeoutRetries(_ raw: String?) -> Int {

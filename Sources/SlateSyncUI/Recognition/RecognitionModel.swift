@@ -118,7 +118,7 @@ public final class RecognitionModel {
     public var permitsNewOperation: (@MainActor () -> Bool)?
     private(set) var editableRecords: [EditableRecognitionRecord] = []
 
-    private let service: any WorkspaceWorkflowServing
+    private let service: any WorkspaceWorkflowServing & LocalSlateWorkflowServing
     private let settings: any GlobalSettingsWorkflowServing
     private var recognitionTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
@@ -127,7 +127,7 @@ public final class RecognitionModel {
     public var didComplete: (@MainActor (NativeRecognitionRequest, RecognitionData) async throws -> Void)?
 
     public init(
-        service: any WorkspaceWorkflowServing,
+        service: any WorkspaceWorkflowServing & LocalSlateWorkflowServing,
         settings: any GlobalSettingsWorkflowServing
     ) {
         self.service = service
@@ -225,8 +225,8 @@ public final class RecognitionModel {
         // File-panel completions can arrive after a Library/close barrier has
         // disabled the view. Enforce admission again at the operation owner.
         guard permitsNewOperation?() != false else { return }
-        guard recognitionTask == nil, cancelTask == nil,
-              let local = service as? any LocalSlateWorkflowServing else { return }
+        // Local CSV processing is a required capability of this model.
+        guard recognitionTask == nil, cancelTask == nil else { return }
         guard commitVisibleEditor() else { return }
         let id = UUID()
         self.projectID = projectID
@@ -237,7 +237,7 @@ public final class RecognitionModel {
             var terminalState: OperationState = .idle
             do {
                 try await flush()
-                let records = try await local.decodeSlateCSV(data)
+                let records = try await service.decodeSlateCSV(data)
                 try Task.checkCancellation()
                 if operationID == id {
                     slateCSVRecords = records
@@ -259,8 +259,7 @@ public final class RecognitionModel {
         taskID: String? = nil
     ) {
         guard permitsNewOperation?() != false else { return }
-        guard recognitionTask == nil, cancelTask == nil, !slateCSVRecords.isEmpty,
-              let local = service as? any LocalSlateWorkflowServing else { return }
+        guard recognitionTask == nil, cancelTask == nil, !slateCSVRecords.isEmpty else { return }
         guard commitVisibleEditor() else { return }
         let id = UUID()
         operationID = id
@@ -272,7 +271,7 @@ public final class RecognitionModel {
             var terminalState: OperationState = .idle
             do {
                 try await flush()
-                let value = await local.localSlateRecords(records)
+                let value = await service.localSlateRecords(records)
                 try Task.checkCancellation()
                 if operationID == id {
                     // A local result must not retain a previous Provider response.

@@ -161,7 +161,8 @@ private final class RecordingLifecycle: ProductLifecycleServing {
 }
 
 /// Idle workspace/media/log service shared by the wiring test's real models.
-private actor TeardownWorkspaceFake: WorkspaceWorkflowServing, MediaInputWorkflowServing, LogWorkflowServing {
+// Explicit fixture capabilities match the production model constructors.
+private actor TeardownWorkspaceFake: WorkspaceWorkflowServing, MediaInputWorkflowServing, LogWorkflowServing , ProjectContextWorkflowServing , LocalSlateWorkflowServing , ResolveExportWorkflowServing {
     func listTasks(projectID: String) async throws -> [TaskListItem] { [] }
     func loadTask(projectID: String, taskID: String) async throws -> TaskData {
         TaskData(id: taskID, projectId: projectID, customPrompt: "")

@@ -174,7 +174,8 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
 
 /// Minimal service double that delegates CSV work to the real SM-05 services,
 /// so the regression freezes the production merge/encode semantics.
-private actor CSVExportFake: WorkspaceWorkflowServing, ResolveExportWorkflowServing {
+// Explicit fixture capabilities match the production model constructors.
+private actor CSVExportFake: WorkspaceWorkflowServing, ResolveExportWorkflowServing , ProjectContextWorkflowServing , LocalSlateWorkflowServing {
     private let sm05 = SM05WorkflowServices()
     private let engine = ResolveCSVEngine()
     private let storedTask: TaskData

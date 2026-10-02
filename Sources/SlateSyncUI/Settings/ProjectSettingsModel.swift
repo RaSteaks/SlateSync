@@ -14,10 +14,11 @@ public final class ProjectSettingsModel {
     public var description = ""
     public var settings = ProjectSettings()
     public var onSaved: (@MainActor (ProjectData) -> Void)?
-    private let service: any ProjectLibraryWorkflowServing
+    private let service: any ProjectLibraryWorkflowServing & ProjectContextWorkflowServing
     private var generation = 0
 
-    public init(service: any ProjectLibraryWorkflowServing) { self.service = service }
+    /// Project context is a required capability, including Scenario reads.
+    public init(service: any ProjectLibraryWorkflowServing & ProjectContextWorkflowServing) { self.service = service }
 
     public func flushIfNeeded() async throws {
         guard !operation.isRunning else {
@@ -42,7 +43,7 @@ public final class ProjectSettingsModel {
         operation = .running(label: L10n.tr("正在读取项目设置…"))
         do {
             let value = try await service.project(id: projectID)
-            let scenarios = try await (service as? any LocalSlateWorkflowServing)?.listScenarios(projectID: projectID) ?? []
+            let scenarios = try await service.listScenarios(projectID: projectID)
             guard generation == request else { return }
             project = value
             self.scenarios = scenarios

@@ -138,6 +138,16 @@ public protocol ProjectLibraryWorkflowServing: Sendable {
     func renameLibrary(to name: String) async throws -> LibraryRenameResult
 }
 
+/// Required project context for native editors. These reads are explicit
+/// capabilities, rather than optional casts of an unrelated task service.
+public protocol ScenarioListWorkflowServing: Sendable {
+    func listScenarios(projectID: String) async throws -> [ScenarioSummary]
+}
+
+public protocol ProjectContextWorkflowServing: ScenarioListWorkflowServing {
+    func project(id: String) async throws -> ProjectData
+}
+
 public protocol WorkspaceWorkflowServing: Sendable {
     func listTasks(projectID: String) async throws -> [TaskListItem]
     func loadTask(projectID: String, taskID: String) async throws -> TaskData
@@ -170,10 +180,9 @@ public protocol ResolveExportWorkflowServing: Sendable {
 
 /// Local slate input and Scenario options are projected by Workflow, keeping
 /// parsing and project-runtime access out of SwiftUI's editing models.
-public protocol LocalSlateWorkflowServing: Sendable {
+public protocol LocalSlateWorkflowServing: ScenarioListWorkflowServing {
     func decodeSlateCSV(_ data: Data) async throws -> [SlateCsvRecord]
     func localSlateRecords(_ records: [SlateCsvRecord]) async -> [PersistedRecognitionRecord]
-    func listScenarios(projectID: String) async throws -> [ScenarioSummary]
 }
 
 public protocol GlobalSettingsWorkflowServing: Sendable {

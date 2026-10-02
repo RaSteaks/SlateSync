@@ -24,8 +24,8 @@
     {
       "role": "english-localization",
       "source": "Sources/SlateSyncUI/Resources/English.json",
-      "bytes": 95477,
-      "sha256": "0c1ceb2512068107ef6103b90e789f8fedb3330a0328491a6ff558d3ad44f0c8"
+      "bytes": 95951,
+      "sha256": "970c55c4e1edba418d68d848e601cabe4f09964852cbd3d203955c560d40ab5b"
     },
     {
       "role": "app-icon-image",
@@ -38,6 +38,13 @@
       "source": "build/slatesync.icon/icon.json",
       "bytes": 600,
       "sha256": "9c4a6cecb7c3ba52a7edff060ea0cc45b2b8133f18dd4ad56b2e8ecb5a051081"
+    },
+    {
+      "role": "native-workflow-defaults",
+      "source": "Sources/SlateSyncPersistence/Resources/slatesync.config.json",
+      "bundle": "slatesync.config.json",
+      "bytes": 265,
+      "sha256": "7b71a9668699930251afa0b89d44d7d006ef71a5bd1e6edeb376713ba9ef82ae"
     }
   ],
   "bundlePolicy": {

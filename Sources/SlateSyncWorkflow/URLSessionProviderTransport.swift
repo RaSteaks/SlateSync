@@ -7,7 +7,7 @@ import SlateSyncDomain
 public actor URLSessionProviderTransport: ProviderHTTPTransporting {
     public static let maximumResponseBytes = 16 * 1024 * 1024
 
-    private let session: URLSession
+    private let session: ProviderResponseSession
     private let credentials: any ProviderCredentialReading
     private let clock: any ProviderClock
     private var active: [UUID: Task<ProviderTransportResponse, Error>] = [:]
@@ -25,7 +25,7 @@ public actor URLSessionProviderTransport: ProviderHTTPTransporting {
         safeConfiguration.httpCookieStorage = nil
         safeConfiguration.httpShouldSetCookies = false
         safeConfiguration.waitsForConnectivity = false
-        self.session = URLSession(configuration: safeConfiguration)
+        self.session = ProviderResponseSession(configuration: safeConfiguration)
         self.credentials = credentials
         self.clock = clock
     }
@@ -67,7 +67,7 @@ public actor URLSessionProviderTransport: ProviderHTTPTransporting {
 
     private nonisolated static func perform(
         _ input: ProviderTransportRequest,
-        session: URLSession,
+        session: ProviderResponseSession,
         credentials: any ProviderCredentialReading,
         clock: any ProviderClock
     ) async throws -> ProviderTransportResponse {
@@ -92,7 +92,7 @@ public actor URLSessionProviderTransport: ProviderHTTPTransporting {
 
     private nonisolated static func attempt(
         _ input: ProviderTransportRequest,
-        session: URLSession,
+        session: ProviderResponseSession,
         credentials: any ProviderCredentialReading,
         clock: any ProviderClock
     ) async throws -> ProviderTransportResponse {
@@ -132,7 +132,9 @@ public actor URLSessionProviderTransport: ProviderHTTPTransporting {
         do {
             return try await withThrowingTaskGroup(of: ProviderTransportResponse.self) { group in
                 group.addTask {
-                    let (body, response) = try await session.data(for: finalRequest)
+                    // Receive through a bounded delegate; a post-download check alone
+                    // cannot cap memory for oversized or unterminated responses.
+                    let (body, response) = try await session.receive(finalRequest, maximumBytes: maximumResponseBytes)
                     guard let http = response as? HTTPURLResponse else { throw RecognitionFailure.invalidResponse }
                     guard !body.isEmpty, body.count <= maximumResponseBytes else {
                         throw SlateSyncError(code: "MODEL_RESPONSE_SIZE", message: body.isEmpty ? "模型服务返回空响应" : "模型服务响应超过大小限制", status: 502, providerError: true)

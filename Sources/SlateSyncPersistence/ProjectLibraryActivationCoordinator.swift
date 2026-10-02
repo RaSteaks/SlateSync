@@ -36,8 +36,9 @@ public actor ProjectLibraryActivationCoordinator {
             try await activate(info)
             return .imported(info)
         } catch {
+            let terminal = state == .restartPending
             resetFailedPreparation()
-            throw error
+            throw terminal ? SlateSyncError.wrapped(error).requiringRestart() : error
         }
     }
 
@@ -56,16 +57,19 @@ public actor ProjectLibraryActivationCoordinator {
             try await activate(info)
             return .imported(info)
         } catch {
+            let terminal = state == .restartPending
             resetFailedPreparation()
-            throw error
+            throw terminal ? SlateSyncError.wrapped(error).requiringRestart() : error
         }
     }
 
     public func renameLibrary(to name: String) async throws -> LibraryRenameResult {
         try beginSwitch()
         var runtimeIsTerminal = false
+        var previousLocation: LibraryInfo?
         do {
             try await library.preflightLibraryRename(name)
+            let previous = try await library.libraryInfo()
             // A POSIX directory rename keeps SQLite file descriptors alive but
             // not the snapshot URLs retained by project stores. Drain and close
             // them before moving the Library so no late write recreates oldRoot.
@@ -79,6 +83,7 @@ public actor ProjectLibraryActivationCoordinator {
                 )
             }
             let renamed = try await library.renameLibrary(name)
+            previousLocation = previous
             // renameLibrary already committed and verified its own v1 manifest;
             // activating that exact result must not introduce a second fallible
             // external-package validation after the directory has moved.
@@ -92,9 +97,19 @@ public actor ProjectLibraryActivationCoordinator {
             try await activate(info, runtimeAlreadyClosed: true)
             return .renamed(renamed)
         } catch {
+            // Until the new path is committed, restore the old directory. Once
+            // activation saved it, close failures must keep the new location.
+            if state == .switching, let previousLocation {
+                do { try await library.restoreLibraryLocation(previousLocation) }
+                catch {
+                    state = .restartPending
+                    throw SlateSyncError(code: "LIBRARY_RENAME_ROLLBACK",
+                        message: "无法恢复项目库原位置，请重新选择改名后的项目库", requiresRestart: true)
+                }
+            }
             if runtimeIsTerminal { state = .restartPending }
             resetFailedPreparation()
-            throw error
+            throw runtimeIsTerminal ? SlateSyncError.wrapped(error).requiringRestart() : error
         }
     }
 

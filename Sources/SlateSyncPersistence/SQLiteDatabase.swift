@@ -1,6 +1,7 @@
 import Foundation
 import SQLite3
 import SlateSyncDomain
+import Synchronization
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -102,12 +103,14 @@ public actor SQLiteDatabase {
         }
 
         do {
+            // Journal setup can contend too; install the busy handler before
+            // issuing any SQL on a newly opened connection.
+            try Self.executeScript(handle, sql: "PRAGMA busy_timeout = 5000;")
             if mode == .readWriteCreate {
                 // These values are part of the frozen Electron v1 on-disk contract.
                 try Self.executeScript(handle, sql: "PRAGMA journal_mode = WAL;")
             }
             try Self.executeScript(handle, sql: "PRAGMA foreign_keys = ON;")
-            try Self.executeScript(handle, sql: "PRAGMA busy_timeout = 5000;")
             if mode != .readOnly {
                 try SecureFilePermissions.repairFile(at: url, permissions: 0o600)
                 repairSidecarPermissions()
@@ -178,16 +181,103 @@ public actor SQLiteDatabase {
             at: URL(fileURLWithPath: snapshotURL.path + ".tasks.lock.tmp"), action)
     }
 
-    func saveTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
-        try withTaskSnapshotLock {
-            let object = try PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
-            _ = try execute("""
+    func saveTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting, replacingKeys: Set<String>? = nil) throws {
+        try mutateTaskSnapshot(id, snapshotURL: snapshotURL, writer: writer) { database in
+            var object = try PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
+            if let replacingKeys, let text = try database.rowsUnlocked(
+                "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil {
+                let previous = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
+                // Missing known fields intentionally clear old values. Unknown
+                // extension fields survive native decode/edit/save round trips.
+                for (key, value) in previous where !replacingKeys.contains(key) { object[key] = value }
+                object["createdAt"] = previous["createdAt"]
+            }
+            let merged = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
+            _ = try database.executeUnlocked("""
                 INSERT INTO tasks (id, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json,
                   created_at = excluded.created_at, updated_at = excluded.updated_at;
-                """, bindings: [id, String(decoding: data, as: UTF8.self),
+                """, bindings: [id, String(decoding: merged, as: UTF8.self),
                     object["createdAt"] as? String, object["updatedAt"] as? String])
-            try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+            return merged
+        }
+    }
+
+    /// A durable intent lets reopening reconcile an interrupted two-file write
+    /// from authoritative SQLite before legacy snapshot import can see it.
+    private func intentURL(_ snapshotURL: URL) -> URL {
+        snapshotURL.appendingPathExtension("pending")
+    }
+
+    func recoverTaskSnapshot(_ id: String, snapshotURL: URL) throws {
+        try withTaskSnapshotLock { try recoverTaskSnapshotUnlocked(id, snapshotURL: snapshotURL) }
+    }
+
+    private func recoverTaskSnapshotUnlocked(_ id: String, snapshotURL: URL) throws {
+        let intent = intentURL(snapshotURL)
+        guard FileManager.default.fileExists(atPath: intent.path) else { return }
+        if let text = try rows("SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil {
+            try FileManagerAtomicFileWriter().writeAtomically(Data(text.utf8), to: snapshotURL)
+        } else if FileManager.default.fileExists(atPath: snapshotURL.path) {
+            try FileManager.default.removeItem(at: snapshotURL)
+        }
+        try FileManager.default.removeItem(at: intent)
+    }
+
+    private func mutateTaskSnapshot(
+        _ id: String, snapshotURL: URL, writer: any AtomicFileWriting,
+        mutation: @Sendable (isolated SQLiteDatabase) throws -> Data
+    ) throws {
+        try withTaskSnapshotLock {
+            try recoverTaskSnapshotUnlocked(id, snapshotURL: snapshotURL)
+            let intent = intentURL(snapshotURL)
+            try FileManagerAtomicFileWriter().writeRaw(Data(), to: intent, permissions: 0o600)
+            let attempted = Mutex<Data?>(nil)
+            do {
+                try withEncryptedSnapshot(writing: true) { database in
+                    let handle = try database.openHandle()
+                    try Self.executeScript(handle, sql: "BEGIN IMMEDIATE;")
+                    do {
+                        let data = try mutation(database)
+                        attempted.withLock { $0 = data }
+                        // A snapshot failure rolls back the SQLite mutation,
+                        // including a generated task ID the UI has not seen.
+                        try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+                        try Self.executeScript(handle, sql: "COMMIT;")
+                    } catch {
+                        try? Self.executeScript(handle, sql: "ROLLBACK;")
+                        throw error
+                    }
+                }
+            } catch {
+                // An encrypted snapshot's post-commit cleanup can fail after
+                // the new row is durable. Read back the exact attempted bytes:
+                // only an acknowledged commit may return its generated ID.
+                let committed: Bool
+                do {
+                    let row = try rows("SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil
+                    committed = attempted.withLock { expected in
+                        guard let expected, let row else { return false }
+                        return Data(row.utf8) == expected
+                    }
+                } catch {
+                    throw SlateSyncError(code: "TASK_SNAPSHOT_RECOVERY", message: "任务快照恢复未完成，请重新打开项目", retryable: true)
+                }
+                do { try recoverTaskSnapshotUnlocked(id, snapshotURL: snapshotURL) }
+                catch {
+                    // A committed row must still return its identity. The
+                    // retained intent makes a later open retry mirror repair.
+                    guard committed else {
+                        throw SlateSyncError(code: "TASK_SNAPSHOT_RECOVERY", message: "任务快照恢复未完成，请重新打开项目", retryable: true)
+                    }
+                    SlateSyncLogger(category: "persistence").warning("committed task snapshot awaits recovery")
+                }
+                if committed { return }
+                throw error
+            }
+            // The row and mirror are committed. Cleanup failure must not turn
+            // a successful creation into an unidentified, retryable failure.
+            try? FileManager.default.removeItem(at: intent)
         }
     }
 
@@ -214,41 +304,23 @@ public actor SQLiteDatabase {
     /// encrypted snapshot lock. No actor suspension or upsert can lose another
     /// writer's fields or resurrect a task deleted before this transaction.
     func patchTask(_ id: String, patch: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws {
-        try withTaskSnapshotLock {
-            let data = try patchTaskData(id, patch: patch)
-            try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
-        }
-    }
-
-    private func patchTaskData(_ id: String, patch: Data) throws -> Data {
-        try withEncryptedSnapshot(writing: true) { database in
-            let handle = try database.openHandle()
-            try Self.executeScript(handle, sql: "BEGIN IMMEDIATE;")
-            do {
-                guard let text = try database.rowsUnlocked(
-                    "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]
-                ).first?["data_json"] ?? nil else {
-                    throw SlateSyncError(code: "ENOENT", message: "任务不存在")
-                }
-                var object = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
-                let createdAt = object["createdAt"]
-                let changes = try PersistenceJSON.object(from: patch, errorCode: "TASK_INVALID")
-                for (key, value) in changes { object[key] = value }
-                let now = PersistenceJSON.timestamp()
-                object["id"] = id
-                object["createdAt"] = createdAt
-                object["updatedAt"] = now
-                let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
-                _ = try database.executeUnlocked(
-                    "UPDATE tasks SET data_json = ?, updated_at = ? WHERE id = ?;",
-                    bindings: [String(decoding: data, as: UTF8.self), now, id]
-                )
-                try Self.executeScript(handle, sql: "COMMIT;")
-                return data
-            } catch {
-                try? Self.executeScript(handle, sql: "ROLLBACK;")
-                throw error
+        try mutateTaskSnapshot(id, snapshotURL: snapshotURL, writer: writer) { database in
+            guard let text = try database.rowsUnlocked(
+                "SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil else {
+                throw SlateSyncError(code: "ENOENT", message: "任务不存在")
             }
+            var object = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
+            let createdAt = object["createdAt"]
+            let changes = try PersistenceJSON.object(from: patch, errorCode: "TASK_INVALID")
+            for (key, value) in changes { object[key] = value }
+            let now = PersistenceJSON.timestamp()
+            object["id"] = id
+            object["createdAt"] = createdAt
+            object["updatedAt"] = now
+            let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
+            _ = try database.executeUnlocked("UPDATE tasks SET data_json = ?, updated_at = ? WHERE id = ?;",
+                bindings: [String(decoding: data, as: UTF8.self), now, id])
+            return data
         }
     }
 

@@ -14,7 +14,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "SlateSyncDomain"),
-        .target(name: "SlateSyncPersistence", dependencies: ["SlateSyncDomain"]),
+        // Native defaults replace the removed Electron root configuration.
+        .target(name: "SlateSyncPersistence", dependencies: ["SlateSyncDomain"], resources: [.process("Resources")]),
         .target(name: "SlateSyncMedia", dependencies: ["SlateSyncDomain"]),
         .target(
             name: "SlateSyncWorkflow",

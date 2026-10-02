@@ -54,11 +54,11 @@ public final class ResolveCSVModel {
     private var workGeneration = 0
     private var editGeneration = 0
     public var permitsNewOperation: (@MainActor () -> Bool)?
-    private let service: any WorkspaceWorkflowServing
+    private let service: any WorkspaceWorkflowServing & ResolveExportWorkflowServing
     public var onTableChange: (@MainActor (CSVStageSnapshot) -> Void)?
     public var flushEditor: (@MainActor () throws -> Void)?
 
-    public init(service: any WorkspaceWorkflowServing) {
+    public init(service: any WorkspaceWorkflowServing & ResolveExportWorkflowServing) {
         self.service = service
     }
 
@@ -126,14 +126,12 @@ public final class ResolveCSVModel {
         guard let current = table else {
             throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
         }
-        guard let exporter = service as? any ResolveExportWorkflowServing else {
-            throw SlateSyncError(code: "CSV_EXPORT_UNAVAILABLE", message: L10n.tr("导出服务当前不可用"))
-        }
+        // Export is guaranteed by construction, not a runtime capability probe.
         // Tasks persisted before raw bytes existed fall back to their staged
         // table; the merge is still recomputed from the latest records.
         let source: Data
         if let rawData { source = rawData } else { source = try await service.encodeResolveCSV(current) }
-        let result = try await exporter.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
+        let result = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
         // The export re-merge is also the freshest reconciliation report; the
         // badge strip shows what the exported bytes actually contain.
         lastMergeDiagnostics = result.merge
@@ -190,7 +188,6 @@ public final class ResolveCSVModel {
     }
 
     public func merge(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async {
-        guard let exporter = service as? any ResolveExportWorkflowServing else { return }
         await performWork { [self] in
             try flushEditor?()
             let edits = editGeneration
@@ -202,7 +199,7 @@ public final class ResolveCSVModel {
             // AppKit snapshot awaiting a render pass.
             let source: Data
             if let rawData { source = rawData } else { source = try await service.encodeResolveCSV(current) }
-            let result = try await exporter.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
+            let result = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
             try Task.checkCancellation()
             try requireUnchangedEdits(edits)
             self.table = result.merge.table

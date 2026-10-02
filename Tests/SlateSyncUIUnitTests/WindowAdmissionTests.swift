@@ -137,7 +137,8 @@ private final class AdmissionGate: Sendable {
 }
 
 /// Idle service that records which features actually reached their owner.
-private actor AdmissionWorkspaceFake: WorkspaceWorkflowServing, MediaInputWorkflowServing {
+// Explicit fixture capabilities match the production model constructors.
+private actor AdmissionWorkspaceFake: WorkspaceWorkflowServing, MediaInputWorkflowServing , ProjectContextWorkflowServing , LocalSlateWorkflowServing , ResolveExportWorkflowServing {
     private let recognitionGate = AdmissionGate()
     private(set) var recognitionEntered = false
     private(set) var prepareCount = 0

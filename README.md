@@ -203,6 +203,16 @@ SlateSyncApp/Resources/PaddleOCR
 
 也可以在应用中选择其他项目库位置。全局设置按机器用户保存，不随项目包导入/导出。
 
+### 工作流配置
+
+原生默认配置位于 `Sources/SlateSyncPersistence/Resources/slatesync.config.json`，随应用打包。
+开发运行可显式设置 `SLATESYNC_CONFIG_PATH`；没有指定路径且工作目录不存在配置时，使用原生资源默认值。
+打包应用使用包内配置。路径在启动时确定，内容在每次操作时重新校验；首次读取失败会停止相关操作，
+后续无效编辑保留最后有效版本。
+
+`slate.maxDirectoryDepth` 控制原生元数据扫描深度，`scenario.matching` 控制识别时的结构匹配。
+`resolve` 为新建项目提供初始格式；现有项目与任务的显式设置优先，不被全局配置覆盖。
+
 ### 本地项目加密
 
 正常启动会自动将项目库索引、项目设置、任务、诊断、场记 Profile 和 JSON 快照转换为

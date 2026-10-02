@@ -149,6 +149,36 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
         )
     }
 
+    func testWorkflowMatchingThresholdChangesRecognitionSelection() async throws {
+        let transport = SM07CoordinatorTransport()
+        let preparation = SM07CoordinatorPreparation()
+        let ocr = SM07CoordinatorOCR()
+        let scenarios = ThresholdScenarioPersistence()
+        let root = FileManager.default.temporaryDirectory.appending(path: "recognition-config-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appending(path: "workflow.json")
+        var config = WorkflowConfig(scenario: .init(matching: .init(threshold: 1)))
+        try JSONEncoder().encode(config).write(to: url)
+        let provider = WorkflowConfigProvider(url: url)
+        let coordinator = RecognitionCoordinator(registry: ProviderRegistry(), client: .init(transport: transport),
+            mediaFactory: {
+                MediaOCRWorkflow(preparation: preparation, ocr: LocalOCRService(vision: ocr, paddle: nil,
+                    settings: .init(), visionAvailable: true, paddleAvailable: false))
+            }, scenarioPersistence: scenarios, workflowConfiguration: { try await provider.current() })
+        // Seed one similar profile. Exact and permissive thresholds must then
+        // produce different selections through the real recognition pipeline.
+        _ = try await coordinator.recognize(request())
+        let strict = try await coordinator.recognize(request())
+        XCTAssertEqual(strict.scenario?.match, "created")
+        config.scenario.matching.threshold = 0.5
+        try JSONEncoder().encode(config).write(to: url)
+        let permissive = try await coordinator.recognize(request())
+        XCTAssertEqual(permissive.scenario?.match, "reused")
+        XCTAssertEqual(permissive.scenario?.id, "known")
+        await coordinator.close()
+    }
+
     func testNativeRecognitionAndRerunUpdateOnePersistedDraft() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "recognition-identity-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -287,5 +317,33 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
         let active = await coordinator.activeOperationCount(), limited = await limiter.activeCount()
         XCTAssertEqual(active, 0); XCTAssertEqual(limited, 0)
         await coordinator.close()
+    }
+}
+
+/// Keep a fixed, slightly different layout so threshold changes have an
+/// observable business effect, independent of transport and wall-clock timing.
+private actor ThresholdScenarioPersistence: ScenarioMatchingPersistence {
+    private var stored: ScenarioProfile?
+    func listScenarios(projectID: String) -> [ScenarioSummary] {
+        guard let stored else { return [] }
+        return [.init(id: "known", label: stored.label, fingerprint: stored.fingerprint,
+            fingerprintVersion: stored.fingerprintVersion, schemaVersion: stored.schemaVersion,
+            sampleCount: 1, fieldCount: 10, createdAt: "", updatedAt: "", lastUsedAt: "")]
+    }
+    func loadScenario(projectID: String, scenarioID: String) throws -> ScenarioData {
+        guard let stored else { throw SlateSyncError(code: "FIXTURE", message: "Missing profile") }
+        return .init(id: "known", profile: stored, sampleCount: 1, createdAt: "", updatedAt: "", lastUsedAt: "")
+    }
+    func applyScenarioMatch(projectID: String, candidate: ScenarioProfile, selectedProfileID: String?, observationPayload: Data) -> ScenarioMatchCommit {
+        if stored == nil {
+            let layout = ScenarioLayout(pages: candidate.layout.pages, headerTokens: candidate.layout.headerTokens,
+                cameraGroups: candidate.layout.cameraGroups, columnBands: [2, 18], rowBands: candidate.layout.rowBands,
+                blockCount: candidate.layout.blockCount)
+            stored = .init(schemaVersion: candidate.schemaVersion, fingerprintVersion: candidate.fingerprintVersion,
+                fingerprint: ScenarioProfileEngine.fingerprint(layout), label: candidate.label,
+                layout: layout, fields: candidate.fields, recognition: candidate.recognition, output: candidate.output)
+        }
+        return .init(profile: .init(id: selectedProfileID ?? "created", profile: candidate,
+            sampleCount: 1, createdAt: "", updatedAt: "", lastUsedAt: ""), observationID: "observation")
     }
 }

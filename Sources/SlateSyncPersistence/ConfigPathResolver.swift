@@ -10,11 +10,13 @@ public struct WorkflowConfigPathEnvironment: Sendable {
     public let isPackaged: Bool
     public let developmentRoot: URL
     public let bundledResourceURL: URL?
+    public let nativeDefaultURL: URL?
 
-    public init(isPackaged: Bool, developmentRoot: URL, bundledResourceURL: URL?) {
+    public init(isPackaged: Bool, developmentRoot: URL, bundledResourceURL: URL?, nativeDefaultURL: URL? = nil) {
         self.isPackaged = isPackaged
         self.developmentRoot = developmentRoot
         self.bundledResourceURL = bundledResourceURL
+        self.nativeDefaultURL = nativeDefaultURL
     }
 
     public static func live(bundle: Bundle = .main) -> Self {
@@ -24,7 +26,8 @@ public struct WorkflowConfigPathEnvironment: Sendable {
                 fileURLWithPath: FileManager.default.currentDirectoryPath,
                 isDirectory: true
             ),
-            bundledResourceURL: bundle.resourceURL
+            bundledResourceURL: bundle.resourceURL,
+            nativeDefaultURL: Bundle.module.url(forResource: "slatesync.config", withExtension: "json")
         )
     }
 }
@@ -54,6 +57,13 @@ public enum ConfigPathResolver {
             return bundled.appending(path: "slatesync.config.json")
         }
         let value = (configured ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        // Native-only checkouts no longer carry the retired Electron root file.
+        // A configured path remains strict; only an absent implicit default can
+        // use the packaged SwiftPM resource during local development.
+        if value.isEmpty, let nativeDefault = environment.nativeDefaultURL,
+           !FileManager.default.fileExists(atPath: environment.developmentRoot.appending(path: "slatesync.config.json").path) {
+            return nativeDefault
+        }
         let name = value.isEmpty ? "slatesync.config.json" : value
         if name.hasPrefix("/") {
             return URL(fileURLWithPath: name)

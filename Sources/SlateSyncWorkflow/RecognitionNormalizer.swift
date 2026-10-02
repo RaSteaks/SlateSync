@@ -113,7 +113,16 @@ public enum RecognitionNormalizer {
     public static func aggregateUsage(_ values: [TokenUsage?]) -> TokenUsage? {
         func total(_ keyPath: KeyPath<TokenUsage, Int?>) -> Int? {
             let numbers = values.compactMap { $0?[keyPath: keyPath] }.filter { $0 >= 0 }
-            return numbers.isEmpty ? nil : numbers.reduce(0, +)
+            guard !numbers.isEmpty else { return nil }
+            var sum = 0
+            for number in numbers {
+                // Provider counters can each fit Int but overflow across pages.
+                // An unrepresentable total is unknown, never a wrapped count.
+                let addition = sum.addingReportingOverflow(number)
+                guard !addition.overflow else { return nil }
+                sum = addition.partialValue
+            }
+            return sum
         }
         let result = TokenUsage(
             promptTokens: total(\.promptTokens), completionTokens: total(\.completionTokens),

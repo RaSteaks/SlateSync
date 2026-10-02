@@ -67,6 +67,11 @@ def validate_resources(manifest: dict[str, object]) -> None:
     # updating the current release manifest must fail before archive/package.
     ui_resources = {str(path.relative_to(ROOT)) for path in (ROOT / "Sources/SlateSyncUI/Resources").rglob("*") if path.is_file()}
     require(ui_resources <= seen, f"untracked UI resources in release manifest: {sorted(ui_resources - seen)}")
+    # Native defaults are executable workflow policy and must ship byte-for-byte.
+    native_config = "Sources/SlateSyncPersistence/Resources/slatesync.config.json"
+    require(native_config in seen, "native workflow defaults missing from release manifest")
+    require(any(item.get("source") == native_config and item.get("bundle") == "slatesync.config.json"
+                for item in resources), "native workflow defaults missing bundle mapping")
 
     tracked = subprocess.run(
         ["git", "-C", str(ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],

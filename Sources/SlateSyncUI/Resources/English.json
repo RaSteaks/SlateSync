@@ -1,4 +1,8 @@
 {
+  "无法恢复不同项目库的位置": "Cannot restore the location of a different project library.",
+  "无法恢复项目库原位置，请重新选择改名后的项目库": "Could not restore the original library location. Select the renamed library again.",
+  "任务快照恢复未完成，请重新打开项目": "Task snapshot recovery is incomplete. Reopen the project.",
+  "设置正在保存，请稍后重试": "Settings are being saved. Try again shortly.",
   "请先填写 API Key": "Enter an API key first",
   "模型列表获取不可用": "Model listing is unavailable",
   "接口未返回模型，可继续手动填写模型 ID。": "The API returned no models. You can still enter model IDs manually.",

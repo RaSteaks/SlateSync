@@ -234,8 +234,14 @@ public final class ProjectLibraryModel {
         } catch is CancellationError {
             operation = .canceled
         } catch {
-            self.error = ProductPrivacy.error(error)
-            operation = .failed(ProductPrivacy.error(error))
+            let failure = ProductPrivacy.error(error)
+            // Rollback restores data, not a runtime that has already closed.
+            if failure.requiresRestart == true {
+                libraryRestartRequired = true
+                didRequireRestart?()
+            }
+            self.error = failure
+            operation = .failed(failure)
         }
     }
 

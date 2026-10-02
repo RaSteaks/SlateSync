@@ -301,5 +301,9 @@ public actor ScenarioProfileEngine: ScenarioProfileProcessing {
     }
     private nonisolated static func jsonArray(_ values: [String]) -> String { "[\(values.map(json).joined(separator: ","))]" }
     private nonisolated static func numberArray(_ values: [Double]) -> String { "[\(values.map(jsNumber).joined(separator: ","))]" }
-    private nonisolated static func jsNumber(_ value: Double) -> String { value.rounded() == value ? String(Int(value)) : String(value) }
+    private nonisolated static func jsNumber(_ value: Double) -> String {
+        // Fingerprint inputs may contain imported numeric bands larger than Int.
+        // Reuse the compatibility formatter instead of a trapping conversion.
+        JavaScriptCompatibility.numberString(value) ?? "null"
+    }
 }

@@ -190,7 +190,7 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
     public func renameLibrary(_ nextName: String) async throws -> LibraryInfo {
         try await bootstrap()
         let name = try validateLibraryName(nextName)
-        var current = try requiredManifest()
+        let current = try requiredManifest()
         guard name != current.name else { return try await libraryInfo() }
         let oldRoot = root
         let suffix = oldRoot.lastPathComponent.hasSuffix(Self.libraryExtension)
@@ -202,15 +202,30 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             throw SlateSyncError(code: "LIBRARY_NAME_CONFLICT", message: "该名称的项目库目录已存在，请选择其他名称")
         }
 
-        try FileManager.default.moveItem(at: oldRoot, to: newRoot)
+        return try await moveLibrary(to: newRoot, name: name)
+    }
+
+    /// Compensation uses the exact previous URL: portable directory names do
+    /// not have to match their manifest's display name.
+    func restoreLibraryLocation(_ previous: LibraryInfo) async throws {
+        guard previous.id == manifest?.id else {
+            throw SlateSyncError(code: "LIBRARY_RENAME_ROLLBACK", message: "无法恢复不同项目库的位置")
+        }
+        _ = try await moveLibrary(to: URL(fileURLWithPath: previous.path), name: previous.name)
+    }
+
+    private func moveLibrary(to newRoot: URL, name: String) async throws -> LibraryInfo {
+        let oldRoot = root
+        var current = try requiredManifest()
+        if oldRoot != newRoot { try FileManager.default.moveItem(at: oldRoot, to: newRoot) }
         current.name = name
         do {
             try writeJSON(current, to: newRoot.appending(path: "library.json"))
         } catch {
             do {
-                try FileManager.default.moveItem(at: newRoot, to: oldRoot)
+                if oldRoot != newRoot { try FileManager.default.moveItem(at: newRoot, to: oldRoot) }
             } catch {
-                throw SlateSyncError(code: "LIBRARY_RENAME_ROLLBACK", message: "项目库改名失败，且无法恢复原目录")
+                throw SlateSyncError(code: "LIBRARY_RENAME_ROLLBACK", message: "项目库改名失败，且无法恢复原目录", requiresRestart: true)
             }
             throw error
         }

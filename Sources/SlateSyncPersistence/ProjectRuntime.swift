@@ -72,6 +72,18 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
         )
     }
 
+    /// Native projections replace their known fields while retaining extension
+    /// data owned by compatible clients. The merge runs inside the DB transaction.
+    public func saveTaskProjection(projectID: String, taskID: String?, task: TaskData) async throws -> String {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        var object = try PersistenceJSON.object(from: JSONEncoder().encode(task), errorCode: "TASK_INVALID")
+        object["projectId"] = projectID
+        return try await context.tasks.saveTask(
+            PersistenceJSON.data(from: object, errorCode: "TASK_INVALID"), taskID: taskID,
+            replacingKeys: TaskData.persistenceFieldNames)
+    }
+
     /// Recognition reads the canonical project/settings snapshot through the
     /// same lease boundary used by task, scenario, and diagnostic writes.
     public func recognitionProject(projectID: String) async throws -> ProjectData {

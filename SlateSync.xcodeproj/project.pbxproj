@@ -16,6 +16,7 @@
 		B10000000000000000000007 /* build/slatesync.icon in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* build/slatesync.icon */; };
 		B10000000000000000000008 /* SlateSyncApp/Resources/PaddleOCR in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* SlateSyncApp/Resources/PaddleOCR */; };
 		B10000000000000000000009 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json */; };
+		B10000000000000000000010 /* slatesync.config.json in Resources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000014 /* slatesync.config.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +44,7 @@
 		F10000000000000000000012 /* Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Tests/SlateSyncPersistenceTests/Fixtures/SM09/sm09-legacy-export.json"; sourceTree = SOURCE_ROOT; };
 		F10000000000000000000013 /* SlateSyncAppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SlateSyncAppStore.entitlements; sourceTree = "<group>"; };
 		F10000000000000000000020 /* Configuration/Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Signing.xcconfig; sourceTree = SOURCE_ROOT; };
+		F10000000000000000000014 /* slatesync.config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Sources/SlateSyncPersistence/Resources/slatesync.config.json; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -260,6 +262,7 @@
 			files = (
 				B10000000000000000000007 /* build/slatesync.icon in Resources */,
 				B10000000000000000000008 /* SlateSyncApp/Resources/PaddleOCR in Resources */,
+				B10000000000000000000010 /* slatesync.config.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

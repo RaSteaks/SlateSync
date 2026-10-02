@@ -111,7 +111,8 @@ private final class RecognitionGate: Sendable {
 
 /// Service double whose recognition suspends on explicit gates so the test
 /// can order completion against cancel deterministically.
-private actor RecognitionStateFake: WorkspaceWorkflowServing {
+// Explicit fixture capabilities match the production model constructors.
+private actor RecognitionStateFake: WorkspaceWorkflowServing , ProjectContextWorkflowServing , LocalSlateWorkflowServing , ResolveExportWorkflowServing {
     let recognizeGate = RecognitionGate()
     let cancelGate = RecognitionGate()
 

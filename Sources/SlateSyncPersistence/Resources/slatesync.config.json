@@ -1,0 +1,8 @@
+{
+  "slate": { "maxDirectoryDepth": 4 },
+  "scenario": { "matching": { "threshold": 0.85, "ambiguityMargin": 0.05 } },
+  "resolve": {
+    "fieldFormats": { "scene": "XXX", "shot": "XX", "take": "XX" },
+    "comments": { "goodTake": "_OK", "holdTake": "_KP" }
+  }
+}

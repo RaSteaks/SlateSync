@@ -224,7 +224,9 @@ public actor ProviderRecognitionClient {
         guard case .object(let fields)? = value else { return nil }
         func integer(_ keys: [String]) -> Int? {
             for key in keys {
-                if case .number(let number)? = fields[key], number.isFinite, number.rounded() == number, number >= 0, number <= Double(Int.max) { return Int(number) }
+                // Untrusted usage values must fail conversion without trapping.
+                if case .number(let number)? = fields[key], number >= 0,
+                   let integer = Int(exactly: number) { return integer }
             }
             return nil
         }

@@ -15,24 +15,36 @@ public actor ModelCapabilityProbeService {
     private let save: Save?
     private let saveBuiltin: (@Sendable (BuiltinProviderCapabilityCache) async throws -> Void)?
     private let now: @Sendable () -> Date
-    private var batches: [String: Task<ModelProbeResult, Error>] = [:]
+    private struct Batch {
+        let id: UUID
+        let task: Task<ModelProbeResult, Error>
+    }
+    private var batches: [String: Batch] = [:]
+    private var closed = false
 
     public init(registry: ProviderRegistry, client: ProviderRecognitionClient, save: Save? = nil, saveBuiltin: (@Sendable (BuiltinProviderCapabilityCache) async throws -> Void)? = nil, now: @escaping @Sendable () -> Date = Date.init) {
         self.registry = registry; self.client = client; self.save = save; self.saveBuiltin = saveBuiltin; self.now = now
     }
 
     public func probe(providerID: String, modelIDs: [String], progress: ProgressSink? = nil) async throws -> ModelProbeResult {
+        guard !closed else { throw RecognitionFailure.closed }
         guard batches[providerID] == nil else { throw RecognitionFailure.probeBusy }
-        let generation = await registry.currentGeneration()
-        let provider = try await registry.descriptor(providerID: providerID)
+        let id = UUID()
         // Preserve caller order while filtering duplicates; completion order
         // may differ, but result/progress model indexes remain deterministic.
         var seen = Set<String>()
         let ids = modelIDs.filter {
             ProviderCatalog.isValidModelID($0) && !ProviderCatalog.isExcluded($0) && seen.insert($0).inserted
         }
-        let revision = provider.revision ?? 0, client = client, now = now
+        let client = client, now = now
+        // Reserve the entire operation, including registry lookups, before the
+        // first await. Cancel/close can now join preparation as well as HTTP.
         let task = Task {
+            try Task.checkCancellation()
+            let generation = await registry.currentGeneration()
+            let provider = try await registry.descriptor(providerID: providerID)
+            let revision = provider.revision ?? 0
+            try Task.checkCancellation()
             var output = Array<ModelCapabilityProbeResult?>(repeating: nil, count: ids.count)
             var next = 0, completed = 0
             try await withThrowingTaskGroup(of: (Int, ModelCapabilityProbeResult).self) { group in
@@ -79,22 +91,32 @@ public actor ModelCapabilityProbeService {
         }
         // The retained task owns publication as well as HTTP work. Closing a
         // runtime must join durable writes before credentials/config can change.
-        batches[providerID] = task
-        defer { batches.removeValue(forKey: providerID) }
+        batches[providerID] = Batch(id: id, task: task)
+        defer { removeBatch(providerID: providerID, id: id) }
         do {
             return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
-        } catch is CancellationError { return .init(canceled: true, revision: provider.revision, results: [], completed: 0, total: ids.count) }
+        } catch is CancellationError { return .init(canceled: true, revision: nil, results: [], completed: 0, total: ids.count) }
     }
 
     public func cancel(providerID: String) async -> Bool {
-        guard let task = batches[providerID] else { return false }
-        task.cancel(); _ = try? await task.value; batches.removeValue(forKey: providerID); return true
+        guard let batch = batches[providerID] else { return false }
+        batch.task.cancel()
+        _ = try? await batch.task.value
+        removeBatch(providerID: providerID, id: batch.id)
+        return true
     }
 
     public func close() async {
-        let values = Array(batches.values); values.forEach { $0.cancel() }
-        for task in values { _ = try? await task.value }
+        closed = true
+        let values = Array(batches.values)
+        values.forEach { $0.task.cancel() }
+        for batch in values { _ = try? await batch.task.value }
         batches.removeAll()
+    }
+
+    private func removeBatch(providerID: String, id: UUID) {
+        // A late cancellation continuation cannot remove a replacement batch.
+        if batches[providerID]?.id == id { batches.removeValue(forKey: providerID) }
     }
 
     private nonisolated static func probeOne(id: String, provider: ProviderDescriptor, client: ProviderRecognitionClient, now: @Sendable () -> Date) async -> ModelCapabilityProbeResult {

@@ -991,8 +991,10 @@ public struct WorkflowConfig: Codable, Hashable, Sendable {
             // Keep conversion safe for malformed hand-edited values; the
             // enclosing WorkflowConfig validation reports the range error.
             if let number, number.isFinite, number.rounded() == number,
-               number >= Double(Int.min), number <= Double(Int.max) {
-                maxDirectoryDepth = Int(number)
+               // Validate the business range before conversion; Double(Int.max)
+               // rounds up and is not a safe integer-conversion boundary.
+               (1...12).contains(number), let depth = Int(exactly: number) {
+                maxDirectoryDepth = depth
             } else {
                 maxDirectoryDepth = 0
             }

@@ -28,7 +28,7 @@ public actor ProjectTaskStore {
     }
 
     @discardableResult
-    public func saveTask(_ payload: Data, taskID explicitID: String? = nil) async throws -> String {
+    public func saveTask(_ payload: Data, taskID explicitID: String? = nil, replacingKeys: Set<String>? = nil) async throws -> String {
         try await bootstrap()
         var object = try PersistenceJSON.object(from: payload, errorCode: "TASK_INVALID")
         let suppliedID = explicitID ?? PersistenceJSON.string(object["id"])
@@ -41,7 +41,7 @@ public actor ProjectTaskStore {
         object["updatedAt"] = now
         let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
         // The database owner keeps the row and snapshot under one mutation lock.
-        try await database.saveTaskSnapshot(id, data: data, snapshotURL: snapshotURL(id), writer: writer)
+        try await database.saveTaskSnapshot(id, data: data, snapshotURL: snapshotURL(id), writer: writer, replacingKeys: replacingKeys)
         return id
     }
 
@@ -162,6 +162,14 @@ public actor ProjectTaskStore {
     private func performBootstrap() async throws {
         try SecureFilePermissions.prepareDirectory(at: tasksDirectory)
         try await SQLiteV1.bootstrapProject(database)
+        // Repair interrupted native writes before considering legacy files.
+        let intents = try FileManager.default.contentsOfDirectory(at: tasksDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasSuffix(".json.pending") }
+        for intent in intents {
+            let snapshot = intent.deletingPathExtension()
+            let id = try PersistenceIdentifiers.task(snapshot.deletingPathExtension().lastPathComponent)
+            try await database.recoverTaskSnapshot(id, snapshotURL: snapshot)
+        }
         try await importSnapshots()
     }
 

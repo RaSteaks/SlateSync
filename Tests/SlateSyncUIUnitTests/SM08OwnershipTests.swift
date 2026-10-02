@@ -609,7 +609,7 @@ final class SM08OwnershipTests: XCTestCase {
         for _ in 0..<20 { await Task.yield() }
         XCTAssertFalse(settingsDrained)
         await probeGate.release()
-        await probe.value
+        _ = await probe.value
         for _ in 0..<20 { await Task.yield() }
         XCTAssertFalse(settingsDrained, "drain must join the first explicit cancellation task")
         await providerCancelGate.release()
@@ -646,7 +646,7 @@ final class SM08OwnershipTests: XCTestCase {
             "a superseded cancellation must not recreate removed provider state"
         )
         await supersededProbeGate.release()
-        await supersededProbe.value
+        _ = await supersededProbe.value
 
         let installGate = SM08TestGate()
         let installerCancelGate = SM08TestGate()
@@ -1024,7 +1024,8 @@ private actor MutationBarrierProbe {
     }
 }
 
-private actor ProjectLibraryFake: ProjectLibraryWorkflowServing {
+// Explicit fixture capabilities match the production model constructors.
+private actor ProjectLibraryFake: ProjectLibraryWorkflowServing , ProjectContextWorkflowServing {
     nonisolated let projectSummary = ProjectSummary(
         id: "project-1",
         name: "片场 A",
@@ -1154,7 +1155,8 @@ private actor AutosaveProbe {
     }
 }
 
-private actor WorkspaceFake: WorkspaceWorkflowServing, LocalSlateWorkflowServing {
+// Explicit fixture capabilities match the production model constructors.
+private actor WorkspaceFake: WorkspaceWorkflowServing, LocalSlateWorkflowServing , ProjectContextWorkflowServing , ResolveExportWorkflowServing {
     let table: ResolveCSVTable
     private var saveFailuresRemaining: Int
     private let taskCount: Int

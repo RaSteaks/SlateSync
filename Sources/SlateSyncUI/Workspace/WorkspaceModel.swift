@@ -35,7 +35,7 @@ public final class WorkspaceModel {
         }
     }
 
-    private let service: any WorkspaceWorkflowServing
+    private let service: any WorkspaceWorkflowServing & ProjectContextWorkflowServing
     private let autosave: WorkspaceAutosave
     private var isPublishingSnapshot = false
     private var autosaveScheduleTask: Task<Void, Never>?
@@ -57,7 +57,7 @@ public final class WorkspaceModel {
         guard !isTransitioning else { throw transitionError }
     }
 
-    public init(service: any WorkspaceWorkflowServing) {
+    public init(service: any WorkspaceWorkflowServing & ProjectContextWorkflowServing) {
         self.service = service
         autosave = WorkspaceAutosave { projectID, taskID, snapshot in
             try await service.saveTask(projectID: projectID, taskID: taskID, task: snapshot)
@@ -111,11 +111,9 @@ public final class WorkspaceModel {
         if let candidate { task = try await service.loadTask(projectID: newProjectID, taskID: candidate) }
         else { task = nil }
         activationStage = L10n.tr("正在读取项目配置…")
-        let settings: ProjectSettings
-        if let library = service as? any ProjectLibraryWorkflowServing {
-            settings = try await library.project(id: newProjectID).settings
-        } else { settings = task?.projectSettingsSnapshot ?? .init() }
-        let availableScenarios = try await (service as? any LocalSlateWorkflowServing)?.listScenarios(projectID: newProjectID) ?? []
+        // Both context reads are required by the injected service contract.
+        let settings = try await service.project(id: newProjectID).settings
+        let availableScenarios = try await service.listScenarios(projectID: newProjectID)
         activationStage = L10n.tr("正在完成项目切换…")
         if let projectID, projectID != newProjectID {
             try await closeRuntimeProject(projectID)
