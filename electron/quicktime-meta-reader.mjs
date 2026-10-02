@@ -44,7 +44,24 @@ export async function readQuickTimeMoov(filePath, maxBytes = DEFAULT_MAX_MOOV_BY
           );
         }
         const moov = Buffer.alloc(size);
-        await handle.read(moov, 0, size, offset);
+        let totalRead = 0;
+        while (totalRead < size) {
+          const { bytesRead } = await handle.read(
+            moov,
+            totalRead,
+            size - totalRead,
+            offset + totalRead,
+          );
+          if (!bytesRead) break;
+          totalRead += bytesRead;
+        }
+        if (totalRead < size) {
+          // atom 头声明的长度超过文件实际内容：这是被截断的损坏文件，不能把
+          // 零填充缓冲当作有效 moov 交给解析器。报错文案同样不含路径。
+          throw new Error(
+            `的 moov 元数据不完整（文件可能在传输中被截断），已跳过内嵌元数据读取`,
+          );
+        }
         return moov;
       }
       offset += size;

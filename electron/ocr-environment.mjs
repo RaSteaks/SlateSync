@@ -186,7 +186,11 @@ export function createOcrEnvironmentProbe({
     const status = visionOcrPublicConfig(activeEnv, { autoEnable: false });
     const binaryPath = status.binaryPath || "";
     const binaryExists = Boolean(binaryPath) && Boolean(existsImpl(binaryPath));
-    const explicitBinary = Boolean(clean(env.VISIONOCR_BINARY));
+    // Read the pinned binary from the resolved runtime snapshot. The injected
+    // `env` may be a function (Main passes `() => runtimeEnv()`), so reading
+    // `env.VISIONOCR_BINARY` directly would always be undefined and the dialog
+    // could never classify the source as "explicit".
+    const explicitBinary = Boolean(clean(activeEnv.VISIONOCR_BINARY));
     const source = explicitBinary
       ? "explicit"
       : binaryExists

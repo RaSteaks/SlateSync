@@ -14,7 +14,10 @@ export async function loadLocalEnv(path) {
     throw error;
   }
 
-  for (const rawLine of contents.split(/\r?\n/)) {
+  // A UTF-8 BOM would otherwise attach itself to the first key name and make
+  // that override unmatchable; the workflow config loader strips it the same
+  // way.
+  for (const rawLine of contents.replace(/^\uFEFF/, "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     const separator = line.indexOf("=");

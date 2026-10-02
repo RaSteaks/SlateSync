@@ -263,9 +263,10 @@ export function registerIpcHandlers(ipcMain, context) {
       clearRegisteredModels("openai-compatible");
     }
     for (const key of Object.keys(runtimeGlobalConfig)) delete runtimeGlobalConfig[key];
-    const savedValues = saved?.values?.values && typeof saved.values.values === "object"
-      ? saved.values.values
-      : saved?.values || next;
+    // The store always returns the flat `{version, values, customProviders}`
+    // envelope; fall back to the candidate only for injected stores (tests)
+    // that resolve to nothing.
+    const savedValues = saved?.values || next;
     Object.assign(runtimeGlobalConfig, savedValues);
 
     // Keep the legacy first-run OCR wizard and the new global form pointed at
@@ -674,7 +675,8 @@ export function registerIpcHandlers(ipcMain, context) {
         apiKey,
         modelIds: requestedModelIds,
         signal: controller.signal,
-        fetchImpl: body.fetchImpl,
+        // The probe transport is injectable through the Main-side context for
+        // tests; renderer input must never be able to supply one.
         onProgress: (progress) => {
           if (typeof event?.sender?.send !== "function" || event.sender.isDestroyed?.()) return;
           const progressModel = String(progress?.model || "").trim();

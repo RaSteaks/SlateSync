@@ -343,6 +343,39 @@ describe("OCR environment probe", () => {
     }
   });
 
+  it("classifies an explicit Vision bridge as explicit when env resolves lazily", async () => {
+    // Main injects `env: () => runtimeEnv()` (a function), so the probe must
+    // read VISIONOCR_BINARY from the resolved snapshot, not from `env` itself.
+    const userDataPath = await createUserData();
+    const explicitBinary = join(userDataPath, "vision-ocr");
+    await writeFile(explicitBinary, "#!/bin/sh\n");
+    try {
+      const probe = createOcrEnvironmentProbe({
+        userDataPath,
+        env: () => ({
+          PATH: "/usr/bin:/bin",
+          VISIONOCR_BINARY: explicitBinary,
+        }),
+        platform: "darwin",
+        arch: "arm64",
+        spawnImpl: createFakeSpawn(pythonResponder({
+          python3: { stdout: "Python 3.12.4\n" },
+          swVers: { stdout: "15.5\n" },
+        })),
+        existsImpl: existsSync,
+        osRelease: () => "24.5.0",
+      });
+
+      const snapshot = await probe.snapshot();
+
+      assert.equal(snapshot.vision.source, "explicit");
+      assert.equal(snapshot.vision.binaryExists, true);
+      assert.equal(snapshot.vision.binaryPath, explicitBinary);
+    } finally {
+      await rm(userDataPath, { recursive: true, force: true });
+    }
+  });
+
   it("reports an unparseable banner instead of claiming Python is missing", async () => {
     const userDataPath = await createUserData();
     try {

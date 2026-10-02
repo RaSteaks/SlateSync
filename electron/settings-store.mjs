@@ -18,6 +18,10 @@ const DEFAULT_SETTINGS = Object.freeze({
 // permissions of key-store.mjs.
 export function createSettingsStore(userDataPath) {
   const filePath = join(userDataPath, "settings.json");
+  // Serialize saves so concurrent callers (global-settings form edit and the
+  // OCR wizard can both save) cannot race on the shared temporary path; the
+  // behavior mirrors key-store.mjs and global-config-store.mjs.
+  let pendingWrite = Promise.resolve();
 
   return {
     async load() {
@@ -30,15 +34,20 @@ export function createSettingsStore(userDataPath) {
     },
 
     async save(settings) {
-      await mkdir(userDataPath, { recursive: true });
       const data = { ...DEFAULT_SETTINGS, ...sanitizeSettings(settings) };
       const tempPath = `${filePath}.tmp`;
-      await writeFile(tempPath, JSON.stringify(data, null, 2), {
-        encoding: "utf8",
-        mode: 0o600,
+      // Keep the chain rejection-free: a failed save must not poison later
+      // saves, while each caller still receives its own outcome.
+      const operation = pendingWrite.then(async () => {
+        await mkdir(userDataPath, { recursive: true });
+        await writeFile(tempPath, JSON.stringify(data, null, 2), {
+          encoding: "utf8",
+          mode: 0o600,
+        });
+        await rename(tempPath, filePath);
       });
-      await rename(tempPath, filePath);
-      return data;
+      pendingWrite = operation.catch(() => {});
+      return operation.then(() => data);
     },
   };
 }

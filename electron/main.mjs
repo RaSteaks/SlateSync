@@ -470,8 +470,15 @@ async function createWindow() {
       event.preventDefault();
       return;
     }
-    const filePath = fileURLToPath(url);
-    if (!isWithinRoot(filePath, allowedRoot)) {
+    // fileURLToPath throws on malformed file URLs (for example a remote host
+    // component); an escaping exception would skip preventDefault and let the
+    // navigation proceed unguarded, so parse failures are blocked outright.
+    try {
+      const filePath = fileURLToPath(url);
+      if (!isWithinRoot(filePath, allowedRoot)) {
+        event.preventDefault();
+      }
+    } catch {
       event.preventDefault();
     }
   };
