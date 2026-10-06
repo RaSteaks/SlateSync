@@ -119,6 +119,20 @@ public struct AppRootView: View {
                 SlateStatusBar(message, tone: .success)
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // The app bundle owns the notice; render it verbatim in both
+            // languages. This outer inset keeps status actions above the footer.
+            if let notice = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
+                Text(verbatim: notice)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .accessibilityIdentifier("app.copyright")
+            }
+        }
         .onChange(of: recognition.operation) { _, newValue in
             guard case .succeeded = newValue,
                   let taskID = recognition.resultTaskID,

@@ -137,6 +137,11 @@ maps comfortable/compact to panel padding 20/12 pt, section spacing 16/12 pt,
 list vertical padding 7/3 pt and CSV row height 30/24 pt. Native controls also
 follow the same existing `density` preference.
 
+The primary window keeps its copyright notice centered at the bottom across
+all routes. `AppRootView` renders the app bundle's `NSHumanReadableCopyright`
+verbatim with native caption2 typography and secondary text color. A separate
+bottom safe-area inset reserves its space below recognition status and actions.
+
 The task rail is 210 pt and can be hidden independently. The workspace retains
 Input / Recognition Results / Resolve CSV tabs and a current-task heading.
 Input gives the evidence preview the remaining height, with a 300 pt recognition

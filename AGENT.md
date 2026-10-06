@@ -1,5 +1,11 @@
 # SlateSync 当前项目方案
 
+## 2026-10-06 主窗口版权底栏
+
+- 主窗口所有导航页底部居中显示应用包的 `NSHumanReadableCopyright`（当前为 `Copyright © 2026 朱煜天`）；原文显示，复用系统 caption2 和次要文字颜色。
+- 独立底部 safe-area inset 为版权文字保留空间，识别状态和操作位于其上方；同步代码注释和 `DESIGN.md`，不新增版权文案副本或主题 Token。
+- SwiftPM warnings-as-errors 构建、完整无窗口预检、本地化审计、Info.plist 校验及差异检查通过。构建缓存使用临时可写路径；未启动应用或前台 UI 验收。网页 strict 审计仍为既有 69 项，修改前后 findings 完全一致。
+
 ## 2026-10-02 Swift 架构审查修复
 
 - 项目库改名在新路径保存失败时按原始 URL 和名称回滚；生命周期错误携带 `requiresRestart`，UI 同步冻结所有窗口。新增真实 façade → 持久化 → UI → 重启回归，验证原项目仍可访问。
