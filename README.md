@@ -299,6 +299,7 @@ SlateSync 只更新匹配到的素材，不创建虚构行；原 CSV 的其他�
 | `HOST` / `PORT` | `127.0.0.1` / `4173` | Web 服务监听地址 |
 | `SLATESYNC_DATA_DIR` | `data` | API Key、任务和诊断数据目录 |
 | `SLATESYNC_CONFIG_PATH` | `slatesync.config.json` | 工作流配置文件路径 |
+| `SLATESYNC_JSON_SNAPSHOT` | `on` | SQLite 之外的 JSON 兼容快照开关，`off` 后保存不再写 JSON 副本 |
 | `MODEL_PAGE_CONCURRENCY` | `2` | 同时提交给模型的页数，范围 1–6 |
 | `MAX_CONCURRENT_RECOGNITIONS` | `1` | 同时运行的识别任务数 |
 | `PADDLEOCR_ENABLED` | `auto` | `auto`、`true` 或 `false` |
@@ -383,7 +384,7 @@ npm run ocr:check   # 检查 PaddleOCR 安装
 }
 ```
 
-可用工具包括配置与模型查询、API Key 保存、场记结构 Profile 查询、场记单识别、任务管理，以及诊断会话与 OCR 证据的检索（用于排查识别问题）。`recognize_slate` 的 `scenarioId` 可指定 Profile；省略时自动匹配并学习。
+可用工具包括配置与模型查询、API Key 保存、场记结构 Profile 查询、场记单识别、任务管理，以及诊断会话与 OCR 证据的检索（用于排查识别问题）。`recognize_slate` 的 `scenarioId` 可指定 Profile；省略时自动匹配并学习。与 Web 识别一致，MCP 的识别结果会保存为任务并出现在 `list_tasks` 中。
 
 Web API 也提供相同的 Profile 能力：`GET /api/scenarios`、`GET /api/scenarios/:id` 和 `POST /api/scenarios/import`。识别请求可选传 `scenarioId`。
 

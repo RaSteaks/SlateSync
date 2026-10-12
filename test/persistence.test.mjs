@@ -59,3 +59,69 @@ test("diagnostic sessions use owner-only files and validated IDs", async () => {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("listTasks projects summaries in SQL and honours limit and offset", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-tasks-"));
+  try {
+    const store = createTaskStore(dataDir);
+    const first = await store.saveTask({
+      filename: "day-01.pdf",
+      provider: "openai",
+      model: "openai/gpt-5.6-terra",
+      status: "completed",
+      result: { records: [{ id: "one" }, { id: "two" }, { id: "three" }] },
+    });
+    await delay(10);
+    const second = await store.saveTask({
+      filename: "day-02.pdf",
+      provider: "openrouter",
+      model: "openai/gpt-5.6-luna",
+      status: "edited",
+      editedRecords: [{ id: "one" }],
+    });
+
+    const all = await store.listTasks();
+    assert.deepEqual(all.map((task) => task.id), [second, first]);
+    assert.equal(all[0].recordCount, 1);
+    assert.equal(all[0].status, "edited");
+    assert.equal(all[0].filename, "day-02.pdf");
+    assert.equal(all[1].recordCount, 3);
+    assert.equal(all[1].model, "openai/gpt-5.6-terra");
+    assert.ok(all[1].createdAt);
+
+    const limited = await store.listTasks({ limit: 1 });
+    assert.deepEqual(limited.map((task) => task.id), [second]);
+
+    const offset = await store.listTasks({ limit: 1, offset: 1 });
+    assert.deepEqual(offset.map((task) => task.id), [first]);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("SLATESYNC_JSON_SNAPSHOT=off skips the JSON compatibility export", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "slatesync-tasks-"));
+  const previous = process.env.SLATESYNC_JSON_SNAPSHOT;
+  process.env.SLATESYNC_JSON_SNAPSHOT = "off";
+  try {
+    const store = createTaskStore(dataDir);
+    const id = await store.saveTask({
+      filename: "day-01.pdf",
+      status: "completed",
+    });
+    await assert.rejects(
+      () => stat(join(store.tasksDir, `${id}.json`)),
+      /ENOENT/,
+    );
+    assert.equal((await store.loadTask(id)).filename, "day-01.pdf");
+  } finally {
+    if (previous === undefined) delete process.env.SLATESYNC_JSON_SNAPSHOT;
+    else process.env.SLATESYNC_JSON_SNAPSHOT = previous;
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+

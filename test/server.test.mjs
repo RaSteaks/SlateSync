@@ -154,11 +154,63 @@ test("server exposes health endpoints and stops gracefully", async () => {
     );
     assert.match(await pageResponse.text(), /场记单识别与回填/);
 
+    // 静态文件带 ETag 协商与 gzip 压缩。
+    const etag = pageResponse.headers.get("etag");
+    assert.ok(etag);
+    const notModified = await fetch(baseUrl, {
+      headers: { Authorization: authorization, "If-None-Match": etag },
+    });
+    assert.equal(notModified.status, 304);
+
+    const gzippedPage = await rawRequest(baseUrl, "/", {
+      headers: { Authorization: authorization, "Accept-Encoding": "gzip" },
+    });
+    assert.equal(gzippedPage.status, 200);
+    assert.equal(gzippedPage.headers["content-encoding"], "gzip");
+
+    // DELETE 虽无请求体，但仍受同源防护约束。
+    const missingTaskResponse = await fetch(
+      `${baseUrl}/api/tasks/no-such-task`,
+      {
+        method: "DELETE",
+        headers: { Authorization: authorization },
+      },
+    );
+    assert.equal(missingTaskResponse.status, 404);
+
+    const crossSiteDelete = await fetch(`${baseUrl}/api/tasks/no-such-task`, {
+      method: "DELETE",
+      headers: {
+        Authorization: authorization,
+        Origin: "http://cross-site.example",
+      },
+    });
+    assert.equal(crossSiteDelete.status, 403);
+
+    // 路径参数做 URL 解码；解码后的非法标识符按客户端错误（400）处理。
+    const encodedTaskId = await fetch(`${baseUrl}/api/tasks/bad%20id`, {
+      headers: { Authorization: authorization },
+    });
+    assert.equal(encodedTaskId.status, 400);
+
+    // 超大上传仅凭 Content-Length 头即被 413 拒绝。
+    const oversizedResponse = await rawRequest(baseUrl, "/api/recognize", {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/json",
+        "Content-Length": String(81 * 1024 * 1024),
+      },
+    });
+    assert.equal(oversizedResponse.status, 413);
+
+    // 并发槽位在请求体上传完成后才占用：慢上传不得挤占识别容量。
     const slowRequest = http.request({
       host: "127.0.0.1",
       port,
       path: "/api/recognize",
       method: "POST",
+      agent: false,
       headers: {
         Authorization: authorization,
         "Content-Type": "application/json",
@@ -166,9 +218,11 @@ test("server exposes health endpoints and stops gracefully", async () => {
     });
     const slowResponse = responseResult(slowRequest);
     slowRequest.write('{"provider":');
-    await waitForActiveRecognitions(baseUrl, 1);
+    await delay(250);
+    const duringUpload = await (await fetch(`${baseUrl}/readyz`)).json();
+    assert.equal(duringUpload.activeRecognitions, 0);
 
-    const busyResponse = await fetch(`${baseUrl}/api/recognize`, {
+    const missingProviderResponse = await fetch(`${baseUrl}/api/recognize`, {
       method: "POST",
       headers: {
         Authorization: authorization,
@@ -176,8 +230,7 @@ test("server exposes health endpoints and stops gracefully", async () => {
       },
       body: "{}",
     });
-    assert.equal(busyResponse.status, 429);
-    assert.match((await busyResponse.json()).error, /正在处理 1 个识别任务/);
+    assert.equal(missingProviderResponse.status, 400);
 
     slowRequest.end("invalid}");
     assert.equal((await slowResponse).status, 400);
@@ -385,6 +438,29 @@ function waitForExit(child) {
 
 function basicAuthorization(username, password) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function rawRequest(baseUrl, path, { method = "GET", headers = {} } = {}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, baseUrl);
+    // agent: false 避免复用可能已被服务端在拒绝超大上传后销毁的 keep-alive 连接。
+    const request = http.request(
+      url,
+      { method, headers, agent: false },
+      (response) => {
+        response.resume();
+        response.once("end", () =>
+          resolve({ status: response.statusCode, headers: response.headers }),
+        );
+      },
+    );
+    request.once("error", reject);
+    request.end();
+  });
 }
 
 function responseResult(request) {

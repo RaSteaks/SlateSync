@@ -18,3 +18,4 @@ public/vendor/
 
 # Local assistant session exports may contain prompts and absolute machine paths.
 session-*.md
+.zcode/
