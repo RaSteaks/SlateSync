@@ -84,10 +84,10 @@ public struct ProjectLibraryView: View {
                 }
             }
             .padding(density.panelPadding)
-            // The fixed library summary is a single surface; the scrolling
-            // project list below stays native. The canvas-backed summary retains
-            // its hierarchy even when transparency is disabled.
-            .slateGlassSurface(.librarySummary, shape: .rectangle)
+            // The fixed library summary is docked chrome: a flat canvas strip
+            // with a bottom hairline; the scrolling project list below stays
+            // native.
+            .slateDockedSurface(.summary, separator: .bottom)
         }
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom) { errorBanner }
@@ -231,8 +231,13 @@ private struct ProjectRow: View {
             Text(L10n.tr("{0} 个任务", [String(describing: project.taskCount)]))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Image(systemName: archived ? "archivebox" : "chevron.right")
-                .font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+            // Archived rows already show the archive glyph on the leading tile
+            // and cannot be opened by double-click, so only active rows get the
+            // disclosure chevron.
+            if !archived {
+                Image(systemName: "chevron.right")
+                    .font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+            }
         }
         .padding(.vertical, density.rowPadding)
         // The identity stripe is reserved for projects, never repeated on tasks.
@@ -269,7 +274,7 @@ private struct CreateProjectSheet: View {
                     // Form renders its visible title as a sibling element.
                     .accessibilityLabel(L10n.tr("描述（可选）"))
             }
-            if let error = model.error { Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger) }
+            if let error = model.error { SlateInlineError(error.message) }
             HStack {
                 Spacer()
                 Button(L10n.tr("取消"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
@@ -300,7 +305,7 @@ private struct ProjectDeletionSheet: View {
             Text(L10n.tr("此操作不可撤销。请输入“{0}”以确认。", [String(describing: project.name)]))
             TextField(L10n.tr("项目名称"), text: $model.deletionConfirmation)
                 .accessibilityIdentifier("project.delete.confirmation")
-            if let error = model.error { Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger) }
+            if let error = model.error { SlateInlineError(error.message) }
             HStack {
                 Spacer()
                 Button(L10n.tr("取消"), role: .cancel) { dismiss() }

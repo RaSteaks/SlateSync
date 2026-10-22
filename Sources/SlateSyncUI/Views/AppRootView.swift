@@ -14,7 +14,6 @@ public struct AppRootView: View {
     @State private var unseenSectionsByTask: [String: Set<WorkspaceSection>] = [:]
     @State private var activeWorkspaceSection = WorkspaceSection.input
     @AppStorage("appearance") private var appearance = "system"
-    @AppStorage("density") private var density = "comfortable"
     @Bindable private var session: AppSessionModel
     @Bindable private var projects: ProjectLibraryModel
     private let workspace: WorkspaceModel
@@ -65,15 +64,16 @@ public struct AppRootView: View {
     public var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: routeBinding, currentProjectName: currentProjectName)
+                .sidebarResizeBoundary()
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
         } detail: {
             detail
+                // Keep native split motion at the column boundary; a second
+                // inherited animation makes every nested control lag behind.
+                .sidebarResizeBoundary()
         }
         .tint(SlateSyncTheme.accent)
         .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
-        .controlSize(density == "compact" ? .small : .regular)
-        // One scene-level preference drives native controls and content metrics.
-        .environment(\.slateSyncDensity, SlateSyncDensity(rawValue: density) ?? .comfortable)
         .safeAreaInset(edge: .top) { sessionError }
         .focusedSceneValue(\.slateSyncActions, focusedActions)
         .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning || session.openingProjectName != nil)
@@ -93,7 +93,11 @@ public struct AppRootView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if termination.restartRequired { Text(L10n.tr("项目库已更新，请退出并重新打开 SlateSync。")).padding(12) }
+            // Blocking restart notice uses the shared feedback surface like
+            // every other window-level message.
+            if termination.restartRequired {
+                SlateStatusBar(L10n.tr("项目库已更新，请退出并重新打开 SlateSync。"), tone: .warning)
+            }
             // Recognition remains window-owned across Library/Logs/Help routes.
             // Its status and recovery message must not disappear with a tab.
             if recognition.operation.isRunning {
@@ -117,20 +121,6 @@ public struct AppRootView: View {
                 }
             } else if case .succeeded(let message) = recognition.operation {
                 SlateStatusBar(message, tone: .success)
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            // The app bundle owns the notice; render it verbatim in both
-            // languages. This outer inset keeps status actions above the footer.
-            if let notice = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
-                Text(verbatim: notice)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .accessibilityIdentifier("app.copyright")
             }
         }
         .onChange(of: recognition.operation) { _, newValue in

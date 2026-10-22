@@ -160,11 +160,13 @@ def validate_source_boundaries():
     ui = '\n'.join(p.read_text() for p in ui_files)
     require(not re.search(r'URLSession|import SQLite3|import SlateSyncPersistence|Process\s*\(', ui), 'UI ownership violation')
     bridges = sorted(str(p.relative_to(ROOT)) for p in ui_files if re.search(r':\s*NSViewRepresentable', p.read_text()))
-    # The workbench adds only window-chrome and editor-boundary probes; neither
-    # owns a second data surface. Keep the allowlist exact for future bridges.
+    # Window/editor probes and the prepared-JPEG display are narrow AppKit
+    # boundaries. The image layer owns no media parsing or editor state; keep
+    # this allowlist exact so another bridge still requires explicit review.
     require(bridges == ['Sources/SlateSyncUI/App/WindowLifecycleBridge.swift',
                         'Sources/SlateSyncUI/CSV/EditableCSVTableRepresentable.swift',
                         'Sources/SlateSyncUI/Components/WindowMinimumSize.swift',
+                        'Sources/SlateSyncUI/Workspace/MediaPreviewView.swift',
                         'Sources/SlateSyncUI/Workspace/WorkspaceEditorBoundary.swift'], 'AppKit bridge allowlist drift')
     commands = read('Sources/SlateSyncUI/App/FocusedActions.swift')
     require('NSApp.keyWindow?.performClose(nil)' in commands, 'current-window close missing')

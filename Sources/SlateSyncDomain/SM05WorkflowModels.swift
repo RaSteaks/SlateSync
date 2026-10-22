@@ -118,8 +118,8 @@ public struct ResolveMergeResult: Codable, Hashable, Sendable {
     public let missingShootDayKeys: [String]
     public let sequenceAnomalies: [SlateSequenceAnomaly]
 
-    /// Record-level outcomes that prevented the merger from writing the
-    /// recognition fields. These are separate from informational audit
+    /// Record-level outcomes that prevent writing or still require review.
+    /// These are separate from informational audit
     /// warnings such as normalization or overwrite notices.
     public var unresolvedStatuses: [ResolveRecordStatus] {
         statuses.compactMap { status in
@@ -129,8 +129,23 @@ public struct ResolveMergeResult: Codable, Hashable, Sendable {
     }
 
     private static let unresolvedStatusValues: Set<String> = [
-        "missing-key", "incomplete", "conflict", "unmatched", "duplicate"
+        "missing-key", "incomplete", "conflict", "unmatched", "duplicate", "review-required"
     ]
+
+    /// Shared native/MCP review boundary. Unidentifiable source rows also need
+    /// attention even though they cannot appear in the material-key index.
+    public var reviewIssueCount: Int {
+        unrecognizedMaterials.count + missingCameraFPSKeys.count + missingShootDayKeys.count
+            + sequenceAnomalies.count + unresolvedStatuses.count + rowKeys.filter(\.isEmpty).count
+    }
+
+    /// Native and MCP exports use the same guard. Out-of-range overrides are
+    /// ignored by merging and therefore cannot manufacture export eligibility.
+    public func permitsExport(recordCount: Int, edits: [ResolveSparseEdit]) -> Bool {
+        recordCount > 0 && (matchedRecordCount > 0 || edits.contains {
+            table.rows.indices.contains($0.rowIndex) && table.headers.indices.contains($0.columnIndex)
+        })
+    }
 
     public init(
         table: ResolveCSVTable,

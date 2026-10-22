@@ -7,8 +7,8 @@ colors:
   canvas-dark: "#1E2229"
   evidence-light: "#FFFFFF"
   evidence-dark: "#2A2F37"
-  success: "#1E7A5A"
-  warning: "#7C6A00"
+  success: "#17694C"
+  warning: "#6B5B00"
   danger: "#B03A2E"
   success-dark: "#7FC9A9"
   warning-dark: "#E3C36B"
@@ -89,8 +89,10 @@ than stacked ornament.
 `SlateSyncTheme` owns the native runtime mapping of these semantic roles.
 Accent uses #B45309 in light appearance and #F59E0B in dark appearance;
 canvas uses #F6F7F9 / #1E2229 and evidence uses #FFFFFF / #2A2F37.
-Success uses pine green (#1E7A5A / #7FC9A9), warning uses brass
-(#7C6A00 / #E3C36B), and danger uses brick red (#B03A2E / #E58873).
+Success uses pine green (#17694C / #7FC9A9), warning uses brass
+(#6B5B00 / #E3C36B), and danger uses brick red (#B03A2E / #E58873). The light
+success and warning values were deepened on 2026-10-22 so status text keeps at
+least 4.5:1 on its own 12–14% tint (chips, reconciliation rows, badges).
 The amber accent is an action cue, never proof of success; status retains its
 label and symbol. Low saturation and cool-gray backgrounds establish the quiet
 visual hierarchy; warning sits about twenty degrees apart in hue from the
@@ -132,24 +134,45 @@ Dynamic Type metrics and accessibility sizes override fixed visual ambitions.
 Use `WindowGroup` with a stable `NavigationSplitView`: source-list sidebar,
 task-focused detail, and an inspector/supplementary column only where it reduces
 modal switching. Default window size is 1440×900 and minimum is 960×600.
-Comfortable and compact density share the same hierarchy. `SlateSyncDensity`
-maps comfortable/compact to panel padding 20/12 pt, section spacing 16/12 pt,
-list vertical padding 7/3 pt and CSV row height 30/24 pt. Native controls also
-follow the same existing `density` preference.
+There is one layout density (2026-10-22): the sidebar and Settings no longer
+offer a comfortable/compact choice. `SlateSyncDensity` stays as the internal
+metric table at its comfortable values — panel padding 20 pt, section spacing
+16 pt, list vertical padding 7 pt and CSV row height 30 pt — and nothing
+injects the compact metrics; native controls use the regular control size. A
+stale persisted `density` value is ignored.
 
-The primary window keeps its copyright notice centered at the bottom across
-all routes. `AppRootView` renders the app bundle's `NSHumanReadableCopyright`
-verbatim with native caption2 typography and secondary text color. A separate
-bottom safe-area inset reserves its space below recognition status and actions.
+The copyright notice lives only in the Settings window (2026-10-22): a centered,
+secondary-color caption below the settings content and any error bar, rendered
+verbatim from the app bundle's `NSHumanReadableCopyright`. The main window no
+longer shows it, so recognition status and actions own the bottom edge.
 
-The task rail is 210 pt and can be hidden independently. The workspace retains
-Input / Recognition Results / Resolve CSV tabs and a current-task heading.
-Input gives the evidence preview the remaining height, with a 300 pt recognition
-panel. At workspace detail widths below 900 pt the panel starts hidden and
-opens as an overlay; at wider widths it starts inline. Explicit user toggles
-are retained for the life of the workspace view. Advanced prompt settings are
-collapsed initially. Local slate CSV stays with input; metadata scanning belongs
-to Resolve CSV.
+The task rail is 210 pt and can be hidden independently. Its native list stays
+at 210 pt while one layout translates it and places the adjacent content over
+200 ms; Reduce Motion disables this animation. The list and its separator remain
+mounted and are clipped at the workspace edge. Both native navigation columns
+and task panes clear inherited animations so controls follow their container
+without separately interpolating stale frames.
+The workspace retains
+Input / Recognition Results / Resolve CSV tabs and a current-task heading. The
+heading is one compact row (about 64 pt): task name with live facts (pages ·
+records · status) on the left, the segmented section picker and the page's
+contextual control on the right; when the detail column cannot fit one row the
+picker row drops under the title. Input gives the evidence preview the remaining
+height, with a 300 pt recognition panel. At workspace detail widths below 900 pt
+the panel starts hidden; once visible it docks (the preview makes room) from
+700 pt and overlays the preview with a soft edge shadow below that. At 900 pt
+and above it starts docked. When provider or model is missing the status bar
+offers "Open recognition settings". Default visibility is resolved on the first
+input layout and retained, along with explicit toggles, for the life of the
+workspace view; resizing either sidebar never automatically opens or closes
+this second panel. Advanced prompt settings are collapsed initially.
+Local slate CSV stays with input; metadata scanning belongs to Resolve CSV.
+
+Input panel default/dock choices are derived from the detail column through
+`onGeometryChange` value types that change only at breakpoints. Original
+comparison placement is owned by `WorkspaceResultLayout`, which uses the exact
+proposed width without publishing geometry to workspace state. Neither sidebar
+feeds a per-frame or quantized width back into the workspace body.
 
 Results keep their table in one structural position. Optional original evidence
 uses up to 420 pt (40% at wide sizes), appears inline at 900 pt and above, and
@@ -159,7 +182,7 @@ existing autosave barriers before hiding content.
 
 Settings has a 780×620 default and a 700×540 minimum, with scrollable native forms
 and a native segmented selector for General / Provider / Recognition / OCR /
-Advanced. A single flexible content host avoids the fixed ideal size imposed by
+MCP / Advanced. A single flexible content host avoids the fixed ideal size imposed by
 the macOS 15 Settings TabView host.
 OCR environment diagnostics use native form rows with selectable path/version
 details, textual status and SF Symbols; success/warning/error reuse theme colors.
@@ -183,14 +206,25 @@ custom fills over a native sidebar.
 views choose semantic roles (`panel`, `control`, `prominent`, or `status`) rather
 than selecting materials independently. macOS 26 uses the system `glassEffect`
 renderer and grouped `GlassEffectContainer`; macOS 15–25 use `regularMaterial`
-or `thinMaterial` with the same Slate semantic fills and separator edges.
+or `thinMaterial` with the same Slate semantic fills and separator edges, plus
+a stand-in for the glass look built from public API only (2026-10-22): a soft
+top sheen and a 1 pt lit rim (bright upper-left, fading lower-right; a faint
+dark return edge in light appearance). The highlights sit behind content so
+they never lower text contrast, and are skipped under Increase Contrast and
+Reduce Transparency. Refraction and backdrop sampling cannot be reproduced
+before macOS 26, so the fallback does not attempt them.
 
 Native `NavigationSplitView`, sidebar, toolbar, Settings scenes, sheets and
 lists remain system-owned. Custom glass is reserved for bounded floating
-surfaces such as workspace configuration/progress panels, page summaries,
-search/filter strips and Provider status panels. The CSV `NSTableView`, Light
-Table evidence canvas, media canvas and dense log rows remain opaque/high
-contrast. Glass is never applied per row in a large scrolling collection.
+surfaces: recognition and project-opening progress cards, search/filter
+strips, status chips and the primary action. Docked, edge-to-edge chrome (the
+workspace heading bar, the recognition configuration panel, the library
+summary and `SlateStatusBar`) is flat and opaque (2026-10-22): the
+`slateDockedSurface` roles `header`/`panel` use the evidence surface,
+`summary` the canvas, and `status` the canvas with a 12% tone tint and a top
+hairline. The CSV `NSTableView`, Light Table evidence canvas, media canvas and
+dense log rows remain opaque/high contrast. Glass is never applied per row in
+a large scrolling collection.
 
 The helper keeps the macOS 15 deployment target through availability checks.
 Reduced Transparency uses an opaque semantic fill; macOS contrast and
@@ -205,6 +239,25 @@ panels use 12px. Pills are reserved for short status badges, never general
 buttons or containers.
 
 ## Components
+
+The MCP Settings category combines one-click preparation/startup and an offline
+guide in the existing grouped form scroller. Status stays first and distinguishes
+preparing/building, starting, running, stopping, stopped and errors. Automatic
+start remains opt-in. Directory grants are optional at startup and control file
+access only. Client buttons call the official Codex / Claude Code CLI and have
+separate pending/success/error feedback, preserving accurate broker status.
+Advanced source/launcher overrides share one typed native file importer with
+directory selection; multiple presenters must not be stacked on the same host.
+The app owns startup, build cancellation and Quit drain. Running configurations
+stay read-only; errors use SlateInlineError. Manual setup starts collapsed,
+retaining selectable examples and existing typography, theme and copy feedback.
+
+`WorkflowDiagnosticsSheet` is the shared complete-report surface for metadata
+scanning and CSV reconciliation. Inline summaries remain bounded; a native
+sheet contains a scrolling List with complete selectable messages and an
+Escape-enabled close action. It reuses system typography and existing density;
+no new palette, elevation, or layout identity is introduced. Reports remain
+available for overwrite notices even when there are no blocking diagnostics.
 
 `SlatePanelHeading`, `SlateSearchField`, `SlateEmptyState` and `SlateStatusBar`
 own repeated headings, local clearable search, empty guidance and feedback.
@@ -235,13 +288,15 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
 
 打开项目后，在整个窗口内容中央显示项目名称、当前加载阶段和原生不确定进度条。
 面板最大宽度 360 点，内边距 24 点，圆角复用 `SlateSyncTheme.panelRadius`（12 点），带细边框与轻阴影；覆盖层不改变底层列表布局。
-名称单行截断并提供完整提示；紧凑/舒适模式分别使用 12/20 pt 内边距。
+名称单行截断并提供完整提示；唯一布局使用 20 pt 内边距（原紧凑 / 舒适模式已于 2026-10-22 合并为一种）。
 加载期间禁用重复操作，成功和失败均移除进度；失败保留旧项目及现有错误恢复入口。
 状态只属于发起打开的窗口；进度不估算百分比，也不绕过编辑保存屏障。
 
 ### 运行性能约束（2026-09-11）
 
 预览缓存仅保留当前页图片，换页和素材替换时更新；进度、主题和布局刷新不得重复创建同一图片对象。
+预览通过窄 AppKit 显示桥接复用当前页位图图层；缩放只更新等比适配框和显式矩形阴影路径，
+不通过 GeometryReader 重建图片与阴影树。LightTable 保留原背景，图片层自行承担同一证据阴影。
 任务列表仅加载摘要，打开任务后才恢复完整编辑数据；视觉反馈不能提前提交项目/任务身份或跳过保存屏障。
 启动统计使用只读项目查询，识别本地处理复用标准化排序键；不以减少识别轮次、压缩精度或省略数据校验换取速度。
 
@@ -256,8 +311,9 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
 
 - 新版延续原生工作站配色，用项目身份与任务层级建立视觉区别；颜色仍由
   SlateSyncTheme 提供，不引入独立页面调色板。
-- SlatePageHeading 统一项目库和工作台页首：44 pt 语义图标区域、title2 半粗标题、
+- SlatePageHeading 用于项目库页首：44 pt 语义图标区域、title2 半粗标题、
   callout 辅助文字；面板仍用 SlatePanelHeading，避免所有区域同等强调。
+  （2026-10-22 起工作台页首改为单行紧凑头部，不再使用 SlatePageHeading。）
 - 项目库固定概览展示真实活跃/归档数量，下方原生 List 独立滚动与选择。
   行内保留项目识别线，加入 40 pt 图标底座和打开/归档提示符。
 - 侧栏显示 SlateSync 品牌与“场记整理工作台”，底部提供原生全局设置入口。
@@ -266,7 +322,8 @@ with stable columns, native selection, IME-safe editing and bounded scrolling.
   悬停提示，未打开项目时不显示占位文字，避免与下方导航项争夺层级。
 - 任务栏增加项目任务标题与总数，状态同时使用文字和 SF Symbols；搜索不改变总数含义。
 - 保留三段原生工作页、原稿对照、保存屏障、300 pt 配置面板与现有密度规则。
-  不新增动画，减少动态效果设置无需额外适配。
+  任务栏与内容区由同一布局完成 200 ms 收展，并遵循减少动态效果；两类侧栏的
+  子控件隔离继承动画且裁剪越界绘制，避免中间位置残留。
 
 侧栏左上角品牌图标采用运行中应用的 applicationIconImage，32×32 pt 原色等比显示；
 功能导航继续使用 SF Symbols。

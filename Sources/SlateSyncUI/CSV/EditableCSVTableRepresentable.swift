@@ -150,12 +150,19 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         context.coordinator.applyDensity()
         // AppKit controls must explicitly honor SwiftUI's shared mutation/
         // termination freeze. Preserve the field editor until flush consumes it.
-        let visible = tableView.rows(in: tableView.visibleRect)
-        let visibleRows = visible.location == NSNotFound ? 0..<0 : visible.location..<NSMaxRange(visible)
-        for row in visibleRows {
-            for column in tableView.tableColumns.indices {
-                (tableView.view(atColumn: column, row: row, makeIfNecessary: false) as? NSTextField)?.isEditable = isEnabled
+        // The sweep touches every visible cell (rows × columns) and SwiftUI calls
+        // this method on each layout-driven update — for example every frame of
+        // a sidebar collapse — so run it only when the freeze state flips. Cells
+        // created later (reload, scrolling) read `isEnabled` in viewFor.
+        if context.coordinator.appliedEnabled != isEnabled {
+            let visible = tableView.rows(in: tableView.visibleRect)
+            let visibleRows = visible.location == NSNotFound ? 0..<0 : visible.location..<NSMaxRange(visible)
+            for row in visibleRows {
+                for column in tableView.tableColumns.indices {
+                    (tableView.view(atColumn: column, row: row, makeIfNecessary: false) as? NSTextField)?.isEditable = isEnabled
+                }
             }
+            context.coordinator.appliedEnabled = isEnabled
         }
         if context.coordinator.headers != table.headers {
             context.coordinator.rebuildColumns(for: tableView)
@@ -195,6 +202,8 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         fileprivate weak var tableView: NSTableView?
         fileprivate var renderedRevision = -1
         fileprivate var renderedTableID: UUID?
+        /// Last editability pushed to the visible cells; nil until the first update.
+        fileprivate var appliedEnabled: Bool?
         fileprivate var headers: [String] = []
         fileprivate var timer: Task<Void, Never>?
         private weak var editingField: NSTextField?

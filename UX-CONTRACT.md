@@ -20,12 +20,39 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - When a project is acquired, the Current Project section header shows its
   saved name beside the localized label; closing the project removes the name.
 - Global settings open in the dedicated macOS Settings scene with `Cmd-,`.
+- The MCP category prepares/builds/starts the helper in one action and retains offline setup
+  instructions and the Model Services link. Automatic start is off initially;
+  enabling it starts now and on future app launches. Disabling it or quitting
+  stops the broker and all its client sessions. Closing Settings keeps it alive.
+  Manual Stop preserves the next-launch policy. Startup failure preserves inputs
+  and offers retry. Executable/grants/model consent persist immediately and are
+  editable only while stopped. Model requests require explicit opt-in.
+  Managed clients use a same-user Unix socket through a stdio bridge. Copy only
+  changes the clipboard and reports success/failure; it never edits a client.
+  Start is enabled without a selected executable or any directory grants. Source
+  discovery/build failure preserves the advanced override and offers retry; a
+  long build can be canceled. Empty grants deny file operations, not connection
+  or discovery. Unexpected helper exit updates service status and permits retry.
+  Explicit Add to Codex / Claude Code first starts if needed, then invokes the
+  official CLI for user-level registration. Codex updates only slatesync; Claude
+  preserves conflicting entries. Client feedback is independent of broker state.
+  Source, launcher and grant selection share one native importer presenter.
+  Direct client-owned stdio sessions remain independent of app lifecycle.
 - Project settings remain project-scoped and never replace machine settings.
 - Switching project/task flushes the single autosave writer before publishing
   the next projection. Failed flush keeps the user in the current context.
 - Workspace segments acknowledge selection synchronously while keeping the
   current editor mounted until saving succeeds. Repeated clicks during that
   save select the latest destination; failure restores the current segment.
+- Task-rail toggles retain the fixed-width list and editor, pass the existing
+  save barrier, and use one animated layout for the translated rail and adjacent
+  content; Reduce Motion disables that animation. Pane contents are clipped and
+  do not inherit either sidebar’s resize animation; controls never independently
+  animate stale frames into neighboring panes. Input configuration visibility is chosen on first layout
+  and retained across sidebar resizing, so one toggle never automatically
+  opens or closes another panel. Original comparison resizing preserves the
+  mounted result editor and current-page bitmap without publishing widths to
+  workspace state.
 
 ## Canonical operations
 
@@ -59,6 +86,18 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Destructive dialogs remain open while work is pending and after recoverable failure.
 
 ## Tables and files
+
+- Reconciliation preview remains available when every record is incomplete or
+  conflicting; export eligibility is checked separately by the shared workflow.
+- Material-identity cell edits participate in matching and metadata scanning.
+  Other explicit cell edits remain the final override.
+- CSV export has a busy state, rejects duplicate submissions, and joins the
+  existing task-switch/close cancellation barrier. A confirmation artifact
+  cannot be accepted for a different table.
+- Automatic corrections retain a review status at export. Editing a core field
+  acknowledges that field only; unresolved source identities also remain visible.
+- Full scan/merge diagnostics use `WorkflowDiagnosticsSheet`; inline truncation
+  must link to that report, never to logs that intentionally store counts only.
 
 - The CSV editor owns its internal scroll region; the surrounding workspace
   does not gain a second fixed-height scroller.
@@ -97,8 +136,11 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   styles. macOS 15–25 retain the same layout and behavior through material and
   semantic-color fallbacks; the package deployment target remains macOS 15.
 - Native sidebar, toolbar, Settings, Sheet, `List`, and `NSTableView` behavior
-  remains platform-owned. Custom glass is limited to bounded application
-  surfaces and is never applied per row in dense or 10,000-row collections.
+  remains platform-owned. Custom glass is limited to bounded floating surfaces
+  (progress cards, search/filter strips, status chips, primary action) and is
+  never applied per row in dense or 10,000-row collections. Docked chrome (workspace
+  heading, configuration panel, library summary, `SlateStatusBar`) uses the opaque
+  `slateDockedSurface` roles in `SlateGlass.swift` instead.
 - Adjacent custom surfaces share one glass container. No first-pass glass
   morphing IDs or new transitions may bypass the existing editor/save barrier.
 - Reduced Transparency switches custom surfaces to opaque Slate fills;
@@ -134,6 +176,14 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Credential badges retain capsule geometry; custom outlines appear only for accessibility modes.
 - Search owns its focus/separator outline; the configuration panel owns its full-opacity leading rule, avoiding duplicate helper borders.
 - The library summary uses a canvas-backed fallback, including reduced transparency, distinct from the evidence-surface list.
+
+### UI polish pass (2026-10-22)
+
+- Docked chrome is opaque (see the Liquid Glass contract above); the configuration panel is one surface whether docked (from 700 pt of detail width) or overlaid, so its field editors keep identity and IME drafts.
+- When provider/model is missing and the panel is closed, the status bar offers "Open recognition settings" (`workspace.configuration.open`); `workspace.configuration.toggle`/`close` and `workspace.original.toggle`/`close` are unchanged.
+- Inline failures in forms and sheets use `SlateInlineError` (symbol + text) so color is never the only signal; window-level feedback stays on `SlateStatusBar`.
+- Task rail glyphs: failed uses the danger color and processing the amber in-progress signal; text and other states stay neutral.
+- MCP settings fold the long setup guide behind a "设置指南" row (open while the launcher is not yet configured, collapsed afterwards).
 
 
 ## Model service setup and immediate role changes (2026-09-27)

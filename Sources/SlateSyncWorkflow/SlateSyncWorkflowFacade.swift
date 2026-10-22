@@ -243,6 +243,11 @@ public actor SlateSyncWorkflowFacade:
         return document
     }
 
+    /// Preview shares merge rules with export without applying its admission guard.
+    public func previewResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveMergeResult {
+        try await sm05.previewMerge(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
+    }
+
     public func mergeResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveExportArtifact {
         try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
     }
@@ -307,7 +312,7 @@ public actor SlateSyncWorkflowFacade:
     public func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
         let resolved = await runtime.resolveSettingsDraft(values)
         let resourcePaths = try OCRRuntimePaths(
-            resources: Self.paddleResources(), python: URL(fileURLWithPath: "/usr/bin/python3"),
+            resources: RecognitionMediaFactory.paddleResources(), python: URL(fileURLWithPath: "/usr/bin/python3"),
             workingDirectory: runtime.locator.url,
             modelCache: runtime.locator.url.appending(path: "paddle-models"), environment: [:])
         return try await OCREnvironmentChecker().check(
@@ -388,69 +393,18 @@ public actor SlateSyncWorkflowFacade:
         let client = ProviderRecognitionClient(transport: transport)
         let projectRuntime = try await library.projectRuntime()
         let values = snapshot.configuration.values
-        let visionProbe = VisionOCRService(configuration: VisionOCRConfiguration(values))
-        let visionAvailable = await visionProbe.isAvailable()
-        await visionProbe.close()
-        let paddlePaths = try Self.paddleRuntimePaths(runtime: runtime, values: values)
-        let paddleAvailable = paddlePaths.map { paths in
-            (try? paths.validate()) != nil
-        } ?? false
+        let mediaFactory = try await RecognitionMediaFactory.make(runtime: runtime, values: values)
         let workflowConfig = await runtime.workflowConfigProvider()
         let coordinator = RecognitionCoordinator(
             registry: registry,
             client: client,
-            mediaFactory: {
-                let vision = VisionOCRService(configuration: VisionOCRConfiguration(values))
-                let paddle = paddlePaths.map {
-                    PaddleOCRService(configuration: PaddleOCRConfiguration(values), paths: $0)
-                }
-                let local = LocalOCRService(
-                    vision: vision,
-                    paddle: paddle,
-                    settings: values,
-                    visionAvailable: visionAvailable,
-                    paddleAvailable: paddleAvailable
-                )
-                return MediaOCRWorkflow(ocr: local)
-            },
+            mediaFactory: mediaFactory,
             scenarioPersistence: projectRuntime,
             persistence: NativeRecognitionPersistence(runtime: projectRuntime),
             settings: values,
             workflowConfiguration: { try await workflowConfig.current() }
         )
         return coordinator
-    }
-
-    private nonisolated static func paddleRuntimePaths(
-        runtime: SlateSyncRuntime,
-        values: GlobalSettingValues
-    ) throws -> OCRRuntimePaths? {
-        let rawPython = values[.paddleOCRPython]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !rawPython.isEmpty else { return nil }
-        let root = runtime.locator.url
-        let work = root.appending(path: "paddle-runtime", directoryHint: .isDirectory)
-        let cache = root.appending(path: "paddle-models", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        return try OCRRuntimePaths(
-            resources: paddleResources(),
-            python: URL(fileURLWithPath: rawPython),
-            workingDirectory: work,
-            modelCache: cache,
-            environment: ProcessInfo.processInfo.environment
-        )
-    }
-
-    /// Diagnostics and inference must inspect the same bundled/development runner.
-    private nonisolated static func paddleResources() -> OCRRuntimePaths.Resources {
-        if let bundleRoot = Bundle.main.resourceURL?.appending(path: "PaddleOCR", directoryHint: .isDirectory),
-           FileManager.default.isReadableFile(atPath: bundleRoot.appending(path: "paddleocr_runner.py").path) {
-            // The folder reference preserves one canonical PaddleOCR subtree
-            // in the bundle; runtime/cache paths remain outside Resources.
-            return .bundle(bundleRoot)
-        } else {
-            return .development(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-        }
     }
 
     private func resetRecognition() async throws { await recognitionRuntime.reset() }

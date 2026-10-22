@@ -43,9 +43,9 @@ struct SlateStatusBar<Actions: View>: View {
         // Feedback follows panel density without reducing semantic type sizes.
         .padding(.horizontal, density.panelPadding).padding(.vertical, density.rowPadding + 3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The full-width status surface uses the shared material fallback on
-        // older systems and the native Liquid Glass renderer on macOS 26+.
-        .slateGlassSurface(.status(tone.slateGlassTone), shape: .rectangle)
+        // Full-width feedback is docked chrome: a flat, lightly tinted strip
+        // with a top hairline. Glass stays on floating elements.
+        .slateDockedSurface(.status(tone.slateGlassTone), separator: .top)
     }
 }
 
@@ -91,8 +91,24 @@ struct SlatePanelHeading: View {
     }
 }
 
-/// Page identity is deliberately stronger than a panel heading. Both library
-/// and workspace use this composition, while native controls retain focus.
+/// Inline failure text for forms and sheets. The symbol keeps the error
+/// readable without color (Differentiate Without Color); window-level
+/// feedback still belongs to SlateStatusBar.
+struct SlateInlineError: View {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var body: some View {
+        Label {
+            Text(L10n.message(message)).textSelection(.enabled)
+        } icon: {
+            Image(systemName: "exclamationmark.circle")
+        }
+        .foregroundStyle(SlateSyncTheme.danger)
+    }
+}
+
+/// Page identity is deliberately stronger than a panel heading. The library
+/// uses this composition, while native controls retain focus.
 struct SlatePageHeading: View {
     let title: String
     let subtitle: String

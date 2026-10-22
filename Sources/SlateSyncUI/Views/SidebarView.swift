@@ -5,10 +5,9 @@ import SwiftUI
 
 public struct SidebarView: View {
     @Environment(\.slateSyncDensity) private var density
-    // Same persisted keys as AppRootView/Settings; both owners observe the
+    // Same persisted key as AppRootView/Settings; both owners observe the
     // same defaults so a toggle here restyles the whole window immediately.
     @AppStorage("appearance") private var appearancePreference = "system"
-    @AppStorage("density") private var densityPreference = "comfortable"
     @Binding private var selection: SidebarDestination
     private let currentProjectName: String?
 
@@ -73,9 +72,10 @@ public struct SidebarView: View {
                 }
                 .buttonStyle(.borderless)
                 Spacer(minLength: 8)
-                // Persistent appearance/density toggles (design 2026-09-14):
-                // icon buttons with full labels, shortcuts to the same
-                // preference the Settings scene owns.
+                // Persistent appearance toggle (design 2026-09-14): an icon
+                // button with a full label, a shortcut to the same preference
+                // the Settings scene owns. There is a single layout density,
+                // so no density control exists.
                 Button(action: cycleAppearance) {
                     Image(systemName: appearanceSymbol)
                         .frame(width: 20)
@@ -84,17 +84,6 @@ public struct SidebarView: View {
                 .help(L10n.tr("外观：{0}", [String(describing: appearanceTitle)]))
                 .accessibilityLabel(L10n.tr("外观：{0}", [String(describing: appearanceTitle)]))
                 .accessibilityIdentifier("sidebar.appearance")
-                Button {
-                    densityPreference = densityPreference == "compact" ? "comfortable" : "compact"
-                } label: {
-                    Image(systemName: densityPreference == "compact"
-                        ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
-                        .frame(width: 20)
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.tr("界面密度：{0}", [String(describing: densityPreference == "compact" ? L10n.tr("紧凑") : L10n.tr("舒适"))]))
-                .accessibilityLabel(L10n.tr("界面密度：{0}", [String(describing: densityPreference == "compact" ? L10n.tr("紧凑") : L10n.tr("舒适"))]))
-                .accessibilityIdentifier("sidebar.density")
             }
             .padding(density.panelPadding)
         }
@@ -132,7 +121,7 @@ public struct SidebarView: View {
     private func sidebarRow(_ destination: SidebarDestination) -> some View {
         Label(destination.title, systemImage: destination.symbol)
             // Match task/project rhythm without replacing native selection.
-            .padding(.vertical, density == .compact ? 0 : 3)
+            .padding(.vertical, 3)
             .tag(destination)
             .accessibilityIdentifier("sidebar.\(destination.rawValue)")
     }

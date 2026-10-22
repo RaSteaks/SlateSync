@@ -5,14 +5,24 @@ extension View {
     /// Expresses the minimum in outer-window points, including native chrome.
     /// Measuring the owning window avoids baking one macOS toolbar height into
     /// layout, and keeps settings and document windows independent.
-    public func slateWindowMinimumSize(width: CGFloat, height: CGFloat) -> some View {
-        modifier(WindowMinimumSize(width: width, height: height))
+    ///
+    /// `restoresResizableStyle` is only for the Settings host, which keeps
+    /// stripping the resizable style mask: it re-checks on every window update.
+    /// Ordinary windows skip that observer — it fires continuously during
+    /// animations such as the sidebar collapse and would only add main-queue
+    /// work to every frame.
+    public func slateWindowMinimumSize(
+        width: CGFloat, height: CGFloat, restoresResizableStyle: Bool = false
+    ) -> some View {
+        modifier(WindowMinimumSize(
+            width: width, height: height, restoresResizableStyle: restoresResizableStyle))
     }
 }
 
 private struct WindowMinimumSize: ViewModifier {
     let width: CGFloat
     let height: CGFloat
+    let restoresResizableStyle: Bool
     @State private var chromeHeight: CGFloat = 0
 
     func body(content: Content) -> some View {
@@ -23,7 +33,7 @@ private struct WindowMinimumSize: ViewModifier {
                 minHeight: max(0, height - chromeHeight), maxHeight: .infinity
             )
             .background {
-                WindowChromeProbe { measuredHeight in
+                WindowChromeProbe(observesEveryUpdate: restoresResizableStyle) { measuredHeight in
                     if chromeHeight != measuredHeight { chromeHeight = measuredHeight }
                 }
                 .frame(width: 0, height: 0)
@@ -32,9 +42,11 @@ private struct WindowMinimumSize: ViewModifier {
 }
 
 private struct WindowChromeProbe: NSViewRepresentable {
+    let observesEveryUpdate: Bool
     let report: (CGFloat) -> Void
     func makeNSView(context: Context) -> Probe {
         let view = Probe()
+        view.observesEveryUpdate = observesEveryUpdate
         view.report = report
         return view
     }
@@ -45,6 +57,7 @@ private struct WindowChromeProbe: NSViewRepresentable {
 
     final class Probe: NSView {
         var report: ((CGFloat) -> Void)?
+        var observesEveryUpdate = false
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             let center = NotificationCenter.default
@@ -53,9 +66,13 @@ private struct WindowChromeProbe: NSViewRepresentable {
                 // macOS 15/26 的 Settings 宿主会在多个时机重设 styleMask 并剥掉
                 // resizable（含标题栏点击之后这类没有 key/main 变化的时刻）。
                 // didUpdate 随窗口每个事件触发，把补插延迟压到一个事件周期内，
-                // 拖拽前的任何交互都能先恢复可缩放状态。
-                center.addObserver(self, selector: #selector(windowRestyled),
-                                   name: NSWindow.didUpdateNotification, object: window)
+                // 拖拽前的任何交互都能先恢复可缩放状态。它在动画期间会逐帧触发，
+                // 因此只给确实需要的 Settings 窗口开启（见 observesEveryUpdate），
+                // 主窗口不订阅，避免侧栏折叠等动画的每一帧都多一次主队列任务。
+                if observesEveryUpdate {
+                    center.addObserver(self, selector: #selector(windowRestyled),
+                                       name: NSWindow.didUpdateNotification, object: window)
+                }
                 center.addObserver(self, selector: #selector(windowRestyled),
                                    name: NSWindow.didBecomeKeyNotification, object: window)
                 center.addObserver(self, selector: #selector(windowRestyled),

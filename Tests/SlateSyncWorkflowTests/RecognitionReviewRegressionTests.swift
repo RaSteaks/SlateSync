@@ -36,16 +36,16 @@ final class RecognitionReviewRegressionTests: XCTestCase {
         let audit = RecognitionSheet(records: [record(id: "a", card: "A001", clip: "C001", scene: "002", shot: "01", take: "01")])
         let merge = RecognitionPostprocessor.mergeHighAccuracy(primary, audit)
         XCTAssertEqual(merge.conflicts.count, 1)
-        // The third-pass review echoes the same card+clip twice. Old behavior
-        // (mergeHighAccuracy) warns and keeps the first; applyReview must not
-        // trap on duplicate dictionary keys and must apply only the first.
+        // Keep the first record identity, but conflicting duplicate readings
+        // cannot turn response ordering into a successful field adjudication.
         let review = RecognitionSheet(records: [
             record(id: "r1", card: "A001", clip: "C001", scene: "101", shot: "01", take: "01"),
             record(id: "r2", card: "A001", clip: "C001", scene: "202", shot: "01", take: "01"),
         ])
         let reviewed = RecognitionPostprocessor.applyReview(merge, review: review)
-        XCTAssertEqual(reviewed.records.first?.scene, "101")
-        XCTAssertTrue(reviewed.warnings.contains { $0.contains("重复") && $0.contains("保留第一条") }, "重复复核键应产生警告：\(reviewed.warnings)")
+        XCTAssertNil(reviewed.records.first?.scene)
+        XCTAssertTrue(reviewed.records.first?.reviewRequiredFields?.contains("scene") == true)
+        XCTAssertTrue(reviewed.warnings.contains { $0.contains("重复") && $0.contains("冲突") })
     }
 
     func testApplyReviewSkipsRecordsWithoutMaterialKeyAndWarns() {

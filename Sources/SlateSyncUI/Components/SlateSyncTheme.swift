@@ -15,8 +15,11 @@ public enum SlateSyncTheme {
     public static let primary = Color.primary
     public static let secondary = Color.secondary
     public static let separator = Color(nsColor: .separatorColor)
-    public static let success = adaptive(light: 0x1E7A5A, dark: 0x7FC9A9)
-    public static let warning = adaptive(light: 0x7C6A00, dark: 0xE3C36B)
+    // Light success/warning text also sits on its own 12–14% tint (chips,
+    // WarnRow, diagnostic badges); these values keep it above 4.5:1 there
+    // (success 5.05, warning 5.13). Dark values already clear 6:1.
+    public static let success = adaptive(light: 0x17694C, dark: 0x7FC9A9)
+    public static let warning = adaptive(light: 0x6B5B00, dark: 0xE3C36B)
     public static let danger = adaptive(light: 0xB03A2E, dark: 0xE58873)
     // DESIGN.md `rounded` ladder. Custom containers use `.continuous` corners;
     // feature views must not introduce local 7/9/10 pt radii (single-theme rule).
@@ -39,7 +42,11 @@ public enum SlateSyncTheme {
     }
 }
 
-/// Persisted preference values stay compatible with previous releases.
+/// Layout metrics. The app ships a single layout (`comfortable`) and exposes no
+/// density choice: nothing injects `.compact` into the environment any more, so
+/// the key's default applies everywhere. The compact metrics remain only as the
+/// table the native CSV table's density-change path and its regression test
+/// exercise. A stale "density" value in user defaults is simply ignored.
 public enum SlateSyncDensity: String, Sendable {
     case comfortable, compact
     public var panelPadding: CGFloat { self == .compact ? 12 : 20 }

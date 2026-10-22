@@ -4,16 +4,18 @@ import SwiftUI
 /// Semantic glass roles keep Liquid Glass decisions out of feature views.
 /// macOS 26 uses the system glass renderer; older systems retain the Slate
 /// material and contrast treatment without changing the deployment target.
+/// Glass is reserved for floating elements (progress cards, search/filter
+/// strips, status chips, the primary action); docked chrome such as header
+/// bars, side panels and status strips uses `slateDockedSurface` instead.
 enum SlateGlassRole {
     case panel
-    case librarySummary
     case control
     case prominent
     case status(SlateGlassTone)
 
     var cornerRadius: CGFloat {
         switch self {
-        case .panel, .librarySummary: SlateSyncTheme.panelRadius
+        case .panel: SlateSyncTheme.panelRadius
         case .control: SlateSyncTheme.controlRadius
         case .prominent: SlateSyncTheme.controlRadius
         case .status: SlateSyncTheme.smallRadius
@@ -30,7 +32,6 @@ enum SlateGlassRole {
     var fallbackFill: Color {
         switch self {
         case .panel: SlateSyncTheme.evidenceSurface.opacity(0.82)
-        case .librarySummary: SlateSyncTheme.canvas.opacity(0.82)
         case .control: SlateSyncTheme.canvas.opacity(0.78)
         case .prominent: SlateSyncTheme.accent.opacity(0.16)
         case .status(let tone): tone.color.opacity(0.14)
@@ -41,7 +42,7 @@ enum SlateGlassRole {
     /// transparency, preserving the semantic hierarchy without translucency.
     var reducedTransparencyFill: Color {
         switch self {
-        case .control, .librarySummary: SlateSyncTheme.canvas
+        case .control: SlateSyncTheme.canvas
         default: SlateSyncTheme.evidenceSurface
         }
     }
@@ -53,11 +54,23 @@ enum SlateGlassRole {
         }
     }
 
+    /// Strength of the top sheen on the pre-macOS 26 fallback. Small status
+    /// chips stay nearly flat; larger floating surfaces and the primary action
+    /// get a clearer light catch.
+    var fallbackSheenOpacity: Double {
+        switch self {
+        case .panel: 0.14
+        case .control: 0.10
+        case .prominent: 0.18
+        case .status: 0.08
+        }
+    }
+
     @available(macOS 26.0, *)
     func glass(interactive: Bool) -> Glass {
         var value: Glass
         switch self {
-        case .panel, .librarySummary:
+        case .panel:
             value = .regular
         case .control:
             value = .clear
@@ -124,6 +137,7 @@ private struct SlateGlassSurfaceModifier: ViewModifier {
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
 
     // AppKit posts changes on its workspace notification center. Store the
     // current value so toggling Increase Contrast invalidates mounted surfaces.
@@ -156,11 +170,47 @@ private struct SlateGlassSurfaceModifier: ViewModifier {
             .overlay { contrastBorder(shape) }
     }
 
+    // macOS 15–25 cannot sample or refract the content behind a surface, so the
+    // fallback imitates Liquid Glass with public API only: blurred material,
+    // the Slate tint, a top sheen and a lit rim. Stacking order, front to back:
+    // content, highlights, tint, material. The highlights sit behind the
+    // content so they never lower text contrast.
     private func materialSurface(content: Content, shape: AnyShape) -> some View {
         content
+            .background { glassHighlights(shape) }
             .background(role.fallbackFill, in: shape)
             .background(role.fallbackMaterial, in: shape)
             .overlay { contrastBorder(shape) }
+    }
+
+    /// Soft sheen from the top edge plus a 1 pt rim that is bright on the
+    /// upper-left and fades toward the lower-right, the way a glass edge catches
+    /// light. Light appearance adds a faint dark return edge so the rim still
+    /// reads over near-white canvas. Skipped under Increase Contrast, where the
+    /// plain border rules. Gradients fade through `white.opacity(0)` instead of
+    /// `.clear` to avoid a gray fringe while interpolating.
+    @ViewBuilder
+    private func glassHighlights(_ shape: AnyShape) -> some View {
+        if !increaseContrast {
+            let dark = colorScheme == .dark
+            let transparent = Color.white.opacity(0)
+            ZStack {
+                shape.fill(LinearGradient(
+                    colors: [.white.opacity(role.fallbackSheenOpacity * (dark ? 0.7 : 1)), transparent],
+                    startPoint: .top, endPoint: .center))
+                // A centered 2 pt stroke clipped to the shape leaves a 1 pt inner rim.
+                shape.stroke(
+                    LinearGradient(
+                        colors: dark
+                            ? [.white.opacity(0.30), transparent, .white.opacity(0.10)]
+                            : [.white.opacity(0.75), transparent, .black.opacity(0.07)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing),
+                    lineWidth: 2)
+            }
+            .clipShape(shape)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     @available(macOS 26.0, *)
@@ -237,6 +287,75 @@ private struct SlatePrimaryActionModifier: ViewModifier {
         } else {
             content.buttonStyle(.borderedProminent)
         }
+    }
+}
+
+// MARK: - Docked chrome
+
+/// Opaque roles for docked, edge-to-edge chrome. These sit in the content
+/// layer, so they stay flat and cheap: no material sampling, no shadow.
+/// Reduced Transparency and Increase Contrast need no special handling because
+/// the fills are already opaque theme tokens and the hairline uses the system
+/// separator color.
+enum SlateDockedRole {
+    /// Page heading bar above a work area.
+    case header
+    /// Side panel hosting live controls (evidence tone, like a sheet).
+    case panel
+    /// Overview strip above a native list (canvas tone).
+    case summary
+    /// Full-width feedback strip: canvas with a light tint of the tone.
+    case status(SlateGlassTone)
+}
+
+private struct SlateDockedSurfaceModifier: ViewModifier {
+    let role: SlateDockedRole
+    let separator: Edge?
+
+    func body(content: Content) -> some View {
+        content
+            .background { fill }
+            .overlay(alignment: alignment) {
+                if let separator {
+                    let horizontal = separator == .top || separator == .bottom
+                    Rectangle()
+                        .fill(SlateSyncTheme.separator)
+                        .frame(width: horizontal ? nil : 0.5, height: horizontal ? 0.5 : nil)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+
+    @ViewBuilder private var fill: some View {
+        switch role {
+        case .header, .panel:
+            SlateSyncTheme.evidenceSurface
+        case .summary:
+            SlateSyncTheme.canvas
+        case .status(let tone):
+            ZStack {
+                SlateSyncTheme.canvas
+                tone.color.opacity(0.12)
+            }
+        }
+    }
+
+    private var alignment: Alignment {
+        switch separator {
+        case .top: .top
+        case .bottom: .bottom
+        case .leading: .leading
+        case .trailing: .trailing
+        case nil: .center
+        }
+    }
+}
+
+extension View {
+    /// Flat opaque surface for docked chrome; `separator` draws a hairline on
+    /// the given edge (omit it when a Divider already draws that edge).
+    func slateDockedSurface(_ role: SlateDockedRole, separator: Edge? = nil) -> some View {
+        modifier(SlateDockedSurfaceModifier(role: role, separator: separator))
     }
 }
 

@@ -1,0 +1,57 @@
+name: Local MCP server
+
+on:
+  push:
+    branches: [swift-rewrite]
+  pull_request:
+    branches: [swift-rewrite]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-test:
+    name: MCP unit and stdio integration
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test optional Swift package
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --package-path MCP 2>&1 | tee "$RUNNER_TEMP/mcp-tests.log"
+          ./script/build_mcp.sh -Xswiftc -warnings-as-errors 2>&1 | tee "$RUNNER_TEMP/mcp-build.log"
+      - name: Verify real stdio protocol and export bytes
+        run: |
+          python3 -B script/tests/mcp_stdio_smoke.py \
+            --binary MCP/.build/release/slatesync-mcp \
+            --report "$RUNNER_TEMP/mcp-stdio.json"
+          # The same tool/export assertions must pass through app-managed
+          # sessions, including duplicate-start rejection and Quit/EOF drain.
+          python3 -B script/tests/mcp_stdio_smoke.py \
+            --binary MCP/.build/release/slatesync-mcp --managed \
+            --report "$RUNNER_TEMP/mcp-managed.json"
+          # Startup is independent of grants; discovery works and file access
+          # remains denied in both direct and app-managed sessions.
+          python3 -B script/tests/mcp_stdio_smoke.py \
+            --binary MCP/.build/release/slatesync-mcp --no-grants \
+            --report "$RUNNER_TEMP/mcp-no-grants.json"
+          python3 -B script/tests/mcp_stdio_smoke.py \
+            --binary MCP/.build/release/slatesync-mcp --managed --no-grants \
+            --report "$RUNNER_TEMP/mcp-managed-no-grants.json"
+      - name: Preserve MCP evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-verification
+          path: |
+            ${{ runner.temp }}/mcp-tests.log
+            ${{ runner.temp }}/mcp-build.log
+            ${{ runner.temp }}/mcp-stdio.json
+            ${{ runner.temp }}/mcp-managed.json
+            ${{ runner.temp }}/mcp-no-grants.json
+            ${{ runner.temp }}/mcp-managed-no-grants.json

@@ -235,8 +235,6 @@ final class SlateSyncUITests: XCTestCase {
                 app.radioButtons[english ? "General" : "通用"].click()
                 app.popUpButtons["settings.appearance"].firstMatch.click()
                 app.menuItems[english ? (dark ? "Dark" : "Light") : (dark ? "深色" : "浅色")].click()
-                app.popUpButtons["settings.density"].firstMatch.click()
-                app.menuItems[english ? (dark ? "Compact" : "Comfortable") : (dark ? "紧凑" : "舒适")].click()
                 // Match the established Settings resize test: focus native chrome before edge drags.
                 app.activate()
                 // Activation can front the project window; the Settings command raises the target explicitly.
@@ -667,6 +665,47 @@ final class SlateSyncUITests: XCTestCase {
         return settingsWindow
     }
 
+    /// Remote macOS runner only: opening successive pickers catches the native
+    /// presenter collision that model tests cannot observe. No helper is launched.
+    @MainActor
+    func testMCPPickerRoutesAndDirectoryFreeStartAvailability() throws {
+        let launcher = testRoot.appending(path: "helper.sh")
+        try Data("#!/bin/zsh\nexit 0\n".utf8).write(to: launcher)
+        let app = launchIsolatedApp()
+        let settings = openSettingsWindow(app)
+        let category = settings.radioButtons["MCP"].firstMatch
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
+        category.click()
+        let start = settings.buttons["settings.mcp.start"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        XCTAssertTrue(start.isEnabled, "Neither launcher selection nor directory grants gate one-click start")
+        XCTAssertTrue(settings.buttons["settings.mcp.add.codex"].firstMatch.isEnabled)
+        XCTAssertTrue(settings.buttons["settings.mcp.add.claudeCode"].firstMatch.isEnabled)
+
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<14 {
+                if element.exists && element.isHittable { return }
+                settings.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -160)
+            }
+            XCTAssertTrue(element.isHittable)
+        }
+        let advanced = settings.staticTexts["高级设置"].firstMatch
+        reveal(advanced)
+        advanced.click()
+        let chooseExecutable = settings.buttons["settings.mcp.executable.choose"].firstMatch
+        reveal(chooseExecutable)
+        chooseExecutable.click()
+        choosePanelPath(launcher.path, operation: .openFile, app: app)
+        XCTAssertEqual(settings.textFields["settings.mcp.executable"].firstMatch.value as? String, launcher.path)
+        let chooseSource = settings.buttons["settings.mcp.source.choose"].firstMatch
+        reveal(chooseSource)
+        chooseSource.click()
+        // Folder selection uses the same NSOpenPanel as executable selection.
+        choosePanelPath(testRoot.path, operation: .openFile, app: app)
+        XCTAssertEqual(settings.textFields["settings.mcp.executable"].firstMatch.value as? String, "")
+        attachReview("MCP source picker selected and launcher reset", app: app)
+    }
+
     @MainActor
     func testIndependentWindowsAndNewWindowAfterClosingLastWindow() {
         let app = launchIsolatedApp()
@@ -957,48 +996,46 @@ final class SlateSyncUITests: XCTestCase {
         choosePanelPath(mediaURL.path, operation: .openFile, app: app)
         XCTAssertTrue(app.buttons["workspace.preview.enlarge"].waitForExistence(timeout: 10))
 
+        // The layout density choice was removed (one layout ships); the name
+        // stays because the packaged UI contract lists this test by name.
         let main = app.windows.firstMatch
         for appearance in ["浅色", "深色"] {
-            for density in ["舒适", "紧凑"] {
-                app.typeKey(",", modifierFlags: .command)
-                let appearancePicker = app.popUpButtons["settings.appearance"].firstMatch
-                XCTAssertTrue(appearancePicker.waitForExistence(timeout: 5))
-                appearancePicker.click()
-                app.menuItems[appearance].click()
-                app.popUpButtons["settings.density"].firstMatch.click()
-                app.menuItems[density].click()
-                attachReview("设置-\(appearance)-\(density)", app: app)
-                app.typeKey("w", modifierFlags: .command)
-                waitForWindowCount(1, app: app)
-                for size in [CGSize(width: 1440, height: 900), CGSize(width: 960, height: 600)] {
-                    resize(main, to: size)
-                    // Window resizing can leave another desktop app in front;
-                    // restore activation before checking physical hit targets.
-                    app.activate()
-                    let name = "\(appearance)-\(density)-\(Int(size.width))x\(Int(size.height))"
-                    attachReview("输入-\(name)", app: app)
-                    let config = app.buttons["workspace.configuration.toggle"].firstMatch
-                    XCTAssertTrue(config.isHittable)
-                    config.click()
-                    attachReview("配置-\(name)", app: app)
-                    if app.buttons["workspace.configuration.close"].firstMatch.exists
-                        && app.buttons["workspace.configuration.close"].firstMatch.isHittable
-                    {
-                        app.buttons["workspace.configuration.close"].firstMatch.click()
-                    }
-                    app.radioButtons["识别结果"].firstMatch.click()
-                    let toggle = app.descendants(matching: .any).matching(identifier: "workspace.original.toggle")
-                        .firstMatch
-                    XCTAssertTrue(toggle.waitForExistence(timeout: 5))
-                    toggle.click()
-                    XCTAssertTrue(app.buttons["workspace.original.close"].waitForExistence(timeout: 5))
-                    attachReview("原稿对照-\(name)", app: app)
-                    app.buttons["workspace.original.close"].click()
-                    app.radioButtons["Resolve CSV"].firstMatch.click()
-                    XCTAssertTrue(app.buttons["导入 CSV…"].firstMatch.isHittable)
-                    attachReview("CSV-\(name)", app: app)
-                    app.radioButtons["输入"].firstMatch.click()
+            app.typeKey(",", modifierFlags: .command)
+            let appearancePicker = app.popUpButtons["settings.appearance"].firstMatch
+            XCTAssertTrue(appearancePicker.waitForExistence(timeout: 5))
+            appearancePicker.click()
+            app.menuItems[appearance].click()
+            attachReview("设置-\(appearance)", app: app)
+            app.typeKey("w", modifierFlags: .command)
+            waitForWindowCount(1, app: app)
+            for size in [CGSize(width: 1440, height: 900), CGSize(width: 960, height: 600)] {
+                resize(main, to: size)
+                // Window resizing can leave another desktop app in front;
+                // restore activation before checking physical hit targets.
+                app.activate()
+                let name = "\(appearance)-\(Int(size.width))x\(Int(size.height))"
+                attachReview("输入-\(name)", app: app)
+                let config = app.buttons["workspace.configuration.toggle"].firstMatch
+                XCTAssertTrue(config.isHittable)
+                config.click()
+                attachReview("配置-\(name)", app: app)
+                if app.buttons["workspace.configuration.close"].firstMatch.exists
+                    && app.buttons["workspace.configuration.close"].firstMatch.isHittable
+                {
+                    app.buttons["workspace.configuration.close"].firstMatch.click()
                 }
+                app.radioButtons["识别结果"].firstMatch.click()
+                let toggle = app.descendants(matching: .any).matching(identifier: "workspace.original.toggle")
+                    .firstMatch
+                XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+                toggle.click()
+                XCTAssertTrue(app.buttons["workspace.original.close"].waitForExistence(timeout: 5))
+                attachReview("原稿对照-\(name)", app: app)
+                app.buttons["workspace.original.close"].click()
+                app.radioButtons["Resolve CSV"].firstMatch.click()
+                XCTAssertTrue(app.buttons["导入 CSV…"].firstMatch.isHittable)
+                attachReview("CSV-\(name)", app: app)
+                app.radioButtons["输入"].firstMatch.click()
             }
         }
         // Local filtering must not change the selected task or its prepared media.

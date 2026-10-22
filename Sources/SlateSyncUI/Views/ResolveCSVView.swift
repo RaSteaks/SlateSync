@@ -13,6 +13,8 @@ public struct ResolveCSVView: View {
     @State private var requestsExport = false
     @State private var exportDocument = CSVDocument(data: Data())
     @State private var pendingExportData: Data?
+    @State private var pendingExportTableID: UUID?
+    @State private var diagnosticReport: WorkflowDiagnosticReport?
     @State private var exportDefaultName = "Resolve.csv"
     private let recognition: RecognitionModel?
     private let workspace: WorkspaceModel?
@@ -85,7 +87,13 @@ public struct ResolveCSVView: View {
         .safeAreaInset(edge: .bottom) {
             // Import, encode and save-panel failures retain the table and a
             // visible recovery message; cancellation never reports success.
-            if case .failed(let error) = model.operation {
+            if case .running(let label) = model.operation {
+                // Export/merge share visible progress and the same awaited
+                // cancellation path used by task switches and window close.
+                SlateStatusBar(message: label, busy: true) {
+                    Button(L10n.tr("取消")) { Task { await model.drain() } }
+                }
+            } else if case .failed(let error) = model.operation {
                 SlateStatusBar(message: error.message, tone: .error) {
                     // Keep recovery with the failed table. Users can retry an
                     // export or replace the source without dismissing errors.
@@ -127,17 +135,22 @@ public struct ResolveCSVView: View {
         } message: {
             Text(L10n.tr("当前合并结果包含 {0} 项告警，导出文件会保留这些行的当前值。", [String(describing: unresolvedCount)]))
         }
+        .sheet(item: $diagnosticReport) { WorkflowDiagnosticsSheet(report: $0) }
+        .onChange(of: model.tableID) { _, _ in
+            // Confirmation artifacts belong to the original table, never the
+            // task selected while an async merge or save panel was pending.
+            pendingExportData = nil
+            pendingExportTableID = nil
+            requestsExport = false
+            diagnosticReport = nil
+        }
     }
 
     // MARK: Reconciliation diagnostics
 
     private var unresolvedCount: Int {
         guard let diagnostics = model.lastMergeDiagnostics else { return 0 }
-        return diagnostics.unrecognizedMaterials.count
-            + diagnostics.missingCameraFPSKeys.count
-            + diagnostics.missingShootDayKeys.count
-            + diagnostics.sequenceAnomalies.count
-            + diagnostics.unresolvedStatuses.count
+        return diagnostics.reviewIssueCount
     }
 
     /// Merge-time reconciliation badges. They only summarize; the canonical
@@ -162,7 +175,7 @@ public struct ResolveCSVView: View {
                 }
                 if !diagnostics.unresolvedStatuses.isEmpty {
                     diagnosticBadge(
-                        L10n.tr("未写入记录 {0}", [String(describing: diagnostics.unresolvedStatuses.count)]), symbol: "nosign")
+                        L10n.tr("待核对记录 {0}", [String(describing: diagnostics.unresolvedStatuses.count)]), symbol: "exclamationmark.circle")
                 }
             }
             Spacer(minLength: 8)
@@ -198,8 +211,14 @@ public struct ResolveCSVView: View {
                 }
             }
             if rows.count > visible.count {
-                Text(L10n.tr("其余 {0} 项见日志。", [String(describing: rows.count - visible.count)]))
-                    .font(.caption).foregroundStyle(.secondary)
+                Button(L10n.tr("查看全部 {0} 项", [String(rows.count)])) {
+                    diagnosticReport = WorkflowDiagnosticReport(title: L10n.tr("回填对账详情"), messages: rows.map(\.message))
+                }.font(.caption)
+            }
+            if !diagnostics.warnings.isEmpty {
+                Button(L10n.tr("查看完整合并报告")) {
+                    diagnosticReport = WorkflowDiagnosticReport(title: L10n.tr("完整合并报告"), messages: diagnostics.warnings.map { L10n.message($0) })
+                }.font(.caption)
             }
             Text(L10n.tr("在识别结果中修正后重新合并；手动编辑会保留。"))
                 .font(.caption).foregroundStyle(.secondary)
@@ -223,6 +242,8 @@ public struct ResolveCSVView: View {
                 message = L10n.tr("{0} 未匹配到 Resolve CSV 行，未写入", [String(describing: subject)])
             case "duplicate":
                 message = L10n.tr("{0} 是重复识别记录，未写入", [String(describing: subject)])
+            case "review-required":
+                message = L10n.tr("{0} 包含自动修正字段，已回填但仍需核对", [subject])
             default:
                 message = L10n.tr("{0} 的识别结果未写入 CSV", [String(describing: subject)])
             }
@@ -255,19 +276,25 @@ public struct ResolveCSVView: View {
                 message: anomaly.message,
                 symbol: "exclamationmark.arrow.triangle")
         }
-        return statusRows + materialRows + fpsRows + dayRows + sequenceRows
+        let unidentified = diagnostics.rowKeys.enumerated().filter { $0.element.isEmpty }.map { row in
+            DiagnosticRow(id: "identity-\(row.offset)",
+                message: L10n.tr("CSV 第 {0} 行的素材标识无法确认，未自动回填", [String(row.offset + 2)]), symbol: "questionmark.circle")
+        }
+        return statusRows + materialRows + fpsRows + dayRows + sequenceRows + unidentified
     }
 
     private func performExport() {
+        let identity = model.tableID
         Task {
             do {
                 pendingExportData = nil
                 let data: Data
                 if let recognition, let workspace {
                     try await workspace.flush()
+                    guard identity == model.tableID else { return }
                     // Canonical merged export: re-merge from the raw
                     // table with the latest records, apply manual
-                    // edits last, canonicalize the whole table.
+                    // field edits last, preserving every unrelated source cell.
                     // Old naming: <baseName(metadataFile)>_场记已回填.csv.
                     exportDefaultName = ResolveCSVModel.suggestedFilename(
                         model.filename, fallback: "Resolve", suffix: L10n.tr("场记已回填"))
@@ -279,26 +306,30 @@ public struct ResolveCSVView: View {
                     exportDefaultName = model.filename ?? "Resolve.csv"
                     data = try await model.encodedData()
                 }
+                guard identity == model.tableID else { return }
                 // The guard runs after the same merge that produced these
                 // bytes. Cache that artifact for confirmation so accepting the
                 // dialog cannot re-merge against a changed diagnostic state.
                 if unresolvedCount > 0 {
                     pendingExportData = data
+                    pendingExportTableID = identity
                     requestsExport = true
                 } else {
                     beginFileExport(data)
                 }
-            } catch { model.report(error) }
+            } catch is CancellationError { }
+            catch { if identity == model.tableID { model.report(error) } }
         }
     }
 
     private func confirmPendingExport() {
-        guard let data = pendingExportData else { return }
+        guard pendingExportTableID == model.tableID, let data = pendingExportData else { return }
         beginFileExport(data)
     }
 
     private func beginFileExport(_ data: Data) {
         pendingExportData = nil
+        pendingExportTableID = nil
         exportDocument = CSVDocument(data: data)
         exportsCSV = true
     }
@@ -326,6 +357,14 @@ public struct ResolveCSVView: View {
                 }
             }.disabled(
                 model.table == nil || recognition.resolveRecords.isEmpty || model.operation.isRunning)
+            if let diagnostics = model.lastMergeDiagnostics, !diagnostics.warnings.isEmpty {
+                // Overwrite/normalization notes remain reachable even when no
+                // unresolved-status badge is needed.
+                Button(L10n.tr("查看合并报告")) {
+                    diagnosticReport = WorkflowDiagnosticReport(title: L10n.tr("完整合并报告"),
+                        messages: diagnostics.warnings.map { L10n.message($0) })
+                }
+            }
         }
     }
 

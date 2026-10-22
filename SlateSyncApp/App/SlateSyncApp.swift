@@ -17,6 +17,7 @@ struct SlateSyncApp: App {
     @State private var settingsNavigation: SettingsNavigationModel
     @State private var paddleInstaller: PaddleInstallerModel
     @State private var termination: TerminationCoordinator
+    @State private var mcpService: MCPSettingsModel
     private let projectOwnership = ProjectWindowOwnership()
     private let preferences: UserDefaults
 
@@ -106,6 +107,12 @@ struct SlateSyncApp: App {
         _settingsNavigation = State(initialValue: SettingsNavigationModel())
         _paddleInstaller = State(initialValue: PaddleInstallerModel(service: workflow))
         _termination = State(initialValue: TerminationCoordinator(lifecycle: workflow))
+        // One owner for every window and Settings. UI fixtures never launch
+        // external helpers, and the optional SDK remains outside the app build.
+        _mcpService = State(initialValue: MCPSettingsModel(
+            service: MCPServiceLifecycle(settingsDirectory: locator.url,
+                allowsLaunching: !isolated && ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil),
+            preferences: preferences, socketPath: MCPServiceLifecycle.socketPath))
     }
 
     var body: some Scene {
@@ -125,10 +132,12 @@ struct SlateSyncApp: App {
                 .slateWindowMinimumSize(width: 960, height: 600)
                 .task {
                     appDelegate.termination = termination
-                    termination.applicationDrain = { [globalSettings, paddleInstaller] in
+                    termination.applicationDrain = { [globalSettings, paddleInstaller, mcpService] in
+                        await mcpService.drain()
                         await globalSettings.drain()
                         await paddleInstaller.drain()
                     }
+                    mcpService.activate()
                 }
         }
         .defaultSize(width: 1440, height: 900)
@@ -139,7 +148,8 @@ struct SlateSyncApp: App {
                 settings: globalSettings,
                 paddleInstaller: paddleInstaller,
                 navigation: settingsNavigation,
-                preferences: preferences
+                preferences: preferences,
+                mcpService: mcpService
             )
                 .defaultAppStorage(preferences)
                 .environment(\.locale, L10n.language.locale)

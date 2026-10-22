@@ -116,7 +116,14 @@ private struct TaskRailRow: View, Equatable {
                 .lineLimit(1).help(task.filename ?? L10n.tr("未命名任务"))
             HStack {
                 // Symbol and text carry status together, including without color.
-                Label(statusTitle, systemImage: statusSymbol)
+                // Only the glyph is tinted: failure reads as danger and live
+                // processing as the amber in-progress signal; the text and every
+                // other state stay neutral.
+                Label {
+                    Text(statusTitle)
+                } icon: {
+                    Image(systemName: statusSymbol).foregroundStyle(statusSymbolStyle)
+                }
                 Spacer()
                 Text(L10n.tr("{0} 条", [String(describing: task.recordCount)]))
             }
@@ -134,16 +141,28 @@ private struct TaskRailRow: View, Equatable {
         default: "doc"
         }
     }
-    // Translate display text only; persisted status values remain untouched.
-    private var statusTitle: String {
+    private var statusSymbolStyle: Color {
         switch task.status {
+        case "failed": SlateSyncTheme.danger
+        case "processing": SlateSyncTheme.accent
+        default: SlateSyncTheme.secondary
+        }
+    }
+    private var statusTitle: String { task.statusTitle }
+
+}
+
+extension TaskListItem {
+    /// Translate display text only; persisted status values remain untouched.
+    /// Shared by the task rail rows and the workspace header facts.
+    var statusTitle: String {
+        switch status {
         case "draft": L10n.tr("待处理")
         case "completed": L10n.tr("已完成")
         case "processing": L10n.tr("处理中")
         case "failed": L10n.tr("失败")
         case "cancelled": L10n.tr("已取消")
-        default: task.status
+        default: status
         }
     }
-
 }

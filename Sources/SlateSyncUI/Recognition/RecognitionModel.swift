@@ -20,7 +20,7 @@ struct EditableRecognitionRecord: Identifiable, Hashable, Sendable {
     let shotSize: String?
     let cameraPosition: String?
     let confidence: RecognitionConfidence?
-    let reviewRequiredFields: [String]?
+    var reviewRequiredFields: [String]?
 
     init(_ value: RecognitionRecord) {
         id = value.id; sourcePage = value.sourcePage; cardNumber = value.cardNumber ?? ""
@@ -387,6 +387,14 @@ public final class RecognitionModel {
     ) {
         guard let index = editableRecords.firstIndex(where: { $0.id == recordID }) else { return }
         editableRecords[index][keyPath: path] = value
+        // Editing a specific core field acknowledges that field only; other
+        // automatic repairs retain their review markers across autosave/reopen.
+        let fields: [(WritableKeyPath<EditableRecognitionRecord, String>, String)] = [
+            (\.scene, "scene"), (\.shot, "shot"), (\.take, "take"), (\.takeStatus, "takeStatus")
+        ]
+        if let field = fields.first(where: { $0.0 == path })?.1 {
+            editableRecords[index].reviewRequiredFields?.removeAll { $0 == field }
+        }
         commit(editableRecords.map(\.persisted))
     }
 

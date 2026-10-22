@@ -171,9 +171,12 @@ public protocol MediaInputWorkflowServing: Sendable {
 }
 
 public protocol ResolveExportWorkflowServing: Sendable {
+    /// Preview always returns reconciliation details, including when no record
+    /// is exportable. Only the export operation applies CSV_NO_EXPORT.
+    func previewResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveMergeResult
     /// Merged export mirrors the retained Worker's `export-resolve`: the
     /// source stays the retained raw table, and manual sparse edits are
-    /// applied after the recognition merge, last and byte-for-byte.
+    /// applied byte-for-byte. Identity edits guide matching; field edits win last.
     func mergeResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveExportArtifact
     func exportStandalone(records: [ResolveSlateRecord], settings: ProjectSettings.ResolveSettings) async throws -> Data
 }

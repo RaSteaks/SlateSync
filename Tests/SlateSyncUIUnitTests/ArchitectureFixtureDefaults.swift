@@ -19,6 +19,10 @@ extension LocalSlateWorkflowServing {
     }
 }
 extension ResolveExportWorkflowServing {
+    // Unrelated fixtures fail explicitly if a new preview capability is used.
+    func previewResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata],
+        settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]
+    ) async throws -> ResolveMergeResult { throw missingFixtureCapability }
     func mergeResolve(
         source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata],
         settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]

@@ -1,7 +1,91 @@
 # SlateSync 当前项目方案
 
+## 2026-10-22 MCP 审查三项修复
+
+- 独立 MCP 包新增完整消息串行传输层：响应与进度通知共用单写入队列，解决 SDK 0.11 在背压下交错输出 JSON 的问题。取消排队消息会移除它；已开始的消息由独立写入任务完成，调用者可立即取消；断连会取消并排空写入，部分写入失败后关闭会话。
+- stdio bridge 在转发任何客户端字节前，通过 `getpeereid` 验证已连接 socket 的对端 UID；不信任可被提前占用的路径。真实临时 Unix socket 测试覆盖当前用户接入和预期 UID 不符时关闭连接、零字节转发，无需切换系统用户。
+- 启动握手等待被取消时，先排空子进程再保留 `CancellationError`，不再误报 `MCP_START_FAILED`；清理等待不继承已取消任务的睡眠，避免空转。新增回归验证取消后进程已退出且可以重新启动。
+- 验证：14 项 MCP 测试与 19 项应用侧 MCP 定向测试全部通过；原始并发大响应探针恢复为两条有效 JSON；Release 直连 / 托管 × 有授权 / 无授权四种协议检查、MCP Release 与原生 Debug 严格 Swift 警告构建、无窗口预检及 `git diff --check` 通过。并发测试已加入既有 CI 冒烟脚本。
+- 未启动 App、XCUI、前台性能验收或真实模型请求，也未修改客户端配置。日志与协议报告保留在 `/private/tmp/slatesync-mcp-review-fixes`。
+
+## 2026-10-22 MCP 一键构建、启动与客户端接入
+
+- 修复 MCP 设置同一 Section 叠加两个 fileImporter 导致启动程序选择无响应：启动程序、源码目录和授权目录共用一个带类型路由的原生选择器。高级配置默认折叠；普通使用点击“一键启动 MCP”，自动定位源码并增量构建 Release 后启动，显示准备/构建、启动、运行、停止和异常退出状态；支持取消构建、失败重试与退出排空。
+- 目录授权与服务启动在 UI、Workflow、MCPFileAccess 三层解耦。空授权可初始化、连接、列出工具与模型，文件读写仍默认拒绝；目录及模型请求许可只可在停止时更改。旧偏好可解码，已选独立二进制保留直接启动，源码移动时提供目录覆盖。
+- 增加“添加到 Codex / Claude Code”，必要时先准备并启动，再使用官方 CLI 写入用户级 slatesync 配置。Codex 保留其他服务器；Claude 相同条目幂等、不同条目不覆盖。客户端操作反馈与服务状态分开，CLI 缺失/失败不把运行中的服务显示为停止。原复制配置与客户端独立 stdio 模式保留。
+- 26 项应用侧/本地化定向测试、8 项 MCP 离线测试、Swift 严格库构建、原生 Debug 无签名严格 build-for-testing、完整无窗口预检、本地化与 DESIGN lint 通过。真实 Release 脚本的有授权托管导出、无授权直连/托管发现与拒绝访问均通过；真实 Codex/Claude CLI 在临时用户配置中添加成功并核对保存结果，未更改真实客户端配置。
+- 新增文件选择器 XCUI 回归并加入 Release 必测清单；本机只编译未运行，未启动 App 或前台验收，远端 CI 本轮未执行。额外全测试目标 warnings-as-errors 编译被未修改的 LibraryBoundaryTests / RecoverableDeletionTests 既有未使用值警告阻断，未抑制检查。Premium 网页静态审计仍为完全相同的既有 69 项。
+- 当前 App/DMG 仍不内置 MCP：首次构建需本机源码、Xcode/Swift 和网络；自动定位失败时选择源码目录，客户端接入需要已安装 CLI。证据保留在 `/private/tmp/slatesync-mcp-oneclick`，详见其中 `verification.md`。
+
+
+## 2026-10-22 侧栏动画事务与中间位置残留修复
+
+- 任务侧栏收展改为 `WorkspaceTaskSplit` / `WorkspaceTaskLayout` 单一布局：固定 210 pt 的列表整体平移，列表右缘与内容左缘共用同一动画值，外层裁剪越界内容。保留常驻列表、分隔线、编辑器、200 ms 动画、减少动态效果及原有编辑/保存屏障。
+- 主 NavigationSplitView 两列与任务分栏子视图新增统一动画边界：清除继承动画并裁剪各自内容，避免原生列表、搜索与表单再单独插值。此轮为代码层修复，未采集前台帧率或视觉截图，不能据此断言用户机器上的卡顿已消失。
+- 新增 3 项回归覆盖中间位置、反向位置、共同边缘、常驻原生视图、动画事务隔离及普通/减少动态效果的反复收展；与既有布局和编辑保存测试共 12 项通过。最终 Xcode Debug 无签名严格构建、无窗口预检、本地化与 DESIGN lint 通过。全测试目标强制 warnings-as-errors 的尝试受既有 Persistence 测试未使用值警告阻碍，常规测试通过；网页 Premium 审计仍为修改前同一组 69 项。
+- 未启动应用、XCUI、本机前台测试或远端 CI。日志保留在 `/private/tmp/slatesync-sidebar-followup`，实际收展流畅度与像素残留仍需远端 UI 或用户明确安排的本机前台验收。
+
+## 2026-10-22 两个侧栏收展与预览图层优化
+
+- 在此前减少整页宽度回写的基础上继续处理两条共用布局路径：任务列表内部固定 210 pt，只收展裁剪视口与常驻分隔线，采用局部 200 ms 动画并遵循减少动态效果；识别配置面板只在首次输入布局确定默认显示状态，侧栏跨过 900 pt 不再同时自动开关另一个 300 pt 面板。现有编辑器与保存屏障保持不变。
+- 结果对照改为 `WorkspaceResultLayout` 直接放置常驻视图，保留 900 pt 内联断点与精确 40% / 420 pt 宽度，移除 10 pt 量化以及结果宽度向根视图状态回写。预览移除逐帧 GeometryReader，通过窄 AppKit 桥接保留当前页位图，布局只更新等比适配框和显式矩形阴影路径；LightTable 保留原背景且不重复承担图片阴影。原生桥接精确白名单同步登记，未放宽其他边界。
+- 5 项新增无窗口回归覆盖连续宽度、内联/覆盖断点、视图身份、位图复用及换页/清理；连同 4 项保存屏障回归共 9 项通过。严格警告选项的 Xcode Debug 无签名构建、完整无窗口预检、本地化审计、DESIGN lint 通过。Premium strict 静态审计仍是修改前完全相同的既有 69 项，不计为 PASS。
+- 未启动应用、XCUI 或本机前台性能采样，也未运行远端 CI；代码路径和离线回归不能作为实际帧率提升的结论。构建、测试、审计与逐任务差异报告保留在 `/private/tmp/slatesync-sidebar-5vcl574s`，实际收展流畅度和完整交互仍待 GitHub macOS runner 或用户明确安排的前台验收。
+
+## 2026-10-22 项目包类型声明修复
+
+- App 的 `Info.plist` 补齐项目包与项目库包的 `UTExportedTypeDeclarations`，分别映射 `slatesync-project` / `slatesync-library` 扩展名，均遵循 `com.apple.package` 和 `public.content`，消除 `ProjectLibraryView` 创建导出类型时缺少包内声明的诊断；增加注释说明与导入器的对应关系。
+- plist 校验、完整无窗口预检与严格警告选项的原生 Debug 无签名构建通过；核对构建产物中两项声明与源文件一致，Debug / Release / AppStore 共用该 plist。未启动 App、XCUI 或前台测试；日志与类型检查报告保留在 `/private/tmp/slatesync-package-uti.YmgMez`。
+
+## 2026-10-22 侧栏折叠卡顿优化
+
+- 根因（代码分析，未做实机 Instruments 采样）：折叠侧栏时详情列宽按帧变化。输入页 / 结果页的 `GeometryReader` 闭包逐帧重跑，含整个识别配置 Form；输入页 `onGeometryChange` 还把宽度逐帧写入 `@State availableWidth`，使 960 行的 `WorkspaceView.body` 逐帧重算；CSV 表格 `updateNSView` 每次都遍历全部可见单元格（行 × 列，Resolve 表很宽）；主窗口还订阅了逐帧触发的 `NSWindow.didUpdateNotification`。
+- 改动：输入 / 结果页改用 `onGeometryChange(for: InputLayout / ResultLayout)` 只在断点翻转时更新状态（结果页预览宽度按 10 pt 量化，行为与原 40% / 420 pt 规则一致）；`updateNSView` 仅在 `isEnabled` 翻转时清扫可见单元格（新单元格由 `viewFor` 读取当前值）；`didUpdate` 观察者只留给设置窗口（`restoresResizableStyle: true`）。新增 `testFreezeAndThawStillReachVisibleCells` 守住冻结 / 解冻路径，并用临时关闭清扫验证该测试会失败。
+- 验证：严格 `swift build`、UI 单元测试、无窗口预检通过。未启动 App：实际流畅度需在本机折叠侧栏确认；若仍卡，请告知是系统侧栏还是任务列表按钮、在哪个页面（输入 / 结果 / CSV），下一步优先看 `MediaPreviewView` 的阴影与大图重绘。
+
+## 2026-10-22 单一布局与版权位置
+
+- 移除侧栏底部的紧凑 / 舒适切换按钮与设置“通用”里的界面密度选项，只保留舒适（原默认）一种布局：不再读取 / 注入 `density` 偏好，原生控件使用常规尺寸；旧的 `density` 偏好值被忽略（用户若曾设为紧凑，将自动回到舒适）。`SlateSyncDensity` 仅作为内部度量表保留（CSV 表格的密度变更回归测试仍使用其紧凑值），后续可连同该测试一并清理。
+- 版权信息（`NSHumanReadableCopyright`）从主窗口底部移到设置窗口底部，所有设置分类可见，位于错误条下方，caption + 次要色，保留 `app.copyright` 标识符。
+- 同步移除 `AccessibilityID.settingsDensity`、4 条英文密度文案及资源哈希；XCUI 外观矩阵与键盘矩阵去掉密度维度（测试函数名保留，因打包 UI 合约按名称列出）。本机仅做构建与离线检查，XCUI 留给 GitHub runner。
+
+## 2026-10-22 前端界面审查与优化
+
+- 全应用 SwiftUI 审查后实施：浅色成功 / 警告加深为 #17694C / #6B5B00（自身 12–14% 底色上由 4.10 / 4.16 升到约 5.1:1）；工作台页首改为约 64 pt 单行（任务名 + 页数·条数·状态实况 + 分段选择 + 上下文按钮，放不下时选择行落到标题下），不再使用 SlatePageHeading。
+- 识别配置面板在详情宽度 ≥ 700 pt 时推开预览（不再遮挡），更窄时才悬浮并带边缘阴影；面板始终同一不透明表面，输入法草稿不受影响。缺少服务商 / 模型且面板关闭时，状态条给出“打开识别配置”。
+- Liquid Glass 收窄为悬浮元素（进度卡、搜索 / 筛选条、状态胶囊、主操作）；页首、配置面板、项目库概览与 SlateStatusBar 改为 SlateGlass.swift 中的不透明 `slateDockedSurface`，移除 librarySummary 角色与面板 `interactive`。
+- 表单与弹窗内联错误统一为带符号的 SlateInlineError；重启提示改用 SlateStatusBar；任务列表失败 / 处理中图标分别用 danger / accent；已归档项目行去掉重复的归档图标；设置里 OCR 定位提示在“减少动态效果”下也会按时消失。
+- MCP 设置：修正“1. / 3.”缺 2 的编号；长说明折叠为“设置指南”（未配置启动程序时默认展开）；服务区错误改为内联。
+- 英文资源与 sm09 资源清单哈希同步；DESIGN / UX-CONTRACT / design-system 同步。严格 `swift build`、本地化审计、无窗口预检与 146 项 UI 单元测试通过；未启动 App、XCUI 或前台测试，深色主操作按钮文字对比度、英文分段未读点位置、窗口宽度阈值需在 GitHub runner 截图或用户机器上确认。
+- 暂缓：Resolve CSV 诊断条换行、供应商页版式统一、侧栏外观 / 密度按钮、间距 Token、场景样式修饰符等整理项。
+
+## 2026-10-22 MCP 随应用自动启停
+
+- 用户选择随 SlateSync 启动、退出时停止。MCP 设置新增默认关闭的持久开关、手动启停、实际运行状态、组件选择、目录授权和显式模型请求许可；退出设置不停止服务。托管配置可直接复制，原客户端独立 stdio 模式保留。
+- 应用级模型复用既有退出排空；Workflow 独立持有子进程，MCP 包新增同用户 Unix socket broker / stdio bridge，每客户端独立协议会话。控制管道 EOF 自动停止，退出取消并排空会话；无 TCP 监听，目录/套接字 0700/0600，独占锁拒绝替换正在运行的实例。组件仍单独构建，不引入 App 的 SDK 依赖。
+- 沿用 grouped Form、SlateStatusBar、语义主题和中英本地化；运行期间禁止修改配置，失败可重试。模型请求默认关闭，不修改外部客户端配置。
+- 应用侧 17 项定向回归与 MCP 8 项离线测试通过；严格 Swift / MCP Debug、Release 构建、Xcode build-for-testing、无窗口预检、本地化和 DESIGN lint 通过。Debug 及实际 Release 启动脚本的直连/托管协议、导出字节、双客户端、重复启动拒绝、EOF/SIGTERM 清理、普通文件保护与残留 socket 恢复均通过。日志和协议报告保留在 /tmp/slatesync-mcp-lifecycle-*、/tmp/slatesync-mcp-managed*；网页 strict 审计与既有 69 项逐条一致，不计为 PASS。未启动 App、XCUI 或前台测试，完整 UI 验收留给 GitHub runner。
+
+## 2026-10-22 设置内 MCP 功能与使用说明
+
+- 原生设置新增独立 MCP 分类，使用现有 grouped Form、分段导航、主题及状态条。说明单独构建、stdio 接入、协议版本、六个工具、推荐流程、目录授权、模型请求权限和常见故障；明确当前组件未随 App/DMG 分发，不展示无实际功能的启动开关。
+- 提供可选择文本与“复制构建命令 / 复制配置示例”，示例仅含绝对路径占位符，默认仅授权本地工具；模型识别按说明显式加入 --allow-model-requests。支持直接转到模型服务设置，复制成功/失败有原位反馈，不修改客户端配置或启动进程。
+- 中英文说明、DESIGN/UX-CONTRACT、MCP 文档和现行 English.json 资源哈希同步。8 项本地化回归、严格 Swift 构建、无窗口预检、DESIGN lint、配置 JSON/六工具一致性与启动脚本 stdio 检查通过；未启动 App 或前台 UI 验收。网页 strict 审计仍为前后完全一致的既有 69 项。
+
+## 2026-10-21 识别回填管线审查与本机 MCP
+
+- 按素材统一核对完整与不完整记录，防止不完整矛盾项被过滤；CSV 标识编辑先参与匹配，其他字段编辑最后覆盖。sidecar 扫描收集全部受支持副本，验证目录身份与目标集合；根目录名称不能误剪整棵目录。
+- 同轮次重复素材的字段矛盾进入复核，第三轮未确认字段保持空值；查漏候选的存在确认不再复活未确认字段。自动修正标记进入导出对账，编辑某字段只确认该字段。
+- 共享预览与导出拆分：全不完整/冲突的输入仍可查看诊断；统一导出资格与告警计数，越界编辑不能绕过守卫。导出加入忙碌、取消排空、表身份及编辑代际检查。
+- 识别/回填原生视觉语言保持不变；新增共享完整报告 sheet，全部告警可达且可复制，不再把被截断的正文指向只记录计数的日志。同步 DESIGN、UX-CONTRACT、本地化与现行发布资源哈希。
+- 用户确认采用本机 stdio。独立 MCP/ SwiftPM 包提供模型列表、识别、本地场记 CSV、元数据扫描、回填预览、新文件导出六工具；复用 Workflow 和 OCR 工厂，不写 GUI 项目库。官方 SDK 0.11.0 与解析依赖固定，协议为 2025-11-25；目录授权、显式模型请求开关、取消/关闭排空和原子不覆盖导出均有离线覆盖。新增构建/启动脚本和独立 macOS CI。
+- 最初 4 个边界用例复现 12 条失败断言。完整离线 SwiftPM 回归 483 项、2 项专用环境跳过、零失败；跳过项为专用 Paddle 和需授权的前台显示节奏测试。真实 Vision 与进程清理在沙箱外复测通过；未启动 App、XCUI、前台性能测试或真实 Provider 请求。
+- 原生 Debug build-for-testing、无窗口预检、本地化与 DESIGN lint 通过；MCP 8 项离线集成与真实 stdio Debug/Release 导出字节检查通过。最终增量检查记录随本轮交付保留。Premium 网页 strict 审计仍有既有 69 项，不计为 PASS。
+- 详细问题、后续提升及已知边界见 docs/pipeline-review.md；MCP 客户端配置、工具契约、权限与单次处理范围见 docs/mcp.md。完整窗口/主题/辅助功能交互仍由远端 UI Gate 验收，本轮未执行远端 CI。
+
 ## 2026-10-06 主窗口版权底栏
 
+- （2026-10-22 起版权仅在设置窗口底部显示，主窗口不再显示，见顶部记录。）
 - 主窗口所有导航页底部居中显示应用包的 `NSHumanReadableCopyright`（当前为 `Copyright © 2026 朱煜天`）；原文显示，复用系统 caption2 和次要文字颜色。
 - 独立底部 safe-area inset 为版权文字保留空间，识别状态和操作位于其上方；同步代码注释和 `DESIGN.md`，不新增版权文案副本或主题 Token。
 - SwiftPM warnings-as-errors 构建、完整无窗口预检、本地化审计、Info.plist 校验及差异检查通过。构建缓存使用临时可写路径；未启动应用或前台 UI 验收。网页 strict 审计仍为既有 69 项，修改前后 findings 完全一致。
@@ -313,7 +397,8 @@
 - 共享 SlateSyncTheme 改为冷灰阶梯（微蓝调 slate）底色与单一钨丝琥珀强调色，覆盖两个外观模式；
   同日更早的暖石灰 / 鼠尾草方向在提交前被本方案取代，未留下中间提交。
 - accent 亮 / 暗用 #B45309 / #F59E0B；canvas #F6F7F9 / #1E2229；evidenceSurface #FFFFFF / #2A2F37。
-  成功、警告、错误分别采用松绿 #1E7A5A / #7FC9A9、黄铜 #7C6A00 / #E3C36B、砖红 #B03A2E / #E58873；
+  成功、警告、错误分别采用松绿 #1E7A5A / #7FC9A9、黄铜 #7C6A00 / #E3C36B、砖红 #B03A2E / #E58873
+  （亮色成功 / 警告已于 2026-10-22 加深为 #17694C / #6B5B00，见顶部记录）；
   保留文字与图标语义，不以颜色独自表达状态。
 - warning 从赭金系移到黄铜：新 accent 为琥珀（色相约 28°），旧赭金（约 33°）与其明度相近，
   警告行会与选中行混淆；黄铜（约 50°）拉开约 22° 色相。状态三色整体从暖土系转为冷调系以贴合冷灰底。

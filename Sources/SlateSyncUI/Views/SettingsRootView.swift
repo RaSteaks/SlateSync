@@ -7,7 +7,7 @@ import SwiftUI
 public struct SettingsRootView: View {
     @AppStorage(AppLanguage.preferenceKey) private var applicationLanguage = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("appearance") private var appearance = "system"
-    @AppStorage("density") private var density = "comfortable"
+    @Environment(\.slateSyncDensity) private var density
     @Bindable private var settings: GlobalSettingsModel
     @Bindable private var paddleInstaller: PaddleInstallerModel
     @State private var credentialProvider: ProviderSummary?
@@ -27,21 +27,25 @@ public struct SettingsRootView: View {
     @State private var highlightedOCRSubregion: SettingsSubregion?
     private let preferences: UserDefaults
     private let navigation: SettingsNavigationModel
+    private let mcpService: MCPSettingsModel?
 
     public init(
         settings: GlobalSettingsModel,
         paddleInstaller: PaddleInstallerModel,
         navigation: SettingsNavigationModel,
-        preferences: UserDefaults = .standard
+        preferences: UserDefaults = .standard,
+        mcpService: MCPSettingsModel? = nil
     ) {
         self.preferences = preferences
         self.settings = settings
         self.paddleInstaller = paddleInstaller
         self.navigation = navigation
+        // Production injects one app-owned service; previews retain the guide.
+        self.mcpService = mcpService
     }
 
     public var body: some View {
-        // A native segmented category selector keeps the five existing forms
+        // A native segmented category selector keeps forms and the MCP guide
         // inside one flexible content host. macOS 15's special Settings TabView
         // host otherwise forces its ideal size into fixed window constraints.
         VStack(spacing: 0) {
@@ -53,7 +57,7 @@ public struct SettingsRootView: View {
             }
             .pickerStyle(.segmented).labelsHidden()
             .accessibilityIdentifier("settings.category")
-            .padding(density == "compact" ? 12 : 20)
+            .padding(density.panelPadding)
             Divider()
             Group {
                 switch category {
@@ -61,21 +65,19 @@ public struct SettingsRootView: View {
                 case .providers: providers
                 case .recognition: recognition
                 case .ocr: ocr
+                case .mcp: MCPSettingsView(navigation: navigation, service: mcpService)
                 case .advanced: advanced
                 }
             }
-            .padding(density == "compact" ? 12 : 20)
+            .padding(density.panelPadding)
         }
-        .slateWindowMinimumSize(width: 700, height: 540)
+        .slateWindowMinimumSize(width: 700, height: 540, restoresResizableStyle: true)
         .navigationTitle(L10n.tr("设置"))
         // Settings shares the workbench canvas instead of the system window
         // gray, keeping both windows on one neutral scale in each appearance.
         .background(SlateSyncTheme.canvas)
         .tint(SlateSyncTheme.accent)
         .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
-        .controlSize(density == "compact" ? .small : .regular)
-        // One scene-level preference drives native controls and content metrics.
-        .environment(\.slateSyncDensity, SlateSyncDensity(rawValue: density) ?? .comfortable)
         .task {
             await settings.load()
             processPendingNavigation()
@@ -143,10 +145,28 @@ public struct SettingsRootView: View {
         )) {
             if let provider = providerPendingDeletion { ProviderDeletionSheet(settings: settings, provider: provider) }
         }
-        .safeAreaInset(edge: .bottom) {
-            if case .failed(let error) = settings.operation {
-                SlateStatusBar(error.message, tone: .error)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if case .failed(let error) = settings.operation {
+                    SlateStatusBar(error.message, tone: .error)
+                }
+                copyrightNotice
             }
+        }
+    }
+
+    /// The app bundle owns the notice; render it verbatim in both languages.
+    /// It lives only in Settings (not in the main window), below any error bar.
+    @ViewBuilder private var copyrightNotice: some View {
+        if let notice = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
+            Text(verbatim: notice)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .accessibilityIdentifier("app.copyright")
         }
     }
 
@@ -180,10 +200,8 @@ public struct SettingsRootView: View {
         if let subregion = request.subregion {
             focusedOCRSubregion = subregion
             highlightedOCRSubregion = subregion
-            guard !reduceMotion else {
-                navigation.consume(request)
-                return
-            }
+            // The capsule is a static cue, so it clears after the same delay
+            // with Reduce Motion on; skipping the timer left it on screen.
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(1_200))
                 if highlightedOCRSubregion == subregion {
@@ -225,12 +243,6 @@ public struct SettingsRootView: View {
             // explicitly name the interactive controls for VoiceOver/XCUI.
             .accessibilityLabel(L10n.tr("外观"))
             .accessibilityIdentifier(AccessibilityID.settingsAppearance)
-            Picker(L10n.tr("界面密度"), selection: $density) {
-                Text(L10n.tr("舒适")).tag("comfortable")
-                Text(L10n.tr("紧凑")).tag("compact")
-            }
-            .accessibilityLabel(L10n.tr("界面密度"))
-            .accessibilityIdentifier(AccessibilityID.settingsDensity)
         }.formStyle(.grouped)
     }
 
@@ -610,7 +622,7 @@ public struct SettingsRootView: View {
                 ProgressView(L10n.tr("正在检测 OCR 环境…"))
                 Button(L10n.tr("取消"), role: .cancel) { settings.cancelOCREnvironmentCheck() }
             } else if case .failed(let error) = settings.ocrCheckOperation {
-                Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger)
+                SlateInlineError(error.message)
             } else if settings.ocrChecks.isEmpty {
                 Text(L10n.tr("尚未检测")).foregroundStyle(.secondary)
             }

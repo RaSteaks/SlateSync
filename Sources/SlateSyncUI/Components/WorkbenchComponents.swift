@@ -256,9 +256,11 @@ public struct LeaderProgress: View {
 /// appearances so the evidence page stays the brightest region (灯箱反转).
 public struct LightTable<Content: View>: View {
     @Environment(\.slateSyncDensity) private var density
+    private let contentCastsShadow: Bool
     private let content: () -> Content
 
-    public init(@ViewBuilder content: @escaping () -> Content) {
+    public init(contentCastsShadow: Bool = true, @ViewBuilder content: @escaping () -> Content) {
+        self.contentCastsShadow = contentCastsShadow
         self.content = content
     }
 
@@ -267,8 +269,9 @@ public struct LightTable<Content: View>: View {
             cornerRadius: SlateSyncTheme.panelRadius, style: .continuous)
         return content()
             // Raised evidence preview keeps the soft shadow DESIGN.md reserves
-            // for overlays and evidence.
-            .shadow(color: .black.opacity(0.20), radius: 9, x: 0, y: 3)
+            // for overlays and evidence. Native image layers supply their own
+            // rectangular shadow path to avoid an alpha-mask pass on resize.
+            .shadow(color: .black.opacity(contentCastsShadow ? 0.20 : 0), radius: 9, x: 0, y: 3)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(density.panelPadding)
             .background {

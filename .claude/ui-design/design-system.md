@@ -51,8 +51,8 @@ SlateSync 处理的信任链是:**纸质场记单 → 结构化数据 → 已校
 | `accent` | `#F59E0B` | `#B45309` | DESIGN.md `accent-soft` / `primary` |
 | `canvas` | `#1E2229` | `#F6F7F9` | DESIGN.md `canvas-dark` / `canvas-light` |
 | `evidenceSurface`(原 `panel`) | `#2A2F37` | `#FFFFFF` | DESIGN.md `evidence-dark` / `evidence-light` |
-| `ok` | `#7FC9A9` | `#1E7A5A` | DESIGN.md `success-dark` / `success` |
-| `warn` | `#E3C36B` | `#7C6A00` | DESIGN.md `warning-dark` / `warning` |
+| `ok` | `#7FC9A9` | `#17694C` | DESIGN.md `success-dark` / `success`(2026-10-22 亮色加深,自身 14% 底色上 ≥ 4.5:1) |
+| `warn` | `#E3C36B` | `#6B5B00` | DESIGN.md `warning-dark` / `warning`(同上) |
 | `danger` | `#E58873` | `#B03A2E` | DESIGN.md `danger-dark` / `danger` |
 | `paper` | `#F2EEE3` | `#F2EEE3` | 证据内容色(只属于纸面内容),不属于主题 |
 

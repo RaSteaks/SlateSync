@@ -41,5 +41,45 @@
     <string>Copyright © 2026 朱煜天</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <!-- Register both package formats used by ProjectLibraryView's UTType declarations and file importers. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.slatesync.project-package</string>
+            <key>UTTypeDescription</key>
+            <string>SlateSync Project Package</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>com.apple.package</string>
+                <string>public.content</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>slatesync-project</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.slatesync.library-package</string>
+            <key>UTTypeDescription</key>
+            <string>SlateSync Library Package</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>com.apple.package</string>
+                <string>public.content</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>slatesync-library</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
 </dict>
 </plist>

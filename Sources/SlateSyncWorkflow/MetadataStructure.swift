@@ -2,7 +2,8 @@ import Foundation
 import SlateSyncDomain
 
 /// Filesystem-independent naming convention learning used by the bounded
-/// scanner to avoid enumerating every recognized clip directory.
+/// scanner to report reusable camera-sidecar naming conventions. Discovery
+/// still enumerates each matching directory so conflicting copies stay visible.
 public enum MetadataStructure {
     public static func defaultTemplates() -> [MetadataNameTemplate] { [.dirnameSuffix("-slate.txt")] }
 

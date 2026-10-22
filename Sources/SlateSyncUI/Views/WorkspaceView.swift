@@ -33,9 +33,12 @@ public struct WorkspaceView: View {
     @Bindable private var metadata: MetadataScanModel
     @Bindable private var media: MediaInputModel
     @Environment(\.slateSyncDensity) private var density
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsTasks = true
     @State private var showsConfiguration: Bool?
-    @State private var availableWidth: CGFloat = 0
+    // Only input breakpoints enter view state. Result comparison geometry is
+    // handled directly by WorkspaceResultLayout without publishing widths.
+    @State private var inputLayout = InputLayout()
     @State private var editorBoundary = WorkspaceEditorBoundary()
     @State private var showsOriginal = false
     @State private var showsAdvanced = false
@@ -46,6 +49,7 @@ public struct WorkspaceView: View {
     @State private var pendingEntryPoint: WorkspaceEntryPoint?
     @State private var importsFile = false
     @State private var importKind = ImportKind.media
+    @State private var metadataReport: WorkflowDiagnosticReport?
     // The parent owns this ledger so completion events are not lost when the
     // workspace route is replaced by Projects, Logs, or Help.
     @Binding private var unseenSections: Set<WorkspaceSection>
@@ -60,6 +64,33 @@ public struct WorkspaceView: View {
             }
         }
     }
+    private static let configurationPanelWidth: CGFloat = 300
+
+    // Widths below are measured on the detail column (window minus the sidebar
+    // and task rail), not on the window. The layout types are nonisolated value
+    // types so the geometry callback can build them off the main actor, which
+    // is why their breakpoints live on them instead of on the view.
+
+    /// Input-page width classes. Equatable on purpose: `onGeometryChange` only
+    /// fires when a class flips, so animating the split view's sidebar (or
+    /// dragging the window edge) does not write state — and re-evaluate this
+    /// large view — on every frame the way a raw width would.
+    private struct InputLayout: Equatable {
+        /// The configuration panel opens by default from this width.
+        static let defaultWidth: CGFloat = 900
+        /// From this width a visible panel docks (the preview makes room for
+        /// it); narrower columns overlay it on top of the preview instead.
+        static let dockWidth: CGFloat = 700
+
+        var opensConfiguration = false
+        var docksConfiguration = false
+        init() {}
+        init(width: CGFloat) {
+            opensConfiguration = width >= Self.defaultWidth
+            docksConfiguration = width >= Self.dockWidth
+        }
+    }
+
     @State private var section: WorkspaceSection
     // A native segmented Picker must read back its new value synchronously.
     // Keep that feedback separate from the page, which stays mounted until
@@ -109,13 +140,11 @@ public struct WorkspaceView: View {
     }
 
     public var body: some View {
-        HStack(spacing: 0) {
-            // Width/visibility change without removing the list or editor tree.
+        // A single animated layout places both panes; native descendants do
+        // not inherit the split animation or retain intermediate rectangles.
+        WorkspaceTaskSplit(showsTasks: showsTasks, reduceMotion: reduceMotion) {
             TaskRailView(model: workspace)
-                .frame(width: showsTasks ? 210 : 0)
-                .clipped().opacity(showsTasks ? 1 : 0)
-                .allowsHitTesting(showsTasks).accessibilityHidden(!showsTasks)
-            if showsTasks { Divider() }
+        } detail: {
             VStack(spacing: 0) {
                 workspaceHeader
                 Divider()
@@ -125,6 +154,8 @@ public struct WorkspaceView: View {
         }
         .background(WorkspaceEditorProbe(boundary: editorBoundary).frame(width: 0, height: 0))
         .navigationTitle(L10n.tr("工作台"))
+        .sheet(item: $metadataReport) { WorkflowDiagnosticsSheet(report: $0) }
+        .onChange(of: workspace.selectedTaskID) { _, _ in metadataReport = nil }
         .safeAreaInset(edge: .bottom) {
             autosaveBanner
             if let layoutError {
@@ -256,67 +287,108 @@ public struct WorkspaceView: View {
         importsFile = true
     }
 
+    /// One compact row: task identity on the left, section picker and the
+    /// page's contextual control on the right. When the detail column is too
+    /// narrow the picker row drops below the title instead of squeezing it.
+    /// The bar is docked chrome, so it uses an opaque surface (glass is kept
+    /// for floating elements); the Divider in `body` draws its lower edge.
     private var workspaceHeader: some View {
-        VStack(alignment: .leading, spacing: density.sectionSpacing) {
-            // A stronger task heading anchors all three work pages without
-            // replacing their native segmented navigation or editor identity.
-            SlatePageHeading(
-                title: workspace.selectedTask?.filename ?? L10n.tr("当前任务"),
-                subtitle: workspace.selectedTaskID == nil ? L10n.tr("新建任务或导入场记单以开始") : L10n.tr("导入场记 · 校对结果 · 整理 Resolve CSV"),
-                symbol: "doc.viewfinder"
-            )
-            // A container identifier propagates to every HStack child on
-            // macOS; scope the heading identifier to the actual heading.
-            .accessibilityIdentifier(AccessibilityID.workspaceHeading)
-            HStack(spacing: 12) {
-                Picker(L10n.tr("工作区"), selection: sectionBinding) {
-                    ForEach(WorkspaceSection.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .frame(maxWidth: 360)
-                // "New content" dots ride over the native segmented control
-                // without replacing it: selection, keyboard and VoiceOver
-                // behavior stay platform-owned; dots never steal focus and
-                // clear on the next visit to their section.
-                .overlay(alignment: .top) {
-                    GeometryReader { proxy in
-                        let segmentWidth = proxy.size.width / CGFloat(WorkspaceSection.allCases.count)
-                        ForEach(Array(WorkspaceSection.allCases.enumerated()), id: \.element) { index, tab in
-                            if unseenSections.contains(tab) {
-                                Circle()
-                                    .fill(SlateSyncTheme.accent)
-                                    .frame(width: 6, height: 6)
-                                    .offset(x: segmentWidth * (CGFloat(index) + 0.82), y: 3)
-                            }
-                        }
-                    }
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                }
-                // Keep the selected section in the value and announce unread
-                // sections as a hint; replacing the value with only the dot
-                // message hides the Picker's current selection from VoiceOver.
-                .accessibilityValue((pendingSection ?? section).title)
-                .accessibilityHint(pendingSectionsAccessibilityHint)
-                Spacer(minLength: 0)
-                if section == .input {
-                    Button(L10n.tr("识别配置"), systemImage: "slider.horizontal.3") {
-                        changeLayout { showsConfiguration = !(showsConfiguration ?? (availableWidth >= 900)) }
-                    }
-                    .tint(Color.secondary)
-                    .accessibilityIdentifier("workspace.configuration.toggle")
-                } else if section == .result {
-                    Toggle(L10n.tr("原稿对照"), isOn: originalBinding)
-                        .toggleStyle(.button)
-                        .disabled(media.document == nil)
-                        .accessibilityIdentifier("workspace.original.toggle")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                headerTitle
+                sectionPicker
+                headerAccessory
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                headerTitle
+                HStack(spacing: 12) {
+                    sectionPicker
+                    Spacer(minLength: 0)
+                    headerAccessory
                 }
             }
         }
-        .padding(density.panelPadding)
-        // The heading and section controls form one shared floating surface;
-        // the workbench canvas below remains an opaque evidence surface.
-        .slateGlassSurface(.panel, shape: .rectangle)
+        .padding(.horizontal, density.panelPadding)
+        .padding(.vertical, 12)
+        .slateDockedSurface(.header)
+    }
+
+    /// Task name plus live facts (pages · records · status) instead of a
+    /// fixed tagline; falls back to the start hint without a loaded task.
+    private var headerTitle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(workspace.selectedTask?.filename ?? L10n.tr("当前任务"))
+                .font(.title3.weight(.semibold)).lineLimit(1)
+                .help(workspace.selectedTask?.filename ?? L10n.tr("当前任务"))
+            Text(headerFacts)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+        // A small ideal width lets ViewThatFits keep the one-row layout for
+        // long file names; the name truncates instead of forcing the stack.
+        .frame(minWidth: 120, idealWidth: 160, maxWidth: .infinity, alignment: .leading)
+        // A container identifier propagates to every HStack child on
+        // macOS; scope the heading identifier to the actual heading.
+        .accessibilityIdentifier(AccessibilityID.workspaceHeading)
+    }
+
+    private var headerFacts: String {
+        guard let id = workspace.selectedTaskID,
+              let item = workspace.tasks.first(where: { $0.id == id })
+        else { return L10n.tr("新建任务或导入场记单以开始") }
+        var facts: [String] = []
+        if let pages = item.pageCount, pages > 0 {
+            facts.append(L10n.tr("{0} 页", [String(describing: pages)]))
+        }
+        facts.append(L10n.tr("{0} 条", [String(describing: item.recordCount)]))
+        facts.append(item.statusTitle)
+        return facts.joined(separator: " · ")
+    }
+
+    private var sectionPicker: some View {
+        Picker(L10n.tr("工作区"), selection: sectionBinding) {
+            ForEach(WorkspaceSection.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented).labelsHidden()
+        .frame(maxWidth: 360)
+        // "New content" dots ride over the native segmented control
+        // without replacing it: selection, keyboard and VoiceOver
+        // behavior stay platform-owned; dots never steal focus and
+        // clear on the next visit to their section.
+        .overlay(alignment: .top) {
+            GeometryReader { proxy in
+                let segmentWidth = proxy.size.width / CGFloat(WorkspaceSection.allCases.count)
+                ForEach(Array(WorkspaceSection.allCases.enumerated()), id: \.element) { index, tab in
+                    if unseenSections.contains(tab) {
+                        Circle()
+                            .fill(SlateSyncTheme.accent)
+                            .frame(width: 6, height: 6)
+                            .offset(x: segmentWidth * (CGFloat(index) + 0.82), y: 3)
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        // Keep the selected section in the value and announce unread
+        // sections as a hint; replacing the value with only the dot
+        // message hides the Picker's current selection from VoiceOver.
+        .accessibilityValue((pendingSection ?? section).title)
+        .accessibilityHint(pendingSectionsAccessibilityHint)
+    }
+
+    @ViewBuilder private var headerAccessory: some View {
+        if section == .input {
+            Button(L10n.tr("识别配置"), systemImage: "slider.horizontal.3") {
+                changeLayout { showsConfiguration = !(showsConfiguration ?? inputLayout.opensConfiguration) }
+            }
+            .tint(Color.secondary)
+            .accessibilityIdentifier("workspace.configuration.toggle")
+        } else if section == .result {
+            Toggle(L10n.tr("原稿对照"), isOn: originalBinding)
+                .toggleStyle(.button)
+                .disabled(media.document == nil)
+                .accessibilityIdentifier("workspace.original.toggle")
+        }
     }
 
     @ViewBuilder private var detail: some View {
@@ -335,78 +407,98 @@ public struct WorkspaceView: View {
     }
 
     private var inputView: some View {
-        GeometryReader { geometry in
-            let wide = geometry.size.width >= 900
-            let visible = showsConfiguration ?? wide
-            ZStack(alignment: .trailing) {
-                VStack(spacing: 0) {
-                    HStack {
-                        SlatePanelHeading(
-                            title: L10n.tr("场记单"), subtitle: media.document?.filename ?? L10n.tr("支持 PDF 和图像，也可拖入文件"))
-                        Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
-                            .disabled(!media.canAcceptInput || workspace.projectID == nil)
-                    }.padding(density.panelPadding)
-                    if media.operation.isRunning {
-                        SlateStatusBar(message: L10n.tr("正在准备场记单…"), busy: true) {
-                            Button(L10n.tr("取消准备"), role: .cancel) { media.cancel() }
-                        }
-                    }
-                    if case .failed(let error) = media.operation {
-                        SlateStatusBar(message: error.message, tone: .error) {
-                            Button(L10n.tr("重新选择…")) { presentImport(.media) }
-                        }
-                    }
-                    Group {
-                        if let document = media.document {
-                            MediaPreviewView(document: document, pageIndex: $media.pageIndex)
-                        } else {
-                            SlateEmptyState(
-                                title: L10n.tr("导入场记单"), symbol: "doc.viewfinder",
-                                message: L10n.tr("选择或拖入 PDF、图像，然后配置识别。")
-                            ) {
-                                Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
-                                    .disabled(!media.canAcceptInput || workspace.projectID == nil)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(SlateSyncTheme.canvas)
-                    localCSVPanel
-                    if let reason = recognitionUnavailableReason {
-                        SlateStatusBar(reason)
+        // Width classes are published only when a breakpoint flips, so the
+        // sidebar collapse animation does not re-evaluate this subtree (the
+        // configuration form included) on every animated frame.
+        let visible = showsConfiguration ?? inputLayout.opensConfiguration
+        // A visible panel pushes the preview once there is room for both;
+        // below that it floats over the evidence with a soft edge shadow.
+        let docked = visible && inputLayout.docksConfiguration
+        return ZStack(alignment: .trailing) {
+            VStack(spacing: 0) {
+                HStack {
+                    SlatePanelHeading(
+                        title: L10n.tr("场记单"), subtitle: media.document?.filename ?? L10n.tr("支持 PDF 和图像，也可拖入文件"))
+                    Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
+                        .disabled(!media.canAcceptInput || workspace.projectID == nil)
+                }.padding(density.panelPadding)
+                if media.operation.isRunning {
+                    SlateStatusBar(message: L10n.tr("正在准备场记单…"), busy: true) {
+                        Button(L10n.tr("取消准备"), role: .cancel) { media.cancel() }
                     }
                 }
-                .padding(.trailing, wide && visible ? 300 : 0)
-                // The same form stays mounted as the window crosses 900 pt;
-                // only its placement changes, preserving native IME drafts.
-                configurationPanel
-                    .frame(width: 300)
-                    .frame(maxHeight: .infinity)
-                    // This panel contains live controls, so the shared surface
-                    // opts into interaction while keeping the editor mounted.
-                    .slateGlassSurface(.panel, shape: .rectangle, interactive: true, border: .none)
-                    // Overlay layout needs an explicit vertical rule; retain full
-                    // separator opacity between the controls and evidence canvas.
-                    .overlay(alignment: .leading) {
-                        Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
-                            .allowsHitTesting(false)
+                if case .failed(let error) = media.operation {
+                    SlateStatusBar(message: error.message, tone: .error) {
+                        Button(L10n.tr("重新选择…")) { presentImport(.media) }
                     }
-                    .opacity(visible ? 1 : 0)
-                    .allowsHitTesting(visible)
-                    .accessibilityHidden(!visible)
-                // The leader dial is the single "recognition in progress"
-                // trace and reports the real page stream from the workflow.
-                if recognition.operation.isRunning {
-                    recognitionProgressCard
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        .padding(density.panelPadding)
+                }
+                Group {
+                    if let document = media.document {
+                        MediaPreviewView(document: document, pageIndex: $media.pageIndex)
+                    } else {
+                        SlateEmptyState(
+                            title: L10n.tr("导入场记单"), symbol: "doc.viewfinder",
+                            message: L10n.tr("选择或拖入 PDF、图像，然后配置识别。")
+                        ) {
+                            Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
+                                .disabled(!media.canAcceptInput || workspace.projectID == nil)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(SlateSyncTheme.canvas)
+                localCSVPanel
+                if let block = recognitionBlock {
+                    SlateStatusBar(message: block.message) {
+                        // Provider and model are required inputs; when the
+                        // panel is closed the status bar opens it directly.
+                        if block.needsConfiguration, !visible {
+                            Button(L10n.tr("打开识别配置")) {
+                                changeLayout { showsConfiguration = true }
+                            }
+                            .accessibilityIdentifier("workspace.configuration.open")
+                        }
+                    }
                 }
             }
+            .padding(.trailing, docked ? Self.configurationPanelWidth : 0)
+            // The same form stays mounted as the column crosses the dock
+            // width; only its placement changes, preserving native IME
+            // drafts. The panel is always the same opaque surface so its
+            // identity never depends on docked/overlay state.
+            configurationPanel
+                .frame(width: Self.configurationPanelWidth)
+                .frame(maxHeight: .infinity)
+                .slateDockedSurface(.panel)
+                // Overlay layout needs an explicit vertical rule; retain full
+                // separator opacity between the controls and evidence canvas.
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
+                        .allowsHitTesting(false)
+                }
+                // Only a floating (overlaid) panel casts a shadow; docked
+                // chrome stays flat (DESIGN.md: shadows are for overlays).
+                .shadow(color: .black.opacity(visible && !docked ? 0.22 : 0),
+                        radius: visible && !docked ? 10 : 0, x: -3, y: 0)
+                .opacity(visible ? 1 : 0)
+                .allowsHitTesting(visible)
+                .accessibilityHidden(!visible)
+            // The leader dial is the single "recognition in progress"
+            // trace and reports the real page stream from the workflow.
+            if recognition.operation.isRunning {
+                recognitionProgressCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(density.panelPadding)
+            }
         }
-        .onGeometryChange(for: CGFloat.self) {
-            $0.size.width
+        .onGeometryChange(for: InputLayout.self) {
+            InputLayout(width: $0.size.width)
         } action: {
-            availableWidth = $0
+            inputLayout = $0
+            // Choose the initial default once. Crossing 900 pt during either
+            // sidebar animation must not also open/close a 300 pt panel and
+            // reverse the preview's resize midway through that animation.
+            if showsConfiguration == nil { showsConfiguration = $0.opensConfiguration }
         }
         .disabled(recognition.operation.isRunning)
     }
@@ -575,7 +667,7 @@ public struct WorkspaceView: View {
                 Button(L10n.tr("选择目录并扫描…")) { presentImport(.metadata) }
                     .disabled(workspace.selectedTaskID == nil || csv.table == nil)
                 if case .failed(let error) = metadata.operation {
-                    Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger)
+                    SlateInlineError(error.message)
                 }
                 if metadata.operation.isRunning {
                     Button(L10n.tr("取消扫描"), role: .cancel) { metadata.cancel() }
@@ -598,9 +690,16 @@ public struct WorkspaceView: View {
                             Text(L10n.message(warning)).font(.caption).lineLimit(2)
                         }
                     }
-                    if result.warnings.count > 6 {
-                        Text(L10n.tr("其余 {0} 条警告已记录在日志中。", [String(describing: result.warnings.count - 6)]))
-                            .font(.caption).foregroundStyle(.secondary)
+                    if !result.warnings.isEmpty || !result.missingKeys.isEmpty {
+                        // Logs intentionally contain counts only. Full warning
+                        // text and every missing clip remain in this local report.
+                        Button(L10n.tr("查看完整扫描报告")) {
+                            let missing = result.missingKeys.map {
+                                L10n.tr("素材 {0} 缺少元数据", [$0])
+                            }
+                            metadataReport = WorkflowDiagnosticReport(title: L10n.tr("元数据扫描报告"),
+                                messages: result.warnings.map { L10n.message($0) } + missing)
+                        }.font(.caption)
                     }
                 }
             }
@@ -639,53 +738,63 @@ public struct WorkspaceView: View {
     }
 
     private var resultView: some View {
-        GeometryReader { geometry in
-            let wide = geometry.size.width >= 900
-            let previewWidth = wide ? min(420, geometry.size.width * 0.4) : min(420, geometry.size.width)
-            ZStack(alignment: .leading) {
-                // Never switch the result table between separate layout branches:
-                // padding changes preserve its field editor, selection and scroll.
+        // Layout places the mounted panes at the exact proposed width. A
+        // sidebar animation no longer feeds stepped widths back into this
+        // view's state or rebuilds the surrounding workspace and toolbar.
+        WorkspaceResultLayout(showsOriginal: showsOriginal) {
+            // Never switch the result table between separate layout branches:
+            // layout changes preserve its field editor, selection and scroll.
+            VStack(spacing: 0) {
+                takeMarkSummary
+                RecognitionResultView(
+                    model: recognition, workspace: workspace,
+                    onInput: { changeLayout { visit(.input) } }
+                )
+            }
+            if let document = media.document {
                 VStack(spacing: 0) {
-                    takeMarkSummary
-                    RecognitionResultView(
-                        model: recognition, workspace: workspace,
-                        onInput: { changeLayout { visit(.input) } }
-                    )
+                    HStack {
+                        SlatePanelHeading(title: L10n.tr("原稿对照"), subtitle: L10n.tr("翻页仅切换原稿，不改变结果选择"))
+                        Button(L10n.tr("关闭"), systemImage: "xmark") { changeLayout { showsOriginal = false } }
+                            .tint(Color.secondary)
+                            .accessibilityIdentifier("workspace.original.close")
+                    }.padding(density.panelPadding)
+                    MediaPreviewView(document: document, pageIndex: $media.pageIndex)
                 }
-                .padding(.leading, wide && showsOriginal ? previewWidth : 0)
-                if let document = media.document {
-                    VStack(spacing: 0) {
-                        HStack {
-                            SlatePanelHeading(title: L10n.tr("原稿对照"), subtitle: L10n.tr("翻页仅切换原稿，不改变结果选择"))
-                            Button(L10n.tr("关闭"), systemImage: "xmark") { changeLayout { showsOriginal = false } }
-                                .tint(Color.secondary)
-                                .accessibilityIdentifier("workspace.original.close")
-                        }.padding(density.panelPadding)
-                        MediaPreviewView(document: document, pageIndex: $media.pageIndex)
-                    }
-                    .frame(width: previewWidth).frame(maxHeight: .infinity)
-                    .background(SlateSyncTheme.canvas)
-                    .overlay(alignment: .trailing) {
-                        Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
-                    }
-                    .opacity(showsOriginal ? 1 : 0).allowsHitTesting(showsOriginal)
-                    .accessibilityHidden(!showsOriginal)
+                .frame(maxHeight: .infinity)
+                .background(SlateSyncTheme.canvas)
+                .overlay(alignment: .trailing) {
+                    Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
                 }
+                .opacity(showsOriginal ? 1 : 0).allowsHitTesting(showsOriginal)
+                .accessibilityHidden(!showsOriginal)
             }
         }
     }
 
-    private var recognitionUnavailableReason: String? {
-        if workspace.projectID == nil { return L10n.tr("请先从项目库打开项目。") }
-        if workspace.selectedTaskID == nil { return L10n.tr("请选择任务，或导入场记单自动创建任务。") }
-        if media.operation.isRunning { return L10n.tr("场记单准备完成后即可识别。") }
-        if media.document == nil { return L10n.tr("请先导入 PDF 或图像；本地 CSV 可直接生成结果。") }
-        if providerID.isEmpty || modelID.isEmpty { return L10n.tr("请在识别配置中选择服务商和模型。") }
+    /// Why recognition cannot start, plus whether the fix lives in the
+    /// recognition configuration panel (so the status bar can offer to open it).
+    private struct RecognitionBlock {
+        let message: String
+        var needsConfiguration = false
+    }
+
+    private var recognitionBlock: RecognitionBlock? {
+        if workspace.projectID == nil { return RecognitionBlock(message: L10n.tr("请先从项目库打开项目。")) }
+        if workspace.selectedTaskID == nil { return RecognitionBlock(message: L10n.tr("请选择任务，或导入场记单自动创建任务。")) }
+        if media.operation.isRunning { return RecognitionBlock(message: L10n.tr("场记单准备完成后即可识别。")) }
+        if media.document == nil { return RecognitionBlock(message: L10n.tr("请先导入 PDF 或图像；本地 CSV 可直接生成结果。")) }
+        if providerID.isEmpty || modelID.isEmpty {
+            return RecognitionBlock(message: L10n.tr("请在识别配置中选择服务商和模型。"), needsConfiguration: true)
+        }
         if !recognition.canRecognize(providerID: providerID, modelID: modelID) {
-            return L10n.tr("识别配置不可用，请选择可用模型或打开全局设置配置服务商。")
+            return RecognitionBlock(
+                message: L10n.tr("识别配置不可用，请选择可用模型或打开全局设置配置服务商。"), needsConfiguration: true)
         }
         return nil
     }
+
+    private var recognitionUnavailableReason: String? { recognitionBlock?.message }
 
     private var originalBinding: Binding<Bool> {
         Binding(get: { showsOriginal }, set: { value in changeLayout { showsOriginal = value } })
@@ -834,12 +943,14 @@ public struct WorkspaceView: View {
         // Matching is intentionally derived from the canonical Resolve table;
         // scanning an arbitrary directory without expected keys would either
         // miss the user’s material set or violate the bounded scanner contract.
+        let tableID = csv.tableID, taskID = workspace.selectedTaskID
         Task {
             do {
                 let keys = try await csv.materialKeys()
+                guard tableID == csv.tableID, taskID == workspace.selectedTaskID else { return }
                 metadata.scan(directory, expectedKeys: keys)
             } catch {
-                metadata.report(error)
+                if tableID == csv.tableID, taskID == workspace.selectedTaskID { metadata.report(error) }
             }
         }
     }
