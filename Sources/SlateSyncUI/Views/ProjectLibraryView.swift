@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 // Product copy uses the shared launch language; user content stays verbatim.
 
 public struct ProjectLibraryView: View {
+    // The outgoing live page keeps its colors but relinquishes window chrome.
+    @Environment(\.contentRevealIsActive) private var revealIsActive
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ProjectLibraryModel
     private let onOpen: (ProjectSummary) -> Void
@@ -70,9 +72,9 @@ public struct ProjectLibraryView: View {
         // The library is one native list: the window title names the library,
         // section headers count the groups, and rows carry no icon tile,
         // stripe or disclosure chevron. Double-click or Return opens.
-        .navigationTitle(model.library?.name ?? L10n.tr("项目库"))
+        .contentRevealNavigationTitle(model.library?.name ?? L10n.tr("项目库"))
         .listStyle(.inset)
-        .toolbar { toolbar }
+        .toolbar { if revealIsActive { toolbar } }
         .safeAreaInset(edge: .bottom) { errorBanner }
         .sheet(isPresented: $model.showsCreateSheet) {
             CreateProjectSheet(model: model) { project in onOpen(project) }

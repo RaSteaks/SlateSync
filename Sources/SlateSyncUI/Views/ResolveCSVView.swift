@@ -5,6 +5,9 @@ import UniformTypeIdentifiers
 // Product copy uses the shared launch language; user content stays verbatim.
 
 public struct ResolveCSVView: View {
+    // A retained CSV page must relinquish its window actions immediately,
+    // including when an ancestor workspace route is leaving the screen.
+    @Environment(\.contentRevealIsActive) private var revealIsActive
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ResolveCSVModel
     @State private var importsCSV = false
@@ -68,14 +71,16 @@ public struct ResolveCSVView: View {
         }
         .disabled(recognition?.operation.isRunning == true)
         .toolbar {
-            // Import is an icon (with a help tag); merge and export carry titles.
-            ToolbarItemGroup(placement: .primaryAction) {
-                // AppKit collapses trailing toolbar items into the overflow chevron
-                // first when the window is narrow, so the order is by importance:
-                // the accent-filled export, then merge (a bordered secondary).
-                // Import is in the More menu; the empty state also offers it.
-                exportAction.slateToolbarPrimaryStyle().labelStyle(.titleAndIcon)
-                mergeButton.buttonStyle(.bordered).labelStyle(.titleAndIcon)
+            if revealIsActive {
+                // Import is an icon (with a help tag); merge and export carry titles.
+                ToolbarItemGroup(placement: .primaryAction) {
+                    // AppKit collapses trailing toolbar items into the overflow chevron
+                    // first when the window is narrow, so the order is by importance:
+                    // the accent-filled export, then merge (a bordered secondary).
+                    // Import is in the More menu; the empty state also offers it.
+                    exportAction.slateToolbarPrimaryStyle().labelStyle(.titleAndIcon)
+                    mergeButton.buttonStyle(.bordered).labelStyle(.titleAndIcon)
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {

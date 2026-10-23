@@ -27,12 +27,17 @@ public enum WorkspaceSection: String, CaseIterable, Identifiable, Hashable, Send
 }
 
 public struct WorkspaceView: View {
+    // The outgoing live page keeps its colors but relinquishes window chrome.
+    @Environment(\.contentRevealIsActive) private var revealIsActive
     @Bindable private var workspace: WorkspaceModel
     @Bindable private var recognition: RecognitionModel
     @Bindable private var csv: ResolveCSVModel
     @Bindable private var metadata: MetadataScanModel
     @Bindable private var media: MediaInputModel
     @Environment(\.slateSyncDensity) private var density
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // Initial width defaults and page reveals never also animate a panel.
+    @State private var animatesPanelChanges = false
     @State private var showsConfiguration: Bool?
     // Only input breakpoints enter view state. Result comparison geometry is
     // handled directly by WorkspaceResultLayout without publishing widths.
@@ -66,6 +71,7 @@ public struct WorkspaceView: View {
         }
     }
     private static let configurationPanelWidth: CGFloat = 300
+    private static let sectionPickerWidth: CGFloat = 360
 
     // Widths below are measured on the detail column (the window minus the
     // sidebar, which also holds the task list), not on the window. The layout
@@ -151,11 +157,15 @@ public struct WorkspaceView: View {
         // Tasks live in the app sidebar (SidebarView), so the workspace is one
         // detail column: the window toolbar carries identity, the section
         // picker and the page's actions; no in-page header bar remains.
-        detail
+        ContentRevealRegion(value: section, origin: .topSegment(
+            index: WorkspaceSection.allCases.firstIndex(of: section) ?? 0,
+            count: WorkspaceSection.allCases.count, width: Self.sectionPickerWidth
+        )) { destination in
+            detail(for: destination)
+        }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WorkspaceEditorProbe(boundary: editorBoundary).frame(width: 0, height: 0))
-        .navigationTitle(workspace.selectedTask?.filename ?? L10n.tr("当前任务"))
-        .navigationSubtitle(headerFacts)
+        .contentRevealNavigationTitle(workspace.selectedTask?.filename ?? L10n.tr("当前任务"), subtitle: headerFacts)
         .sheet(item: $metadataReport) { WorkflowDiagnosticsSheet(report: $0) }
         .onChange(of: workspace.selectedTaskID) { _, _ in metadataReport = nil }
         .safeAreaInset(edge: .bottom) {
@@ -170,47 +180,49 @@ public struct WorkspaceView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                sectionPicker
-            }
-            // Fixed order on every page: [primary] [More] [panel toggle], so the
-            // panel toggle always sits at the trailing edge.
-            ToolbarItemGroup(placement: .primaryAction) {
-                recognitionAction
-                Menu(L10n.tr("更多"), systemImage: "ellipsis.circle") {
-                    if section == .input {
-                        Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
-                            .disabled(!media.canAcceptInput || workspace.projectID == nil)
-                        Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
-                            .disabled(workspace.selectedTaskID == nil)
-                        if !recognition.slateCSVRecords.isEmpty {
-                            Button(L10n.tr("从场记 CSV 生成结果")) {
-                                recognition.generateLocalRecords(
-                                    flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
-                                    taskID: workspace.selectedTaskID)
-                            }
-                        }
-                        Divider()
-                    }
-                    if section == .csv {
-                        // Importing a Resolve CSV is rare and replaces the table,
-                        // so it lives here (and in the empty state) rather than
-                        // as a toolbar glyph that reads like a Save button.
-                        Button(L10n.tr("导入 CSV…")) { presentImport(.resolveCSV) }
-                            .disabled(workspace.selectedTaskID == nil || csv.operation.isRunning)
-                        Divider()
-                    }
-                    // The File menu owns the single ⌘S registration; this item
-                    // invokes the same workspace owner without competing.
-                    Button(L10n.tr("保存")) { Task { try? await workspace.flush() } }
+            if revealIsActive {
+                ToolbarItem(placement: .principal) {
+                    sectionPicker
                 }
-                // A bare ellipsis: the menu indicator would be an unexplained
-                // second glyph, and the icon stays neutral like its neighbors.
-                .menuIndicator(.hidden)
-                .foregroundStyle(.secondary)
-                .help(L10n.tr("更多操作"))
-                .accessibilityIdentifier("workspace.more")
-                headerAccessory
+                // Fixed order on every page: [primary] [More] [panel toggle], so the
+                // panel toggle always sits at the trailing edge.
+                ToolbarItemGroup(placement: .primaryAction) {
+                    recognitionAction
+                    Menu(L10n.tr("更多"), systemImage: "ellipsis.circle") {
+                        if section == .input {
+                            Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
+                                .disabled(!media.canAcceptInput || workspace.projectID == nil)
+                            Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
+                                .disabled(workspace.selectedTaskID == nil)
+                            if !recognition.slateCSVRecords.isEmpty {
+                                Button(L10n.tr("从场记 CSV 生成结果")) {
+                                    recognition.generateLocalRecords(
+                                        flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
+                                        taskID: workspace.selectedTaskID)
+                                }
+                            }
+                            Divider()
+                        }
+                        if section == .csv {
+                            // Importing a Resolve CSV is rare and replaces the table,
+                            // so it lives here (and in the empty state) rather than
+                            // as a toolbar glyph that reads like a Save button.
+                            Button(L10n.tr("导入 CSV…")) { presentImport(.resolveCSV) }
+                                .disabled(workspace.selectedTaskID == nil || csv.operation.isRunning)
+                            Divider()
+                        }
+                        // The File menu owns the single ⌘S registration; this item
+                        // invokes the same workspace owner without competing.
+                        Button(L10n.tr("保存")) { Task { try? await workspace.flush() } }
+                    }
+                    // A bare ellipsis: the menu indicator would be an unexplained
+                    // second glyph, and the icon stays neutral like its neighbors.
+                    .menuIndicator(.hidden)
+                    .foregroundStyle(.secondary)
+                    .help(L10n.tr("更多操作"))
+                    .accessibilityIdentifier("workspace.more")
+                    headerAccessory
+                }
             }
         }
         // A single importer owns the workspace presentation. Multiple
@@ -333,7 +345,7 @@ public struct WorkspaceView: View {
             ForEach(WorkspaceSection.allCases) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented).labelsHidden()
-        .frame(maxWidth: 360)
+        .frame(maxWidth: Self.sectionPickerWidth)
         // "New content" dots ride over the native segmented control
         // without replacing it: selection, keyboard and VoiceOver
         // behavior stay platform-owned; dots never steal focus and
@@ -399,8 +411,8 @@ public struct WorkspaceView: View {
         }
     }
 
-    @ViewBuilder private var detail: some View {
-        switch section {
+    @ViewBuilder private func detail(for destination: WorkspaceSection) -> some View {
+        switch destination {
         case .input: inputView
         case .result: resultView
         case .csv:
@@ -464,6 +476,9 @@ public struct WorkspaceView: View {
                     }
                 }
             }
+            // The preview follows the container's changing space; its controls
+            // do not start their own inherited frame animations.
+            .transaction { $0.animation = nil }
             .padding(.trailing, docked ? Self.configurationPanelWidth : 0)
             // The same form stays mounted as the column crosses the dock
             // width; only its placement changes, preserving native IME
@@ -473,6 +488,7 @@ public struct WorkspaceView: View {
             // stays at full strength so the evidence is never dimmed.
             configurationPanel
                 .disabled(recognition.operation.isRunning)
+                .transaction { $0.animation = nil }
                 .frame(width: Self.configurationPanelWidth)
                 .frame(maxHeight: .infinity)
                 .slateDockedSurface(.panel)
@@ -486,10 +502,13 @@ public struct WorkspaceView: View {
                 // chrome stays flat.
                 .shadow(color: .black.opacity(visible && !docked ? 0.22 : 0),
                         radius: visible && !docked ? 10 : 0, x: -3, y: 0)
+                .offset(x: visible ? 0 : Self.configurationPanelWidth)
                 .opacity(visible ? 1 : 0)
                 .allowsHitTesting(visible)
                 .accessibilityHidden(!visible)
         }
+        .clipped()
+        .animation(panelAnimation, value: visible)
         .onGeometryChange(for: InputLayout.self) {
             InputLayout(width: $0.size.width)
         } action: {
@@ -625,8 +644,10 @@ public struct WorkspaceView: View {
                                 .lineLimit(3...8)
                                 .accessibilityLabel(L10n.tr("自定义提示词"))
                                 .accessibilityIdentifier(AccessibilityID.workspaceCustomPrompt)
+                                .transition(.opacity.combined(with: .offset(y: 6)))
                         }
                     }
+                    .animation(panelAnimation, value: showsAdvanced)
                 }
             }
             .formStyle(.columns)
@@ -734,11 +755,13 @@ public struct WorkspaceView: View {
                     onInput: { changeLayout { visit(.input) } }
                 )
             }
+            .transaction { $0.animation = nil }
             if let document = media.document {
                 // Paging only switches the original; it never changes the result
                 // selection. The close button keeps its identifier; the toolbar
                 // toggle is the primary way to hide the panel.
                 MediaPreviewView(document: document, pageIndex: $media.pageIndex)
+                .transaction { $0.animation = nil }
                 .frame(maxHeight: .infinity)
                 .overlay(alignment: .topTrailing) {
                     Button(L10n.tr("关闭"), systemImage: "xmark") { changeLayout { showsOriginal = false } }
@@ -754,6 +777,8 @@ public struct WorkspaceView: View {
                 .accessibilityHidden(!showsOriginal)
             }
         }
+        .clipped()
+        .animation(panelAnimation, value: showsOriginal)
         .onGeometryChange(for: Int.self) {
             // 0 = first-pass ideal width (not measured), 1 = narrow, 2 = inline.
             $0.size.width >= 900 ? 2 : ($0.size.width >= 600 ? 1 : 0)
@@ -792,6 +817,10 @@ public struct WorkspaceView: View {
         Binding(get: { showsOriginal }, set: { value in changeLayout { showsOriginal = value } })
     }
 
+    private var panelAnimation: Animation? {
+        animatesPanelChanges && !reduceMotion ? SlateMotion.handoff : nil
+    }
+
     private func routeToEntryPoint(_ destination: WorkspaceEntryPoint) {
         guard destination != .input else { return }
         if changingLayout {
@@ -827,6 +856,7 @@ public struct WorkspaceView: View {
                 try editorBoundary.prepare()
                 try await workspace.flush()
                 layoutError = nil
+                animatesPanelChanges = true
                 update()
                 // A tab click can arrive during any layout save, including
                 // sidebar/configuration/original toggles. Apply the last click
@@ -854,6 +884,9 @@ public struct WorkspaceView: View {
     }
 
     private func visit(_ destination: WorkspaceSection) {
+        // A feature change uses the reveal only; initial panel placement is
+        // already part of that new page and must not perform a second handoff.
+        animatesPanelChanges = false
         section = destination
         unseenSections.remove(destination)
         onSectionChanged(destination)

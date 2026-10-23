@@ -162,11 +162,14 @@ def validate_source_boundaries():
     bridges = sorted(str(p.relative_to(ROOT)) for p in ui_files if re.search(r':\s*NSViewRepresentable', p.read_text()))
     # Window/editor probes and the prepared-JPEG display are narrow AppKit
     # boundaries. Appearance reveal only snapshots this window and masks its
-    # old pixels; it never duplicates editor state. The image layer owns no
-    # media parsing. Keep this allowlist exact so new bridges require review.
+    # old pixels; content reveal instead clips two live pages and uses a clear
+    # native input shield, without pixel capture or duplicate toolbar ownership.
+    # The image layer owns no media parsing. Keep this allowlist exact so new
+    # bridges require review.
     require(bridges == ['Sources/SlateSyncUI/App/WindowLifecycleBridge.swift',
                         'Sources/SlateSyncUI/CSV/EditableCSVTableRepresentable.swift',
                         'Sources/SlateSyncUI/Components/AppearanceTransition.swift',
+                        'Sources/SlateSyncUI/Components/ContentMotion.swift',
                         'Sources/SlateSyncUI/Components/WindowMinimumSize.swift',
                         'Sources/SlateSyncUI/Workspace/MediaPreviewView.swift',
                         'Sources/SlateSyncUI/Workspace/WorkspaceEditorBoundary.swift'], 'AppKit bridge allowlist drift')

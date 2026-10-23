@@ -77,7 +77,7 @@ final class WorkspaceLayoutRegressionTests: XCTestCase {
         XCTAssertGreaterThan(expanded.minX, 0)
         for visibility in [NavigationSplitViewVisibility.detailOnly, .all, .detailOnly, .all] {
             state.visibility = visibility
-            try await Task.sleep(for: .milliseconds(300))
+            try await Task.sleep(for: .seconds(SlateMotion.handoffDuration + 0.1))
             try await settle(host)
             let frame = detail.convert(detail.bounds, to: host)
             XCTAssertEqual(host.bounds.width, 960, accuracy: 1)
@@ -97,6 +97,31 @@ final class WorkspaceLayoutRegressionTests: XCTestCase {
     // The task rail and its split layout were removed on 2026-10-23: tasks now
     // live in the system sidebar (SidebarView), which the two native reveal
     // tests above exercise.
+
+    func testSystemSidebarAnimatesItsContainerButNotNativeChildren() async throws {
+        for reduced in [false, true] {
+            let state = NavigationRevealState()
+            let probes = LayoutProbes()
+            let host = NSHostingView(rootView: SystemNavigationSurface(state: state, probes: probes, reduceMotion: reduced))
+            host.sizingOptions = []
+            let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 960, height: 600),
+                                  styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            defer { window.contentView = nil; window.close() }
+            try await settle(host)
+            for visibility in [NavigationSplitViewVisibility.detailOnly, .all] {
+                state.visibility = visibility
+                try await settle(host)
+                XCTAssertEqual(probes.containerAnimations.last, !reduced,
+                               "The container needs an explicit visibility animation, except under Reduce Motion")
+                XCTAssertFalse(probes.receivedAnimation, "Native child controls must not lag behind the split")
+                try await Task.sleep(for: .seconds(reduced ? 0.05 : SlateMotion.handoffDuration + 0.1))
+            }
+            XCTAssertEqual(probes.containerAnimations.count, 2)
+            XCTAssertFalse(window.isVisible)
+        }
+    }
 
     func testComparisonUsesContinuousWidthsAndStaysInsideViewport() {
         let origin = CGPoint(x: 27, y: 13)
@@ -272,6 +297,7 @@ private final class NavigationRevealState {
 private struct SystemNavigationSurface: View {
     @Bindable var state: NavigationRevealState
     let probes: LayoutProbes
+    var reduceMotion = false
 
     var body: some View {
         // Exercise the same native column policy as AppRootView using a
@@ -284,6 +310,8 @@ private struct SystemNavigationSurface: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .sidebarResizeBoundary()
         }
+        .background(SidebarMotionTransactionProbe(visibility: state.visibility, probes: probes))
+        .sidebarVisibilityAnimation(state.visibility, reduceMotion: reduceMotion)
     }
 }
 
@@ -292,6 +320,24 @@ private final class LayoutProbes {
     var views: [String: NSView] = [:]
     var creationCount = 0
     var receivedAnimation = false
+    var containerAnimations: [Bool] = []
+}
+
+/// Observe the transaction at the split container, before child isolation.
+/// A changed input forces updates even when native layout decides its own frames.
+private struct SidebarMotionTransactionProbe: NSViewRepresentable {
+    let visibility: NavigationSplitViewVisibility
+    let probes: LayoutProbes
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView { NSView() }
+    func updateNSView(_ view: NSView, context: Context) {
+        if let previous = context.coordinator.previous, previous != visibility {
+            probes.containerAnimations.append(context.transaction.animation != nil)
+        }
+        context.coordinator.previous = visibility
+    }
+    final class Coordinator { var previous: NavigationSplitViewVisibility? }
 }
 
 private struct LayoutProbe: NSViewRepresentable {

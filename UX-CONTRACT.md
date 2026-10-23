@@ -12,6 +12,7 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 | Toast | `SlateStatusBar` with feature-owned operation state | `WorkspaceComponents` and `AppRootView` | Inline error/recovery or persistent cross-route recognition status; no toast timers | Native UI workflow and error/export regression tests |
 | CRUD | Feature model backed by workflow façade | `ProjectLibraryModel`, `ProjectSettingsModel`, and UI workflow protocols | SM-08 project/task/settings mutations; views never open Persistence directly | SwiftPM ownership tests plus Xcode workflow/UI tests |
 | Navigation | `NavigationSplitView` shell | `AppRootView` and `SidebarView` | Dedicated macOS Settings scene for global settings | App-launch UI test and native keyboard navigation |
+| Content motion | `ContentRevealRegion`, `SlateMotion` and `WorkspaceResultLayout` | DESIGN.md function-area motion contract | Complementary masks over live committed pages; no content snapshots; original-document handoff within a region | `ContentMotionTests` and offscreen layout/editor regressions |
 
 ## Navigation and scenes
 
@@ -74,6 +75,35 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Workspace segments acknowledge selection synchronously while keeping the
   current editor mounted until saving succeeds. Repeated clicks during that
   save select the latest destination; failure restores the current segment.
+- Committed sidebar, workspace and Settings category changes reveal only the
+  content region using complementary masks over the actual outgoing/incoming
+  pages. No content bitmap is captured, flattened, retagged or replayed. A stable
+  canvas sits outside the masks; native controls keep their normal enabled colors.
+- At most two live pages are mounted. Only the current page contributes window
+  chrome and accessibility content; a clear input shield blocks editing during
+  motion without disabling/dimming controls. Existing save barriers still precede
+  route commitment. Rapid return reuses the retained editor and reverses the
+  same circle, preserving its origin and both pages' mask roles. A third-page
+  request waits for this leg to finish; only the latest queued request starts
+  the next reveal, with at most two mounted pages. Departed pages immediately
+  remove toolbar actions, including nested CSV actions. While the latest page
+  waits to mount, the window keeps its previous title.
+  Resize, appearance changes, detachment and Reduce Motion settle the latest
+  request immediately and clear the queue; obsolete completion tasks cannot
+  finish a newer transition.
+- The stable region and keyed pages remain in the existing SwiftUI hierarchy,
+  preserving environment and preferences. Sidebar visibility animates at the
+  split container; native children receive animation-free layout transactions.
+- Committed reveals, sidebar visibility and in-region handoffs share a 2 s
+  cubic Bézier `(0.4, 0, 0.2, 1)` pace. Only the masks animate during page changes;
+  the independent four-second theme transition is outside this replacement.
+
+- Within a feature, explicit configuration/original-panel toggles and advanced
+  disclosure use the shared handoff after the editor/save barrier. The original
+  and result editor remain mounted; a single layout progress owns their shared
+  edge. Original-page replacement animates only a new bitmap, never repeated
+  layout refreshes. Initial panel defaults, high-frequency table edits and
+  window resizing do not introduce motion; Reduce Motion updates directly.
 - Task-rail toggles retain the fixed-width list and editor, pass the existing
   save barrier, and use one animated layout for the translated rail and adjacent
   content; Reduce Motion disables that animation. Pane contents are clipped and

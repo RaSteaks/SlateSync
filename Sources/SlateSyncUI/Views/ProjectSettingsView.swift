@@ -4,6 +4,8 @@ import SwiftUI
 // Product copy uses the shared launch language; user content stays verbatim.
 
 public struct ProjectSettingsView: View {
+    // The outgoing live page keeps its colors but relinquishes window chrome.
+    @Environment(\.contentRevealIsActive) private var revealIsActive
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ProjectSettingsModel
     @Bindable private var recognition: RecognitionModel
@@ -97,12 +99,14 @@ public struct ProjectSettingsView: View {
                     .tint(Color.secondary)
             }
         }
-        .navigationTitle(L10n.tr("项目设置"))
+        .contentRevealNavigationTitle(L10n.tr("项目设置"))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") { Task { await model.save() } }
-                    .slatePrimaryActionStyle()
-                    .disabled(model.project == nil || model.operation.isRunning)
+            if revealIsActive {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") { Task { await model.save() } }
+                        .slatePrimaryActionStyle()
+                        .disabled(model.project == nil || model.operation.isRunning)
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {

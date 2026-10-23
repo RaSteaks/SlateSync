@@ -70,7 +70,8 @@ public struct LogsView: View {
                 }.accessibilityIdentifier(AccessibilityID.logsList)
             }
         }
-        .navigationTitle(L10n.tr("运行日志"))
+        // Retained outgoing pages relinquish the shared window title.
+        .contentRevealNavigationTitle(L10n.tr("运行日志"))
         .safeAreaInset(edge: .bottom) {
             if model.degraded {
                 SlateStatusBar(message: L10n.tr("部分日志无法读取，已保留可用记录。"), tone: .warning) {

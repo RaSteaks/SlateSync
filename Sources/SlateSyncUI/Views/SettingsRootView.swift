@@ -29,6 +29,8 @@ public struct SettingsRootView: View {
     private let preferences: UserDefaults
     private let navigation: SettingsNavigationModel
     private let mcpService: MCPSettingsModel?
+    private static let categoryWidth: CGFloat = 68
+    private static let categorySpacing: CGFloat = 2
 
     public init(
         settings: GlobalSettingsModel,
@@ -55,8 +57,13 @@ public struct SettingsRootView: View {
                 .padding(.horizontal, density.panelPadding)
                 .padding(.top, 6).padding(.bottom, 10)
             Divider()
-            Group {
-                switch category {
+            // Category controls stay live while only the form region reveals.
+            ContentRevealRegion(value: category, origin: .topSegment(
+                index: SettingsCategory.allCases.firstIndex(of: category) ?? 0,
+                count: SettingsCategory.allCases.count,
+                width: CGFloat(SettingsCategory.allCases.count) * (Self.categoryWidth + Self.categorySpacing) - Self.categorySpacing
+            )) { destination in
+                switch destination {
                 case .general: general
                 case .providers: providers
                 case .recognition: recognition
@@ -154,7 +161,7 @@ public struct SettingsRootView: View {
     /// One icon tab per pane. A plain button keeps keyboard and VoiceOver
     /// behavior; the selected tab gets the accent glyph and a quiet fill.
     private var categoryBar: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Self.categorySpacing) {
             ForEach(SettingsCategory.allCases) { item in
                 let selected = category == item
                 Button { category = item } label: {
@@ -162,7 +169,7 @@ public struct SettingsRootView: View {
                         Image(systemName: item.symbol).font(.system(size: 18)).frame(height: 22)
                         Text(item.title).font(.caption).lineLimit(1)
                     }
-                    .frame(width: 68, height: 50)
+                    .frame(width: Self.categoryWidth, height: 50)
                     .foregroundStyle(selected ? SlateSyncTheme.accent : SlateSyncTheme.secondary)
                     .background(
                         selected ? Color(nsColor: .quaternaryLabelColor) : .clear,

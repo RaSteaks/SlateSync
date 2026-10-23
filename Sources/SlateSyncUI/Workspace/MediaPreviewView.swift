@@ -80,11 +80,13 @@ struct MediaPreviewView: View {
 struct MediaPreviewImage: NSViewRepresentable {
     let image: NSImage?
     let accessibilityLabel: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeNSView(context: Context) -> ImageView { ImageView() }
 
     func updateNSView(_ view: ImageView, context: Context) {
-        view.setImage(image)
+        view.setImage(image, animated: !reduceMotion)
+        if reduceMotion { view.finishHandoff() }
         view.setAccessibilityLabel(accessibilityLabel)
     }
 
@@ -116,19 +118,46 @@ struct MediaPreviewImage: NSViewRepresentable {
 
         required init?(coder: NSCoder) { nil }
 
-        func setImage(_ image: NSImage?) {
+        func setImage(_ image: NSImage?, animated: Bool = false) {
             guard self.image !== image else { return }
+            let replacesVisibleImage = self.image != nil
+            finishHandoff()
             self.image = image
             let bitmap = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
             pixelSize = bitmap.map { CGSize(width: $0.width, height: $0.height) } ?? .zero
-            // Geometry and page changes follow the owning SwiftUI transaction;
-            // implicit layer animations would lag behind the moving sidebar.
+            // Geometry follows the owning layout immediately. Only an actual
+            // page/image replacement receives the shared, centered handoff;
+            // repeated layout updates continue to reuse the same bitmap.
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            // Initial mounting belongs to the surrounding feature reveal;
+            // only a page already on screen hands off to its replacement.
+            if animated, replacesVisibleImage, bitmap != nil {
+                let fade = CATransition()
+                fade.type = .fade
+                fade.duration = SlateMotion.handoffDuration
+                fade.timingFunction = SlateMotion.timingFunction
+                // CATransition uses Core Animation's reserved transition key.
+                // Register before changing contents so both bitmaps participate.
+                imageLayer.add(fade, forKey: kCATransition)
+                let arrival = CABasicAnimation(keyPath: "transform.translation.y")
+                arrival.fromValue = 6
+                arrival.toValue = 0
+                arrival.duration = SlateMotion.handoffDuration
+                arrival.timingFunction = fade.timingFunction
+                imageLayer.add(arrival, forKey: "page.arrival")
+            }
             imageLayer.contents = bitmap
             imageLayer.isHidden = bitmap == nil
             CATransaction.commit()
             needsLayout = true
+        }
+
+        /// Changing accessibility settings or clearing media also clears any
+        /// in-flight visual work; the new page never waits for an old one.
+        func finishHandoff() {
+            imageLayer.removeAnimation(forKey: kCATransition)
+            imageLayer.removeAnimation(forKey: "page.arrival")
         }
 
         override func layout() {

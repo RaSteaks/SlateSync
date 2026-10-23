@@ -4,9 +4,12 @@ import SwiftUI
 // Product copy uses the shared launch language; user content stays verbatim.
 
 public struct AppRootView: View {
+    // Only the active live page supplies window chrome during a reveal.
+    @State private var revealNavigation = ContentRevealNavigation()
     // Each window starts with visible navigation, independent of AppKit's
     // saved split-view geometry from another project or test launch.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var workspaceEntryPoint = WorkspaceEntryPoint.input
     // Completion events are observed at the window boundary so they remain
     // observable while WorkspaceView is replaced by another route. The task
@@ -78,6 +81,16 @@ public struct AppRootView: View {
                 // inherited animation makes every nested control lag behind.
                 .sidebarResizeBoundary()
         }
+        // Only the current live page contributes title/subtitle. The outgoing
+        // page stays mounted for its mask, without competing for window chrome.
+        .onPreferenceChange(ContentRevealNavigationKey.self) { navigation in
+            // A third destination waits for the current visual leg, with both
+            // old pages' chrome inactive. Keep the last title until it mounts.
+            if !navigation.title.isEmpty { revealNavigation = navigation }
+        }
+        .navigationTitle(revealNavigation.title)
+        .navigationSubtitle(revealNavigation.subtitle)
+        .sidebarVisibilityAnimation(columnVisibility, reduceMotion: reduceMotion)
         .tint(SlateSyncTheme.accent)
         // Always an explicit scheme (system resolves to the live system value);
         // see AppearanceController for why never nil.
@@ -167,8 +180,16 @@ public struct AppRootView: View {
             }
     }
 
-    @ViewBuilder private var detail: some View {
-        switch session.route {
+    private var detail: some View {
+        // Observe only the committed route: failed saves never start a reveal.
+        // The sidebar and persistent status bar remain outside this region.
+        ContentRevealRegion(value: session.route, origin: .leading) { destination in
+            destinationView(destination)
+        }
+    }
+
+    @ViewBuilder private func destinationView(_ destination: SidebarDestination) -> some View {
+        switch destination {
         case .projects:
             ProjectLibraryView(
                 model: projects,

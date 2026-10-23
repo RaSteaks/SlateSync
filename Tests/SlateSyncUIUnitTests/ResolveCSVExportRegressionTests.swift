@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import SlateSyncDomain
 import SlateSyncWorkflow
 @testable import SlateSyncUI
@@ -9,6 +11,63 @@ import XCTest
 /// The retained `<baseName>_场记已回填.csv` filename contract is unchanged.
 @MainActor
 final class ResolveCSVExportRegressionTests: XCTestCase {
+    /// Exercise the real CSV toolbar in an unordered window. The editor remains
+    /// mounted during both a tab reveal and an ancestor route departure.
+    func testRetainedCSVRelinquishesToolbarForTabAndAncestorNavigation() async throws {
+        let model = ResolveCSVModel(service: CSVExportFake())
+        await model.importData(Data(rawCSV.utf8), filename: "fixture.csv")
+        let state = ToolbarState()
+        let controller = NSHostingController(rootView: ToolbarFixture(state: state, model: model))
+        controller.view.frame = CGRect(x: 0, y: 0, width: 900, height: 500)
+        let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 900, height: 500),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentViewController = controller
+        defer { window.contentViewController = nil; window.close() }
+        func settle() async throws {
+            window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(80))
+            window.contentView?.layoutSubtreeIfNeeded()
+        }
+        try await settle()
+        XCTAssertGreaterThan(try XCTUnwrap(window.toolbar).items.count, 1)
+        XCTAssertNotNil(model.flushEditor)
+        state.page = 1
+        try await settle()
+        XCTAssertEqual(window.toolbar?.items.count, 1, "CSV actions must disappear before its two-second reveal completes")
+        XCTAssertNotNil(model.flushEditor, "The actual CSV editor is still retained")
+        state.page = 0
+        try await settle()
+        XCTAssertGreaterThan(try XCTUnwrap(window.toolbar).items.count, 1, "Returning restores the CSV toolbar")
+        state.ancestorIsActive = false
+        try await settle()
+        XCTAssertEqual(window.toolbar?.items.count, 1, "Leaving the workspace must also remove CSV actions")
+        XCTAssertNotNil(model.flushEditor)
+        XCTAssertFalse(window.isVisible)
+    }
+
+    @MainActor @Observable final class ToolbarState {
+        var page = 0
+        var ancestorIsActive = true
+    }
+
+    private struct ToolbarFixture: View {
+        let state: ToolbarState
+        let model: ResolveCSVModel
+        var body: some View {
+            ContentRevealRegion(value: state.page, origin: .leading) { page in
+                if page == 0 { ResolveCSVView(model: model) }
+                else { Text("Destination") }
+            }
+            .environment(\.contentRevealIsActive, state.ancestorIsActive)
+            // Match the app's persistent navigation chrome. Removing the only
+            // toolbar changes the content size, intentionally ending the reveal.
+            .toolbar {
+                ToolbarItem(placement: .navigation) { Button("Navigation") {} }
+            }
+        }
+    }
+
     private let rawCSV = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\n"
     private let twoRowCSV = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\nB002C002.mov,2,,1,\r\n"
 
