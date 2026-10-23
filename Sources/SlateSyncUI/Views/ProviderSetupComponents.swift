@@ -26,7 +26,7 @@ struct ProviderOperationFeedback: View {
                 let passed = result.results.filter { $0.capabilityStatus == .verified }.count
                 let allPassed = !result.canceled && result.total > 0 && passed == result.total
                 Label(ProviderPresentation.probeSummary(result), systemImage: allPassed ? "checkmark.circle" : "exclamationmark.circle")
-                    .foregroundStyle(allPassed ? SlateSyncTheme.success : (passed == 0 && !result.canceled ? SlateSyncTheme.danger : SlateSyncTheme.warning))
+                    .foregroundStyle(allPassed ? SlateSyncTheme.successText : (passed == 0 && !result.canceled ? SlateSyncTheme.dangerText : SlateSyncTheme.warningText))
                 if result.canceled { Text(L10n.tr("本次验证已取消，未保存新的验证结果。")) }
                 if let failed = result.results.first(where: { $0.capabilityStatus == .failed }) {
                     recovery(.init(code: "MODEL_PROBE", message: failed.message, status: failed.status))
@@ -35,7 +35,7 @@ struct ProviderOperationFeedback: View {
                 Label(L10n.tr("操作已取消"), systemImage: "slash.circle")
             } else if let result = settings.discoveryResults[providerID] {
                 Text(ProviderPresentation.discoverySummary(result))
-                    .foregroundStyle(result.source == .api && result.modelsEndpointAvailable != false ? SlateSyncTheme.secondary : SlateSyncTheme.warning)
+                    .foregroundStyle(result.source == .api && result.modelsEndpointAvailable != false ? SlateSyncTheme.secondary : SlateSyncTheme.warningText)
                 if let warning = result.warning { ProviderDiagnostic(message: L10n.message(warning), isError: false) }
             }
         }

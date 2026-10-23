@@ -27,6 +27,18 @@ public enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Send
         case .advanced: L10n.tr("高级")
         }
     }
+
+    /// SF Symbol for the Settings icon tab.
+    public var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .providers: "server.rack"
+        case .recognition: "text.viewfinder"
+        case .ocr: "doc.text.magnifyingglass"
+        case .mcp: "puzzlepiece.extension"
+        case .advanced: "slider.horizontal.3"
+        }
+    }
 }
 
 /// Optional subregions let a help action land on a meaningful section inside

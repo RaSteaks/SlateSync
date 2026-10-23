@@ -25,7 +25,7 @@ public final class WorkspaceModel {
         didSet { if searchText != oldValue { refreshTaskProjection() } }
     }
     // Materialize the search projection only when its inputs change, not on
-    // selection, progress, autosave or layout updates in the task rail.
+    // selection, progress, autosave or layout updates in the sidebar task rows.
     public private(set) var filteredTasks: [TaskListItem] = []
     public private(set) var selectableTasks: [TaskListItem] = []
     public var customPrompt = "" {
@@ -45,6 +45,11 @@ public final class WorkspaceModel {
     // Stage text follows real suspension points, not estimated percentages.
     public private(set) var activationStage: String?
     public private(set) var isTransitioning = false
+    /// True from the click that starts task creation until the new task is
+    /// published. Set before the first suspension so the UI can answer the click
+    /// at once (a pending row, a disabled button) instead of looking idle while
+    /// the durable creation call runs.
+    public private(set) var isCreatingTask = false
     public var prepareSelectionChange: (@MainActor () async throws -> Void)?
     public var flushEditor: (@MainActor () throws -> Void)?
     public var acquireProject: (@MainActor (String) throws -> Void)?
@@ -173,15 +178,45 @@ public final class WorkspaceModel {
     }
 
     public func createTask() async {
-        guard let projectID, !isTransitioning, permitsNewOperation?() != false else { return }
+        // A second click while one creation is in flight is dropped, not queued.
+        guard let projectID, !isTransitioning, !isCreatingTask, permitsNewOperation?() != false else { return }
+        isCreatingTask = true
+        defer { isCreatingTask = false }
         isTransitioning = true
         defer { isTransitioning = false }
+        let requestGeneration = generation
+        let start = ContinuousClock.now
+        var stageStart = start
+        var stage = "initialFlush"
+        var timings: [String: JSONValue] = [:]
+        var succeeded = false
+        // One diagnostic per click, with timings only: no project IDs, paths,
+        // task titles or prompt contents enter the performance log.
+        func finishStage(next: String) {
+            let now = ContinuousClock.now
+            let elapsed = stageStart.duration(to: now).components
+            timings[stage + "Ms"] = .number(Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15)
+            stageStart = now
+            stage = next
+        }
+        defer {
+            let lastStage = stage
+            finishStage(next: "finished")
+            let elapsed = start.duration(to: .now).components
+            timings["totalMs"] = .number(Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15)
+            timings["succeeded"] = .boolean(succeeded)
+            timings["lastStage"] = .string(lastStage)
+            SlateSyncLogger(category: "performance").info("Task creation stages", metadata: timings)
+        }
         do {
             try await flush()
+            finishStage(next: "drain")
             try await prepareSelectionChange?()
+            finishStage(next: "finalFlush")
             // A completing operation may have staged data while the first
             // flush was suspended. Drain first, then persist its final state.
             try await flush()
+            finishStage(next: "create")
             operation = .running(label: L10n.tr("正在新建任务…"))
             let task = TaskData(
                 projectId: projectID,
@@ -190,10 +225,16 @@ public final class WorkspaceModel {
                 filename: L10n.tr("未命名场记单"),
                 customPrompt: ""
             )
-            let id = try await service.saveTask(projectID: projectID, taskID: nil, task: task)
+            let created = try await service.createTask(projectID: projectID, task: task)
+            finishStage(next: "publish")
+            guard self.projectID == projectID, generation == requestGeneration else { return }
+            // Use the exact persisted task and same-transaction list. Local
+            // timestamp guesses or post-save reads can diverge from the commit.
             generation += 1
-            try await reloadTasks(selecting: id)
+            tasks = created.tasks
+            publish(created.task, id: created.task.id)
             operation = .succeeded(message: L10n.tr("任务已创建"))
+            succeeded = true
         } catch {
             operation = .failed(ProductPrivacy.error(error))
         }

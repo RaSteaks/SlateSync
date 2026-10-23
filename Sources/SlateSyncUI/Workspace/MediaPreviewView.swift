@@ -20,11 +20,11 @@ struct MediaPreviewView: View {
             Button { showsLightbox = true } label: {
                 // The native image layer fits its viewport without a
                 // GeometryReader rebuilding this image/shadow tree per frame.
-                LightTable(contentCastsShadow: false) { preview }
+                pageStage
             }.buttonStyle(.plain).accessibilityLabel(L10n.tr("放大场记单预览")).accessibilityIdentifier("workspace.preview.enlarge").help(L10n.tr("放大场记单预览"))
-            Divider()
-            navigation.padding(.horizontal, 12).padding(.bottom, 12)
+            navigation.padding(.bottom, 10)
         }
+        // The page floats on the window canvas with its own shadow.
         .background(SlateSyncTheme.canvas)
         .onChange(of: previewJPEG, initial: true) {
             previewImage = previewJPEG.flatMap { NSImage(data: $0) }
@@ -32,14 +32,22 @@ struct MediaPreviewView: View {
         .sheet(isPresented: $showsLightbox) {
             VStack {
                 HStack { navigation; Spacer(); Button(L10n.tr("关闭预览")) { showsLightbox = false }.keyboardShortcut(.cancelAction) }
-                LightTable(contentCastsShadow: false) { preview }
+                pageStage
             }
             .padding(20).frame(minWidth: 720, minHeight: 480)
-            // Paging shortcuts exist only inside the lightbox, so arrow keys
+            // Paging shortcuts exist only inside the enlarged preview, so arrow keys
             // in task/result text editors retain native caret/IME behavior.
             .onKeyPress(.leftArrow) { previous(); return .handled }
             .onKeyPress(.rightArrow) { next(); return .handled }
         }
+    }
+
+    /// The document page alone, centered with the standard page margin. The
+    /// layer draws its own rectangular shadow; there is no frame around it.
+    private var pageStage: some View {
+        preview
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(20)
     }
 
     private var preview: some View {
@@ -56,9 +64,9 @@ struct MediaPreviewView: View {
 
     private var navigation: some View {
         HStack {
-            Button(L10n.tr("上一页"), systemImage: "chevron.left", action: previous).labelStyle(.iconOnly).help(L10n.tr("上一页")).accessibilityIdentifier("workspace.preview.previous").disabled(pageIndex == 0)
+            Button(L10n.tr("上一页"), systemImage: "chevron.left", action: previous).labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary).help(L10n.tr("上一页")).accessibilityIdentifier("workspace.preview.previous").disabled(pageIndex == 0)
             Text("\(pageIndex + 1) / \(document.pages.count)").monospacedDigit()
-            Button(L10n.tr("下一页"), systemImage: "chevron.right", action: next).labelStyle(.iconOnly).help(L10n.tr("下一页")).accessibilityIdentifier("workspace.preview.next").disabled(pageIndex + 1 >= document.pages.count)
+            Button(L10n.tr("下一页"), systemImage: "chevron.right", action: next).labelStyle(.iconOnly).buttonStyle(.borderless).foregroundStyle(.secondary).help(L10n.tr("下一页")).accessibilityIdentifier("workspace.preview.next").disabled(pageIndex + 1 >= document.pages.count)
         }
     }
 
@@ -137,7 +145,7 @@ struct MediaPreviewImage: NSViewRepresentable {
             CATransaction.commit()
         }
 
-        // The enclosing SwiftUI Button owns clicks and opens the lightbox.
+        // The enclosing SwiftUI Button owns clicks and opens the enlarged preview.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }

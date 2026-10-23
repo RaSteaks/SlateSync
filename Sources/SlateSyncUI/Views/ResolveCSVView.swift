@@ -38,27 +38,10 @@ public struct ResolveCSVView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Only toolbar presentation adapts; the editor stays at one stable
-            // structural position and keeps its native selection/scroll owner.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    importAction
-                    Divider().frame(height: 18)
-                    mergeActions
-                    Spacer(minLength: 8)
-                    exportAction
-                    tableSummary
-                }
-                HStack {
-                    importAction
-                    Spacer(minLength: 4)
-                    Menu(L10n.tr("结果操作"), systemImage: "ellipsis.circle") { mergeActions }
-                        .tint(Color.secondary)
-                    exportAction
-                }
-            }.padding(density.panelPadding)
-            Divider()
-            if unresolvedCount > 0 {
+            // Import, merge and export live in the window toolbar (below); the
+            // editor keeps one stable structural position and its native
+            // selection/scroll owner. The strip is the page's scope line.
+            if model.table != nil {
                 diagnosticsStrip
                 Divider()
             }
@@ -84,6 +67,17 @@ public struct ResolveCSVView: View {
             }
         }
         .disabled(recognition?.operation.isRunning == true)
+        .toolbar {
+            // Import is an icon (with a help tag); merge and export carry titles.
+            ToolbarItemGroup(placement: .primaryAction) {
+                // AppKit collapses trailing toolbar items into the overflow chevron
+                // first when the window is narrow, so the order is by importance:
+                // the accent-filled export, then merge (a bordered secondary).
+                // Import is in the More menu; the empty state also offers it.
+                exportAction.slateToolbarPrimaryStyle().labelStyle(.titleAndIcon)
+                mergeButton.buttonStyle(.bordered).labelStyle(.titleAndIcon)
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             // Import, encode and save-panel failures retain the table and a
             // visible recovery message; cancellation never reports success.
@@ -156,45 +150,48 @@ public struct ResolveCSVView: View {
     /// Merge-time reconciliation badges. They only summarize; the canonical
     /// table is never filtered or reordered (NSTableView identity contract) —
     /// details expand inline instead.
-    private var diagnosticsStrip: some View {
-        HStack(spacing: 8) {
-            if let diagnostics = model.lastMergeDiagnostics {
-                if !diagnostics.unrecognizedMaterials.isEmpty {
-                    diagnosticBadge(
-                        L10n.tr("未匹配素材 {0}", [String(describing: diagnostics.unrecognizedMaterials.count)]),
-                        symbol: "exclamationmark.triangle")
-                }
-                let missingKeys = diagnostics.missingCameraFPSKeys.count + diagnostics.missingShootDayKeys.count
-                if missingKeys > 0 {
-                    diagnosticBadge(L10n.tr("关键信息缺失 {0}", [String(describing: missingKeys)]), symbol: "questionmark.circle")
-                }
-                if !diagnostics.sequenceAnomalies.isEmpty {
-                    diagnosticBadge(
-                        L10n.tr("次序异常 {0}", [String(describing: diagnostics.sequenceAnomalies.count)]),
-                        symbol: "exclamationmark.arrow.triangle")
-                }
-                if !diagnostics.unresolvedStatuses.isEmpty {
-                    diagnosticBadge(
-                        L10n.tr("待核对记录 {0}", [String(describing: diagnostics.unresolvedStatuses.count)]), symbol: "exclamationmark.circle")
-                }
-            }
-            Spacer(minLength: 8)
-            Button(showsDiagnostics ? L10n.tr("收起详情") : L10n.tr("详情")) { showsDiagnostics.toggle() }
-                .font(.caption)
+    /// The reconciliation categories that have findings, as plain phrases.
+    private var diagnosticParts: [String] {
+        guard let diagnostics = model.lastMergeDiagnostics else { return [] }
+        var parts: [String] = []
+        if !diagnostics.unrecognizedMaterials.isEmpty {
+            parts.append(L10n.tr("未匹配素材 {0}", [String(describing: diagnostics.unrecognizedMaterials.count)]))
         }
-        .padding(.horizontal, density.panelPadding)
-        .padding(.vertical, 6)
+        let missingKeys = diagnostics.missingCameraFPSKeys.count + diagnostics.missingShootDayKeys.count
+        if missingKeys > 0 {
+            parts.append(L10n.tr("关键信息缺失 {0}", [String(describing: missingKeys)]))
+        }
+        if !diagnostics.sequenceAnomalies.isEmpty {
+            parts.append(L10n.tr("次序异常 {0}", [String(describing: diagnostics.sequenceAnomalies.count)]))
+        }
+        if !diagnostics.unresolvedStatuses.isEmpty {
+            parts.append(L10n.tr("待核对记录 {0}", [String(describing: diagnostics.unresolvedStatuses.count)]))
+        }
+        return parts
     }
 
-    private func diagnosticBadge(_ title: String, symbol: String) -> some View {
-        // Pills stay reserved for short status badges (DESIGN.md Shapes).
-        Label(title, systemImage: symbol)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(SlateSyncTheme.warning)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(SlateSyncTheme.warning.opacity(0.14), in: Capsule())
-            .help(title)
+    private var diagnosticsStrip: some View {
+        HStack(spacing: 8) {
+            if unresolvedCount > 0 {
+                // One glyph for the whole line; the categories are plain text.
+                Label {
+                    Text(diagnosticParts.joined(separator: " · ")).foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(SlateSyncTheme.warning)
+                }
+                .font(.caption)
+                .help(diagnosticParts.joined(separator: "\n"))
+            }
+            Spacer(minLength: 8)
+            reportButton.buttonStyle(.borderless).font(.caption)
+            if unresolvedCount > 0 {
+                Button(showsDiagnostics ? L10n.tr("收起详情") : L10n.tr("详情")) { showsDiagnostics.toggle() }
+                    .buttonStyle(.borderless).font(.caption)
+            }
+            tableSummary
+        }
+        .padding(.horizontal, density.panelPadding)
+        .padding(.vertical, 8)
     }
 
     /// Inline (non-scrolling) detail rows so the CSV editor keeps the only
@@ -207,7 +204,12 @@ public struct ResolveCSVView: View {
         return VStack(alignment: .leading, spacing: 6) {
             ForEach(visible) { row in
                 WarnRow(severity: .warning) {
-                    Label(row.message, systemImage: row.symbol).font(.callout).lineLimit(2)
+                    Label {
+                        Text(row.message)
+                    } icon: {
+                        Image(systemName: row.symbol).foregroundStyle(WarnRow<EmptyView, EmptyView>.color(for: .warning))
+                    }
+                    .font(.callout).lineLimit(2)
                 }
             }
             if rows.count > visible.count {
@@ -339,13 +341,21 @@ public struct ResolveCSVView: View {
             // standalone surfaces retain the original local file importer.
             if let onImport { onImport() } else { importsCSV = true }
         }
-        .tint(Color.secondary)
         .disabled(workspace?.selectedTaskID == nil || model.operation.isRunning)
     }
 
+    /// Merge plus the report entry, for the recovery menu. The window toolbar
+    /// shows only `mergeButton`: an extra toolbar item that appears after a merge
+    /// or failed export pushes the primary Export action into the overflow chevron
+    /// on a normal-width window, so the report lives in the scope line instead.
     @ViewBuilder private var mergeActions: some View {
+        mergeButton
+        reportButton
+    }
+
+    @ViewBuilder private var mergeButton: some View {
         if let recognition, let workspace {
-            Button(L10n.tr("合并识别结果")) {
+            Button(L10n.tr("合并识别结果"), systemImage: "arrow.triangle.merge") {
                 Task {
                     do {
                         try await workspace.flush()
@@ -355,15 +365,21 @@ public struct ResolveCSVView: View {
                             settings: workspace.projectSettings.resolve)
                     } catch { model.report(error) }
                 }
-            }.disabled(
+            }
+            .help(L10n.tr("把识别结果合并进 Resolve CSV"))
+            .disabled(
                 model.table == nil || recognition.resolveRecords.isEmpty || model.operation.isRunning)
-            if let diagnostics = model.lastMergeDiagnostics, !diagnostics.warnings.isEmpty {
-                // Overwrite/normalization notes remain reachable even when no
-                // unresolved-status badge is needed.
-                Button(L10n.tr("查看合并报告")) {
-                    diagnosticReport = WorkflowDiagnosticReport(title: L10n.tr("完整合并报告"),
-                        messages: diagnostics.warnings.map { L10n.message($0) })
-                }
+        }
+    }
+
+    @ViewBuilder private var reportButton: some View {
+        if recognition != nil, workspace != nil,
+           let diagnostics = model.lastMergeDiagnostics, !diagnostics.warnings.isEmpty {
+            // Overwrite/normalization notes remain reachable even when no
+            // unresolved-status badge is needed.
+            Button(L10n.tr("查看合并报告")) {
+                diagnosticReport = WorkflowDiagnosticReport(title: L10n.tr("完整合并报告"),
+                    messages: diagnostics.warnings.map { L10n.message($0) })
             }
         }
     }
@@ -374,7 +390,7 @@ public struct ResolveCSVView: View {
             // whether warnings need confirmation; stale diagnostics cannot bypass it.
             performExport()
         }
-        .tint(Color.secondary)
+        .help(L10n.tr("导出合并后的 Resolve CSV 文件"))
         .disabled(model.table == nil || model.operation.isRunning)
     }
 

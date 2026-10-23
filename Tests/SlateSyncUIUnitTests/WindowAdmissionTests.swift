@@ -4,9 +4,9 @@ import SlateSyncDomain
 @testable import SlateSyncUI
 import XCTest
 
-/// SM-09 #12: admission is split per feature. Media and metadata edits stay
-/// usable while recognition runs; only CSV import waits for it. A shared
-/// media/CSV predicate would block media edits for a CSV-shaped reason.
+/// SM-09 #12: admission is split per feature. Recognition freezes source-media
+/// replacement and CSV import at their owners, including late picker callbacks;
+/// metadata retains its independent admission policy.
 @MainActor
 final class WindowAdmissionTests: XCTestCase {
     private func awaitTrue(_ condition: @MainActor () async -> Bool) async throws {
@@ -19,7 +19,7 @@ final class WindowAdmissionTests: XCTestCase {
         XCTFail("等待条件超时")
     }
 
-    func testRecognitionRunningKeepsMediaAndMetadataEditableButBlocksCSVImport() async throws {
+    func testRecognitionBlocksMediaReplacementAndCSVButKeepsMetadataAdmission() async throws {
         let service = AdmissionWorkspaceFake()
         let termination = TerminationCoordinator(lifecycle: AdmissionLifecycle())
         let workspace = WorkspaceModel(service: service)
@@ -31,9 +31,14 @@ final class WindowAdmissionTests: XCTestCase {
         // is the production factory; this is not a re-implementation).
         workspace.permitsNewOperation = WindowAdmission.shared(termination)
         csv.permitsNewOperation = WindowAdmission.csv(termination, recognition: recognition)
-        media.permitsNewOperation = WindowAdmission.media(termination)
+        media.permitsNewOperation = WindowAdmission.media(termination, recognition: recognition)
         metadata.permitsNewOperation = WindowAdmission.metadata(termination)
         recognition.permitsNewOperation = WindowAdmission.recognition(termination, workspace: workspace)
+
+        // A picker may open while idle, then complete after recognition starts.
+        XCTAssertTrue(media.canAcceptInput)
+        var preparedCallbacks = 0
+        media.onPrepared = { _ in preparedCallbacks += 1 }
 
         await recognition.loadOptions()
         recognition.recognize(
@@ -52,23 +57,32 @@ final class WindowAdmissionTests: XCTestCase {
         }
         XCTAssertTrue(recognition.operation.isRunning)
 
-        // Independent editors continue during recognition.
-        XCTAssertTrue(media.canAcceptInput)
+        // Recheck admission at the model boundary, not only on the button.
+        XCTAssertFalse(media.canAcceptInput)
         media.select(URL(fileURLWithPath: "/tmp/admission-fixture.jpg"))
-        try await awaitTrue { await service.prepareCount == 1 }
+        XCTAssertEqual(media.operation, .idle)
         metadata.scan(URL(fileURLWithPath: "/tmp/admission-fixture"))
         try await awaitTrue { await service.scanCount == 1 }
+        let prepareWhileRunning = await service.prepareCount
+        XCTAssertEqual(prepareWhileRunning, 0)
+        XCTAssertEqual(preparedCallbacks, 0)
+        XCTAssertNil(media.document)
 
-        // CSV import is the one feature recognition blocks.
+        // CSV replacement remains blocked by recognition as well.
         await csv.importData(Data(), filename: "a.csv")
         await csv.drain()
         let decodeCount = await service.decodeCount
         XCTAssertEqual(decodeCount, 0)
 
-        // After recognition drains, the CSV path admits work again.
+        // After recognition drains, both replacement paths admit work again.
         await service.releaseRecognition()
         await recognition.drain()
         XCTAssertFalse(recognition.operation.isRunning)
+        XCTAssertTrue(media.canAcceptInput)
+        media.select(URL(fileURLWithPath: "/tmp/admission-fixture.jpg"))
+        try await awaitTrue { preparedCallbacks == 1 }
+        let prepareAfter = await service.prepareCount
+        XCTAssertEqual(prepareAfter, 1)
         await csv.importData(Data(), filename: "a.csv")
         await csv.drain()
         let decodeAfter = await service.decodeCount
@@ -85,7 +99,7 @@ final class WindowAdmissionTests: XCTestCase {
         let metadata = MetadataScanModel(service: service)
         workspace.permitsNewOperation = WindowAdmission.shared(termination)
         csv.permitsNewOperation = WindowAdmission.csv(termination, recognition: recognition)
-        media.permitsNewOperation = WindowAdmission.media(termination)
+        media.permitsNewOperation = WindowAdmission.media(termination, recognition: recognition)
         metadata.permitsNewOperation = WindowAdmission.metadata(termination)
         recognition.permitsNewOperation = WindowAdmission.recognition(termination, workspace: workspace)
 

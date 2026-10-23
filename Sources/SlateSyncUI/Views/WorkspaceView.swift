@@ -33,14 +33,15 @@ public struct WorkspaceView: View {
     @Bindable private var metadata: MetadataScanModel
     @Bindable private var media: MediaInputModel
     @Environment(\.slateSyncDensity) private var density
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showsTasks = true
     @State private var showsConfiguration: Bool?
     // Only input breakpoints enter view state. Result comparison geometry is
     // handled directly by WorkspaceResultLayout without publishing widths.
     @State private var inputLayout = InputLayout()
     @State private var editorBoundary = WorkspaceEditorBoundary()
     @State private var showsOriginal = false
+    // Results opens beside the original sheet once, when the column is wide
+    // enough to show both inline; after that the toolbar toggle owns it.
+    @State private var appliedResultDefault = false
     @State private var showsAdvanced = false
     @State private var layoutError: String?
     @State private var changingLayout = false
@@ -66,10 +67,11 @@ public struct WorkspaceView: View {
     }
     private static let configurationPanelWidth: CGFloat = 300
 
-    // Widths below are measured on the detail column (window minus the sidebar
-    // and task rail), not on the window. The layout types are nonisolated value
-    // types so the geometry callback can build them off the main actor, which
-    // is why their breakpoints live on them instead of on the view.
+    // Widths below are measured on the detail column (the window minus the
+    // sidebar, which also holds the task list), not on the window. The layout
+    // types are nonisolated value types so the geometry callback can build them
+    // off the main actor, which is why their breakpoints live on them instead
+    // of on the view.
 
     /// Input-page width classes. Equatable on purpose: `onGeometryChange` only
     /// fires when a class flips, so animating the split view's sidebar (or
@@ -84,10 +86,16 @@ public struct WorkspaceView: View {
 
         var opensConfiguration = false
         var docksConfiguration = false
+        /// The window's 960 pt minimum leaves the detail column at least ~680 pt,
+        /// so a narrower report is the first layout pass (the column's ideal
+        /// width, not its real one) and must not decide the panel's default.
+        static let minimumMeasuredWidth: CGFloat = 600
+        var isMeasured = false
         init() {}
         init(width: CGFloat) {
             opensConfiguration = width >= Self.defaultWidth
             docksConfiguration = width >= Self.dockWidth
+            isMeasured = width >= Self.minimumMeasuredWidth
         }
     }
 
@@ -140,20 +148,14 @@ public struct WorkspaceView: View {
     }
 
     public var body: some View {
-        // A single animated layout places both panes; native descendants do
-        // not inherit the split animation or retain intermediate rectangles.
-        WorkspaceTaskSplit(showsTasks: showsTasks, reduceMotion: reduceMotion) {
-            TaskRailView(model: workspace)
-        } detail: {
-            VStack(spacing: 0) {
-                workspaceHeader
-                Divider()
-                detail
-            }
+        // Tasks live in the app sidebar (SidebarView), so the workspace is one
+        // detail column: the window toolbar carries identity, the section
+        // picker and the page's actions; no in-page header bar remains.
+        detail
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
         .background(WorkspaceEditorProbe(boundary: editorBoundary).frame(width: 0, height: 0))
-        .navigationTitle(L10n.tr("工作台"))
+        .navigationTitle(workspace.selectedTask?.filename ?? L10n.tr("当前任务"))
+        .navigationSubtitle(headerFacts)
         .sheet(item: $metadataReport) { WorkflowDiagnosticsSheet(report: $0) }
         .onChange(of: workspace.selectedTaskID) { _, _ in metadataReport = nil }
         .safeAreaInset(edge: .bottom) {
@@ -168,32 +170,47 @@ public struct WorkspaceView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(showsTasks ? L10n.tr("隐藏任务列表") : L10n.tr("显示任务列表"), systemImage: "sidebar.left") {
-                    changeLayout { showsTasks.toggle() }
-                }
-                .tint(Color.secondary)
-                .help(L10n.tr("显示或隐藏当前项目的任务"))
-                .accessibilityIdentifier("workspace.tasks.toggle")
+            ToolbarItem(placement: .principal) {
+                sectionPicker
             }
+            // Fixed order on every page: [primary] [More] [panel toggle], so the
+            // panel toggle always sits at the trailing edge.
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") {
-                    Task { try? await workspace.flush() }
+                recognitionAction
+                Menu(L10n.tr("更多"), systemImage: "ellipsis.circle") {
+                    if section == .input {
+                        Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
+                            .disabled(!media.canAcceptInput || workspace.projectID == nil)
+                        Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
+                            .disabled(workspace.selectedTaskID == nil)
+                        if !recognition.slateCSVRecords.isEmpty {
+                            Button(L10n.tr("从场记 CSV 生成结果")) {
+                                recognition.generateLocalRecords(
+                                    flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
+                                    taskID: workspace.selectedTaskID)
+                            }
+                        }
+                        Divider()
+                    }
+                    if section == .csv {
+                        // Importing a Resolve CSV is rare and replaces the table,
+                        // so it lives here (and in the empty state) rather than
+                        // as a toolbar glyph that reads like a Save button.
+                        Button(L10n.tr("导入 CSV…")) { presentImport(.resolveCSV) }
+                            .disabled(workspace.selectedTaskID == nil || csv.operation.isRunning)
+                        Divider()
+                    }
+                    // The File menu owns the single ⌘S registration; this item
+                    // invokes the same workspace owner without competing.
+                    Button(L10n.tr("保存")) { Task { try? await workspace.flush() } }
                 }
-                .tint(Color.secondary)
-                // The File menu owns the single ⌘S registration; this toolbar
-                // button invokes the same workspace owner without competing.
-                Button(L10n.tr("开始识别"), systemImage: "viewfinder") { startRecognition() }
-                    .slatePrimaryActionStyle()
-                    .labelStyle(.titleAndIcon)
-                    .help(recognitionUnavailableReason ?? L10n.tr("识别当前场记单"))
-                    .disabled(!canRecognize || recognition.operation.isRunning)
-                    .accessibilityIdentifier(AccessibilityID.recognize)
-                if recognition.operation.isRunning {
-                    Button(L10n.tr("取消识别"), systemImage: "xmark.circle") { recognition.cancel() }
-                        .tint(Color.secondary)
-                        .accessibilityIdentifier(AccessibilityID.recognitionCancel)
-                }
+                // A bare ellipsis: the menu indicator would be an unexplained
+                // second glyph, and the icon stays neutral like its neighbors.
+                .menuIndicator(.hidden)
+                .foregroundStyle(.secondary)
+                .help(L10n.tr("更多操作"))
+                .accessibilityIdentifier("workspace.more")
+                headerAccessory
             }
         }
         // A single importer owns the workspace presentation. Multiple
@@ -287,50 +304,8 @@ public struct WorkspaceView: View {
         importsFile = true
     }
 
-    /// One compact row: task identity on the left, section picker and the
-    /// page's contextual control on the right. When the detail column is too
-    /// narrow the picker row drops below the title instead of squeezing it.
-    /// The bar is docked chrome, so it uses an opaque surface (glass is kept
-    /// for floating elements); the Divider in `body` draws its lower edge.
-    private var workspaceHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 16) {
-                headerTitle
-                sectionPicker
-                headerAccessory
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                headerTitle
-                HStack(spacing: 12) {
-                    sectionPicker
-                    Spacer(minLength: 0)
-                    headerAccessory
-                }
-            }
-        }
-        .padding(.horizontal, density.panelPadding)
-        .padding(.vertical, 12)
-        .slateDockedSurface(.header)
-    }
-
-    /// Task name plus live facts (pages · records · status) instead of a
-    /// fixed tagline; falls back to the start hint without a loaded task.
-    private var headerTitle: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(workspace.selectedTask?.filename ?? L10n.tr("当前任务"))
-                .font(.title3.weight(.semibold)).lineLimit(1)
-                .help(workspace.selectedTask?.filename ?? L10n.tr("当前任务"))
-            Text(headerFacts)
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-        }
-        // A small ideal width lets ViewThatFits keep the one-row layout for
-        // long file names; the name truncates instead of forcing the stack.
-        .frame(minWidth: 120, idealWidth: 160, maxWidth: .infinity, alignment: .leading)
-        // A container identifier propagates to every HStack child on
-        // macOS; scope the heading identifier to the actual heading.
-        .accessibilityIdentifier(AccessibilityID.workspaceHeading)
-    }
-
+    /// Live task facts for the toolbar subtitle (pages · records · status);
+    /// falls back to the start hint without a loaded task.
     private var headerFacts: String {
         guard let id = workspace.selectedTaskID,
               let item = workspace.tasks.first(where: { $0.id == id })
@@ -340,7 +315,16 @@ public struct WorkspaceView: View {
             facts.append(L10n.tr("{0} 页", [String(describing: pages)]))
         }
         facts.append(L10n.tr("{0} 条", [String(describing: item.recordCount)]))
-        facts.append(item.statusTitle)
+        // The subtitle follows the live operation, not the last saved status.
+        if recognition.operation.isRunning, id == workspace.selectedTaskID {
+            if let progress = recognition.progress, progress.total > 0 {
+                facts.append(L10n.tr("识别中 {0}/{1}", [String(progress.completed), String(progress.total)]))
+            } else {
+                facts.append(L10n.tr("识别中"))
+            }
+        } else {
+            facts.append(item.statusTitle)
+        }
         return facts.joined(separator: " · ")
     }
 
@@ -376,16 +360,40 @@ public struct WorkspaceView: View {
         .accessibilityHint(pendingSectionsAccessibilityHint)
     }
 
+    /// One primary slot on the input page: start becomes cancel in the same
+    /// place, both icon + label. Results have no primary action; Resolve CSV
+    /// supplies its own (export) from the CSV view.
+    @ViewBuilder private var recognitionAction: some View {
+        if section == .input {
+            if recognition.operation.isRunning {
+                Button(L10n.tr("取消识别"), systemImage: "xmark.circle") { recognition.cancel() }
+                    .labelStyle(.titleAndIcon)
+                    .help(L10n.tr("停止当前的识别"))
+                    .accessibilityIdentifier(AccessibilityID.recognitionCancel)
+            } else {
+                Button(L10n.tr("开始识别"), systemImage: "viewfinder") { startRecognition() }
+                    .slateToolbarPrimaryStyle()
+                    .labelStyle(.titleAndIcon)
+                    .help(recognitionUnavailableReason ?? L10n.tr("识别当前场记单"))
+                    .disabled(!canRecognize)
+                    .accessibilityIdentifier(AccessibilityID.recognize)
+            }
+        }
+    }
+
+    /// The page's one panel toggle, always drawn with the same trailing-panel
+    /// glyph: recognition configuration on input, original comparison on results.
     @ViewBuilder private var headerAccessory: some View {
         if section == .input {
-            Button(L10n.tr("识别配置"), systemImage: "slider.horizontal.3") {
+            Button(L10n.tr("识别配置"), systemImage: "sidebar.trailing") {
                 changeLayout { showsConfiguration = !(showsConfiguration ?? inputLayout.opensConfiguration) }
             }
-            .tint(Color.secondary)
+            .help(L10n.tr("显示或隐藏识别配置"))
             .accessibilityIdentifier("workspace.configuration.toggle")
         } else if section == .result {
-            Toggle(L10n.tr("原稿对照"), isOn: originalBinding)
+            Toggle(L10n.tr("原稿对照"), systemImage: "sidebar.trailing", isOn: originalBinding)
                 .toggleStyle(.button)
+                .help(L10n.tr("显示或隐藏原稿对照"))
                 .disabled(media.document == nil)
                 .accessibilityIdentifier("workspace.original.toggle")
         }
@@ -416,12 +424,6 @@ public struct WorkspaceView: View {
         let docked = visible && inputLayout.docksConfiguration
         return ZStack(alignment: .trailing) {
             VStack(spacing: 0) {
-                HStack {
-                    SlatePanelHeading(
-                        title: L10n.tr("场记单"), subtitle: media.document?.filename ?? L10n.tr("支持 PDF 和图像，也可拖入文件"))
-                    Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
-                        .disabled(!media.canAcceptInput || workspace.projectID == nil)
-                }.padding(density.panelPadding)
                 if media.operation.isRunning {
                     SlateStatusBar(message: L10n.tr("正在准备场记单…"), busy: true) {
                         Button(L10n.tr("取消准备"), role: .cancel) { media.cancel() }
@@ -430,6 +432,9 @@ public struct WorkspaceView: View {
                 if case .failed(let error) = media.operation {
                     SlateStatusBar(message: error.message, tone: .error) {
                         Button(L10n.tr("重新选择…")) { presentImport(.media) }
+                            // Recovery uses the same admission as the toolbar;
+                            // recognition may still own the previous document.
+                            .disabled(!media.canAcceptInput || workspace.projectID == nil)
                     }
                 }
                 Group {
@@ -446,8 +451,6 @@ public struct WorkspaceView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(SlateSyncTheme.canvas)
-                localCSVPanel
                 if let block = recognitionBlock {
                     SlateStatusBar(message: block.message) {
                         // Provider and model are required inputs; when the
@@ -466,7 +469,10 @@ public struct WorkspaceView: View {
             // width; only its placement changes, preserving native IME
             // drafts. The panel is always the same opaque surface so its
             // identity never depends on docked/overlay state.
+            // Recognition pauses editing: only the form is frozen. The page
+            // stays at full strength so the evidence is never dimmed.
             configurationPanel
+                .disabled(recognition.operation.isRunning)
                 .frame(width: Self.configurationPanelWidth)
                 .frame(maxHeight: .infinity)
                 .slateDockedSurface(.panel)
@@ -477,19 +483,12 @@ public struct WorkspaceView: View {
                         .allowsHitTesting(false)
                 }
                 // Only a floating (overlaid) panel casts a shadow; docked
-                // chrome stays flat (DESIGN.md: shadows are for overlays).
+                // chrome stays flat.
                 .shadow(color: .black.opacity(visible && !docked ? 0.22 : 0),
                         radius: visible && !docked ? 10 : 0, x: -3, y: 0)
                 .opacity(visible ? 1 : 0)
                 .allowsHitTesting(visible)
                 .accessibilityHidden(!visible)
-            // The leader dial is the single "recognition in progress"
-            // trace and reports the real page stream from the workflow.
-            if recognition.operation.isRunning {
-                recognitionProgressCard
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(density.panelPadding)
-            }
         }
         .onGeometryChange(for: InputLayout.self) {
             InputLayout(width: $0.size.width)
@@ -498,54 +497,30 @@ public struct WorkspaceView: View {
             // Choose the initial default once. Crossing 900 pt during either
             // sidebar animation must not also open/close a 300 pt panel and
             // reverse the preview's resize midway through that animation.
-            if showsConfiguration == nil { showsConfiguration = $0.opensConfiguration }
+            if showsConfiguration == nil, $0.isMeasured { showsConfiguration = $0.opensConfiguration }
         }
-        .disabled(recognition.operation.isRunning)
-    }
-
-    /// Academy-leader card for the running recognition. The dial advances
-    /// only with real page completions from the workflow stream; a total of
-    /// zero (or unknown) falls back to the named phase instead of a fake
-    /// fraction. The card sits bottom-leading so evidence stays visible.
-    private var recognitionProgressCard: some View {
-        HStack(alignment: .center, spacing: 14) {
-            if let progress = recognition.progress, progress.total > 0 {
-                LeaderProgress(completedPages: progress.completed, totalPages: progress.total)
-            } else {
-                LeaderProgress(phaseText: progressPhaseFallback)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(recognition.progress.map { L10n.message($0.message) } ?? L10n.tr("正在识别场记单…"))
-                    .font(.callout).lineLimit(2)
-                Text(L10n.tr("输入页在识别期间暂停编辑"))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: 360, alignment: .leading)
-        // Progress is a floating application-specific panel, so it uses one
-        // shared glass surface while the evidence canvas remains opaque.
-        .slateGlassSurface(.panel)
-        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var progressPhaseFallback: String {
-        let phase = recognition.progress?.phase ?? ""
-        return phase.isEmpty ? L10n.tr("识别中") : phase
     }
 
     private var configurationPanel: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 SlatePanelHeading(title: L10n.tr("识别配置"))
+                // Recognition pauses editing; the lock names why the form is
+                // inert without inserting a row that would move the controls.
+                if recognition.operation.isRunning {
+                    Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                        .help(L10n.tr("输入页在识别期间暂停编辑"))
+                        .accessibilityLabel(L10n.tr("输入页在识别期间暂停编辑"))
+                }
                 Button(L10n.tr("收起"), systemImage: "chevron.right") {
                     changeLayout { showsConfiguration = false }
                 }
-                .tint(Color.secondary)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
                 .help(L10n.tr("收起识别配置，扩大预览区域"))
                     .accessibilityIdentifier("workspace.configuration.close")
-            }.padding(density.panelPadding)
+            }.padding(.horizontal, density.panelPadding).padding(.vertical, 12)
             Form {
                 Section {
                     Picker(L10n.tr("服务商"), selection: providerSelection) {
@@ -564,13 +539,9 @@ public struct WorkspaceView: View {
                             Text($0.label).tag($0.id)
                         }
                     }
-                    HStack {
-                        if globalSettings?.live?.values[.defaultProviderID] == providerID,
-                           globalSettings?.live?.values[.defaultModelID] == modelID,
-                           !providerID.isEmpty {
-                            Text(L10n.tr("默认")).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
+                    // Under the model picker: a quiet, leading, borderless menu
+                    // (not a second popup) with the default marker beside it.
+                    HStack(spacing: 8) {
                         Menu(L10n.tr("设为默认…")) {
                             Button(L10n.tr("将当前服务商和模型设为全局默认")) {
                                 guard let globalSettings else { return }
@@ -579,6 +550,14 @@ public struct WorkspaceView: View {
                             .disabled(globalSettings == nil || globalSettings?.operation.isRunning == true
                                 || !recognition.canRecognize(providerID: providerID, modelID: modelID))
                         }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        if globalSettings?.live?.values[.defaultProviderID] == providerID,
+                           globalSettings?.live?.values[.defaultModelID] == modelID,
+                           !providerID.isEmpty {
+                            Label(L10n.tr("默认"), systemImage: "checkmark").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
                     }
                     if unavailableProvider || unavailableModel || providerID.isEmpty || modelID.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -602,6 +581,27 @@ public struct WorkspaceView: View {
                     Picker(L10n.tr("场记版式（Scenario）"), selection: scenarioSelection) {
                         Text(L10n.tr("自动匹配")).tag("")
                         ForEach(workspace.scenarios, id: \.id) { Text($0.label).tag($0.id) }
+                    }
+                    LabeledContent(L10n.tr("本地场记 CSV")) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Menu(L10n.tr("CSV 操作")) {
+                                Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
+                                    .disabled(workspace.selectedTaskID == nil)
+                                if !recognition.slateCSVRecords.isEmpty {
+                                    Button(L10n.tr("从场记 CSV 生成结果")) {
+                                        recognition.generateLocalRecords(
+                                            flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
+                                            taskID: workspace.selectedTaskID)
+                                    }
+                                }
+                            }
+                            .fixedSize()
+                            Text(recognition.slateCSVRecords.isEmpty
+                                ? L10n.tr("已有结构化场记时，可直接生成结果")
+                                : L10n.tr("{0} · {1} 条", [String(describing: recognition.slateCSVFilename ?? L10n.tr("场记 CSV")), String(describing: recognition.slateCSVRecords.count)]))
+                                .font(.caption).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
                     }
                     VStack(alignment: .leading, spacing: 12) {
                         // Own the full heading hit target while keeping the
@@ -629,35 +629,10 @@ public struct WorkspaceView: View {
                     }
                 }
             }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-        }
-    }
-
-    private var localCSVPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            HStack {
-                SlatePanelHeading(
-                    title: L10n.tr("本地场记 CSV"),
-                    subtitle: recognition.slateCSVRecords.isEmpty
-                        ? L10n.tr("已有结构化场记时，可直接生成结果")
-                        : L10n.tr("{0} · {1} 条", [String(describing: recognition.slateCSVFilename ?? L10n.tr("场记 CSV")), String(describing: recognition.slateCSVRecords.count)])
-                )
-                Menu(L10n.tr("CSV 操作"), systemImage: "tablecells") {
-                    Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
-                        .disabled(workspace.selectedTaskID == nil)
-                    if !recognition.slateCSVRecords.isEmpty {
-                        Button(L10n.tr("从场记 CSV 生成结果")) {
-                            recognition.generateLocalRecords(
-                                flush: { try await workspace.flush() }, commit: workspace.stageLocalRecords,
-                                taskID: workspace.selectedTaskID)
-                        }
-                    }
-                }
-                .tint(Color.secondary)
-                .fixedSize()
-            }.padding(.horizontal, density.panelPadding).padding(.bottom, 12)
+            .formStyle(.columns)
+            .padding(.horizontal, density.panelPadding)
+            .padding(.bottom, density.panelPadding)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -708,33 +683,41 @@ public struct WorkspaceView: View {
         .disabled(recognition.operation.isRunning)
     }
 
-    /// Single-point confirmation traces for the result page. The canonical
-    /// NSTableView keeps its frozen cell identity, so the pencil circle and
-    /// grease strike summarize row statuses beside the table instead of
-    /// rewriting its cells (deviation recorded in AGENT.md 2026-09-14).
+    /// Static take-status legend for the result page: four glyphs with their
+    /// counts. The canonical NSTableView keeps its frozen cell identity, so the
+    /// glyphs summarize row statuses beside the table instead of rewriting its
+    /// cells (deviation recorded in AGENT.md 2026-09-14). It is a legend, not a
+    /// filter, and is drawn as plain text — no chips.
     @ViewBuilder private var takeMarkSummary: some View {
         let records = recognition.resolveRecords
         if !records.isEmpty {
-            let circled = records.filter { $0.takeStatus == .passed || $0.takeStatus == .hold }.count
-            let struck = records.filter { $0.takeStatus == .rejected }.count
-            HStack(spacing: 16) {
-                takeMarkCount(mark: TakeMark(phase: .circled), label: L10n.tr("过 / 保"), count: circled)
-                takeMarkCount(mark: TakeMark(phase: .struck), label: L10n.tr("废条"), count: struck)
-                takeMarkCount(mark: TakeMark(phase: .pending), label: L10n.tr("待定"), count: records.count - circled - struck)
+            let counts: [(TakeMark.Phase, Int)] = [
+                (.passed, records.filter { $0.takeStatus == .passed }.count),
+                (.hold, records.filter { $0.takeStatus == .hold }.count),
+                (.rejected, records.filter { $0.takeStatus == .rejected }.count),
+                (.pending, records.filter { $0.takeStatus == nil }.count),
+            ]
+            HStack(spacing: 22) {
+                ForEach(counts, id: \.0) { phase, count in
+                    takeMarkCount(phase: phase, count: count)
+                }
                 Spacer(minLength: 0)
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.callout)
             .padding(.horizontal, density.panelPadding)
             .padding(.vertical, 8)
             Divider()
         }
     }
 
-    private func takeMarkCount(mark: TakeMark, label: String, count: Int) -> some View {
+    private func takeMarkCount(phase: TakeMark.Phase, count: Int) -> some View {
         HStack(spacing: 6) {
-            mark
-            Text("\(label) \(count)").monospacedDigit()
+            TakeMark(phase: phase)
+            Text(TakeMark.label(for: phase))
+            Text(count, format: .number).foregroundStyle(.secondary).monospacedDigit()
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(L10n.tr("{0} {1}", [TakeMark.label(for: phase), String(count)]))
     }
 
     private var resultView: some View {
@@ -752,23 +735,32 @@ public struct WorkspaceView: View {
                 )
             }
             if let document = media.document {
-                VStack(spacing: 0) {
-                    HStack {
-                        SlatePanelHeading(title: L10n.tr("原稿对照"), subtitle: L10n.tr("翻页仅切换原稿，不改变结果选择"))
-                        Button(L10n.tr("关闭"), systemImage: "xmark") { changeLayout { showsOriginal = false } }
-                            .tint(Color.secondary)
-                            .accessibilityIdentifier("workspace.original.close")
-                    }.padding(density.panelPadding)
-                    MediaPreviewView(document: document, pageIndex: $media.pageIndex)
-                }
+                // Paging only switches the original; it never changes the result
+                // selection. The close button keeps its identifier; the toolbar
+                // toggle is the primary way to hide the panel.
+                MediaPreviewView(document: document, pageIndex: $media.pageIndex)
                 .frame(maxHeight: .infinity)
-                .background(SlateSyncTheme.canvas)
-                .overlay(alignment: .trailing) {
+                .overlay(alignment: .topTrailing) {
+                    Button(L10n.tr("关闭"), systemImage: "xmark") { changeLayout { showsOriginal = false } }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless)
+                        .padding(8)
+                        .help(L10n.tr("关闭原稿对照"))
+                        .accessibilityIdentifier("workspace.original.close")
+                }
+                .overlay(alignment: .leading) {
                     Rectangle().fill(SlateSyncTheme.separator).frame(width: 0.5)
                 }
                 .opacity(showsOriginal ? 1 : 0).allowsHitTesting(showsOriginal)
                 .accessibilityHidden(!showsOriginal)
             }
+        }
+        .onGeometryChange(for: Int.self) {
+            // 0 = first-pass ideal width (not measured), 1 = narrow, 2 = inline.
+            $0.size.width >= 900 ? 2 : ($0.size.width >= 600 ? 1 : 0)
+        } action: { bucket in
+            guard !appliedResultDefault, bucket > 0 else { return }
+            appliedResultDefault = true
+            if bucket == 2, media.document != nil { showsOriginal = true }
         }
     }
 

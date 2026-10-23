@@ -244,12 +244,12 @@ private struct SlateSyncWindowRoot: View {
     // Register callbacks outside the SwiftUI task closure so its implicit
     // strong captures do not conflict with the models' weak callback captures.
     private func configureWindowLifecycle() async {
-        // Per-feature admission: independent editors stay usable while
-        // recognition runs; only CSV import waits for it.
+        // Recognition freezes replacement of media and CSV evidence at their
+        // owners, including late picker callbacks; metadata stays independent.
         workspace.permitsNewOperation = WindowAdmission.shared(termination)
         workspace.didFailRuntimeClose = termination.requireRestart
         csv.permitsNewOperation = WindowAdmission.csv(termination, recognition: recognition)
-        media.permitsNewOperation = WindowAdmission.media(termination)
+        media.permitsNewOperation = WindowAdmission.media(termination, recognition: recognition)
         metadata.permitsNewOperation = WindowAdmission.metadata(termination)
         recognition.permitsNewOperation = WindowAdmission.recognition(termination, workspace: workspace)
         projects.mutationCoordinator = termination.performLibraryMutation

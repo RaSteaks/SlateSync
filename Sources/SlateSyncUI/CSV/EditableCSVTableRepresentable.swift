@@ -116,7 +116,8 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.allowsMultipleSelection = false
         tableView.allowsEmptySelection = true
-        tableView.columnAutoresizingStyle = .noColumnAutoresizing
+        // Content-sized columns; only the last one stretches to fill the width.
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         tableView.rowSizeStyle = .custom
         tableView.rowHeight = effectiveDensity.tableRowHeight
         tableView.setAccessibilityLabel(accessibilityLabel)
@@ -164,7 +165,10 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             }
             context.coordinator.appliedEnabled = isEnabled
         }
-        if context.coordinator.headers != table.headers {
+        // A new task/import can keep the same headers but have entirely
+        // different content. Resample once per table identity; ordinary edits
+        // and layout updates preserve the user's manually resized columns.
+        if context.coordinator.headers != table.headers || context.coordinator.columnTableID != tableID {
             context.coordinator.rebuildColumns(for: tableView)
         }
         // Different result tables may both start at revision zero. Identity
@@ -205,6 +209,10 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         /// Last editability pushed to the visible cells; nil until the first update.
         fileprivate var appliedEnabled: Bool?
         fileprivate var headers: [String] = []
+        fileprivate var columnTableID: UUID?
+        /// Columns whose sampled values are all numeric: right-aligned so digits
+        /// of different rows line up.
+        fileprivate var numericColumns: Set<Int> = []
         fileprivate var timer: Task<Void, Never>?
         private weak var editingField: NSTextField?
         private var editingIdentity: CSVCellCommit?
@@ -284,8 +292,14 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 field.maximumNumberOfLines = 1
                 field.drawsBackground = false
                 field.lineBreakMode = .byTruncatingTail
+                // Digits are tabular so numeric columns line up; numeric
+                // columns are right-aligned.
+                field.font = Self.cellFont
                 field.delegate = self
             }
+            // AppKit reuses cells across tables; alignment belongs to the
+            // current sampled column, not to the cell's creation-time table.
+            field.alignment = numericColumns.contains(column) ? .right : .left
             field.tag = row * max(1, parent.table.headers.count) + column
             field.isEditable = parent.isEnabled
             field.stringValue = value(row: row, column: column)
@@ -338,15 +352,37 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             }
         }
 
+        private static let cellFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        private static let headerFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
+        /// Rows sampled to size a column; sizing never walks all 10k rows.
+        private static let sampleRows = 200
+
+        /// A column is as wide as its widest sampled value (or its title) plus
+        /// cell padding, so single-digit columns stay narrow and identifiers such
+        /// as clip names are not truncated.
         fileprivate func rebuildColumns(for tableView: NSTableView) {
             tableView.tableColumns.forEach(tableView.removeTableColumn)
             headers = parent.table.headers
+            columnTableID = parent.tableID
+            numericColumns = []
+            let rows = parent.table.rows.prefix(Self.sampleRows)
             for (index, title) in headers.enumerated() {
+                let shown = title.isEmpty ? L10n.tr("第 {0} 列", [String(describing: index + 1)]) : title
+                let values = rows.compactMap { $0.indices.contains(index) ? $0[index] : nil }.filter { !$0.isEmpty }
+                let numeric = !values.isEmpty && values.allSatisfy { $0.allSatisfy { $0.isNumber || $0 == "." || $0 == "-" } }
+                if numeric { numericColumns.insert(index) }
+                func width(_ text: String, _ font: NSFont) -> CGFloat {
+                    ceil((text as NSString).size(withAttributes: [.font: font]).width)
+                }
+                let content = values.map { width($0, Self.cellFont) }.max() ?? 0
+                let natural = max(content, width(shown, Self.headerFont)) + 22
                 let column = NSTableColumn(identifier: .init("csv.column.\(index)"))
-                column.title = title.isEmpty ? L10n.tr("第 {0} 列", [String(describing: index + 1)]) : title
-                column.width = 160
-                column.minWidth = 88
-                column.maxWidth = 480
+                column.title = shown
+                column.minWidth = numeric ? 40 : 52
+                column.maxWidth = index == headers.count - 1 ? 10_000 : 480
+                column.width = min(max(natural, column.minWidth), 360)
+                column.headerCell.alignment = numeric ? .right : .left
+                column.headerCell.font = Self.headerFont
                 tableView.addTableColumn(column)
             }
             renderedRevision = -1

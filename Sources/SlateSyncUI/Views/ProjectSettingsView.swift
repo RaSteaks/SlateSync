@@ -72,7 +72,7 @@ public struct ProjectSettingsView: View {
                     Section(L10n.tr("Resolve 格式")) {
                         TextField(L10n.tr("场"), text: $model.settings.resolve.fieldFormats.scene)
                         TextField(L10n.tr("镜"), text: $model.settings.resolve.fieldFormats.shot)
-                        TextField(L10n.tr("条"), text: $model.settings.resolve.fieldFormats.take)
+                        TextField(L10n.tr("次"), text: $model.settings.resolve.fieldFormats.take)
                         TextField(L10n.tr("好条标记"), text: $model.settings.resolve.comments.goodTake)
                         TextField(L10n.tr("保条标记"), text: $model.settings.resolve.comments.holdTake)
                     }

@@ -225,14 +225,14 @@ final class SlateSyncUITests: XCTestCase {
         var settingsWindow = openSettingsWindow(app)
         for english in [false, true] {
             if english {
-                app.radioButtons["通用"].click()
+                settingsTab(app, "通用").click()
                 app.popUpButtons["settings.applicationLanguage"].firstMatch.click()
                 app.menuItems["English"].click()
                 app.terminate(); app.launch(); app.activate()
                 settingsWindow = openSettingsWindow(app)
             }
             for dark in [false, true] {
-                app.radioButtons[english ? "General" : "通用"].click()
+                settingsTab(app, english ? "General" : "通用").click()
                 app.popUpButtons["settings.appearance"].firstMatch.click()
                 app.menuItems[english ? (dark ? "Dark" : "Light") : (dark ? "深色" : "浅色")].click()
                 // Match the established Settings resize test: focus native chrome before edge drags.
@@ -647,6 +647,14 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertTrue(app.buttons[english ? "Add model service" : "添加模型服务"].waitForExistence(timeout: 5))
     }
 
+    /// Settings panes are icon tabs (buttons carrying the selected trait); older
+    /// layouts exposed a segmented control as radio buttons. Accept either.
+    @MainActor
+    private func settingsTab(_ container: XCUIElement, _ title: String) -> XCUIElement {
+        let button = container.buttons[title].firstMatch
+        return button.exists ? button : container.radioButtons[title].firstMatch
+    }
+
     @MainActor
     private func openSettingsWindow(_ app: XCUIApplication) -> XCUIElement {
         app.activate()
@@ -673,7 +681,7 @@ final class SlateSyncUITests: XCTestCase {
         try Data("#!/bin/zsh\nexit 0\n".utf8).write(to: launcher)
         let app = launchIsolatedApp()
         let settings = openSettingsWindow(app)
-        let category = settings.radioButtons["MCP"].firstMatch
+        let category = settingsTab(settings, "MCP")
         XCTAssertTrue(category.waitForExistence(timeout: 5))
         category.click()
         let start = settings.buttons["settings.mcp.start"].firstMatch
@@ -1033,7 +1041,8 @@ final class SlateSyncUITests: XCTestCase {
                 attachReview("原稿对照-\(name)", app: app)
                 app.buttons["workspace.original.close"].click()
                 app.radioButtons["Resolve CSV"].firstMatch.click()
-                XCTAssertTrue(app.buttons["导入 CSV…"].firstMatch.isHittable)
+                // Import lives in the More menu on this tab.
+                XCTAssertTrue(app.descendants(matching: .any)["workspace.more"].firstMatch.isHittable)
                 attachReview("CSV-\(name)", app: app)
                 app.radioButtons["输入"].firstMatch.click()
             }
@@ -1046,9 +1055,7 @@ final class SlateSyncUITests: XCTestCase {
         app.buttons["workspace.task.search.clear"].click()
         XCTAssertEqual(search.value as? String, "")
         XCTAssertTrue(app.buttons["workspace.preview.enlarge"].exists)
-        app.buttons["workspace.tasks.toggle"].firstMatch.click()
-        XCTAssertFalse(search.exists && search.isHittable)
-        app.buttons["workspace.tasks.toggle"].firstMatch.click()
+        // Tasks live in the sidebar now; the search field stays reachable.
         XCTAssertTrue(search.isHittable)
         for route in ["项目设置", "运行日志", "帮助"] {
             app.staticTexts[route].firstMatch.click()

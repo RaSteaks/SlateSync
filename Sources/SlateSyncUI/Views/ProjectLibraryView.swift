@@ -67,28 +67,11 @@ public struct ProjectLibraryView: View {
                 }
             }
         }
+        // The library is one native list: the window title names the library,
+        // section headers count the groups, and rows carry no icon tile,
+        // stripe or disclosure chevron. Double-click or Return opens.
         .navigationTitle(model.library?.name ?? L10n.tr("项目库"))
         .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .background(SlateSyncTheme.evidenceSurface)
-        // The library overview stays fixed while the native project list owns
-        // scrolling, selection and double-click activation below it.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: density.sectionSpacing) {
-                SlatePageHeading(title: model.library?.name ?? L10n.tr("项目库"),
-                                 subtitle: L10n.tr("整理拍摄项目，从场记单到剪辑数据。"), symbol: "film.stack")
-                HStack(spacing: 20) {
-                    SlateCountLabel(title: L10n.tr("活跃项目"), count: model.activeProjects.count)
-                    SlateCountLabel(title: L10n.tr("已归档"), count: model.archivedProjects.count)
-                    Spacer(minLength: 0)
-                }
-            }
-            .padding(density.panelPadding)
-            // The fixed library summary is docked chrome: a flat canvas strip
-            // with a bottom hairline; the scrolling project list below stays
-            // native.
-            .slateDockedSurface(.summary, separator: .bottom)
-        }
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom) { errorBanner }
         .sheet(isPresented: $model.showsCreateSheet) {
@@ -147,11 +130,13 @@ public struct ProjectLibraryView: View {
             if let project = model.selectedProject, project.archivedAt == nil {
                 Button(L10n.tr("打开"), systemImage: "arrow.right.circle") { onOpen(project) }
                     .tint(Color.secondary)
+                    .help(L10n.tr("打开所选项目"))
             }
             // Mirror contextual operations for keyboard and toolbar access.
             if let project = model.selectedProject {
                 Menu(L10n.tr("项目操作"), systemImage: "slider.horizontal.3") { actions(for: project) }
                     .tint(Color.secondary)
+                    .help(L10n.tr("对所选项目的操作"))
             }
             Menu(L10n.tr("项目库操作"), systemImage: "ellipsis.circle") {
                 Button(L10n.tr("导入项目…")) { importsProject = true }
@@ -165,8 +150,10 @@ public struct ProjectLibraryView: View {
                 Button(L10n.tr("重命名项目库…")) { showsRename = true }
             }
             .tint(Color.secondary)
+            .help(L10n.tr("导入、导出、切换或重命名项目库"))
             Button(L10n.tr("新建项目"), systemImage: "plus") { model.showsCreateSheet = true }
                 .slatePrimaryActionStyle()
+                .help(L10n.tr("新建一个项目"))
                 .accessibilityIdentifier(AccessibilityID.projectCreate)
         }
     }
@@ -215,41 +202,19 @@ private struct ProjectRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: archived ? "archivebox" : "film.stack")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .frame(width: 40, height: 40)
-                .background(SlateSyncTheme.canvas, in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(project.name).font(.headline).lineLimit(1).help(project.name)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.name).lineLimit(1).help(project.name)
                 if !project.description.isEmpty {
                     Text(project.description).font(.callout).foregroundStyle(.secondary).lineLimit(1).help(project.description)
                 }
             }
             Spacer()
             Text(L10n.tr("{0} 个任务", [String(describing: project.taskCount)]))
-                .font(.caption.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-            // Archived rows already show the archive glyph on the leading tile
-            // and cannot be opened by double-click, so only active rows get the
-            // disclosure chevron.
-            if !archived {
-                Image(systemName: "chevron.right")
-                    .font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
-            }
         }
-        .padding(.vertical, density.rowPadding)
-        // The identity stripe is reserved for projects, never repeated on tasks.
-        .padding(.leading, 10)
-        .overlay(alignment: .leading) {
-            // Clapperboard stripe edge (DESIGN.md signature, black/white is
-            // content-sanctioned); archived projects dim it instead of
-            // recoloring it.
-            SlateBadge()
-                .frame(height: 24)
-                .opacity(archived ? 0.35 : 1)
-        }
+        .padding(.vertical, density.rowPadding - 2)
+        .foregroundStyle(archived ? .secondary : .primary)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.tr("{0}，{1}，{2} 个任务", [String(describing: project.name), String(describing: archived ? L10n.tr("已归档") : L10n.tr("活跃")), String(describing: project.taskCount)]))
     }
@@ -300,8 +265,12 @@ private struct ProjectDeletionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label(L10n.tr("永久删除项目"), systemImage: "trash")
-                .font(.title2.bold()).foregroundStyle(SlateSyncTheme.danger)
+            Label {
+                Text(L10n.tr("永久删除项目"))
+            } icon: {
+                Image(systemName: "trash").foregroundStyle(SlateSyncTheme.dangerText)
+            }
+                .font(.title2.bold())
             Text(L10n.tr("此操作不可撤销。请输入“{0}”以确认。", [String(describing: project.name)]))
             TextField(L10n.tr("项目名称"), text: $model.deletionConfirmation)
                 .accessibilityIdentifier("project.delete.confirmation")

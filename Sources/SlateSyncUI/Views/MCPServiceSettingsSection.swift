@@ -20,7 +20,7 @@ struct MCPServiceSettingsSection: View {
         Section(L10n.tr("服务管理")) {
             LabeledContent(L10n.tr("服务状态")) {
                 Label(model.statusText, systemImage: model.isRunning ? "checkmark.circle" : "stop.circle")
-                    .foregroundStyle(model.isRunning ? SlateSyncTheme.success : .secondary)
+                    .foregroundStyle(model.isRunning ? SlateSyncTheme.successText : .secondary)
                     .accessibilityIdentifier("settings.mcp.status")
             }
             HStack {
@@ -56,7 +56,7 @@ struct MCPServiceSettingsSection: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if case .running(let label) = model.clientOperation { ProgressView(label) }
                 if case .succeeded(let message) = model.clientOperation {
-                    Label(message, systemImage: "checkmark.circle").font(.caption).foregroundStyle(SlateSyncTheme.success)
+                    Label(message, systemImage: "checkmark.circle").font(.caption).foregroundStyle(SlateSyncTheme.successText)
                 }
                 if case .failed(let error) = model.clientOperation { SlateInlineError(error.message) }
             }

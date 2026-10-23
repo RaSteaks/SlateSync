@@ -8,93 +8,95 @@ import XCTest
 /// They cover the intermediate widths supplied by both sidebar animations.
 @MainActor
 final class WorkspaceLayoutRegressionTests: XCTestCase {
-    func testTaskSplitHasOneSharedEdgeAtEveryIntermediateWidth() {
-        // Include overshoot, fractional positions, nonzero origins and narrow
-        // proposals; no frame may expose a gap or leave the list over detail.
-        for width: CGFloat in [0, 100, 700, 1_000] {
-            let bounds = CGRect(x: 27, y: 13, width: width, height: 600)
-            for reveal: CGFloat in [-10, 0, 0.25, 79.5, 150, 209.75, 210, 220] {
-                let frames = WorkspaceTaskLayout.frames(in: bounds, revealedWidth: reveal)
-                XCTAssertEqual(frames.rail.width, 210)
-                XCTAssertEqual(frames.rail.maxX, frames.detail.minX, accuracy: 0.001)
-                XCTAssertEqual(frames.detail.maxX, bounds.maxX, accuracy: 0.001)
-                XCTAssertGreaterThanOrEqual(frames.detail.width, 0)
-                XCTAssertGreaterThanOrEqual(frames.detail.minX, bounds.minX)
-                XCTAssertLessThanOrEqual(frames.rail.maxX, bounds.maxX)
-                if reveal <= 0 {
-                    XCTAssertEqual(frames.detail, bounds)
-                    XCTAssertLessThanOrEqual(frames.rail.maxX, bounds.minX)
-                }
-            }
+    func testSystemSidebarRevealDoesNotReflowItsHeaderAndFooter() async throws {
+        // Drive native reveal proposals without bringing any window forward.
+        // A shrinking inset used to push the list down by over 200 points.
+        let suite = "SlateSync.SidebarLayout.\(UUID().uuidString)"
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let originalLanguage = L10n.language
+        defer {
+            AppLanguage.save(originalLanguage, in: preferences)
+            L10n.configure(preferences: preferences)
+            preferences.removePersistentDomain(forName: suite)
+        }
+        for language in AppLanguage.allCases {
+            AppLanguage.save(language, in: preferences)
+            L10n.configure(preferences: preferences)
+            try await verifySystemSidebarReveal(language: language)
         }
     }
 
-    func testTaskSplitKeepsNativePanesAndSuppressesInheritedAnimations() async throws {
-        let probes = LayoutProbes()
-        let host = NSHostingView(rootView: taskSurface(reveal: 210, probes: probes))
+    private func verifySystemSidebarReveal(language: AppLanguage) async throws {
+        let host = NSHostingView(rootView: SidebarView(selection: .constant(.workspace), currentProjectName: "A long project name 场记项目"))
         host.sizingOptions = []
-        let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 1_000, height: 600),
+        let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 230, height: 600),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
         defer { window.contentView = nil; window.close() }
         try await settle(host)
-        let rail = try XCTUnwrap(probes.views["rail"])
-        let detail = try XCTUnwrap(probes.views["detail"])
-        // Drive the actual Layout through close/open/reversal positions. The
-        // injected parent animation models NavigationSplitView's transaction.
-        for reveal: CGFloat in [150, 79.5, 0, 79.5, 150, 79.5, 210] {
-            host.rootView = taskSurface(reveal: reveal, probes: probes)
+        let table = try XCTUnwrap(nativeTable(in: host))
+        let originalFrame = table.convert(table.bounds, to: host)
+        for width: CGFloat in [230, 190, 150, 80, 32, 0, 32, 80, 150, 190, 230, 280, 230] {
+            window.setContentSize(CGSize(width: width, height: 600))
             try await settle(host)
-            let railFrame = rail.convert(rail.bounds, to: host)
-            let detailFrame = detail.convert(detail.bounds, to: host)
-            XCTAssertEqual(railFrame.width, 210, accuracy: 1 / window.backingScaleFactor)
-            XCTAssertEqual(railFrame.maxX, detailFrame.minX, accuracy: 1 / window.backingScaleFactor)
-            XCTAssertEqual(detailFrame.minX, reveal, accuracy: 1 / window.backingScaleFactor)
-            XCTAssertEqual(detailFrame.maxX, 1_000, accuracy: 1 / window.backingScaleFactor)
-            XCTAssertTrue(probes.views["rail"] === rail)
-            XCTAssertTrue(probes.views["detail"] === detail)
+            let frame = table.convert(table.bounds, to: host)
+            XCTAssertEqual(host.bounds.width, width, accuracy: 1, "The viewport must accept native reveal widths")
+            XCTAssertEqual(frame.minY, originalFrame.minY, accuracy: 1, "Header reflow at \(width) pt")
+            XCTAssertEqual(frame.maxY, originalFrame.maxY, accuracy: 1, "Footer reflow at \(width) pt")
+            XCTAssertTrue(nativeTable(in: host) === table, "Navigation selection must keep its native list")
+            // Optional fixture snapshots stay in the caller's evidence folder;
+            // they never capture the display or the user's project contents.
+            if width > 0, let directory = ProcessInfo.processInfo.environment["SLATESYNC_SIDEBAR_EVIDENCE_DIR"],
+               let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: rep)
+                let url = URL(fileURLWithPath: directory, isDirectory: true)
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                try rep.representation(using: .png, properties: [:])?.write(
+                    to: url.appendingPathComponent("\(language.rawValue)-\(Int(width)).png"))
+            }
         }
-        XCTAssertEqual(probes.creationCount, 2)
-        XCTAssertFalse(probes.receivedAnimation, "Pane controls must not run a second split animation")
         XCTAssertFalse(window.isVisible)
     }
 
-    func testTaskSplitToggleAndReduceMotionReachCleanEndpoints() async throws {
-        for reduceMotion in [false, true] {
-            let probes = LayoutProbes()
-            let host = NSHostingView(rootView: taskSplit(visible: true, reduceMotion: reduceMotion, probes: probes))
-            host.sizingOptions = []
-            let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 1_000, height: 600),
-                                  styleMask: [.borderless], backing: .buffered, defer: false)
-            window.isReleasedWhenClosed = false
-            window.contentView = host
-            defer { window.contentView = nil; window.close() }
+    func testNativeNavigationReopensWithoutPushingTheDetailOrReplacingItsEditor() async throws {
+        let state = NavigationRevealState()
+        let probes = LayoutProbes()
+        let host = NSHostingView(rootView: SystemNavigationSurface(state: state, probes: probes))
+        host.sizingOptions = []
+        let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 960, height: 600),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        try await settle(host)
+        let detail = try XCTUnwrap(probes.views["navigationDetail"])
+        let expanded = detail.convert(detail.bounds, to: host)
+        let table = try XCTUnwrap(nativeTable(in: host))
+        let listFrame = table.convert(table.bounds, to: host)
+        XCTAssertGreaterThan(expanded.minX, 0)
+        for visibility in [NavigationSplitViewVisibility.detailOnly, .all, .detailOnly, .all] {
+            state.visibility = visibility
+            try await Task.sleep(for: .milliseconds(300))
             try await settle(host)
-            let rail = try XCTUnwrap(probes.views["rail"])
-            let detail = try XCTUnwrap(probes.views["detail"])
-            for visible in [false, true, false, true] {
-                host.rootView = taskSplit(visible: visible, reduceMotion: reduceMotion, probes: probes)
-                try await settle(host)
-                // Even while moving, the native panes must share one edge.
-                XCTAssertEqual(rail.convert(rail.bounds, to: host).maxX,
-                               detail.convert(detail.bounds, to: host).minX, accuracy: 1)
-                if !reduceMotion {
-                    try await Task.sleep(for: .milliseconds(300))
-                    try await settle(host)
-                }
-                let railFrame = rail.convert(rail.bounds, to: host)
-                let detailFrame = detail.convert(detail.bounds, to: host)
-                XCTAssertEqual(railFrame.width, 210, accuracy: 1)
-                XCTAssertEqual(railFrame.maxX, visible ? 210 : 0, accuracy: 1)
-                XCTAssertEqual(detailFrame.minX, visible ? 210 : 0, accuracy: 1)
-                XCTAssertEqual(detailFrame.maxX, 1_000, accuracy: 1)
+            let frame = detail.convert(detail.bounds, to: host)
+            XCTAssertEqual(host.bounds.width, 960, accuracy: 1)
+            XCTAssertEqual(frame.maxX, host.bounds.maxX, accuracy: 1)
+            if visibility == .all {
+                XCTAssertEqual(frame.minX, expanded.minX, accuracy: 1)
+                XCTAssertEqual(table.convert(table.bounds, to: host).minY, listFrame.minY, accuracy: 1)
+            } else {
+                XCTAssertLessThan(frame.minX, expanded.minX, "Collapse must release the sidebar's width")
             }
-            XCTAssertEqual(probes.creationCount, 2)
-            XCTAssertFalse(probes.receivedAnimation)
-            XCTAssertFalse(window.isVisible)
+            XCTAssertTrue(probes.views["navigationDetail"] === detail)
         }
+        XCTAssertEqual(probes.creationCount, 1)
+        XCTAssertFalse(window.isVisible)
     }
+
+    // The task rail and its split layout were removed on 2026-10-23: tasks now
+    // live in the system sidebar (SidebarView), which the two native reveal
+    // tests above exercise.
 
     func testComparisonUsesContinuousWidthsAndStaysInsideViewport() {
         let origin = CGPoint(x: 27, y: 13)
@@ -243,29 +245,14 @@ final class WorkspaceLayoutRegressionTests: XCTestCase {
         }
     }
 
-    private func taskSurface(reveal: CGFloat, probes: LayoutProbes) -> some View {
-        WorkspaceTaskLayout(revealedWidth: reveal) {
-            // Inject at each pane so this geometry test drives exact sampled
-            // positions; the separate toggle test exercises the real clock.
-            LayoutProbe(key: "rail", probes: probes).sidebarResizeBoundary()
-                .transaction { $0.animation = .easeInOut(duration: 0.2) }
-            LayoutProbe(key: "detail", probes: probes).sidebarResizeBoundary()
-                .transaction { $0.animation = .easeInOut(duration: 0.2) }
-        }
-        .clipped()
-    }
-
-    private func taskSplit(visible: Bool, reduceMotion: Bool, probes: LayoutProbes) -> some View {
-        WorkspaceTaskSplit(showsTasks: visible, reduceMotion: reduceMotion) {
-            LayoutProbe(key: "rail", probes: probes)
-        } detail: {
-            LayoutProbe(key: "detail", probes: probes)
-        }
-    }
-
     private func nativeImage(in view: NSView) -> MediaPreviewImage.ImageView? {
         if let image = view as? MediaPreviewImage.ImageView { return image }
         return view.subviews.lazy.compactMap { self.nativeImage(in: $0) }.first
+    }
+
+    private func nativeTable(in view: NSView) -> NSTableView? {
+        if let table = view as? NSTableView { return table }
+        return view.subviews.lazy.compactMap { self.nativeTable(in: $0) }.first
     }
 
     private func settle(_ host: NSView) async throws {
@@ -274,6 +261,29 @@ final class WorkspaceLayoutRegressionTests: XCTestCase {
         // Allow SwiftUI's scheduled layout pass without presenting the window.
         try await Task.sleep(for: .milliseconds(20))
         host.layoutSubtreeIfNeeded()
+    }
+}
+
+@MainActor @Observable
+private final class NavigationRevealState {
+    var visibility = NavigationSplitViewVisibility.all
+}
+
+private struct SystemNavigationSurface: View {
+    @Bindable var state: NavigationRevealState
+    let probes: LayoutProbes
+
+    var body: some View {
+        // Exercise the same native column policy as AppRootView using a
+        // stable native detail probe, without loading any user project.
+        NavigationSplitView(columnVisibility: $state.visibility) {
+            SidebarView(selection: .constant(.workspace), currentProjectName: "Layout fixture")
+                .navigationSplitViewColumnWidth(min: SidebarView.minimumColumnWidth, ideal: 230, max: 280)
+        } detail: {
+            LayoutProbe(key: "navigationDetail", probes: probes)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .sidebarResizeBoundary()
+        }
     }
 }
 

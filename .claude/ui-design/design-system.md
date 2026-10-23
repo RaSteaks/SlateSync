@@ -1,5 +1,10 @@
 # SlateSync 新版前端 UI · 设计系统
 
+> **2026-10-23 更新：本文所述 Slate Workbench（钨丝琥珀、冷灰阶梯、斜纹、铅笔圈、灯箱、
+> LeaderProgress、玻璃状态胶囊）已被"素面 Bare Face"极简原生方向取代**——系统颜色、
+> 系统控件、工具栏承载身份与动作、任务并入侧栏、四个过条/保条/废条/待定符号。现行规范见根目录
+> `DESIGN.md` 顶部同日小节与 `UX-CONTRACT.md`；下文仅作历史设计档案。
+
 > 状态:**已实施(2026-09-14 第一轮)**。六个共享组件落于 `SlateSyncUI/Components/WorkbenchComponents.swift`,
 > 圆角 Token 增补进 `SlateSyncTheme`,工作台/外壳/设置整合见 `AGENT.md` 顶部 2026-09-14 实施记录。
 > 与原型的有意偏差(行→页映射、表内 TakeMark、徽章过滤)同样记录在 AGENT.md。本文档保留为该视觉语言的规范来源;

@@ -176,6 +176,12 @@ public actor SlateSyncWorkflowFacade:
         return try await library.projectRuntime().saveTaskProjection(projectID: projectID, taskID: taskID, task: task)
     }
 
+    /// Production creation returns committed data and summaries together;
+    /// no follow-up list/load calls reread the encrypted project snapshot.
+    public func createTask(projectID: String, task: TaskData) async throws -> TaskCreationResult {
+        try await library.projectRuntime().createTask(projectID: projectID, task: task)
+    }
+
     public func deleteTask(projectID: String, taskID: String) async throws {
         try await library.projectRuntime().deleteTask(projectID: projectID, taskID: taskID)
     }

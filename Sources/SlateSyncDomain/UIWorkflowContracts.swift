@@ -17,6 +17,9 @@ public struct ProjectLibraryProjection: Hashable, Sendable {
 
 public struct GlobalSettingsProjection: Hashable, Sendable {
     public let values: GlobalSettingValues
+    /// Resolved defaults/environment values are display fallbacks, kept apart
+    /// from saved overrides so opening Settings never pins inherited values.
+    public let effectiveValues: GlobalSettingValues
     public let customProviders: [CustomProviderConfiguration]
     public let providers: [ProviderSummary]
     public let models: [ModelData]
@@ -40,9 +43,11 @@ public struct GlobalSettingsProjection: Hashable, Sendable {
         paddleAvailable: Bool,
         runtime: GlobalRuntimeProjection,
         restartRequired: Bool = false,
-        credentialStatuses: [String: CredentialStatus] = [:]
+        credentialStatuses: [String: CredentialStatus] = [:],
+        effectiveValues: GlobalSettingValues? = nil
     ) {
         self.values = values
+        self.effectiveValues = effectiveValues ?? GlobalSettingsValidator.resolveValues(globalOverrides: values)
         self.customProviders = customProviders
         self.providers = providers
         self.models = models
@@ -148,10 +153,23 @@ public protocol ProjectContextWorkflowServing: ScenarioListWorkflowServing {
     func project(id: String) async throws -> ProjectData
 }
 
+/// A durable creation and its sidebar projection share one database snapshot.
+/// Callers publish this result without rereading the encrypted project file.
+public struct TaskCreationResult: Hashable, Sendable {
+    public let task: TaskData
+    public let tasks: [TaskListItem]
+
+    public init(task: TaskData, tasks: [TaskListItem]) {
+        self.task = task
+        self.tasks = tasks
+    }
+}
+
 public protocol WorkspaceWorkflowServing: Sendable {
     func listTasks(projectID: String) async throws -> [TaskListItem]
     func loadTask(projectID: String, taskID: String) async throws -> TaskData
     func saveTask(projectID: String, taskID: String?, task: TaskData) async throws -> String
+    func createTask(projectID: String, task: TaskData) async throws -> TaskCreationResult
     func deleteTask(projectID: String, taskID: String) async throws
     func decodeResolveCSV(_ data: Data) async throws -> ResolveCSVTable
     func encodeResolveCSV(_ table: ResolveCSVTable) async throws -> Data
@@ -161,6 +179,17 @@ public protocol WorkspaceWorkflowServing: Sendable {
     func recognitionProgress(projectID: String) async -> AsyncStream<RecognitionProgress>
     func cancelRecognition(projectID: String) async
     func closeProject(id: String) async throws
+}
+
+extension WorkspaceWorkflowServing {
+    /// Compatibility for injected services; the production façade overrides
+    /// this with a single durable persistence operation.
+    public func createTask(projectID: String, task: TaskData) async throws -> TaskCreationResult {
+        let id = try await saveTask(projectID: projectID, taskID: nil, task: task)
+        let tasks = try await listTasks(projectID: projectID)
+        let saved = try await loadTask(projectID: projectID, taskID: id)
+        return TaskCreationResult(task: saved, tasks: tasks)
+    }
 }
 
 /// Native input/preview adapters expose only SM-06 prepared JPEGs. Original

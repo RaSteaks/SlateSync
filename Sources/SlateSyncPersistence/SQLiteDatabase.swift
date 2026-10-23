@@ -202,7 +202,20 @@ public actor SQLiteDatabase {
                   created_at = excluded.created_at, updated_at = excluded.updated_at;
                 """, bindings: [id, String(decoding: merged, as: UTF8.self),
                     object["createdAt"] as? String, object["updatedAt"] as? String])
-            return merged
+            return (data: merged, value: ())
+        }
+    }
+
+    /// Build both projections before committing so a failed decode/query rolls
+    /// back the new row. The result is returned only after encrypted persistence.
+    func createTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting) throws -> TaskCreationResult {
+        try mutateTaskSnapshot(id, snapshotURL: snapshotURL, writer: writer) { database in
+            let task = try JSONDecoder().decode(TaskData.self, from: data)
+            _ = try database.executeUnlocked(
+                "INSERT INTO tasks (id, data_json, created_at, updated_at) VALUES (?, ?, ?, ?);",
+                bindings: [id, String(decoding: data, as: UTF8.self), task.createdAt, task.updatedAt])
+            let result = TaskCreationResult(task: task, tasks: try database.taskListItemsUnlocked())
+            return (data: data, value: result)
         }
     }
 
@@ -227,26 +240,30 @@ public actor SQLiteDatabase {
         try FileManager.default.removeItem(at: intent)
     }
 
-    private func mutateTaskSnapshot(
+    private func mutateTaskSnapshot<Value: Sendable>(
         _ id: String, snapshotURL: URL, writer: any AtomicFileWriting,
-        mutation: @Sendable (isolated SQLiteDatabase) throws -> Data
-    ) throws {
+        mutation: @Sendable (isolated SQLiteDatabase) throws -> (data: Data, value: Value)
+    ) throws -> Value {
         try withTaskSnapshotLock {
             try recoverTaskSnapshotUnlocked(id, snapshotURL: snapshotURL)
             let intent = intentURL(snapshotURL)
             try FileManagerAtomicFileWriter().writeRaw(Data(), to: intent, permissions: 0o600)
-            let attempted = Mutex<Data?>(nil)
+            // Retain the matching projection for the existing post-commit
+            // recovery path; a durable creation must still return its identity.
+            let attempted = Mutex<(data: Data, value: Value)?>(nil)
+            let value: Value
             do {
-                try withEncryptedSnapshot(writing: true) { database in
+                value = try withEncryptedSnapshot(writing: true) { database in
                     let handle = try database.openHandle()
                     try Self.executeScript(handle, sql: "BEGIN IMMEDIATE;")
                     do {
-                        let data = try mutation(database)
-                        attempted.withLock { $0 = data }
+                        let result = try mutation(database)
+                        attempted.withLock { $0 = result }
                         // A snapshot failure rolls back the SQLite mutation,
                         // including a generated task ID the UI has not seen.
-                        try writer.writeAtomically(data, to: snapshotURL, permissions: 0o600)
+                        try writer.writeAtomically(result.data, to: snapshotURL, permissions: 0o600)
                         try Self.executeScript(handle, sql: "COMMIT;")
+                        return result.value
                     } catch {
                         try? Self.executeScript(handle, sql: "ROLLBACK;")
                         throw error
@@ -261,7 +278,7 @@ public actor SQLiteDatabase {
                     let row = try rows("SELECT data_json FROM tasks WHERE id = ?;", bindings: [id]).first?["data_json"] ?? nil
                     committed = attempted.withLock { expected in
                         guard let expected, let row else { return false }
-                        return Data(row.utf8) == expected
+                        return Data(row.utf8) == expected.data
                     }
                 } catch {
                     throw SlateSyncError(code: "TASK_SNAPSHOT_RECOVERY", message: "任务快照恢复未完成，请重新打开项目", retryable: true)
@@ -275,12 +292,13 @@ public actor SQLiteDatabase {
                     }
                     SlateSyncLogger(category: "persistence").warning("committed task snapshot awaits recovery")
                 }
-                if committed { return }
+                if committed, let result = attempted.withLock({ $0 }) { return result.value }
                 throw error
             }
             // The row and mirror are committed. Cleanup failure must not turn
             // a successful creation into an unidentified, retryable failure.
             try? FileManager.default.removeItem(at: intent)
+            return value
         }
     }
 
@@ -325,7 +343,60 @@ public actor SQLiteDatabase {
             let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
             _ = try database.executeUnlocked("UPDATE tasks SET data_json = ?, updated_at = ? WHERE id = ?;",
                 bindings: [String(decoding: data, as: UTF8.self), now, id])
-            return data
+            return (data: data, value: ())
+        }
+    }
+
+    /// Standalone refreshes and creation use the identical summary query.
+    /// Creation calls the unlocked helper inside its existing write transaction.
+    func taskListItems() throws -> [TaskListItem] {
+        try withEncryptedSnapshot(writing: false) { database in try database.taskListItemsUnlocked() }
+    }
+
+    private func taskListItemsUnlocked() throws -> [TaskListItem] {
+        // Project only sidebar fields inside SQLite: image data URLs and full
+        // recognition/CSV arrays must not cross into Swift for every task.
+        // Keep the persisted JSON and ordering unchanged; malformed rows retain
+        // the legacy skip behavior and only actual arrays contribute counts.
+        let rows = try rowsUnlocked("""
+            SELECT CASE WHEN json_valid(data_json) THEN
+                CASE WHEN json_type(data_json) = 'object' THEN json_object(
+                    'id', json_extract(data_json, '$.id'),
+                    'filename', json_extract(data_json, '$.filename'),
+                    'provider', json_extract(data_json, '$.provider'),
+                    'model', json_extract(data_json, '$.model'),
+                    'pageCount', json_extract(data_json, '$.pageCount'),
+                    'scenarioId', json_extract(data_json, '$.scenarioId'),
+                    'status', json_extract(data_json, '$.status'),
+                    'createdAt', json_extract(data_json, '$.createdAt'),
+                    'updatedAt', json_extract(data_json, '$.updatedAt'),
+                    'recordCount', CASE
+                        WHEN json_type(data_json, '$.editedRecords') = 'array'
+                            THEN json_array_length(data_json, '$.editedRecords')
+                        WHEN json_type(data_json, '$.result.records') = 'array'
+                            THEN json_array_length(data_json, '$.result.records')
+                        ELSE 0 END
+                ) END END AS data_json
+            FROM tasks ORDER BY updated_at DESC;
+            """)
+        return rows.compactMap { row in
+            guard
+                let text = row["data_json"] ?? nil,
+                let data = text.data(using: .utf8),
+                let object = try? PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
+            else { return nil }
+            return TaskListItem(
+                id: PersistenceJSON.string(object["id"]),
+                filename: PersistenceJSON.string(object["filename"]),
+                provider: PersistenceJSON.string(object["provider"]),
+                model: PersistenceJSON.string(object["model"]),
+                pageCount: PersistenceJSON.int(object["pageCount"]),
+                scenarioId: PersistenceJSON.string(object["scenarioId"]),
+                recordCount: PersistenceJSON.int(object["recordCount"]) ?? 0,
+                status: PersistenceJSON.string(object["status"]) ?? "unknown",
+                createdAt: PersistenceJSON.string(object["createdAt"]),
+                updatedAt: PersistenceJSON.string(object["updatedAt"])
+            )
         }
     }
 

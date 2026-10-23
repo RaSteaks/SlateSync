@@ -3,11 +3,11 @@ import XCTest
 
 @testable import SlateSyncUI
 
-// Contracts for the 2026-09-14 workbench components: status mapping stays
-// total (every TakeStatus projects to exactly one trace), the leader dial
-// copy keeps real page numbers, and the credential chip never collapses an
-// authorization failure into a missing credential. View conformances make
-// the component initializers MainActor-isolated, so the suite runs there.
+// Contracts for the workbench components: status mapping stays total (every
+// TakeStatus projects to exactly one glyph, distinct by shape and label), and
+// the credential chip never collapses an authorization failure into a missing
+// credential. View conformances make the component initializers
+// MainActor-isolated, so the suite runs there.
 @MainActor
 final class WorkbenchComponentTests: XCTestCase {
     func testCapabilityAndSourceBadgesKeepDistinctStates() {
@@ -27,19 +27,23 @@ final class WorkbenchComponentTests: XCTestCase {
     }
 
     func testTakeMarkMapsEveryTakeStatus() {
+        // Every status projects to exactly one of four distinct states; 过条
+        // and 保条 are no longer merged into one circled trace.
         XCTAssertEqual(TakeMark(nil).phase, .pending)
-        XCTAssertEqual(TakeMark(.passed).phase, .circled)
-        XCTAssertEqual(TakeMark(.hold).phase, .circled)
-        XCTAssertEqual(TakeMark(.rejected).phase, .struck)
+        XCTAssertEqual(TakeMark(.passed).phase, .passed)
+        XCTAssertEqual(TakeMark(.hold).phase, .hold)
+        XCTAssertEqual(TakeMark(.rejected).phase, .rejected)
     }
 
-    func testLeaderProgressReportsRealPages() {
-        let dial = LeaderProgress(completedPages: 2, totalPages: 5)
-        XCTAssertEqual(dial.centerLabel, "第 2/5 页")
-        XCTAssertEqual(dial.accessibilityValue, "第 2 页,共 5 页")
-        // Unknown totals fall back to the named phase, never a fake fraction.
-        let phase = LeaderProgress(phaseText: "正在识别第 3 页")
-        XCTAssertEqual(phase.centerLabel, "正在识别第 3 页")
+    func testTakeMarkStatesAreDistinctByShapeAndLabel() {
+        // State must read without color: four distinct symbols and labels.
+        let phases = TakeMark.Phase.allCases
+        XCTAssertEqual(Set(phases.map { TakeMark(phase: $0).symbol }).count, 4)
+        XCTAssertEqual(Set(phases.map { TakeMark.label(for: $0) }).count, 4)
+        XCTAssertEqual(TakeMark.label(for: .passed), "过条")
+        XCTAssertEqual(TakeMark.label(for: .hold), "保条")
+        XCTAssertEqual(TakeMark.label(for: .rejected), "废条")
+        XCTAssertEqual(TakeMark.label(for: .pending), "待定")
     }
 
     func testCredentialChipStatesKeepDistinctCopy() {

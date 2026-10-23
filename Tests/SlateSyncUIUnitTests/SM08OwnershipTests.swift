@@ -1748,7 +1748,9 @@ extension SM08OwnershipTests {
             let workspace = WorkspaceModel(service: fixtureTasks)
             let taskStart = ContinuousClock.now
             try await workspace.activate(projectID: "fixture")
-            let tasks = SM08ListHarness(TaskRailView(model: workspace))
+            // Tasks are rows of the system sidebar since 2026-10-23.
+            let tasks = SM08ListHarness(SidebarView(
+                selection: .constant(.workspace), currentProjectName: "fixture", workspace: workspace))
             try await tasks.settle()
             let taskTime = sm08Milliseconds(taskStart.duration(to: .now))
             let taskTable = try XCTUnwrap(tasks.table)

@@ -355,7 +355,7 @@ public final class RecognitionModel {
     /// Recognition and Resolve share one native cell editor, including its
     /// marked-text barrier, keyboard semantics and delayed commit behavior.
     public var resultTable: ResolveCSVTable {
-        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("条"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注")],
+        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("次"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注")],
             rows: editableRecords.map { [$0.cardNumber, $0.videoCode, $0.scene, $0.shot, $0.take, $0.takeStatus, $0.description, $0.comments] },
             format: .init())
     }

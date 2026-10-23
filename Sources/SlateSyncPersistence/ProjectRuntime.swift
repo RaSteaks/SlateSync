@@ -84,6 +84,16 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
             replacingKeys: TaskData.persistenceFieldNames)
     }
 
+    /// Hold one project lease through the commit and its returned projections.
+    /// Ownership is stamped here just as it is for existing-task saves.
+    public func createTask(projectID: String, task: TaskData) async throws -> TaskCreationResult {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        var object = try PersistenceJSON.object(from: JSONEncoder().encode(task), errorCode: "TASK_INVALID")
+        object["projectId"] = projectID
+        return try await context.tasks.createTask(PersistenceJSON.data(from: object, errorCode: "TASK_INVALID"))
+    }
+
     /// Recognition reads the canonical project/settings snapshot through the
     /// same lease boundary used by task, scenario, and diagnostic writes.
     public func recognitionProject(projectID: String) async throws -> ProjectData {

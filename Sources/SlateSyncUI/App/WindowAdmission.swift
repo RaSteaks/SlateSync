@@ -2,9 +2,9 @@ import Foundation
 import SlateSyncDomain
 
 /// Per-feature admission predicates for every picker/drop/button input owner.
-/// The predicates are split per feature on purpose: independent editors stay
-/// usable while recognition runs, and a CSV-shaped reason can never block a
-/// media edit. Form.disabled still applies; these closures close the gap for
+/// The predicates are split per feature on purpose: metadata remains independent,
+/// while recognition freezes replacement of its source media and CSV evidence.
+/// Form.disabled still applies; these closures close the gap for
 /// async picker completions and drag/drop, which reach models directly.
 @MainActor
 public enum WindowAdmission {
@@ -14,10 +14,12 @@ public enum WindowAdmission {
         { !termination.isDraining && !termination.isMutatingLibrary && !termination.restartRequired }
     }
 
-    /// Media input waits only for the shared freeze; a running selection is
-    /// owned by MediaInputModel's request generations.
-    public static func media(_ termination: TerminationCoordinator) -> @MainActor () -> Bool {
-        shared(termination)
+    /// A late picker completion or drop must not replace the source of an
+    /// active recognition or enqueue an autosave over its pending result.
+    /// Preview paging and restoration do not use this admission predicate.
+    public static func media(_ termination: TerminationCoordinator, recognition: RecognitionModel) -> @MainActor () -> Bool {
+        let shared = shared(termination)
+        return { !recognition.operation.isRunning && shared() }
     }
 
     /// Metadata scanning waits for the shared freeze like media; a superseded
