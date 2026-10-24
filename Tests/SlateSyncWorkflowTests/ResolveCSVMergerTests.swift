@@ -5,6 +5,60 @@ import SlateSyncDomain
 @testable import SlateSyncWorkflow
 
 final class ResolveCSVMergerTests: XCTestCase {
+    /// Reused immutable parsers retain Unicode, invalid-date and numeral rules.
+    func testReusedNormalizationParsersPreserveCompatibility() {
+        XCTAssertEqual(ResolveCSVNormalization.normalizeCameraFPS("\u{FEFF}２４ ＦＰＳ "), "24")
+        XCTAssertEqual(ResolveCSVNormalization.normalizeCameraFPS("23,976 fps"), "23.976")
+        XCTAssertEqual(ResolveCSVNormalization.normalizeCameraFPS("1001"), "")
+        XCTAssertEqual(ResolveCSVNormalization.normalizeShootDay("20240229"), "24-02-29")
+        XCTAssertEqual(ResolveCSVNormalization.normalizeShootDay("2026/2/30"), "")
+        XCTAssertEqual(ResolveCSVNormalization.chineseNumeralsToArabic("scene 12A"), "scene 12A")
+        XCTAssertEqual(ResolveCSVNormalization.chineseNumeralsToArabic("A十一B二"), "A11B2")
+        XCTAssertEqual(ResolveCSVNormalization.chineseNumeralsToArabic("１２"), "１２")
+    }
+
+    /// Memoization cannot merge identities or hide conflicting sidecar values.
+    func testRepeatedMetadataPreservesConflictsAndInvalidValueHandling() async throws {
+        let source = ResolveCSVTable(headers: ["File Name", "Camera FPS", "Shoot Day"], rows: [
+            ["A001C001.mov", "old-fps", "old-day"],
+            ["A001C002.mov", "keep-fps", "keep-day"],
+        ], format: .init())
+        let records: [ResolveSlateRecord] = [
+            .init(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "1", take: "1"),
+            .init(cardNumber: "A001", videoCode: "C002", scene: "1", shot: "1", take: "2"),
+        ]
+        let repeated: [PersistedSlateMetadata] = (0..<100).flatMap { _ in [
+            .init(materialKey: "A:1:1", sensorFps: "24 fps", shootDay: "2026-09-05"),
+            .init(materialKey: "A:1:2", sensorFps: "24 fps", shootDay: "2026-09-05"),
+        ] }
+        let merger = ResolveCSVMerger()
+        let result = try await merger.merge(source: source, records: records, metadata: repeated + [
+            .init(materialKey: "A:1:2", sensorFps: "48 fps", shootDay: "2026-09-05"),
+        ])
+        XCTAssertEqual(Array(result.table.rows[0][1...2]), ["24", "26-09-05"])
+        XCTAssertEqual(Array(result.table.rows[1][1...2]), ["keep-fps", "26-09-05"])
+        XCTAssertTrue(result.warnings.contains { $0.contains("A001C002") && $0.contains("Sensor FPS") })
+        let invalid = try await merger.merge(source: source, records: records, metadata: [
+            .init(materialKey: "A:1:1", sensorFps: "invalid", shootDay: "2026-02-30"),
+        ])
+        XCTAssertEqual(Array(invalid.table.rows[0][1...2]), ["old-fps", "old-day"])
+    }
+
+    /// Reaching the temporary cache cap falls back to parsing, never dropping
+    /// a later material or accidentally reusing another raw input's value.
+    func testUniqueMetadataBeyondCacheCapacityStillNormalizesLaterMaterial() async throws {
+        var metadata: [PersistedSlateMetadata] = (1...300).map {
+            .init(materialKey: "B:1:\($0)", sensorFps: String($0), shootDay: "\(2000 + $0)-01-01")
+        }
+        metadata.append(.init(materialKey: "A:1:1", sensorFps: "301 fps", shootDay: "2024-02-29"))
+        let result = try await ResolveCSVMerger().merge(
+            source: .init(headers: ["File Name", "Camera FPS", "Shoot Day"],
+                          rows: [["A001C001.mov", "", ""]], format: .init()),
+            records: [.init(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "1", take: "1")],
+            metadata: metadata)
+        XCTAssertEqual(Array(result.table.rows[0][1...2]), ["301", "24-02-29"])
+    }
+
     func testReviewedMergeAndStandaloneByteGoldens() async throws {
         let engine = ResolveCSVEngine()
         let merger = ResolveCSVMerger()

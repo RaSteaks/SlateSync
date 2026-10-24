@@ -8,6 +8,14 @@ public enum ResolveCSVNormalization {
     public static let defaultFieldFormats = ResolveFieldFormats()
     public static let defaultComments = ResolveComments()
 
+    // Immutable parsers/character sets are shared, not rebuilt for every CSV
+    // cell or sidecar. Keep the exact compatibility patterns and trim policy.
+    private static let trimCharacters = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
+    private static let chineseDigits = Set("零一二两三四五六七八九十百")
+    private static let cameraFPSPattern = try? NSRegularExpression(pattern: #"^(\d{1,4}(?:\.\d{1,6})?)\s*(?:fps)?$"#, options: .caseInsensitive)
+    private static let compactDayPattern = try? NSRegularExpression(pattern: #"^(\d{2}|\d{4})(\d{2})(\d{2})$"#)
+    private static let separatedDayPattern = try? NSRegularExpression(pattern: #"^(\d{2}|\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:[T\s].*)?$"#)
+
     public static func clean(_ value: String?) -> String {
         guard let value else { return "" }
         // Resolve exports are overwhelmingly ASCII. Avoid allocating an NFKC
@@ -16,21 +24,23 @@ public enum ResolveCSVNormalization {
         let normalized = value.unicodeScalars.allSatisfy(\.isASCII)
             ? value
             : value.precomposedStringWithCompatibilityMapping
-        return normalized.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}")))
+        return normalized.trimmingCharacters(in: trimCharacters)
     }
 
     public static func chineseNumeralsToArabic(_ value: String?) -> String {
         let source = value ?? ""
+        // No accepted Chinese numeral is ASCII. Return the original value
+        // without rebuilding a string for the usual numeric Resolve fields.
+        if source.unicodeScalars.allSatisfy(\.isASCII) { return source }
         var result = ""
         var run = ""
-        let accepted = Set("零一二两三四五六七八九十百")
         func flush() -> String {
             defer { run = "" }
             guard !run.isEmpty, let number = parseChineseNumber(run) else { return run }
             return String(number)
         }
         for character in source {
-            if accepted.contains(character) {
+            if chineseDigits.contains(character) {
                 run.append(character)
             } else {
                 result += flush()
@@ -43,7 +53,7 @@ public enum ResolveCSVNormalization {
 
     public static func normalizeCameraFPS(_ value: String?) -> String {
         let normalized = clean(value).replacingOccurrences(of: ",", with: ".")
-        guard let match = firstMatch(#"^(\d{1,4}(?:\.\d{1,6})?)\s*(?:fps)?$"#, in: normalized, caseInsensitive: true),
+        guard let match = firstMatch(cameraFPSPattern, in: normalized),
               let number = Double(match[1]), number.isFinite, number > 0, number <= 1_000 else { return "" }
         if number.rounded() == number { return String(Int(number)) }
         return String(number)
@@ -51,9 +61,8 @@ public enum ResolveCSVNormalization {
 
     public static func normalizeShootDay(_ value: String?) -> String {
         let normalized = clean(value)
-        let compact = firstMatch(#"^(\d{2}|\d{4})(\d{2})(\d{2})$"#, in: normalized)
-        let separated = firstMatch(#"^(\d{2}|\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:[T\s].*)?$"#, in: normalized)
-        guard let match = compact ?? separated,
+        guard let match = firstMatch(compactDayPattern, in: normalized)
+                ?? firstMatch(separatedDayPattern, in: normalized),
               let rawYear = Int(match[1]), let month = Int(match[2]), let day = Int(match[3]) else { return "" }
         let year = match[1].count == 2 ? 2_000 + rawYear : rawYear
         var calendar = Calendar(identifier: .gregorian)
@@ -267,14 +276,12 @@ public enum ResolveCSVNormalization {
         // U+FEFF and U+3000, but there is no NFKC — a full-width header like
         // "Ｓｃｅｎｅ" must stay unmatched instead of colliding with a real
         // "Scene" column and tripping CSV_COLUMNS duplicate detection.
-        let trimSet = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
-        return value.trimmingCharacters(in: trimSet).lowercased()
+        return value.trimmingCharacters(in: trimCharacters).lowercased()
             .replacingOccurrences(of: "[\\s\\x{FEFF}_-]+", with: "", options: .regularExpression)
     }
 
-    static func firstMatch(_ pattern: String, in value: String, caseInsensitive: Bool = false) -> [String]? {
-        let options: NSRegularExpression.Options = caseInsensitive ? [.caseInsensitive] : []
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+    private static func firstMatch(_ regex: NSRegularExpression?, in value: String) -> [String]? {
+        guard let regex else { return nil }
         let ns = value as NSString
         guard let result = regex.firstMatch(in: value, range: NSRange(location: 0, length: ns.length)) else { return nil }
         return (0..<result.numberOfRanges).map { index in
@@ -321,8 +328,7 @@ public enum ResolveCSVNormalization {
         // Unlike cleanValue(), Electron's card/video normalizeToken does not
         // apply NFKC. Preserve that distinction so full-width identifiers stay
         // unmatched instead of silently addressing a different material row.
-        let trimSet = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
-        return (value ?? "").trimmingCharacters(in: trimSet).uppercased()
+        return (value ?? "").trimmingCharacters(in: trimCharacters).uppercased()
             .filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
     }
 
