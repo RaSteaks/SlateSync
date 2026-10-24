@@ -1,5 +1,17 @@
 # SlateSync 当前项目方案
 
+## 2026-10-24 App Store 下一版更新为 1.2.0
+
+- 用户确认下一分发版本直接跳到 1.2；Debug / Release / AppStore 的
+  `MARKETING_VERSION` 统一为 `1.2.0`，Info.plist 继续从构建设置注入版本并补充注释。
+- App Store Connect 的商店版本 1.0 实际关联已批准的 `1.1.0 (17)`；
+  Cloud Build 19 再上传 `1.1.0` 被 90062 / 90186 拒绝。只增加 Build 号不能解决。
+- 网页待提交版本应同步为 1.2.0，并使用新 Cloud Build 号重新构建；按用户要求提交并
+  推送至 swift-rewrite 以触发 Xcode Cloud。未修改 App Store Connect 的分发版本记录。
+  既有发布门禁的 1.1.0 固定验收基线保持原样。
+- 验证：完整离线 ci_preflight、plist 语法、三个配置的 1.2.0 版本断言与差异空白检查通过；
+  日志保留在 /private/tmp/slatesync-version-120-preflight.log，云端归档和上传结果需另行确认。
+
 ## 2026-10-24 审查修复：CSV 工具栏与连续切换
 
 - `ResolveCSVView` 接入当前页环境状态，切离 CSV 页签或整个工作区立即移除导出/合并

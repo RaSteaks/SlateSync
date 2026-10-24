@@ -23,6 +23,7 @@
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <!-- App Store submissions must advance MARKETING_VERSION after an approved version closes its train; a new build number alone is insufficient. -->
     <key>CFBundleShortVersionString</key>
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
