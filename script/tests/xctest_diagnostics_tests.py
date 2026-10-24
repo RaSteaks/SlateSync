@@ -42,6 +42,19 @@ class DiagnosticsTests(unittest.TestCase):
         export_failures(Path("result.xcresult"), {"testFailures": [{"failureText": "Runner unavailable"}]},
                         Path("unused"), lambda *args, **kwargs: self.fail("no named test to export"))
 
+    def test_blocked_output_directory_does_not_discard_later_test_evidence(self):
+        """A per-test filesystem failure must not stop independent exports."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "failed-test-1").write_text("a file blocks this directory")
+            calls = []
+            with self.assertRaises(RuntimeError):
+                export_failures(Path("result.xcresult"), {"testFailures": [
+                    {"testIdentifierString": "Suite/testA()"}, {"testIdentifierString": "Suite/testB()"}]},
+                    root, lambda command, check: calls.append(command[-1]))
+            self.assertEqual(calls, ["Suite/testB()"])
+            self.assertEqual((root / "failed-test-2/test-id.txt").read_text().strip(), "Suite/testB()")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,9 @@
 #!/bin/zsh
 set -uo pipefail
 
+# Synthetic Gate failures must not publish to the enclosing real CI summary.
+unset GITHUB_STEP_SUMMARY
+
 script_dir="${0:A:h}"
 project_root="${script_dir:h:h}"
 source "${project_root}/script/lib/phase_gate_lib.sh"
@@ -126,9 +129,22 @@ assert_success "passing summary ignores non-diagnostic environment text" gate_va
 assert_equal "passing summary classification ignores non-diagnostic environment text" PASS \
   "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-passed-environment-word.json")"
 
+# Broken structured evidence must not be reclassified by incidental framework
+# or permission text after the parser fails to return a classification.
+print 'not-json' > "${fixture_root}/xcode-malformed.json"
+(
+  print 'Copy Testing.framework: permission denied'
+  gate_validate_xcode_test_summary "${fixture_root}/xcode-malformed.json"
+) > "${fixture_root}/xcode-malformed.log" 2>&1 || true
+assert_equal "malformed summary fails closed despite environment noise" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-malformed.log" 1)"
+
 # A passing banner must not approve an empty, skipped, or malformed execution.
 for invalid_summary in \
   '{"result":"Passed","failedTests":0}' \
+  '{"result":"Passed","passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":false,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":"0","passedTests":2,"totalTestCount":2,"skippedTests":0}' \
   '{"result":"Passed","failedTests":0,"passedTests":0,"totalTestCount":0,"skippedTests":0}' \
   '{"result":"Passed","failedTests":0,"passedTests":1,"totalTestCount":2,"skippedTests":1}' \
   '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":3,"skippedTests":0}' \
@@ -236,6 +252,7 @@ run_xcode_test_plan_fixture() {
   local summary_json="$3"
   local expected_command_status="$4"
   local expected_classification="$5"
+  local transfer_failure="${6:-0}"
   local fixture_dir="${fixture_root}/${name}"
   local bin_dir="${fixture_dir}/bin"
   local result_dir="${fixture_dir}/results"
@@ -287,6 +304,10 @@ exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
     export SLATESYNC_XCODE_FIXTURE_SUMMARY_PATH="${fixture_dir}/summary.json"
     export SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS="$xcodebuild_status"
     export SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH="${fixture_dir}/xcodebuild-arguments.txt"
+    # Simulate failure to transfer the result, without changing real permissions.
+    if (( transfer_failure )); then
+      mv() { return 73; }
+    fi
     gate_xcode_test_plan_check "$fixture_dir" "$result_dir"
   ) > "${fixture_dir}/output.log" 2>&1 || command_status=$?
 
@@ -304,8 +325,14 @@ exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
     path_is_within "$recorded_derived_data" "$fixture_dir"
   assert_failure "${name} live xcresult is outside repository" \
     path_is_within "$recorded_result_bundle" "$fixture_dir"
-  assert_success "${name} materializes xcresult evidence" \
-    test -d "${result_dir}/SlateSync.xcresult"
+  if (( transfer_failure )); then
+    assert_success "${name} retains sole raw xcresult after transfer failure" test -d "$recorded_result_bundle"
+    # This path comes from the mock build's arguments and is disposable.
+    rm -rf -- "${recorded_result_bundle:h}"
+  else
+    assert_success "${name} materializes xcresult evidence" \
+      test -d "${result_dir}/SlateSync.xcresult"
+  fi
   if [[ "$expected_classification" == "PASS" ]]; then
     # A genuine passing result bundle and an exit-zero xcodebuild invocation
     # must return cleanly without manufacturing a failure marker.
@@ -347,6 +374,14 @@ run_xcode_test_plan_fixture \
   '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
   0 \
   PASS
+
+run_xcode_test_plan_fixture \
+  xcode-evidence-transfer-failure \
+  0 \
+  '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  73 \
+  FAIL \
+  1
 
 assert_success "Universal architectures" gate_validate_architectures \
   "Architectures in the fat file are: x86_64 arm64"

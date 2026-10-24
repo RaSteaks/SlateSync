@@ -17,7 +17,10 @@ functional_only=0
 results_root="${SLATESYNC_GATE_RESULTS_DIR:-${project_root}/.codex/gate-results}"
 overall_failures=0
 overall_environment_blocks=0
+evidence_write_failed=0
 approvable=true
+active_check=""
+typeset -A check_results
 
 usage() {
   print -r -- "用法: ./script/phase_gate.sh SM-XX [--evidence FILE] [--results-dir DIR] [--allow-dirty] [--functional]"
@@ -36,19 +39,60 @@ record_check() {
   local log_path="${5:-}"
 
   printf '%s\t%s\t%s\t%s\t%s\n' \
-    "$check_id" "$critical" "$result" "$message" "$log_path" >> "$checks_tsv"
+    "$check_id" "$critical" "$result" "$message" "$log_path" >> "$checks_tsv" || {
+    (( overall_failures += 1 ))
+    evidence_write_failed=1
+    print -u2 "Unable to append mandatory Gate evidence: ${checks_tsv}"
+    return 1
+  }
+  check_results[$check_id]="$result"
+  active_check=""
 
   case "$result" in
     FAIL) (( overall_failures += 1 )) ;;
     BLOCKED_ENV) (( overall_environment_blocks += 1 )) ;;
   esac
   print -r -- "[${result}] ${check_id} — ${message}"
+  persist_progress
+}
+
+persist_progress() {
+  # A cancelled 50-minute run still needs a SHA-bound, explicitly incomplete
+  # record. Atomic snapshots never claim PASS or approval while work is running.
+  if command -v python3 >/dev/null 2>&1; then
+    write_result_artifacts IN_PROGRESS || {
+      (( overall_failures += 1 ))
+      evidence_write_failed=1
+      print -u2 "Unable to persist Gate progress; final result cannot pass"
+    }
+  fi
+}
+
+run_dependent_check() {
+  local prerequisites="$1"
+  shift
+  local prerequisite
+  local -a unavailable=()
+  for prerequisite in ${=prerequisites}; do
+    if [[ -z "${check_results[$prerequisite]:-}" ]]; then
+      record_check "$1" "$2" FAIL "Missing prerequisite result: ${prerequisite}" ""
+      return
+    fi
+    [[ "${check_results[$prerequisite]}" == PASS ]] || unavailable+=("${prerequisite}=${check_results[$prerequisite]}")
+  done
+  if (( ${#unavailable} )); then
+    # Keep the actual upstream FAIL/BLOCKED_ENV as the root result. This check
+    # has no execution evidence and cannot be called another failure or PASS.
+    record_check "$1" "$2" NOT_RUN "Prerequisite not passing: ${(j:, :)unavailable}" ""
+    return
+  fi
+  run_check "$@"
 }
 
 run_check() {
   local check_id="$1"
   local critical="$2"
-  local description="$3"
+  local description="${3%通过}"
   shift 3
   local -a command=("$@")
   local log_path="${result_dir}/${check_id}.log"
@@ -61,8 +105,11 @@ run_check() {
     print -r -- "Started: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   } > "$log_path"
 
+  active_check="$check_id"
+  print -r -- "[RUN] ${check_id} — ${description}"
+  persist_progress
   (
-    cd "$project_root"
+    cd "$project_root" || exit 1
     "${command[@]}"
   ) >> "$log_path" 2>&1 || command_status=$?
 
@@ -89,6 +136,16 @@ run_check() {
 
   record_check "$check_id" "$critical" "$result" \
     "${description}; exit=${command_status}，详见日志" "$log_path"
+  # Surface compact root diagnostics in the job log; full logs remain intact.
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "${result_dir}/result.json" "$check_id" <<'PYDETAIL' || true
+import json, sys
+for check in json.load(open(sys.argv[1]))['checks']:
+    if check['id'] == sys.argv[2]:
+        for detail in check.get('failureDetails', []):
+            print('  ' + detail)
+PYDETAIL
+  fi
 }
 
 workspace_layout_check() {
@@ -287,7 +344,8 @@ sm01_real_app_launch_check() {
 
 clean_workspace_check() {
   local changes
-  changes="$(git status --porcelain=v1 --untracked-files=all)"
+  # A failed Git observation is not a clean worktree.
+  changes="$(git status --porcelain=v1 --untracked-files=all)" || return 1
   if [[ -z "$changes" ]]; then
     return 0
   fi
@@ -298,6 +356,18 @@ clean_workspace_check() {
   fi
   print -u2 -r -- "formal phase admission requires a clean, committed review target"
   return 1
+}
+
+review_target_unchanged_check() {
+  local current_commit
+  current_commit="$(git rev-parse HEAD)" || return 1
+  [[ "$current_commit" == "$review_commit" ]] || {
+    print -u2 -r -- "Review target changed during Gate: ${review_commit} -> ${current_commit}"
+    return 1
+  }
+  # A clean start does not authorize edits/commits while builds and UI run.
+  # Dirty diagnostic mode remains non-approvable under the existing policy.
+  clean_workspace_check
 }
 
 # forbidden_items_check 已移入 lib/phase_gate_lib.sh：
@@ -417,54 +487,77 @@ write_result_artifacts() {
   generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
   python3 - "$checks_tsv" "${result_dir}/result.json" \
-    "$phase" "$review_commit" "$generated_at" "$overall_result" "$approvable" "$allow_dirty" "$functional_only" <<'PY'
+    "$phase" "$review_commit" "$generated_at" "$overall_result" "$approvable" "$allow_dirty" "$functional_only" "${active_check:-}" <<'PY'
 import csv
 import json
+import os
+from pathlib import Path
+import re
 import sys
 
-checks_path, output_path, phase, commit, generated_at, overall, approvable, allow_dirty, functional_only = sys.argv[1:]
+checks_path, output_path, phase, commit, generated_at, overall, approvable, allow_dirty, functional_only, active = sys.argv[1:]
 checks = []
+# Select actual compiler/assertion/runner diagnostics, not a log's PASS banner.
+pattern = re.compile(r"(?:error:|XCTAssert.*failed|Test Case .+ failed|AssertionError:|"
+                     r"Packaged XCTest failure|missing required|version mismatch|retained raw bundle)", re.I)
 with open(checks_path, encoding="utf-8", newline="") as handle:
     for row in csv.reader(handle, delimiter="\t"):
         check_id, critical, result, message, log_path = row
-        checks.append({
-            "id": check_id,
-            "critical": critical == "true",
-            "result": result,
-            "message": message,
-            "log": log_path or None,
-        })
+        check = dict(id=check_id, critical=critical == "true", result=result, message=message, log=log_path or None)
+        if result in {"FAIL", "BLOCKED_ENV"} and log_path:
+            try:
+                lines = Path(log_path).read_text(errors="replace").splitlines()
+                details = list(dict.fromkeys(line[:1000] for line in lines if pattern.search(line)))[:8]
+                check['failureDetails'] = details or [line[:1000] for line in lines if line.strip()][-8:]
+            except OSError as error:
+                check['failureDetails'] = [f"Log unavailable: {error}"]
+        checks.append(check)
 
 payload = {
     "schemaVersion": 1,
     "scope": "functional" if functional_only == "1" else "full",
     "performancePolicy": "advisory" if functional_only == "1" else "required",
-    "phase": phase,
-    "reviewCommit": commit,
-    "generatedAt": generated_at,
+    "phase": phase, "reviewCommit": commit, "generatedAt": generated_at,
     "overallResult": overall,
-    "approvable": approvable == "true",
+    "executionComplete": overall != "IN_PROGRESS",
+    "activeCheck": active or None,
+    "approvable": overall == "PASS" and approvable == "true",
     "diagnosticDirtyWorkspace": allow_dirty == "1",
+    "rootFailureChecks": [item['id'] for item in checks if item['result'] in {"FAIL", "BLOCKED_ENV"}],
     "checks": checks,
 }
-with open(output_path, "w", encoding="utf-8") as handle:
-    json.dump(payload, handle, ensure_ascii=False, indent=2)
-    handle.write("\n")
-PY
-  (( $? == 0 )) || return 1
 
-  {
-    print -r -- "# ${phase} local Gate result"
-    print -r -- ""
-    print -r -- "- Commit: \`${review_commit}\`"
-    print -r -- "- Generated: ${generated_at}"
-    print -r -- "- Result: **${overall_result}**"
-    print -r -- "- Functional-only: **${functional_only}**"
-    print -r -- "- Approvable: **${approvable}**"
-    print -r -- ""
-    print -r -- "Raw check logs and result.json are local artifacts and must not be committed."
-  } > "${result_dir}/SUMMARY.md"
-  (( $? == 0 )) || return 1
+def atomic_write(path, text):
+    # A kill during serialization leaves the previous complete snapshot intact.
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(path)
+
+output = Path(output_path)
+summary = [f"# {phase} Gate: {overall}", "", f"- Commit: `{commit}`",
+           f"- Scope: {payload['scope']}", f"- Active check: {active or 'none'}",
+           f"- Approvable: {str(payload['approvable']).lower()}", "",
+           "| Check | Result | Detail |", "| --- | --- | --- |"]
+for item in checks:
+    message = item['message'].replace('|', r'\|')
+    summary.append(f"| {item['id']} | {item['result']} | {message} |")
+for item in checks:
+    if item.get('failureDetails'):
+        summary.extend(["", f"## {item['id']}", "", "```text", *item['failureDetails'], "```"])
+text = "\n".join(summary) + "\n"
+atomic_write(output.with_name("SUMMARY.md"), text)
+# result.json is the completion marker: publish it only after both artifacts
+# are ready, so a failed summary write cannot leave an approvable PASS behind.
+atomic_write(output, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+if overall != "IN_PROGRESS" and (destination := os.environ.get("GITHUB_STEP_SUMMARY")):
+    try:
+        with open(destination, "a", encoding="utf-8") as handle:
+            handle.write(text)
+    except OSError as error:
+        # The durable Gate artifacts above are authoritative. The dashboard is
+        # a convenience copy, not a second execution result or approval source.
+        print(f"Unable to publish GitHub summary: {error}", file=sys.stderr)
+PY
 }
 
 while (( $# > 0 )); do
@@ -570,7 +663,29 @@ run_check sm01_foundation_contract true "五模块、macOS 15、Swift 6 与 Xcod
   sm01_foundation_contract_check
 run_check sm01_scope_contract true "SM-01 范围、历史基线与生成物边界完整" \
   sm01_scope_contract_check
-run_check swift_build true "SwiftPM Debug 构建通过" swift build
+sm09_release_tools_check() {
+  local tool
+  for tool in ditto hdiutil otool file shasum; do
+    command -v "$tool" >/dev/null 2>&1 || {
+      print -u2 -r -- "missing required release tool: ${tool}"
+      return 127
+    }
+  done
+}
+
+# The final entry always executes native contracts. Historical phase runners
+# are reproducible from their approved Git commits, not from deleted inputs.
+run_check sm09_release_tools true "原生归档、依赖与 ZIP/DMG 审计工具可用" sm09_release_tools_check
+run_check sm09_release_contract true "原生资源、版本、workflow 与发布边界完整" \
+  python3 -B script/tests/sm09_release_contract.py
+run_check sm09_package_self_tests true "包审计失败、并发和清理路径自测通过" \
+  ./script/tests/release_pipeline_tests.zsh
+# Resolve all cheap admission contracts before compiling or driving the GUI.
+# These checks also run in CI preflight; a direct Gate must fail just as early.
+run_check sm09_ui_scope true "UI 必需用例范围与校验负例" \
+  python3 -B script/tests/packaged_ui_contract.py --self-test
+static_checks="workspace_layout required_tools clean_review_target forbidden_items diff_integrity gate_self_tests sm01_foundation_contract sm01_scope_contract sm09_release_tools sm09_release_contract sm09_package_self_tests sm09_ui_scope"
+run_dependent_check "$static_checks" swift_build true "SwiftPM Debug 构建通过" swift build
 swift_test_check() {
   if [[ "$phase" == SM-06 ]]; then
     # Native-rendered review images are artifacts, never acceptance goldens.
@@ -602,8 +717,8 @@ swift_test_check() {
     swift test
   fi
 }
-run_check swift_test true "SwiftPM 核心测试通过" swift_test_check
-run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
+run_dependent_check "swift_build" swift_test true "SwiftPM 核心测试通过" swift_test_check
+run_dependent_check "$static_checks" xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   xcodebuild -quiet \
   CODE_SIGN_IDENTITY=- \
   -project SlateSync.xcodeproj \
@@ -612,34 +727,17 @@ run_check xcode_debug_build true "共享 Scheme 的 Xcode Debug 构建通过" \
   -destination 'platform=macOS' \
   -derivedDataPath "${result_dir}/DerivedData/Debug" \
   build
-run_check xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
+run_dependent_check "xcode_debug_build" xcode_test_plan true "共享 Test Plan 的 Unit/UI Test 通过" \
   xcode_test_plan_check
 
-sm09_release_tools_check() {
-  local tool
-  for tool in ditto hdiutil otool file shasum; do
-    command -v "$tool" >/dev/null 2>&1 || {
-      print -u2 -r -- "missing required release tool: ${tool}"
-      return 127
-    }
-  done
-}
-
-# The final entry always executes native contracts. Historical phase runners
-# are reproducible from their approved Git commits, not from deleted inputs.
-run_check sm09_release_tools true "原生归档、依赖与 ZIP/DMG 审计工具可用" sm09_release_tools_check
-run_check sm09_release_contract true "原生资源、版本、workflow 与发布边界完整" \
-  python3 -B script/tests/sm09_release_contract.py
 contract_arguments=()
 (( functional_only )) && contract_arguments=(--functional)
-run_check sm09_native_contract true "原生来源、功能与资源验收符合当前检查范围" \
+run_dependent_check "swift_test xcode_test_plan" sm09_native_contract true "原生来源、功能与资源验收符合当前检查范围" \
   python3 -B script/tests/sm09_native_contract.py --result-dir "$result_dir" "${contract_arguments[@]}"
-run_check sm09_package_self_tests true "包审计失败、并发和清理路径自测通过" \
-  ./script/tests/release_pipeline_tests.zsh
 if (( functional_only )); then
   record_check sm05_release_performance false NOT_APPLICABLE "性能预算由独立 advisory job 报告；本次不构成完整发布验收" ""
 else
-  run_check sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
+  run_dependent_check "$static_checks" sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
     env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling
 fi
 
@@ -647,11 +745,11 @@ fi
 # checks. SM-08 adds the final native UI to the same signed app surface.
 if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
    [[ "$phase" == "SM-06" || "$phase" == "SM-08" || "$phase" == "SM-09" ]]; then
-  run_check sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
+  run_dependent_check "$static_checks" sm01_debug_settings true "Debug 为活动架构、-Onone、macOS 15 和完整并发检查" \
     sm01_debug_settings_check
-  run_check sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \
+  run_dependent_check "xcode_debug_build sm01_debug_settings" sm01_real_app_launch true "隔离数据根中启动并确认本次构建的真实 SlateSync 进程" \
     sm01_real_app_launch_check
-  run_check sm01_release_build true "Release generic macOS 构建通过" \
+  run_dependent_check "$static_checks" sm01_release_build true "Release generic macOS 构建通过" \
     xcodebuild -quiet \
     CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
@@ -660,9 +758,9 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     -destination 'generic/platform=macOS' \
     -derivedDataPath "${result_dir}/DerivedData/Release" \
     build
-  run_check sm01_release_artifact true "Release 为 Universal、macOS 15.0 且签名有效" \
+  run_dependent_check "sm01_release_build" sm01_release_artifact true "Release 为 Universal、macOS 15.0 且签名有效" \
     sm01_release_artifact_check
-  run_check sm01_archive true "共享 Scheme 可生成 Release Archive" \
+  run_dependent_check "$static_checks" sm01_archive true "共享 Scheme 可生成 Release Archive" \
     xcodebuild -quiet \
     CODE_SIGN_IDENTITY=- \
     -project SlateSync.xcodeproj \
@@ -671,22 +769,22 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
     -destination 'generic/platform=macOS' \
     -archivePath "${result_dir}/SlateSync.xcarchive" \
     archive
-  run_check sm01_archive_artifact true "Archive 为 Universal、macOS 15.0 且签名有效" \
+  run_dependent_check "sm01_archive" sm01_archive_artifact true "Archive 为 Universal、macOS 15.0 且签名有效" \
     sm01_archive_artifact_check
   if [[ "$phase" == "SM-09" ]]; then
-    run_check sm09_archive_bundle_audit true "Archive hardened runtime、entitlements、依赖和资源审计通过" \
+    run_dependent_check "sm01_archive_artifact sm09_release_contract" sm09_archive_bundle_audit true "Archive hardened runtime、entitlements、依赖和资源审计通过" \
       ./script/verify_bundle.sh \
         "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" "$release_version" "$release_build" adhoc
-    run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
+    run_dependent_check "sm09_archive_bundle_audit sm09_release_tools" sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
       sm09_package_artifacts_gate_check
-    run_check sm09_packaged_ui true "ZIP 内 Release app 使用临时 Library 完成界面与退出重开回归" \
+    run_dependent_check "sm09_package_artifacts xcode_debug_build" sm09_packaged_ui true "ZIP 内 Release app 使用临时 Library 完成界面与退出重开回归" \
       ./script/package_smoke.sh "$result_dir"
   fi
 fi
 
 # Exact execution coverage is part of every Gate invocation, including the
 # protected release lane; the CI post-step is only an independent recheck.
-run_check sm09_ui_execution_coverage true "Debug/Release 必需用例逐项执行且零跳过" \
+run_dependent_check "xcode_test_plan sm09_packaged_ui" sm09_ui_execution_coverage true "Debug/Release 必需用例逐项执行且零跳过" \
   python3 -B script/tests/packaged_ui_contract.py --result-dir "$result_dir"
 
 # 批准检查仅在"状态阶段 == 本阶段且 lifecycleState == COMPLETE"时生效；
@@ -702,6 +800,11 @@ elif gate_state_is_complete \
 else
   record_check approval_freshness true NOT_APPLICABLE \
     "Owner 批准在 Gate PASS 后执行；当前状态尚非 COMPLETE（PASS 中间态窗口内不执行批准检查）" ""
+fi
+
+run_check review_target_unchanged true "结束时提交和工作区仍对应审查目标" review_target_unchanged_check
+if (( evidence_write_failed )); then
+  record_check evidence_integrity true FAIL "运行期间发生证据写入错误；不能认证本次结果" ""
 fi
 
 overall_result="PASS"

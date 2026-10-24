@@ -54,6 +54,7 @@ jobs:
         run: ./script/export_xctest_diagnostics.sh "$RUNNER_TEMP/SlateSync-Gate/SM-09"
 
       - name: Retain Gate evidence
+        # Failed evidence transfers retain their raw runner-temporary bundles.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -66,6 +67,8 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.xcresult.zip
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-failure-attachments/**
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-diagnostics/**
+            ${{ runner.temp }}/slatesync-xcode-test.*/SlateSync.xcresult/**
+            ${{ runner.temp }}/slatesync-package-smoke.*/Packaged.xcresult/**
           if-no-files-found: warn
           retention-days: 14
 

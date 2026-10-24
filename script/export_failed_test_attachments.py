@@ -16,13 +16,15 @@ def export_failures(bundle: Path, summary: dict, output: Path, run=subprocess.ru
     errors = []
     for index, identifier in enumerate(identifiers, 1):
         destination = output / f"failed-test-{index}"
-        destination.mkdir(parents=True, exist_ok=True)
-        (destination / "test-id.txt").write_text(identifier + "\n")
         try:
+            # Filesystem errors belong to this test too. A blocked first
+            # directory must not prevent later failure screenshots being saved.
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / "test-id.txt").write_text(identifier + "\n")
             run(["xcrun", "xcresulttool", "export", "attachments", "--path", str(bundle),
                  "--output-path", str(destination), "--test-id", identifier], check=True)
-        except subprocess.CalledProcessError:
-            errors.append(identifier)
+        except (OSError, subprocess.CalledProcessError) as error:
+            errors.append(f"{identifier}: {error}")
     if errors:
         raise RuntimeError(f"failed to export test attachments: {errors}")
     if not identifiers:

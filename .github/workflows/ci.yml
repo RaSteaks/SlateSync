@@ -75,6 +75,7 @@ jobs:
           ./script/export_xctest_diagnostics.sh "$RUNNER_TEMP/SlateSync-Gate/SM-09"
 
       - name: Upload failure diagnostics
+        # Include raw temporary bundles when transfer into Gate evidence failed.
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
@@ -99,6 +100,8 @@ jobs:
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/artifacts/SHA256SUMS
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-failure-attachments/**
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-diagnostics/**
+            ${{ runner.temp }}/slatesync-xcode-test.*/SlateSync.xcresult/**
+            ${{ runner.temp }}/slatesync-package-smoke.*/Packaged.xcresult/**
           if-no-files-found: ignore
           retention-days: 7
 

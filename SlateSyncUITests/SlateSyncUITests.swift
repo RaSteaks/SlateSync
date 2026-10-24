@@ -239,9 +239,7 @@ final class SlateSyncUITests: XCTestCase {
                 app.activate()
                 // Activation can front the project window; the Settings command raises the target explicitly.
                 app.typeKey(",", modifierFlags: .command)
-                settingsWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-                    .withOffset(CGVector(dx: 0, dy: 16)).click()
-                resize(settingsWindow, to: CGSize(width: 700, height: 540))
+                resize(settingsWindow, to: CGSize(width: 700, height: 540), app: app)
                 selectModelSettings(app, english: english)
                 app.buttons[english ? "Add model service" : "添加模型服务"].click()
                 app.buttons[english ? "Custom configuration" : "自定义配置"].click()
@@ -969,7 +967,13 @@ final class SlateSyncUITests: XCTestCase {
         let row = table.tableRows.firstMatch
         row.click()
         XCTAssertTrue(row.isSelected)
-        app.descendants(matching: .any).matching(identifier: "workspace.original.toggle").firstMatch.click()
+        // A wide display opens comparison by default; this paging scenario
+        // needs it visible, not blindly toggled into the opposite state.
+        let closeOriginal = app.buttons["workspace.original.close"].firstMatch
+        if !controlIsVisible(closeOriginal, in: app.windows.firstMatch) {
+            app.descendants(matching: .any).matching(identifier: "workspace.original.toggle").firstMatch.click()
+        }
+        guard waitForControl(closeOriginal, visible: true, in: app.windows.firstMatch, app: app) else { return }
         XCTAssertTrue(app.staticTexts["2 / 2"].waitForExistence(timeout: 5))
         // The second source page is unrelated to the one restored result row.
         // Paging in the comparison panel must preserve native row selection.
@@ -992,14 +996,9 @@ final class SlateSyncUITests: XCTestCase {
         // Packaged Release launches can leave the newly created Settings
         // window behind the app until activation is restored explicitly.
         app.activate()
-        // Focus the title bar before the first edge drag; the packaged app can
-        // expose the settings sheet without making it the key resize target.
-        settingsWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-            .withOffset(CGVector(dx: 0, dy: 16))
-            .click()
-        resize(settingsWindow, to: CGSize(width: 700, height: 540))
+        resize(settingsWindow, to: CGSize(width: 700, height: 540), app: app)
         XCTAssertTrue(appearance.isHittable)
-        resize(settingsWindow, to: CGSize(width: 780, height: 620))
+        resize(settingsWindow, to: CGSize(width: 780, height: 620), app: app)
         XCTAssertEqual(appearance.value as? String, value)
         attachReview("设置窗口缩放", app: app)
     }
@@ -1032,7 +1031,7 @@ final class SlateSyncUITests: XCTestCase {
             app.typeKey("w", modifierFlags: .command)
             waitForWindowCount(1, app: app)
             for size in [CGSize(width: 1440, height: 900), CGSize(width: 960, height: 600)] {
-                resize(main, to: size)
+                resize(main, to: size, app: app)
                 // Window resizing can leave another desktop app in front;
                 // restore activation before checking physical hit targets.
                 app.activate()
@@ -1136,7 +1135,10 @@ final class SlateSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func resize(_ window: XCUIElement, to size: CGSize) {
+    private func resize(_ window: XCUIElement, to size: CGSize, app: XCUIApplication) {
+        // Activation belongs before the first native gesture, not after it.
+        // All Settings/workspace callers share the same safe title-chrome path.
+        app.activate()
         // Work-area size is achievable only after the window is parked at its
         // top-left. A prior top-edge shrink moves the origin downward; growing
         // from there hits the Dock boundary before reaching the target height.
@@ -1151,6 +1153,11 @@ final class SlateSyncUITests: XCTestCase {
         // drag/click to the segmented control just to focus the window.
         let title = window.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: 100, dy: 16))
+        // A move gesture also raises its native window. Click separately only
+        // when already parked, avoiding a click/press pair at the same point.
+        if abs(window.frame.minX - origin.x) <= 2 && abs(window.frame.minY - origin.y) <= 2 {
+            title.click()
+        }
         @MainActor func parkWindow() -> Bool {
             @MainActor func positioned() -> Bool {
                 abs(window.frame.minX - origin.x) <= 2 && abs(window.frame.minY - origin.y) <= 2

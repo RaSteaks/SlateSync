@@ -28,6 +28,41 @@ REQUIRED_DEBUG_FIXTURES = frozenset({
 })
 
 
+# Acceptance floors are policy, not the mutable execution filter. Deleting a
+# method AND its list entry must not silently reduce the delivery contract.
+REQUIRED_RELEASE_TESTS = frozenset({
+    "testAdvisoryURLSuffixDoesNotBlockSaveOnly",
+    "testApplicationLanguageRoundTripIncludesHelpMenusAndUserContent",
+    "testChineseKeyboardWorkflowAndApplicationReopen",
+    "testCreatesProjectAndOpensWorkspaceInIsolatedLibrary",
+    "testHelpRouteUsesBundleLocalSearch",
+    "testIndependentWindowsAndNewWindowAfterClosingLastWindow",
+    "testLaunchesMainWindowAndProjectLibrary",
+    "testLegacyLibraryCSVExportAndReopenInDeliveredApp",
+    "testLogsRouteRendersLocalLogSurface",
+    "testMinimumWindowAccessibilityAndLightDarkAppearance",
+    "testPreviewPagingPreservesResultSelection",
+    "testProviderEditorValidationAndDiscardPreserveSavedConfiguration",
+    "testProviderLayoutAppearanceLanguageAndKeyboardMatrix",
+    "testSettingsCanOpenAndCloseWithoutReplacingHelpRoute",
+    "testMCPPickerRoutesAndDirectoryFreeStartAvailability",
+    "testSettingsWindowResizesWithoutLosingPreferences",
+    "testUnconfiguredBuiltinStartsAtCredentialEntry",
+    "testWorkspaceAppearanceDensityAndComparisonMatrix",
+})
+REQUIRED_APP_TESTS = frozenset({
+    "testAppCompositionCanOpenAnIsolatedLibrary",
+    "testSecurityKeychainBackendUsesAnIsolatedServiceAndConditionalDelete",
+})
+
+
+def app_test_names(source: str) -> list[str]:
+    names = re.findall(r"^    func (test\w+)\(", source, re.MULTILINE)
+    require(len(names) == len(set(names)) and REQUIRED_APP_TESTS <= set(names),
+            "app-hosted acceptance coverage shrank or duplicated")
+    return names
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -50,6 +85,7 @@ def validate_scope(source: str, names: list[str]) -> list[str]:
             fixtures.append(name)
     require(len(tests) == len(set(tests)), "duplicate Swift UI test method")
     expected = set(tests) - set(fixtures)
+    require(REQUIRED_RELEASE_TESTS <= expected, "Release acceptance coverage shrank")
     require(set(names) == expected,
             f"packaged scope drift: missing={sorted(expected - set(names))}, inapplicable={sorted(set(names) - expected)}")
     require(REQUIRED_DEBUG_FIXTURES <= set(fixtures),
@@ -107,8 +143,7 @@ def validate_debug_results(names: list[str], fixtures: list[str], summary: dict,
     # The shared Test Plan must execute every UI case and both app-hosted unit
     # tests. A passing subset or a skipped non-Provider case is not acceptance.
     unit_source = (ROOT / "SlateSyncTests/SlateSyncTests.swift").read_text()
-    units = re.findall(r"^    func (test\w+)\(", unit_source, re.MULTILINE)
-    require(units, "no app-hosted unit tests declared")
+    units = app_test_names(unit_source)
     expected = {f"SlateSyncUITests/{name}()" for name in names + fixtures}
     expected.update(f"SlateSyncTests/{name}()" for name in units)
     require(summary.get("result", "").lower() == "passed" and summary.get("failedTests") == 0,
@@ -139,7 +174,8 @@ def verify_results(root: Path, names: list[str], fixtures: list[str], commit: st
                                    trees["SlateSync"])
     executed = validate_packaged_results(names, json.loads((root / "packaged_ui_summary.json").read_text()),
                                         trees["Packaged"])
-    evidence = {"reviewCommit": commit, "debugTests": debug, "debugFixtureTests": fixtures,
+    diagnostic = bool(subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT, text=True))
+    evidence = {"reviewCommit": commit, "diagnosticDirtyWorkspace": diagnostic, "debugTests": debug, "debugFixtureTests": fixtures,
                 "packagedReleaseTests": executed, "scopeSha256": hashlib.sha256(LIST_PATH.read_bytes()).hexdigest(),
                 "uiTestSourceSha256": hashlib.sha256(SOURCE_PATH.read_bytes()).hexdigest()}
     (root / "ui-scope-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
@@ -152,8 +188,11 @@ def verify_gate(gate_root: Path, names: list[str], fixtures: list[str]) -> None:
     root = results[0].parent
     result = json.loads(results[0].read_text())
     require(result.get("overallResult") == "PASS", "Gate is not passing")
+    require(result.get("diagnosticDirtyWorkspace") is False, "diagnostic evidence cannot certify a committed candidate")
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     require(result.get("reviewCommit") == commit, "Gate evidence belongs to a different commit")
+    dirty = subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT, text=True)
+    require(not dirty, "current source differs from the committed Gate candidate")
     verify_results(root, names, fixtures, commit)
 
 
@@ -171,6 +210,8 @@ def self_tests(names: list[str], fixtures: list[str]) -> None:
     debug_summary = {**summary, "passedTests": len(debug_ids), "totalTestCount": len(debug_ids)}
     validate_debug_results(names, fixtures, debug_summary, debug_tree)
     cases = [
+        lambda: validate_scope(source.replace("func " + names[0] + "(", "func removedDeliveryCase(", 1), names[1:]),
+        lambda: app_test_names("    func testUnrelatedAppCase() {}"),
         lambda: validate_debug_results(names, fixtures, {**debug_summary, "skippedTests": 1}, debug_tree),
         lambda: validate_debug_results(names, fixtures, {**debug_summary, "passedTests": 0, "totalTestCount": 0}, {"testNodes": []}),
         lambda: validate_debug_results(names, fixtures, debug_summary, {"testNodes": debug_tree["testNodes"][1:]}),
