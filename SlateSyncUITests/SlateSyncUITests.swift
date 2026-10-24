@@ -1137,17 +1137,41 @@ final class SlateSyncUITests: XCTestCase {
 
     @MainActor
     private func resize(_ window: XCUIElement, to size: CGSize) {
-        // The native size clamp uses the display's work-area SIZE, regardless
-        // of a window's temporary origin while dragging. Move it to that area's
-        // top-left first, keeping all resize handles clear of the Dock.
+        // Work-area size is achievable only after the window is parked at its
+        // top-left. A prior top-edge shrink moves the origin downward; growing
+        // from there hits the Dock boundary before reaching the target height.
         let screen = NSScreen.main!
         let visible = screen.visibleFrame
         let target = CGSize(width: min(size.width, visible.width), height: min(size.height, visible.height))
         let origin = CGPoint(x: visible.minX, y: screen.frame.maxY - visible.maxY)
-        let title = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-            .withOffset(CGVector(dx: 0, dy: 16))
-        title.press(forDuration: 0.15, thenDragTo: title.withOffset(
-            CGVector(dx: origin.x - window.frame.minX, dy: origin.y - window.frame.minY)))
+        // The center of the main toolbar contains the workspace segment picker,
+        // not draggable title chrome. Use the title strip to the right of the
+        // traffic lights, before the sidebar button; Settings has title text
+        // here, which AppKit also permits dragging. Never send a zero-distance
+        // drag/click to the segmented control just to focus the window.
+        let title = window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 100, dy: 16))
+        @MainActor func parkWindow() -> Bool {
+            @MainActor func positioned() -> Bool {
+                abs(window.frame.minX - origin.x) <= 2 && abs(window.frame.minY - origin.y) <= 2
+            }
+            for _ in 0..<2 {
+                if positioned() { return true }
+                let before = window.frame
+                title.press(forDuration: 0.15, thenDragTo: title.withOffset(
+                    CGVector(dx: origin.x - before.minX, dy: origin.y - before.minY)))
+                // Check the result of the native drag instead of assuming it
+                // moved the window. Retry only the measured residual distance.
+                let predicate = NSPredicate { _, _ in MainActor.assumeIsolated { positioned() } }
+                let expectation = XCTNSPredicateExpectation(predicate: predicate, object: window)
+                if XCTWaiter().wait(for: [expectation], timeout: 3) == .completed { return true }
+            }
+            return positioned()
+        }
+        guard parkWindow() else {
+            XCTFail("UI_RESIZE positioning failed: expected origin=\(origin), actual=\(window.frame)")
+            return
+        }
 
         // Tahoe's rounded corners are outside the resize hit region. Drag the
         // middle of each straight edge separately; no app-side resize hook or
@@ -1191,7 +1215,13 @@ final class SlateSyncUITests: XCTestCase {
                         : target.height - window.frame.height)))
             }
         }
-        print("UI_RESIZE requested=\(size) supported=\(target) visible=\(visible) actual=\(window.frame)")
+        // Top-edge shrinking changes the origin even when size is correct.
+        // Restore it now so subsequent theme/size iterations start on-screen.
+        guard parkWindow() else {
+            XCTFail("UI_RESIZE final positioning failed: expected origin=\(origin), actual=\(window.frame)")
+            return
+        }
+        print("UI_RESIZE requested=\(size) supported=\(target) visible=\(visible) origin=\(origin) actual=\(window.frame)")
         XCTAssertEqual(window.frame.width, target.width, accuracy: 4)
         XCTAssertEqual(window.frame.height, target.height, accuracy: 4)
     }
