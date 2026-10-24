@@ -274,6 +274,18 @@ public actor ResolveCSVMerger {
 
     private static func buildMetadataIndex(_ entries: [PersistedSlateMetadata], warnings: inout [String]) -> [String: MetadataValue] {
         var result: [String: MetadataValue] = [:]
+        // A shoot often repeats one date and a few frame rates across thousands
+        // of sidecars. Cache pure normalization only for this merge, with a
+        // fixed cap so arbitrary unique input cannot grow another unbounded map.
+        var normalizedFPS: [String: String] = [:]
+        var normalizedDays: [String: String] = [:]
+        func normalized(_ raw: String?, cache: inout [String: String], using normalize: (String?) -> String) -> String {
+            let key = raw ?? ""
+            if let value = cache[key] { return value }
+            let value = normalize(raw)
+            if cache.count < 256 { cache[key] = value }
+            return value
+        }
         let valid = entries.filter { !$0.materialKey.isEmpty }
         let groups = Dictionary(grouping: valid, by: \.materialKey)
         var keyOrder: [String] = []
@@ -281,8 +293,12 @@ public actor ResolveCSVMerger {
         for entry in valid where seenKeys.insert(entry.materialKey).inserted { keyOrder.append(entry.materialKey) }
         for key in keyOrder {
             guard let group = groups[key] else { continue }
-            let fps = Set(group.map { ResolveCSVNormalization.normalizeCameraFPS($0.sensorFps) }.filter { !$0.isEmpty })
-            let days = Set(group.map { ResolveCSVNormalization.normalizeShootDay($0.shootDay) }.filter { !$0.isEmpty })
+            let fps = Set(group.map {
+                normalized($0.sensorFps, cache: &normalizedFPS, using: ResolveCSVNormalization.normalizeCameraFPS)
+            }.filter { !$0.isEmpty })
+            let days = Set(group.map {
+                normalized($0.shootDay, cache: &normalizedDays, using: ResolveCSVNormalization.normalizeShootDay)
+            }.filter { !$0.isEmpty })
             if fps.count > 1 { warnings.append("\(ResolveCSVNormalization.canonicalKeyToMaterialPrefix(key)) 的 slate.txt 存在互相冲突或无效的 Sensor FPS，Camera FPS 不会写入。") }
             if days.count > 1 { warnings.append("\(ResolveCSVNormalization.canonicalKeyToMaterialPrefix(key)) 的 slate.txt 存在互相冲突的 Shot Date，Shoot Day 不会写入。") }
             let value = MetadataValue(sensorFPS: fps.count == 1 ? (fps.first ?? "") : "", shootDay: days.count == 1 ? (days.first ?? "") : "")

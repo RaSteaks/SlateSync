@@ -5,23 +5,40 @@ project_root="${script_dir:h}"
 source "${script_dir}/lib/phase_gate_lib.sh"
 (( $# == 1 )) || { print -u2 'usage: package_smoke.sh <Gate result directory>'; exit 64; }
 result_dir="${1:A}"
-smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-package-smoke.XXXXXX")"
+# The Gate records source-derived expectations before building. Never infer
+# acceptance metadata from the extracted app or fall back to a historical name.
+release_identity="$(python3 -B "${script_dir}/release_identity.py")"
+release_version="${release_identity%%$'\n'*}"
+release_build="${release_identity##*$'\n'}"
+python3 - "${result_dir}/release-identity.json" "$release_version" "$release_build" <<'PYIDENTITY'
+import json, sys
+identity = json.load(open(sys.argv[1]))
+assert identity == {"configuration": "Release", "version": sys.argv[2], "build": sys.argv[3]}, "candidate identity changed after build"
+PYIDENTITY
+# RUNNER_TEMP also makes a failed-transfer raw bundle discoverable by artifact
+# upload; local callers retain the ordinary temporary-directory behavior.
+smoke_root="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/slatesync-package-smoke.XXXXXX")"
 # macOS reports the executable under /private/var even when TMPDIR uses
 # /var or a doubled slash. Canonicalize before matching a process for cleanup.
 smoke_root="${smoke_root:A}"
 app="${smoke_root}/consumer/SlateSync.app"
+retain_smoke_root=0
 cleanup() {
   # Stop only the tested bundle before removing its isolated consumer install.
   slatesync_stop_executable SlateSync "${app}/Contents/MacOS/SlateSync" || {
     print -u2 "Packaged application still running; retaining ${smoke_root}"
     return 1
   }
-  rm -rf "$smoke_root"
+  if (( retain_smoke_root )); then
+    print -u2 -r -- "Retaining original packaged XCTest evidence: ${smoke_root}"
+  else
+    rm -rf "$smoke_root"
+  fi
 }
 trap cleanup EXIT INT TERM
 mkdir "${smoke_root}/consumer"
-ditto -x -k "${result_dir}/artifacts/SlateSync-1.1.0-macOS-universal.zip" "${smoke_root}/consumer"
-"${script_dir}/verify_bundle.sh" "$app" 1.1.0 2 adhoc
+ditto -x -k "${result_dir}/artifacts/SlateSync-${release_version}-macOS-universal.zip" "${smoke_root}/consumer"
+"${script_dir}/verify_bundle.sh" "$app" "$release_version" "$release_build" adhoc
 # Build only the test harness. XCUIApplication(url:) explicitly launches the
 # extracted app, so XCTest cannot silently substitute the development build.
 # Sign the isolated harness explicitly; clean CI runners have no local identity.
@@ -66,7 +83,21 @@ xcodebuild -quiet test-without-building -xctestrun "$xctestrun[1]" \
   -destination 'platform=macOS' "${only_testing[@]}" \
   -resultBundlePath "${smoke_root}/Packaged.xcresult" \
   > "${result_dir}/packaged_ui_xcodebuild.log" 2>&1 || smoke_status=$?
-ditto "${smoke_root}/Packaged.xcresult" "${result_dir}/Packaged.xcresult"
+if [[ ! -d "${smoke_root}/Packaged.xcresult" ]]; then
+  # Setup/build/runner failures can occur before XCTest creates a bundle.
+  # Surface the actual wrapper log and status instead of a secondary ditto error.
+  cat "${result_dir}/packaged_ui_xcodebuild.log"
+  print -u2 'Packaged XCTest produced no result bundle'
+  (( smoke_status == 0 )) || exit "$smoke_status"
+  exit 1
+fi
+if ! ditto "${smoke_root}/Packaged.xcresult" "${result_dir}/Packaged.xcresult"; then
+  # EXIT cleanup must not destroy the sole raw result after a failed transfer.
+  retain_smoke_root=1
+  cat "${result_dir}/packaged_ui_xcodebuild.log"
+  print -u2 -r -- "Unable to retain packaged XCTest results: ${smoke_root}/Packaged.xcresult"
+  exit 1
+fi
 xcrun xcresulttool get test-results summary --path "${smoke_root}/Packaged.xcresult" \
   --format json > "${result_dir}/packaged_ui_summary.json"
 # Quiet xcodebuild can hide an assertion behind unrelated environment logging.

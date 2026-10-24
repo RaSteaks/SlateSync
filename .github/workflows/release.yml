@@ -6,11 +6,9 @@ on:
       version:
         description: SemVer matching MARKETING_VERSION
         required: true
-        default: 1.1.0
       build:
         description: Monotonic CFBundleVersion integer
         required: true
-        default: "2"
 
 permissions:
   contents: read
@@ -38,8 +36,9 @@ jobs:
         run: |
           [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$RELEASE_BUILD" =~ ^[1-9][0-9]*$ ]]
-          [[ "$RELEASE_VERSION" == "1.1.0" ]]
-          [[ "$RELEASE_BUILD" == "2" ]]
+          # Match this checkout's candidate, not the sealed migration baseline.
+          expected_identity="$(python3 -B script/release_identity.py)"
+          [[ "$expected_identity" == "$(printf '%s\n%s' "$RELEASE_VERSION" "$RELEASE_BUILD")" ]]
           xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
           grep -Fx 'Xcode 26.3' "$RUNNER_TEMP/xcode-version.txt"
           grep -Fx 'Build version 17C529' "$RUNNER_TEMP/xcode-version.txt"
@@ -48,6 +47,30 @@ jobs:
         env:
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
         run: ./script/phase_gate.sh SM-09
+
+      # Full release acceptance needs the same failure evidence as merge CI.
+      - name: Export failed XCTest diagnostics
+        if: failure() || cancelled()
+        run: ./script/export_xctest_diagnostics.sh "$RUNNER_TEMP/SlateSync-Gate/SM-09"
+
+      - name: Retain Gate evidence
+        # Failed evidence transfers retain their raw runner-temporary bundles.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-release-gate-evidence
+          path: |
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.tsv
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.md
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.xcresult.zip
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-failure-attachments/**
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcresult-diagnostics/**
+            ${{ runner.temp }}/slatesync-xcode-test.*/SlateSync.xcresult/**
+            ${{ runner.temp }}/slatesync-package-smoke.*/Packaged.xcresult/**
+          if-no-files-found: warn
+          retention-days: 14
 
       # WP-0 authorizes local/ad-hoc evidence only. This workflow deliberately
       # has no Developer ID secret, notarization, tag, or GitHub Release write.

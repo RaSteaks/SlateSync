@@ -76,6 +76,45 @@ enum CSVKeyboardNavigation {
     }
 }
 
+/// Counts binding work without observing SwiftUI state or retaining row views.
+/// These diagnostics supplement FPS; they never change the rendering workload.
+struct CSVCellWorkMetrics: Sendable {
+    var bindings = 0
+    var creations = 0
+    var valueWrites = 0
+    var styleWrites = 0
+    var accessibilityFormats = 0
+}
+
+/// Keep native text editing/layout intact, but format the contextual AX label
+/// only when a client requests it. Scrolling must not eagerly localize a label
+/// for every reused cell. The cache belongs to this cell, not the whole table.
+@MainActor
+final class CSVTableTextField: NSTextField {
+    private var representedRow = -1
+    private var representedHeader = ""
+    private var cachedLabel: String?
+    private var cachedLanguage: AppLanguage?
+
+    func bindAccessibility(row: Int, header: String) {
+        guard representedRow != row || representedHeader != header else { return }
+        representedRow = row
+        representedHeader = header
+        cachedLabel = nil
+    }
+
+    override func accessibilityLabel() -> String? {
+        guard representedRow >= 0 else { return super.accessibilityLabel() }
+        let language = L10n.language
+        if let cachedLabel, cachedLanguage == language { return cachedLabel }
+        let label = L10n.tr("第 {0} 行，{1}", [String(representedRow + 1), representedHeader], language: language)
+        cachedLabel = label
+        cachedLanguage = language
+        (delegate as? EditableCSVTableRepresentable.Coordinator)?.recordAccessibilityFormat()
+        return label
+    }
+}
+
 /// The single SM-08 AppKit data-surface bridge. NSTableView supplies row reuse
 /// for 10k editable rows; the coordinator owns only AppKit edit/scroll state
 /// and reports immutable identities back to the MainActor model.
@@ -119,6 +158,9 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         // Content-sized columns; only the last one stretches to fill the width.
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         tableView.rowSizeStyle = .custom
+        // Density owns fixed row heights; do not ask every reused text field
+        // to determine automatic row geometry while traversing a large table.
+        tableView.usesAutomaticRowHeights = false
         tableView.rowHeight = effectiveDensity.tableRowHeight
         tableView.setAccessibilityLabel(accessibilityLabel)
         context.coordinator.tableView = tableView
@@ -210,9 +252,17 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         fileprivate var appliedEnabled: Bool?
         fileprivate var headers: [String] = []
         fileprivate var columnTableID: UUID?
-        /// Columns whose sampled values are all numeric: right-aligned so digits
-        /// of different rows line up.
-        fileprivate var numericColumns: Set<Int> = []
+        private struct ColumnBinding {
+            let sourceIndex: Int
+            let reuseIdentifier: NSUserInterfaceItemIdentifier
+            let header: String
+            let alignment: NSTextAlignment
+        }
+        // Prepared once per schema/table identity. Avoid bridging and searching
+        // tableColumns for every cell request; native visual order can change.
+        private var columnBindings: [ObjectIdentifier: ColumnBinding] = [:]
+        private var sourceColumnIdentifiers: [NSUserInterfaceItemIdentifier] = []
+        private(set) var cellWork = CSVCellWorkMetrics()
         fileprivate var timer: Task<Void, Never>?
         private weak var editingField: NSTextField?
         private var editingIdentity: CSVCellCommit?
@@ -275,14 +325,17 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             row: Int
         ) -> NSView? {
             guard let tableColumn,
-                  let column = tableView.tableColumns.firstIndex(of: tableColumn) else { return nil }
-            let identifier = NSUserInterfaceItemIdentifier("csv.cell.\(column)")
-            let field: NSTextField
-            if let reused = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTextField {
+                  let binding = columnBindings[ObjectIdentifier(tableColumn)],
+                  parent.table.headers.indices.contains(binding.sourceIndex) else { return nil }
+            let column = binding.sourceIndex
+            cellWork.bindings += 1
+            let field: CSVTableTextField
+            if let reused = tableView.makeView(withIdentifier: binding.reuseIdentifier, owner: nil) as? CSVTableTextField {
                 field = reused
             } else {
-                field = NSTextField()
-                field.identifier = identifier
+                field = CSVTableTextField()
+                field.identifier = binding.reuseIdentifier
+                cellWork.creations += 1
                 field.isBordered = false
                 // Table cells do not need the standalone text-input bezel's
                 // appearance layers. Limit display layout to the fixed-height
@@ -297,15 +350,29 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 field.font = Self.cellFont
                 field.delegate = self
             }
+            field.tag = row * max(1, parent.table.headers.count) + column
+            field.bindAccessibility(row: row, header: binding.header)
             // AppKit reuses cells across tables; alignment belongs to the
             // current sampled column, not to the cell's creation-time table.
-            field.alignment = numericColumns.contains(column) ? .right : .left
-            field.tag = row * max(1, parent.table.headers.count) + column
-            field.isEditable = parent.isEnabled
-            field.stringValue = value(row: row, column: column)
-            field.setAccessibilityLabel(L10n.tr("第 {0} 行，{1}", [String(describing: row + 1), String(describing: parent.table.headers[column])]))
+            // AppKit setters may invalidate text/layout/display even for an
+            // unchanged value. Apply only actual differences on cell reuse.
+            if field.alignment != binding.alignment {
+                field.alignment = binding.alignment
+                cellWork.styleWrites += 1
+            }
+            if field.isEditable != parent.isEnabled {
+                field.isEditable = parent.isEnabled
+                cellWork.styleWrites += 1
+            }
+            let text = value(row: row, column: column)
+            if field.stringValue != text {
+                field.stringValue = text
+                cellWork.valueWrites += 1
+            }
             return field
         }
+
+        fileprivate func recordAccessibilityFormat() { cellWork.accessibilityFormats += 1 }
 
         public func controlTextDidEndEditing(_ notification: Notification) {
             guard let field = notification.object as? NSTextField,
@@ -361,16 +428,16 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         /// cell padding, so single-digit columns stay narrow and identifiers such
         /// as clip names are not truncated.
         fileprivate func rebuildColumns(for tableView: NSTableView) {
+            columnBindings.removeAll(keepingCapacity: true)
+            sourceColumnIdentifiers.removeAll(keepingCapacity: true)
             tableView.tableColumns.forEach(tableView.removeTableColumn)
             headers = parent.table.headers
             columnTableID = parent.tableID
-            numericColumns = []
             let rows = parent.table.rows.prefix(Self.sampleRows)
             for (index, title) in headers.enumerated() {
                 let shown = title.isEmpty ? L10n.tr("第 {0} 列", [String(describing: index + 1)]) : title
                 let values = rows.compactMap { $0.indices.contains(index) ? $0[index] : nil }.filter { !$0.isEmpty }
                 let numeric = !values.isEmpty && values.allSatisfy { $0.allSatisfy { $0.isNumber || $0 == "." || $0 == "-" } }
-                if numeric { numericColumns.insert(index) }
                 func width(_ text: String, _ font: NSFont) -> CGFloat {
                     ceil((text as NSString).size(withAttributes: [.font: font]).width)
                 }
@@ -383,6 +450,10 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 column.width = min(max(natural, column.minWidth), 360)
                 column.headerCell.alignment = numeric ? .right : .left
                 column.headerCell.font = Self.headerFont
+                columnBindings[ObjectIdentifier(column)] = ColumnBinding(
+                    sourceIndex: index, reuseIdentifier: .init("csv.cell.\(index)"),
+                    header: title, alignment: numeric ? .right : .left)
+                sourceColumnIdentifiers.append(column.identifier)
                 tableView.addTableColumn(column)
             }
             renderedRevision = -1
@@ -426,9 +497,20 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 return true
             }
             let cell = cellIdentity(for: field)
+            // Cell tags/commits use source columns. Keyboard movement uses the
+            // current visual order, including a native header drag reorder.
+            guard sourceColumnIdentifiers.indices.contains(cell.column) else {
+                finishEditing(field)
+                return true
+            }
+            let visualColumn = tableView.column(withIdentifier: sourceColumnIdentifiers[cell.column])
+            guard visualColumn >= 0 else {
+                finishEditing(field)
+                return true
+            }
             let destination = CSVKeyboardNavigation.destination(
                 row: cell.row,
-                column: cell.column,
+                column: visualColumn,
                 rows: tableView.numberOfRows,
                 columns: tableView.tableColumns.count,
                 movement: movement

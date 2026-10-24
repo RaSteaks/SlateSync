@@ -21,6 +21,24 @@ METRICS = (
 )
 
 
+def benchmark_results(log_text: str) -> dict[str, str]:
+    """Distinguish absent execution from an executed budget/assertion failure."""
+    results = {}
+    for name in BENCHMARKS:
+        events = re.findall(r"^Test Case '-\[[^\]\n]+ " + re.escape(name)
+                            + r"\]' (started|passed|failed|skipped)\b", log_text, re.MULTILINE)
+        # A later retry/pass must not hide a failure in the same report.
+        if "failed" in events:
+            results[name] = "failed"
+        elif "skipped" in events:
+            results[name] = "skipped"
+        elif "passed" in events:
+            results[name] = "passed"
+        else:
+            results[name] = "incomplete" if events else "missing"
+    return results
+
+
 def run(output: Path) -> int:
     # Never mix a new attempt with stale metric files or overwrite a prior report.
     if output.exists() and any(output.iterdir()):
@@ -48,11 +66,18 @@ def run(output: Path) -> int:
                 code = code or 1
     # A zero exit with an empty filter or missing metrics is not evidence.
     log_text = (output / "benchmarks.log").read_text(errors="replace")
-    missing_tests = [name for name in BENCHMARKS if not re.search(r"\b" + re.escape(name) + r"\]' passed", log_text)]
+    test_results = benchmark_results(log_text)
+    missing_tests = [name for name, state in test_results.items() if state == "missing"]
+    failed_tests = [name for name, state in test_results.items() if state == "failed"]
+    skipped_tests = [name for name, state in test_results.items() if state == "skipped"]
+    incomplete_tests = [name for name, state in test_results.items() if state == "incomplete"]
     missing_metrics = [name for name in METRICS if name not in metrics]
-    if missing_tests or missing_metrics:
+    if any(state != "passed" for state in test_results.values()) or missing_metrics:
         code = code or 1
-    result = {"missingTests": missing_tests, "missingMetrics": missing_metrics, "scope": "advisory-performance", "passed": code == 0,
+    result = {"missingTests": missing_tests, "failedTests": failed_tests,
+              "skippedTests": skipped_tests, "incompleteTests": incomplete_tests,
+              "testResults": test_results, "missingMetrics": missing_metrics,
+              "scope": "advisory-performance", "passed": code == 0,
               "exitCode": code, "command": command, "metrics": metrics}
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     summary = ("## Performance report (non-blocking)\n\n"

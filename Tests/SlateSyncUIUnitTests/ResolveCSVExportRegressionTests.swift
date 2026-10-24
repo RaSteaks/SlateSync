@@ -55,7 +55,9 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         let state: ToolbarState
         let model: ResolveCSVModel
         var body: some View {
-            ContentRevealRegion(value: state.page, origin: .leading) { page in
+            // This test proves toolbar ownership while the outgoing editor is
+            // retained. Reduced motion is covered separately in ContentMotionTests.
+            ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: false) { page in
                 if page == 0 { ResolveCSVView(model: model) }
                 else { Text("Destination") }
             }

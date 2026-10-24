@@ -69,6 +69,9 @@ public struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        // Scope the list's AX identifier before attaching inset controls. On
+        // macOS 26 an outer identifier overwrites their task/search identifiers.
+        .accessibilityIdentifier("sidebar")
         // Icons stay monochrome; the accent belongs to the selection only.
         .listItemTint(.monochrome)
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -111,7 +114,6 @@ public struct SidebarView: View {
         } message: {
             Text(L10n.tr("任务的场记单与校对结果将被删除。"))
         }
-        .accessibilityIdentifier("sidebar")
     }
 
     // MARK: Project section

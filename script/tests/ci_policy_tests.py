@@ -123,6 +123,53 @@ class CIPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': ''}), patch.object(report.subprocess, 'run', return_value=type('Completed', (), {'returncode': 0})()):
             self.assertEqual(report.run(Path(directory)), 1)
 
+    def test_report_distinguishes_failed_skipped_incomplete_and_missing(self):
+        names = report.BENCHMARKS
+        log = "\n".join([
+            f"Test Case '-[Suite {names[0]}]' passed (0.1 seconds).",
+            f"Test Case '-[Suite {names[1]}]' failed (0.1 seconds).",
+            f"Test Case '-[Suite {names[1]}]' passed (0.1 seconds).",
+            f"Test Case '-[Suite {names[2]}]' skipped (0.1 seconds).",
+            f"Test Case '-[Suite {names[3]}]' started.",
+        ])
+        self.assertEqual(list(report.benchmark_results(log).values()),
+                         ['passed', 'failed', 'skipped', 'incomplete', 'missing'])
+
+    def test_dependency_failure_is_not_execution_or_a_pass(self):
+        source = (ROOT/'script/phase_gate.sh').read_text()
+        function = source[source.index('run_dependent_check() {'):source.index('\nrun_check() {')]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'dependency.zsh'
+            path.write_text(function)
+            command = ('source "$1"; typeset -A check_results; '
+                       '[[ "$2" == MISSING ]] || check_results[parent]="$2"; '
+                       'record_check() { print -r -- "$1 $3"; }; '
+                       'run_check() { print EXECUTED; }; '
+                       'run_dependent_check parent child true description true')
+            for state, expected in [('PASS', 'EXECUTED'), ('FAIL', 'child NOT_RUN'),
+                                    ('BLOCKED_ENV', 'child NOT_RUN'), ('NOT_RUN', 'child NOT_RUN'),
+                                    ('MISSING', 'child FAIL')]:
+                value = native.subprocess.run(['zsh', '-c', command, '--', str(path), state],
+                                              check=True, capture_output=True, text=True)
+                self.assertEqual(value.stdout.strip(), expected)
+
+    def test_final_review_target_rejects_head_dirty_and_observation_drift(self):
+        source = (ROOT/'script/phase_gate.sh').read_text()
+        function = source[source.index('clean_workspace_check() {'):source.index('# forbidden_items_check 已移入')]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'target.zsh'
+            path.write_text(function)
+            command = ("source \"$1\"; review_commit=before; allow_dirty=0; mode=\"$2\"; "
+                       "git() { if [[ \"$1\" == rev-parse ]]; then "
+                       "if [[ $mode == head ]]; then print after; else print before; fi; "
+                       "else [[ $mode == error ]] && return 128; "
+                       "[[ $mode == dirty ]] && print modified; fi; return 0; }; "
+                       "review_target_unchanged_check")
+            for mode in ['clean', 'head', 'dirty', 'error']:
+                value = native.subprocess.run(['zsh', '-c', command, '--', str(path), mode],
+                                              check=False, capture_output=True)
+                self.assertEqual(value.returncode == 0, mode == 'clean')
+
     def test_gate_scope_metadata_and_exit_codes(self):
         source = (ROOT/'script/phase_gate.sh').read_text()
         function = source[source.index('write_result_artifacts() {'):source.index('\nwhile (( $# > 0 ))')]
@@ -132,11 +179,22 @@ class CIPolicyTests(unittest.TestCase):
             (root/'functions.zsh').write_text(function)
             (root/'checks.tsv').write_text('core\ttrue\tPASS\tfunctional tests passed\t\n')
             command = 'source "$1"; result_dir="$2"; checks_tsv="$2/checks.tsv"; phase=SM-09; review_commit=fixture; approvable=false; allow_dirty=0; functional_only=1; write_result_artifacts PASS'
-            native.subprocess.run(['zsh', '-c', command, '--', str(root/'functions.zsh'), str(root)], check=True)
+            native.subprocess.run(['zsh', '-c', command, '--', str(root/'functions.zsh'), str(root)], check=True,
+                                  env=dict(os.environ, GITHUB_STEP_SUMMARY=""))
             value = json.loads((root/'result.json').read_text())
             self.assertEqual(value['scope'], 'functional')
             self.assertEqual(value['performancePolicy'], 'advisory')
             self.assertFalse(value['approvable'])
+            # Provisional progress must survive cancellation without certifying
+            # the candidate, even when the intended final lane is approvable.
+            progress = command.replace('write_result_artifacts PASS',
+                                       'active_check=mock_build; approvable=true; write_result_artifacts IN_PROGRESS')
+            native.subprocess.run(['zsh', '-c', progress, '--', str(root/'functions.zsh'), str(root)],
+                                  check=True, env=dict(os.environ, GITHUB_STEP_SUMMARY=""))
+            snapshot = json.loads((root/'result.json').read_text())
+            self.assertFalse(snapshot['executionComplete'])
+            self.assertFalse(snapshot['approvable'])
+            self.assertEqual(snapshot['activeCheck'], 'mock_build')
             for outcome, functional, dirty, expected in [('PASS', 1, 0, 0), ('FAIL', 1, 0, 1), ('BLOCKED_ENV', 1, 0, 2), ('PASS', 1, 1, 3), ('PASS', 0, 0, 3)]:
                 setup = f'overall_result={outcome}; functional_only={functional}; allow_dirty={dirty}; approvable=false; exit_fail=1; exit_blocked_environment=2; exit_diagnostic_only=3;\n'
                 result = native.subprocess.run(['zsh', '-c', setup + ending], check=False)

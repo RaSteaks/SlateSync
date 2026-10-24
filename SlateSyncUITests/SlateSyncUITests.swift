@@ -239,9 +239,7 @@ final class SlateSyncUITests: XCTestCase {
                 app.activate()
                 // Activation can front the project window; the Settings command raises the target explicitly.
                 app.typeKey(",", modifierFlags: .command)
-                settingsWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-                    .withOffset(CGVector(dx: 0, dy: 16)).click()
-                resize(settingsWindow, to: CGSize(width: 700, height: 540))
+                resize(settingsWindow, to: CGSize(width: 700, height: 540), app: app)
                 selectModelSettings(app, english: english)
                 app.buttons[english ? "Add model service" : "添加模型服务"].click()
                 app.buttons[english ? "Custom configuration" : "自定义配置"].click()
@@ -541,6 +539,9 @@ final class SlateSyncUITests: XCTestCase {
         // XCUI; the workspace-owned task action is the stable route witness.
         let taskCreate = app.buttons.matching(identifier: "task.create").firstMatch
         XCTAssertTrue(taskCreate.waitForExistence(timeout: 8))
+        // Both inset controls must retain their own identifiers after the
+        // native sidebar list is assembled; the outer list must not mask them.
+        XCTAssertTrue(app.textFields["workspace.task.search"].waitForExistence(timeout: 3))
         // The sidebar keeps the acquired project visible beside its group
         // heading, independent of the workspace's current detail route.
         let currentProjectName = app.staticTexts["sidebar.currentProjectName"]
@@ -690,23 +691,35 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertTrue(settings.buttons["settings.mcp.add.codex"].firstMatch.isEnabled)
         XCTAssertTrue(settings.buttons["settings.mcp.add.claudeCode"].firstMatch.isEnabled)
 
-        func reveal(_ element: XCUIElement) {
+        let content = settings.scrollViews["settings.mcp.guide"].firstMatch
+        func reveal(_ element: XCUIElement) -> Bool {
+            // A native AX element can be present while clipped by its Form.
+            // Require the complete target inside this viewport before clicking.
             for _ in 0..<14 {
-                if element.exists && element.isHittable { return }
-                settings.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -160)
+                let viewport = content.frame.intersection(settings.frame).insetBy(dx: 1, dy: 1)
+                if element.exists, !element.frame.isEmpty,
+                   viewport.contains(element.frame), element.isHittable { return true }
+                let direction: CGFloat = element.exists && element.frame.midY < viewport.midY ? 160 : -160
+                content.scroll(byDeltaX: 0, deltaY: direction)
             }
-            XCTAssertTrue(element.isHittable)
+            recordUIFailure("MCP control is outside the visible viewport: \(element)", app: app)
+            return false
         }
-        let advanced = settings.staticTexts["高级设置"].firstMatch
-        reveal(advanced)
+        // The same full-row button as the setup guide exposes actual expanded
+        // state. Prove expansion before looking for picker controls or scrolling.
+        let advanced = settings.buttons["settings.mcp.advanced"].firstMatch
+        guard reveal(advanced) else { return }
         advanced.click()
+        guard waitForUICondition("MCP advanced section expands", app: app, {
+            advanced.value as? String == "已展开"
+        }) else { return }
         let chooseExecutable = settings.buttons["settings.mcp.executable.choose"].firstMatch
-        reveal(chooseExecutable)
+        guard reveal(chooseExecutable) else { return }
         chooseExecutable.click()
         choosePanelPath(launcher.path, operation: .openFile, app: app)
         XCTAssertEqual(settings.textFields["settings.mcp.executable"].firstMatch.value as? String, launcher.path)
         let chooseSource = settings.buttons["settings.mcp.source.choose"].firstMatch
-        reveal(chooseSource)
+        guard reveal(chooseSource) else { return }
         chooseSource.click()
         // Folder selection uses the same NSOpenPanel as executable selection.
         choosePanelPath(testRoot.path, operation: .openFile, app: app)
@@ -954,7 +967,13 @@ final class SlateSyncUITests: XCTestCase {
         let row = table.tableRows.firstMatch
         row.click()
         XCTAssertTrue(row.isSelected)
-        app.descendants(matching: .any).matching(identifier: "workspace.original.toggle").firstMatch.click()
+        // A wide display opens comparison by default; this paging scenario
+        // needs it visible, not blindly toggled into the opposite state.
+        let closeOriginal = app.buttons["workspace.original.close"].firstMatch
+        if !controlIsVisible(closeOriginal, in: app.windows.firstMatch) {
+            app.descendants(matching: .any).matching(identifier: "workspace.original.toggle").firstMatch.click()
+        }
+        guard waitForControl(closeOriginal, visible: true, in: app.windows.firstMatch, app: app) else { return }
         XCTAssertTrue(app.staticTexts["2 / 2"].waitForExistence(timeout: 5))
         // The second source page is unrelated to the one restored result row.
         // Paging in the comparison panel must preserve native row selection.
@@ -977,14 +996,9 @@ final class SlateSyncUITests: XCTestCase {
         // Packaged Release launches can leave the newly created Settings
         // window behind the app until activation is restored explicitly.
         app.activate()
-        // Focus the title bar before the first edge drag; the packaged app can
-        // expose the settings sheet without making it the key resize target.
-        settingsWindow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-            .withOffset(CGVector(dx: 0, dy: 16))
-            .click()
-        resize(settingsWindow, to: CGSize(width: 700, height: 540))
+        resize(settingsWindow, to: CGSize(width: 700, height: 540), app: app)
         XCTAssertTrue(appearance.isHittable)
-        resize(settingsWindow, to: CGSize(width: 780, height: 620))
+        resize(settingsWindow, to: CGSize(width: 780, height: 620), app: app)
         XCTAssertEqual(appearance.value as? String, value)
         attachReview("设置窗口缩放", app: app)
     }
@@ -1017,7 +1031,7 @@ final class SlateSyncUITests: XCTestCase {
             app.typeKey("w", modifierFlags: .command)
             waitForWindowCount(1, app: app)
             for size in [CGSize(width: 1440, height: 900), CGSize(width: 960, height: 600)] {
-                resize(main, to: size)
+                resize(main, to: size, app: app)
                 // Window resizing can leave another desktop app in front;
                 // restore activation before checking physical hit targets.
                 app.activate()
@@ -1025,21 +1039,34 @@ final class SlateSyncUITests: XCTestCase {
                 attachReview("输入-\(name)", app: app)
                 let config = app.buttons["workspace.configuration.toggle"].firstMatch
                 XCTAssertTrue(config.isHittable)
-                config.click()
-                attachReview("配置-\(name)", app: app)
-                if app.buttons["workspace.configuration.close"].firstMatch.exists
-                    && app.buttons["workspace.configuration.close"].firstMatch.isHittable
-                {
-                    app.buttons["workspace.configuration.close"].firstMatch.click()
+                // Hidden panes stay mounted to preserve drafts, so exists is
+                // not visibility. Only close a control inside the live window.
+                let closeConfig = app.buttons["workspace.configuration.close"].firstMatch
+                if controlIsVisible(closeConfig, in: main) {
+                    closeConfig.click()
+                    guard waitForControl(closeConfig, visible: false, in: main, app: app) else { return }
                 }
+                config.click()
+                guard waitForControl(closeConfig, visible: true, in: main, app: app) else { return }
+                attachReview("配置-\(name)", app: app)
+                closeConfig.click()
+                guard waitForControl(closeConfig, visible: false, in: main, app: app) else { return }
                 app.radioButtons["识别结果"].firstMatch.click()
                 let toggle = app.descendants(matching: .any).matching(identifier: "workspace.original.toggle")
                     .firstMatch
                 XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+                // The first wide result page opens comparison automatically;
+                // blindly toggling would close it and fail the next assertion.
+                let closeOriginal = app.buttons["workspace.original.close"].firstMatch
+                if controlIsVisible(closeOriginal, in: main) {
+                    closeOriginal.click()
+                    guard waitForControl(closeOriginal, visible: false, in: main, app: app) else { return }
+                }
                 toggle.click()
-                XCTAssertTrue(app.buttons["workspace.original.close"].waitForExistence(timeout: 5))
+                guard waitForControl(closeOriginal, visible: true, in: main, app: app) else { return }
                 attachReview("原稿对照-\(name)", app: app)
-                app.buttons["workspace.original.close"].click()
+                closeOriginal.click()
+                guard waitForControl(closeOriginal, visible: false, in: main, app: app) else { return }
                 app.radioButtons["Resolve CSV"].firstMatch.click()
                 // Import lives in the More menu on this tab.
                 XCTAssertTrue(app.descendants(matching: .any)["workspace.more"].firstMatch.isHittable)
@@ -1052,8 +1079,27 @@ final class SlateSyncUITests: XCTestCase {
         search.click()
         search.typeText("不存在的场记任务")
         XCTAssertTrue(app.staticTexts["无匹配任务"].waitForExistence(timeout: 5))
-        app.buttons["workspace.task.search.clear"].click()
-        XCTAssertEqual(search.value as? String, "")
+        let clearSearch = app.buttons["workspace.task.search.clear"]
+        XCTAssertTrue(clearSearch.isHittable)
+        clearSearch.click()
+        // A click returning does not prove that the binding, native field and
+        // filtered task list have all updated. Require all observable effects;
+        // a missed click or stale editor write still fails within this bound.
+        guard waitForUICondition("Task search clears and restores its results", app: app, {
+            search.value as? String == "" && !app.staticTexts["无匹配任务"].exists
+                && (!clearSearch.exists || !clearSearch.isEnabled)
+        }) else { return }
+        // Type without clicking the field: clear must return keyboard focus,
+        // and a later edit must not restore the previous query.
+        app.typeText("SM09-search-probe")
+        guard waitForUICondition("Cleared task search retains input focus", app: app, {
+            search.value as? String == "SM09-search-probe"
+        }) else { return }
+        clearSearch.click()
+        guard waitForUICondition("Task search clears again after editing", app: app, {
+            search.value as? String == "" && !app.staticTexts["无匹配任务"].exists
+                && (!clearSearch.exists || !clearSearch.isEnabled)
+        }) else { return }
         XCTAssertTrue(app.buttons["workspace.preview.enlarge"].exists)
         // Tasks live in the sidebar now; the search field stays reachable.
         XCTAssertTrue(search.isHittable)
@@ -1069,19 +1115,89 @@ final class SlateSyncUITests: XCTestCase {
         }
     }
 
+    /// Kept-alive, translated panels can remain in macOS's AX tree even with
+    /// accessibilityHidden. Physical visibility and hit testing own clicks.
     @MainActor
-    private func resize(_ window: XCUIElement, to size: CGSize) {
-        // The native size clamp uses the display's work-area SIZE, regardless
-        // of a window's temporary origin while dragging. Move it to that area's
-        // top-left first, keeping all resize handles clear of the Dock.
+    private func controlIsVisible(_ control: XCUIElement, in window: XCUIElement) -> Bool {
+        guard control.exists, !control.frame.isEmpty else { return false }
+        return window.frame.contains(control.frame) && control.isHittable
+    }
+
+    @MainActor
+    private func waitForControl(_ control: XCUIElement, visible: Bool,
+                                in window: XCUIElement, app: XCUIApplication) -> Bool {
+        waitForUICondition("Control visibility must become \(visible): \(control)", app: app) {
+            self.controlIsVisible(control, in: window) == visible
+        }
+    }
+
+    @MainActor
+    private func waitForUICondition(_ description: String, app: XCUIApplication,
+                                    _ condition: @escaping @MainActor () -> Bool) -> Bool {
+        let predicate = NSPredicate { _, _ in MainActor.assumeIsolated { condition() } }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app)
+        if XCTWaiter().wait(for: [expectation], timeout: 5) == .completed { return true }
+        recordUIFailure(description, app: app)
+        return false
+    }
+
+    @MainActor
+    private func recordUIFailure(_ message: String, app: XCUIApplication) {
+        // Preserve the complete AX tree as well as a screenshot when a helper
+        // assertion fails; XCTest otherwise may retain only a root snapshot.
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "UI-state-failure-hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        attachReview("界面状态失败", app: app)
+        XCTFail(message)
+    }
+
+    @MainActor
+    private func resize(_ window: XCUIElement, to size: CGSize, app: XCUIApplication) {
+        // Activation belongs before the first native gesture, not after it.
+        // All Settings/workspace callers share the same safe title-chrome path.
+        app.activate()
+        // Work-area size is achievable only after the window is parked at its
+        // top-left. A prior top-edge shrink moves the origin downward; growing
+        // from there hits the Dock boundary before reaching the target height.
         let screen = NSScreen.main!
         let visible = screen.visibleFrame
         let target = CGSize(width: min(size.width, visible.width), height: min(size.height, visible.height))
         let origin = CGPoint(x: visible.minX, y: screen.frame.maxY - visible.maxY)
-        let title = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-            .withOffset(CGVector(dx: 0, dy: 16))
-        title.press(forDuration: 0.15, thenDragTo: title.withOffset(
-            CGVector(dx: origin.x - window.frame.minX, dy: origin.y - window.frame.minY)))
+        // The center of the main toolbar contains the workspace segment picker,
+        // not draggable title chrome. Use the title strip to the right of the
+        // traffic lights, before the sidebar button; Settings has title text
+        // here, which AppKit also permits dragging. Never send a zero-distance
+        // drag/click to the segmented control just to focus the window.
+        let title = window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 100, dy: 16))
+        // A move gesture also raises its native window. Click separately only
+        // when already parked, avoiding a click/press pair at the same point.
+        if abs(window.frame.minX - origin.x) <= 2 && abs(window.frame.minY - origin.y) <= 2 {
+            title.click()
+        }
+        @MainActor func parkWindow() -> Bool {
+            @MainActor func positioned() -> Bool {
+                abs(window.frame.minX - origin.x) <= 2 && abs(window.frame.minY - origin.y) <= 2
+            }
+            for _ in 0..<2 {
+                if positioned() { return true }
+                let before = window.frame
+                title.press(forDuration: 0.15, thenDragTo: title.withOffset(
+                    CGVector(dx: origin.x - before.minX, dy: origin.y - before.minY)))
+                // Check the result of the native drag instead of assuming it
+                // moved the window. Retry only the measured residual distance.
+                let predicate = NSPredicate { _, _ in MainActor.assumeIsolated { positioned() } }
+                let expectation = XCTNSPredicateExpectation(predicate: predicate, object: window)
+                if XCTWaiter().wait(for: [expectation], timeout: 3) == .completed { return true }
+            }
+            return positioned()
+        }
+        guard parkWindow() else {
+            XCTFail("UI_RESIZE positioning failed: expected origin=\(origin), actual=\(window.frame)")
+            return
+        }
 
         // Tahoe's rounded corners are outside the resize hit region. Drag the
         // middle of each straight edge separately; no app-side resize hook or
@@ -1125,7 +1241,13 @@ final class SlateSyncUITests: XCTestCase {
                         : target.height - window.frame.height)))
             }
         }
-        print("UI_RESIZE requested=\(size) supported=\(target) visible=\(visible) actual=\(window.frame)")
+        // Top-edge shrinking changes the origin even when size is correct.
+        // Restore it now so subsequent theme/size iterations start on-screen.
+        guard parkWindow() else {
+            XCTFail("UI_RESIZE final positioning failed: expected origin=\(origin), actual=\(window.frame)")
+            return
+        }
+        print("UI_RESIZE requested=\(size) supported=\(target) visible=\(visible) origin=\(origin) actual=\(window.frame)")
         XCTAssertEqual(window.frame.width, target.width, accuracy: 4)
         XCTAssertEqual(window.frame.height, target.height, accuracy: 4)
     }

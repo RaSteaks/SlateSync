@@ -70,6 +70,14 @@ gate_valid_phase() {
   [[ "${1:-}" =~ '^SM-0[0-9]$' ]]
 }
 
+gate_create_result_directory() {
+  local root="$1" phase="$2" timestamp="$3" commit="$4"
+  mkdir -p "${root}/${phase}" || return 1
+  # Two invocations for one SHA can start in the same second. Never truncate
+  # another run's checks/logs or reuse its archived app as fresh evidence.
+  mktemp -d "${root}/${phase}/${timestamp}-${commit[1,12]}.XXXXXX"
+}
+
 gate_classify_failure() {
   local log_path="$1"
   local exit_status="$2"
@@ -166,10 +174,13 @@ with open(path, encoding="utf-8") as handle:
     summary = json.load(handle)
 
 result = str(summary.get("result", "")).strip().lower()
-try:
-    failed = int(summary.get("failedTests", 0) or 0)
-except (TypeError, ValueError):
-    failed = 1
+# Missing/null/string/bool counts are not proof of zero failures. Preserve
+# runner-failure classification only for a structurally valid failed count.
+failed = summary.get("failedTests")
+valid_failed_count = type(failed) is int and failed >= 0
+if not valid_failed_count:
+    print("FAIL")
+    raise SystemExit(0)
 
 # Only these fields are diagnostics/failure evidence. In particular, do not
 # scan arbitrary summary metadata: a passing run may mention environment words
@@ -228,7 +239,14 @@ elif failed > 0:
 elif environment_failure:
     print("BLOCKED_ENV")
 elif result in {"passed", "success"} and failed == 0:
-    print("PASS")
+    # A green banner can describe an empty or filtered Test Plan. Require
+    # complete numeric execution counts here; the Gate's named-coverage check
+    # separately proves that these are the intended Debug/Release cases.
+    counts = [summary.get(key) for key in ("passedTests", "totalTestCount", "skippedTests")]
+    valid = all(type(count) is int and count >= 0 for count in counts)
+    valid = valid and counts[0] > 0 and counts[0] == counts[1] and counts[2] == 0
+    valid = valid and not entries and summary.get("expectedFailures", 0) == 0
+    print("PASS" if valid else "FAIL")
 else:
     print("FAIL")
 PY
@@ -236,7 +254,10 @@ PY
 
 gate_validate_xcode_test_summary() {
   local summary_path="$1"
-  local classification="$(gate_classify_xcode_test_summary "$summary_path")"
+  local classification
+  # Parser/read errors must emit an explicit FAIL marker too; otherwise an
+  # incidental environment warning could downgrade malformed result evidence.
+  classification="$(gate_classify_xcode_test_summary "$summary_path")" || classification=FAIL
   if [[ "$classification" != "PASS" ]]; then
     # Preserve structured failures across callers that classify captured logs;
     # incidental Testing.framework messages must not downgrade a failed count.
@@ -261,7 +282,7 @@ gate_xcode_test_plan_check() {
   # Keep the UI test runner outside a repository that may itself live below a
   # macOS protected Desktop/Documents folder. Otherwise TCC can interrupt XCUI
   # with a folder-access prompt even though SlateSync only uses its test root.
-  test_workspace="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-xcode-test.XXXXXX")" || return 1
+  test_workspace="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/slatesync-xcode-test.XXXXXX")" || return 1
   ephemeral_result_bundle="${test_workspace}/SlateSync.xcresult"
   (
     cd "$project_root" &&
@@ -286,11 +307,13 @@ gate_xcode_test_plan_check() {
   if [[ -e "$ephemeral_result_bundle" ]]; then
     mv "$ephemeral_result_bundle" "$result_bundle" || artifact_status=$?
   fi
-  rm -rf -- "$test_workspace"
   if (( artifact_status != 0 )); then
-    print -u2 -r -- "Unable to materialize the Xcode test result bundle"
+    # Never erase the only copy when evidence transfer fails. In particular,
+    # an exhausted destination must not turn into an uninspectable UI failure.
+    print -u2 -r -- "Unable to materialize Xcode results; retained raw bundle: ${ephemeral_result_bundle}"
     return "$artifact_status"
   fi
+  rm -rf -- "$test_workspace" || return 1
 
   # An xcresult is useful even when xcodebuild exits non-zero. Inspect it before
   # falling back to log classification so assertion failures and environment
@@ -315,7 +338,7 @@ gate_xcode_test_plan_check() {
   fi
   cat "$summary_path"
   local summary_classification
-  summary_classification="$(gate_classify_xcode_test_summary "$summary_path")"
+  summary_classification="$(gate_classify_xcode_test_summary "$summary_path")" || summary_classification=FAIL
   if [[ "$summary_classification" != "PASS" ]]; then
     print -r -- "SLATESYNC_XCODE_TEST_CLASSIFICATION=${summary_classification}"
     return 1

@@ -151,6 +151,9 @@ def validate_workflows(ci: str, release: str) -> None:
             "independent advisory performance job missing")
     require("--functional" not in release, "release acceptance must retain strict performance budgets")
     require("./script/phase_gate.sh SM-09" in release, "release native Gate missing")
+    require("script/release_identity.py" in release, "release input identity validation missing")
+    require("if: always()" in release and "script/export_xctest_diagnostics.sh" in release,
+            "release failure evidence retention missing")
     require("workflow_dispatch:" in release, "release must use protected explicit dispatch")
     require("contents: read" in release, "release permissions are not read-only")
     require("actions/upload-artifact@v4" in release, "release candidate upload missing")
@@ -183,12 +186,19 @@ def validate_gate_package_retention(source: str) -> None:
         "sm09_package_artifacts_check && sm09_package_artifacts_evidence_check" in source,
         "package evidence postcondition is not mandatory",
     )
+    # Current candidates use source metadata; sealed fixtures do not set the
+    # version for a new build. Coverage belongs to the Gate, not only CI YAML.
+    require("script/release_identity.py --output" in source, "candidate identity is not source-derived")
+    require('"$package_output" "$release_version" "$release_build"' in source,
+            "packager is not bound to candidate identity")
+    require("script/tests/packaged_ui_contract.py --result-dir" in source,
+            "named UI coverage is not required by the Gate")
     for name in (
-        "SlateSync-1.1.0-macOS-universal.zip",
-        "SlateSync-1.1.0-macOS-universal.dmg",
+        "SlateSync-${release_version}-macOS-universal.zip",
+        "SlateSync-${release_version}-macOS-universal.dmg",
         "SHA256SUMS",
-        "SlateSync-1.1.0-manifest.json",
-        "SlateSync-1.1.0-release-notes.md",
+        "SlateSync-${release_version}-manifest.json",
+        "SlateSync-${release_version}-release-notes.md",
     ):
         require(name in source, f"retained package evidence is not checked: {name}")
 
@@ -223,6 +233,15 @@ def run_self_tests() -> None:
         else:
             raise AssertionError(f"negative fixture unexpectedly passed: {expected}")
 
+    for mutated in [release.replace("script/release_identity.py", "true"),
+                    release.replace("if: always()", "if: success()")]:
+        try:
+            validate_workflows(ci, mutated)
+        except AssertionError:
+            cases += 1
+        else:
+            raise AssertionError("release identity/evidence regression unexpectedly passed")
+
     manifest = json.loads(read(".codex/swift-migration/manifests/sm09-native-resources.json"))
     manifest["resources"][0]["sha256"] = "0" * 64
     try:
@@ -251,6 +270,8 @@ def run_self_tests() -> None:
             "missing package evidence postcondition",
         ),
         (gate.replace("package_status=0", "status=0"), "zsh read-only status variable"),
+        (gate.replace('"$package_output" "$release_version" "$release_build"', '"$package_output" 1.1.0 2'), "frozen candidate version"),
+        (gate.replace("script/tests/packaged_ui_contract.py --result-dir", "true --result-dir"), "missing Gate-owned UI coverage"),
     ):
         try:
             validate_gate_package_retention(mutated)

@@ -68,6 +68,9 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   official CLI for user-level registration. Codex updates only slatesync; Claude
   preserves conflicting entries. Client feedback is independent of broker state.
   Source, launcher and grant selection share one native importer presenter.
+  Advanced settings uses the same full-row, keyboard-operable disclosure button
+  as the setup guide: both its label and chevron toggle it, and its accessibility
+  value announces expanded/collapsed state independently of the child controls.
   Direct client-owned stdio sessions remain independent of app lifecycle.
 - Project settings remain project-scoped and never replace machine settings.
 - Switching project/task flushes the single autosave writer before publishing
@@ -153,6 +156,9 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - A new table identity resamples content widths and numeric alignment even when
   headers match the previous task. Edits and window resizing preserve manual
   column widths; reused cells adopt the current column alignment.
+- Native column reordering preserves the source column of displayed values and
+  edit commits. Keyboard movement follows visual order; accessible cell labels
+  continue to identify the current row and source header after reuse.
 - Reconciliation preview remains available when every record is incomplete or
   conflicting; export eligibility is checked separately by the shared workflow.
 - Material-identity cell edits participate in matching and metadata scanning.
@@ -230,6 +236,8 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 - `SlateSearchField` owns clearable task/help/category input; clearing preserves
   selection and returns keyboard focus to the field.
+  The clear icon owns a solid 20-point pointer target; its focus decoration
+  never intercepts input. Clearing must restore results and allow immediate typing.
 - Task rail, recognition configuration and original comparison have named,
   accessible toggle controls. Hidden panels are excluded from hit testing and AX.
 - Layout changes first call the window-local `WorkspaceEditorBoundary`, then

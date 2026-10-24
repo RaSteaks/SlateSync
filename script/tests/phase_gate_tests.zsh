@@ -1,6 +1,9 @@
 #!/bin/zsh
 set -uo pipefail
 
+# Synthetic Gate failures must not publish to the enclosing real CI summary.
+unset GITHUB_STEP_SUMMARY
+
 script_dir="${0:A:h}"
 project_root="${script_dir:h:h}"
 source "${project_root}/script/lib/phase_gate_lib.sh"
@@ -98,6 +101,12 @@ done
 
 assert_success "known phase" gate_valid_phase SM-01
 assert_failure "unknown phase" gate_valid_phase SM-10
+# A fixed timestamp/SHA reproduces concurrent startup without launching jobs.
+first_result="$(gate_create_result_directory "$fixture_root" SM-09 20261024T000000Z abcdef0123456789)"
+print 'original evidence' > "${first_result}/checks.tsv"
+second_result="$(gate_create_result_directory "$fixture_root" SM-09 20261024T000000Z abcdef0123456789)"
+assert_success "same-second Gate runs have distinct evidence directories" test "$first_result" != "$second_result"
+assert_equal "second Gate preserves first evidence" 'original evidence' "$(cat "${first_result}/checks.tsv")"
 assert_exit_status "unknown phase CLI status" 64 \
   "${project_root}/script/phase_gate.sh" SM-10
 assert_failure "missing required tool" command -v slatesync-tool-that-does-not-exist
@@ -110,15 +119,40 @@ print -r -- "ModuleCache: Operation not permitted" > "${fixture_root}/environmen
 assert_equal "environment block classification" BLOCKED_ENV \
   "$(gate_classify_failure "${fixture_root}/environment.log" 1)"
 
-print -r -- '{"result":"Passed","failedTests":0,"testsCount":2}' > "${fixture_root}/xcode-passed.json"
+print -r -- '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' > "${fixture_root}/xcode-passed.json"
 assert_success "passing Xcode result summary" gate_validate_xcode_test_summary \
   "${fixture_root}/xcode-passed.json"
-print -r -- '{"result":"Passed","failedTests":0,"testsCount":2,"message":"permission denied is documented setup text"}' > \
+print -r -- '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0,"message":"permission denied is documented setup text"}' > \
   "${fixture_root}/xcode-passed-environment-word.json"
 assert_success "passing summary ignores non-diagnostic environment text" gate_validate_xcode_test_summary \
   "${fixture_root}/xcode-passed-environment-word.json"
 assert_equal "passing summary classification ignores non-diagnostic environment text" PASS \
   "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-passed-environment-word.json")"
+
+# Broken structured evidence must not be reclassified by incidental framework
+# or permission text after the parser fails to return a classification.
+print 'not-json' > "${fixture_root}/xcode-malformed.json"
+(
+  print 'Copy Testing.framework: permission denied'
+  gate_validate_xcode_test_summary "${fixture_root}/xcode-malformed.json"
+) > "${fixture_root}/xcode-malformed.log" 2>&1 || true
+assert_equal "malformed summary fails closed despite environment noise" FAIL \
+  "$(gate_classify_failure "${fixture_root}/xcode-malformed.log" 1)"
+
+# A passing banner must not approve an empty, skipped, or malformed execution.
+for invalid_summary in \
+  '{"result":"Passed","failedTests":0}' \
+  '{"result":"Passed","passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":false,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":"0","passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":0,"passedTests":0,"totalTestCount":0,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":0,"passedTests":1,"totalTestCount":2,"skippedTests":1}' \
+  '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":3,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":0,"passedTests":"2","totalTestCount":2,"skippedTests":0}'; do
+  print -r -- "$invalid_summary" > "${fixture_root}/xcode-invalid-pass.json"
+  assert_equal "passing banner rejects incomplete execution: $invalid_summary" FAIL \
+    "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-invalid-pass.json")"
+done
 
 print -r -- '{"result":"Failed","failedTests":1,"testsCount":2}' > "${fixture_root}/xcode-assertion-failure.json"
 # Exercise the packaged caller's summary-to-log-to-outer-classifier boundary
@@ -218,6 +252,7 @@ run_xcode_test_plan_fixture() {
   local summary_json="$3"
   local expected_command_status="$4"
   local expected_classification="$5"
+  local transfer_failure="${6:-0}"
   local fixture_dir="${fixture_root}/${name}"
   local bin_dir="${fixture_dir}/bin"
   local result_dir="${fixture_dir}/results"
@@ -269,6 +304,10 @@ exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
     export SLATESYNC_XCODE_FIXTURE_SUMMARY_PATH="${fixture_dir}/summary.json"
     export SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS="$xcodebuild_status"
     export SLATESYNC_XCODE_FIXTURE_ARGUMENTS_PATH="${fixture_dir}/xcodebuild-arguments.txt"
+    # Simulate failure to transfer the result, without changing real permissions.
+    if (( transfer_failure )); then
+      mv() { return 73; }
+    fi
     gate_xcode_test_plan_check "$fixture_dir" "$result_dir"
   ) > "${fixture_dir}/output.log" 2>&1 || command_status=$?
 
@@ -286,8 +325,14 @@ exit "$SLATESYNC_XCODE_FIXTURE_XCODEBUILD_STATUS"
     path_is_within "$recorded_derived_data" "$fixture_dir"
   assert_failure "${name} live xcresult is outside repository" \
     path_is_within "$recorded_result_bundle" "$fixture_dir"
-  assert_success "${name} materializes xcresult evidence" \
-    test -d "${result_dir}/SlateSync.xcresult"
+  if (( transfer_failure )); then
+    assert_success "${name} retains sole raw xcresult after transfer failure" test -d "$recorded_result_bundle"
+    # This path comes from the mock build's arguments and is disposable.
+    rm -rf -- "${recorded_result_bundle:h}"
+  else
+    assert_success "${name} materializes xcresult evidence" \
+      test -d "${result_dir}/SlateSync.xcresult"
+  fi
   if [[ "$expected_classification" == "PASS" ]]; then
     # A genuine passing result bundle and an exit-zero xcodebuild invocation
     # must return cleanly without manufacturing a failure marker.
@@ -326,9 +371,17 @@ run_xcode_test_plan_fixture \
 run_xcode_test_plan_fixture \
   xcode-exit-zero-result-pass \
   0 \
-  '{"result":"Passed","failedTests":0,"testsCount":2}' \
+  '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
   0 \
   PASS
+
+run_xcode_test_plan_fixture \
+  xcode-evidence-transfer-failure \
+  0 \
+  '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
+  73 \
+  FAIL \
+  1
 
 assert_success "Universal architectures" gate_validate_architectures \
   "Architectures in the fat file are: x86_64 arm64"
@@ -675,7 +728,7 @@ assert_equal "classifier unreadable log fails closed before missing-tool classif
 # No Swift build or real Library access is possible after prerequisite failure.
 missing_bin="${fixture_root}/missing-bin"
 mkdir -p "$missing_bin"
-for dependency in git python3 swift xcodebuild xcrun lipo codesign open pgrep ps date mkdir tr cat; do
+for dependency in git python3 swift xcodebuild xcrun lipo codesign open pgrep ps date mkdir mktemp plutil tr cat; do
   dependency_path="$(command -v "$dependency")"
   [[ -n "$dependency_path" ]] && ln -s "$dependency_path" "${missing_bin}/${dependency}"
 done

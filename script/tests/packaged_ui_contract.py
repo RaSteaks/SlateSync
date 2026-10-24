@@ -28,6 +28,41 @@ REQUIRED_DEBUG_FIXTURES = frozenset({
 })
 
 
+# Acceptance floors are policy, not the mutable execution filter. Deleting a
+# method AND its list entry must not silently reduce the delivery contract.
+REQUIRED_RELEASE_TESTS = frozenset({
+    "testAdvisoryURLSuffixDoesNotBlockSaveOnly",
+    "testApplicationLanguageRoundTripIncludesHelpMenusAndUserContent",
+    "testChineseKeyboardWorkflowAndApplicationReopen",
+    "testCreatesProjectAndOpensWorkspaceInIsolatedLibrary",
+    "testHelpRouteUsesBundleLocalSearch",
+    "testIndependentWindowsAndNewWindowAfterClosingLastWindow",
+    "testLaunchesMainWindowAndProjectLibrary",
+    "testLegacyLibraryCSVExportAndReopenInDeliveredApp",
+    "testLogsRouteRendersLocalLogSurface",
+    "testMinimumWindowAccessibilityAndLightDarkAppearance",
+    "testPreviewPagingPreservesResultSelection",
+    "testProviderEditorValidationAndDiscardPreserveSavedConfiguration",
+    "testProviderLayoutAppearanceLanguageAndKeyboardMatrix",
+    "testSettingsCanOpenAndCloseWithoutReplacingHelpRoute",
+    "testMCPPickerRoutesAndDirectoryFreeStartAvailability",
+    "testSettingsWindowResizesWithoutLosingPreferences",
+    "testUnconfiguredBuiltinStartsAtCredentialEntry",
+    "testWorkspaceAppearanceDensityAndComparisonMatrix",
+})
+REQUIRED_APP_TESTS = frozenset({
+    "testAppCompositionCanOpenAnIsolatedLibrary",
+    "testSecurityKeychainBackendUsesAnIsolatedServiceAndConditionalDelete",
+})
+
+
+def app_test_names(source: str) -> list[str]:
+    names = re.findall(r"^    func (test\w+)\(", source, re.MULTILINE)
+    require(len(names) == len(set(names)) and REQUIRED_APP_TESTS <= set(names),
+            "app-hosted acceptance coverage shrank or duplicated")
+    return names
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -50,6 +85,7 @@ def validate_scope(source: str, names: list[str]) -> list[str]:
             fixtures.append(name)
     require(len(tests) == len(set(tests)), "duplicate Swift UI test method")
     expected = set(tests) - set(fixtures)
+    require(REQUIRED_RELEASE_TESTS <= expected, "Release acceptance coverage shrank")
     require(set(names) == expected,
             f"packaged scope drift: missing={sorted(expected - set(names))}, inapplicable={sorted(set(names) - expected)}")
     require(REQUIRED_DEBUG_FIXTURES <= set(fixtures),
@@ -103,26 +139,61 @@ def validate_packaged_results(names: list[str], summary: dict, tree: dict) -> li
     return sorted(executed)
 
 
+def validate_debug_results(names: list[str], fixtures: list[str], summary: dict, tree: dict) -> list[str]:
+    # The shared Test Plan must execute every UI case and both app-hosted unit
+    # tests. A passing subset or a skipped non-Provider case is not acceptance.
+    unit_source = (ROOT / "SlateSyncTests/SlateSyncTests.swift").read_text()
+    units = app_test_names(unit_source)
+    expected = {f"SlateSyncUITests/{name}()" for name in names + fixtures}
+    expected.update(f"SlateSyncTests/{name}()" for name in units)
+    require(summary.get("result", "").lower() == "passed" and summary.get("failedTests") == 0,
+            "Debug Test Plan result is not passing")
+    require(summary.get("skippedTests") == 0, "Debug Test Plan tests were skipped")
+    require(summary.get("passedTests") == summary.get("totalTestCount") == len(expected),
+            "Debug executed count differs from required scope")
+    cases = list(test_cases(tree))
+    identifiers = [case.get("nodeIdentifier", "") for case in cases]
+    require(len(identifiers) == len(set(identifiers)), "duplicate Debug test execution")
+    require(set(identifiers) == expected and all(case.get("result", "").lower() == "passed" for case in cases),
+            "Debug named execution coverage differs from required scope")
+    return sorted(identifiers)
+
+
+def verify_results(root: Path, names: list[str], fixtures: list[str], commit: str) -> None:
+    validate_debug_output((root / "xcode_test_plan_xcodebuild.log").read_text(), fixtures)
+    trees = {}
+    # Retain both named execution trees before validating. The Gate itself,
+    # including local/full-release invocations, owns coverage, not only CI YAML.
+    for bundle, name in [("SlateSync", "xcode_test_plan_tests"), ("Packaged", "packaged_ui_tests")]:
+        completed = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "tests",
+                                    "--path", str(root / f"{bundle}.xcresult"), "--format", "json"],
+                                   capture_output=True, text=True, check=True)
+        (root / f"{name}.json").write_text(completed.stdout)
+        trees[bundle] = json.loads(completed.stdout)
+    debug = validate_debug_results(names, fixtures, json.loads((root / "xcode_test_summary.json").read_text()),
+                                   trees["SlateSync"])
+    executed = validate_packaged_results(names, json.loads((root / "packaged_ui_summary.json").read_text()),
+                                        trees["Packaged"])
+    diagnostic = bool(subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT, text=True))
+    evidence = {"reviewCommit": commit, "diagnosticDirtyWorkspace": diagnostic, "debugTests": debug, "debugFixtureTests": fixtures,
+                "packagedReleaseTests": executed, "scopeSha256": hashlib.sha256(LIST_PATH.read_bytes()).hexdigest(),
+                "uiTestSourceSha256": hashlib.sha256(SOURCE_PATH.read_bytes()).hexdigest()}
+    (root / "ui-scope-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    print(f"UI execution coverage: {len(debug)} Debug tests and {len(executed)} packaged Release tests passed")
+
+
 def verify_gate(gate_root: Path, names: list[str], fixtures: list[str]) -> None:
     results = list(gate_root.glob("*/result.json"))
     require(len(results) == 1, "expected exactly one current Gate result")
     root = results[0].parent
     result = json.loads(results[0].read_text())
     require(result.get("overallResult") == "PASS", "Gate is not passing")
-    validate_debug_output((root / "xcode_test_plan_xcodebuild.log").read_text(), fixtures)
-    # Read the real XCTest tree, retaining it before validation so a failed
-    # coverage check is diagnosable through the ordinary artifact upload.
-    completed = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "tests",
-                                "--path", str(root / "Packaged.xcresult"), "--format", "json"],
-                               capture_output=True, text=True, check=True)
-    (root / "packaged_ui_tests.json").write_text(completed.stdout)
-    executed = validate_packaged_results(names, json.loads((root / "packaged_ui_summary.json").read_text()),
-                                        json.loads(completed.stdout))
-    evidence = {"reviewCommit": result["reviewCommit"], "debugFixtureTests": fixtures,
-                "packagedReleaseTests": executed, "scopeSha256": hashlib.sha256(LIST_PATH.read_bytes()).hexdigest(),
-                "uiTestSourceSha256": hashlib.sha256(SOURCE_PATH.read_bytes()).hexdigest()}
-    (root / "ui-scope-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print(f"UI execution coverage: {len(fixtures)} Debug fixtures and {len(executed)} packaged Release tests passed")
+    require(result.get("diagnosticDirtyWorkspace") is False, "diagnostic evidence cannot certify a committed candidate")
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    require(result.get("reviewCommit") == commit, "Gate evidence belongs to a different commit")
+    dirty = subprocess.check_output(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT, text=True)
+    require(not dirty, "current source differs from the committed Gate candidate")
+    verify_results(root, names, fixtures, commit)
 
 
 def self_tests(names: list[str], fixtures: list[str]) -> None:
@@ -133,7 +204,19 @@ def self_tests(names: list[str], fixtures: list[str]) -> None:
     validate_scope(source, names)
     validate_packaged_results(names, summary, tree)
     validate_debug_output(debug, fixtures)
+    unit_names = re.findall(r"^    func (test\w+)\(", (ROOT / "SlateSyncTests/SlateSyncTests.swift").read_text(), re.MULTILINE)
+    debug_ids = [f"SlateSyncUITests/{name}()" for name in names + fixtures] + [f"SlateSyncTests/{name}()" for name in unit_names]
+    debug_tree = {"testNodes": [{"nodeType": "Test Case", "nodeIdentifier": name, "result": "Passed"} for name in debug_ids]}
+    debug_summary = {**summary, "passedTests": len(debug_ids), "totalTestCount": len(debug_ids)}
+    validate_debug_results(names, fixtures, debug_summary, debug_tree)
     cases = [
+        lambda: validate_scope(source.replace("func " + names[0] + "(", "func removedDeliveryCase(", 1), names[1:]),
+        lambda: app_test_names("    func testUnrelatedAppCase() {}"),
+        lambda: validate_debug_results(names, fixtures, {**debug_summary, "skippedTests": 1}, debug_tree),
+        lambda: validate_debug_results(names, fixtures, {**debug_summary, "passedTests": 0, "totalTestCount": 0}, {"testNodes": []}),
+        lambda: validate_debug_results(names, fixtures, debug_summary, {"testNodes": debug_tree["testNodes"][1:]}),
+        lambda: validate_debug_results(names, fixtures, debug_summary, {"testNodes": debug_tree["testNodes"] + [debug_tree["testNodes"][0]]}),
+        lambda: validate_debug_results(names, fixtures, debug_summary, {"testNodes": [{**debug_tree["testNodes"][0], "result": "Skipped"}] + debug_tree["testNodes"][1:]}),
         lambda: validate_scope(source, names[1:]),
         lambda: validate_scope(source, names + [names[0]]),
         lambda: validate_scope(source, names + [fixtures[0]]),
@@ -159,7 +242,9 @@ def self_tests(names: list[str], fixtures: list[str]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gate-root", type=Path)
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--gate-root", type=Path)
+    source.add_argument("--result-dir", type=Path)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     names, fixtures = load_scope()
@@ -167,6 +252,9 @@ def main() -> None:
         self_tests(names, fixtures)
     if args.gate_root:
         verify_gate(args.gate_root, names, fixtures)
+    elif args.result_dir:
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        verify_results(args.result_dir, names, fixtures, commit)
     else:
         print(f"UI scope: {len(fixtures)} Debug fixtures; {len(names)} packaged Release tests")
 
