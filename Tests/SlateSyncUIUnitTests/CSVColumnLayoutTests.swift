@@ -9,6 +9,63 @@ import XCTest
 /// resample content, while edits/resizes preserve user-owned column geometry.
 @MainActor
 final class CSVColumnLayoutTests: XCTestCase {
+    /// Row binding does no eager localization. AX reads still return the full
+    /// current label after reuse or a language change, including on an editor.
+    func testAccessibilityLabelIsLazyAndTracksReuseAndLanguage() throws {
+        let suiteName = "SlateSync.CellAX.\(UUID().uuidString)"
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let previousLanguage = L10n.language
+        defer {
+            AppLanguage.save(previousLanguage, in: preferences)
+            L10n.configure(preferences: preferences)
+            preferences.removePersistentDomain(forName: suiteName)
+        }
+        AppLanguage.save(.english, in: preferences)
+        L10n.configure(preferences: preferences)
+        let coordinator = Fixture.surface(id: UUID(), value: "1").makeCoordinator()
+        let field = CSVTableTextField()
+        field.delegate = coordinator
+        field.bindAccessibility(row: 0, header: "Notes")
+        XCTAssertEqual(coordinator.cellWork.accessibilityFormats, 0)
+        XCTAssertEqual(field.accessibilityLabel(), "Row 1, Notes")
+        XCTAssertEqual(field.accessibilityLabel(), "Row 1, Notes")
+        XCTAssertEqual(coordinator.cellWork.accessibilityFormats, 1)
+        field.bindAccessibility(row: 99, header: "Scene")
+        XCTAssertEqual(coordinator.cellWork.accessibilityFormats, 1)
+        XCTAssertEqual(field.accessibilityLabel(), "Row 100, Scene")
+        AppLanguage.save(.simplifiedChinese, in: preferences)
+        L10n.configure(preferences: preferences)
+        XCTAssertEqual(field.accessibilityLabel(), "第 100 行，Scene")
+        XCTAssertEqual(coordinator.cellWork.accessibilityFormats, 3)
+    }
+
+    /// Prepared column bindings must follow source identity, not the mutable
+    /// visual index: dragging Notes ahead of Clip must never edit Clip's data.
+    func testReorderedColumnsDisplayAndCommitTheirOriginalSourceColumn() async throws {
+        let commits = CommitRecorder()
+        let fixture = Fixture(value: "Camera_A", onCommit: { commits.values.append($0) })
+        defer { fixture.close() }
+        try await fixture.settle()
+        let table = try XCTUnwrap(fixture.table)
+        table.moveColumn(1, toColumn: 0)
+        table.reloadData()
+        try await fixture.settle()
+        let notes = try XCTUnwrap(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTextField)
+        let clip = try XCTUnwrap(table.view(atColumn: 1, row: 0, makeIfNecessary: true) as? NSTextField)
+        XCTAssertEqual(table.tableColumns[0].title, "Notes")
+        XCTAssertEqual(notes.stringValue, "")
+        XCTAssertEqual(clip.stringValue, "Camera_A")
+        XCTAssertEqual(notes.accessibilityLabel(), L10n.tr("第 {0} 行，{1}", ["1", "Notes"]))
+        let coordinator = try XCTUnwrap(notes.delegate as? EditableCSVTableRepresentable.Coordinator)
+        coordinator.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: notes))
+        notes.stringValue = "changed notes"
+        try coordinator.flushEdit()
+        XCTAssertEqual(commits.values.last?.columnID, 1)
+        XCTAssertEqual(commits.values.last?.value, "changed notes")
+        XCTAssertFalse(table.usesAutomaticRowHeights)
+        XCTAssertFalse(fixture.window.isVisible)
+    }
+
     func testSameHeadersWithNewIdentityRefreshWidthsAndReusedCellAlignment() async throws {
         let fixture = Fixture(value: "1")
         defer { fixture.close() }
@@ -57,22 +114,27 @@ final class CSVColumnLayoutTests: XCTestCase {
         Fixture.surface(id: id, value: value, revision: revision)
     }
 
+    @MainActor private final class CommitRecorder {
+        var values: [CSVCellCommit] = []
+    }
+
     @MainActor private final class Fixture {
         let host: NSHostingView<EditableCSVTableRepresentable>
         let window: NSWindow
 
-        init(value: String) {
-            host = NSHostingView(rootView: Self.surface(id: UUID(), value: value))
+        init(value: String, onCommit: @escaping @MainActor @Sendable (CSVCellCommit) -> Void = { _ in }) {
+            host = NSHostingView(rootView: Self.surface(id: UUID(), value: value, onCommit: onCommit))
             window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 640, height: 400),
                 styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.contentView = host
         }
 
-        static func surface(id: UUID, value: String, revision: Int = 0) -> EditableCSVTableRepresentable {
+        static func surface(id: UUID, value: String, revision: Int = 0,
+                            onCommit: @escaping @MainActor @Sendable (CSVCellCommit) -> Void = { _ in }) -> EditableCSVTableRepresentable {
             EditableCSVTableRepresentable(tableID: id, table: .init(
                 headers: ["Clip", "Notes"], rows: [[value, ""]], format: .init()),
-                revision: revision, onCommit: { _ in })
+                revision: revision, onCommit: onCommit)
         }
 
         var table: NSTableView? { findTable(host) }

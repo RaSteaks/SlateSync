@@ -278,6 +278,7 @@ final class SM08NativeSurfaceTests: XCTestCase {
         let window = try XCTUnwrap(harness.window)
         XCTAssertTrue(window.isVisible)
         XCTAssertNotNil(window.screen)
+        let coordinator = try XCTUnwrap(table.delegate as? EditableCSVTableRepresentable.Coordinator)
 
         let counter = DisplayLinkCounter()
         let displayLink = window.displayLink(target: counter, selector: #selector(DisplayLinkCounter.tick(_:)))
@@ -289,6 +290,7 @@ final class SM08NativeSurfaceTests: XCTestCase {
         let idleSeconds = idleStarted.duration(to: .now).seconds
         let idleFrames = counter.frames
         let idleFPS = Double(idleFrames) / idleSeconds
+        let workBefore = coordinator.cellWork
         let started = ContinuousClock.now
         // Alternate across the whole data set long enough to sample actual
         // WindowServer-backed presentation rather than layout-only timings.
@@ -301,6 +303,9 @@ final class SM08NativeSurfaceTests: XCTestCase {
         let elapsedSeconds = started.duration(to: .now).seconds
         let scrollFrames = counter.frames - idleFrames
         let framesPerSecond = Double(scrollFrames) / elapsedSeconds
+        // Read counters after the elapsed-time boundary. Keep the same 120
+        // jumps, 10 ms spacing, explicit redraw and 45 FPS assertions above/below.
+        let workAfter = coordinator.cellWork
         try saveMetrics([
             "schemaVersion": 1,
             "fixtureRows": 10_000,
@@ -314,6 +319,11 @@ final class SM08NativeSurfaceTests: XCTestCase {
             "durationSeconds": elapsedSeconds,
             "scrollFramesPerSecond": framesPerSecond,
             "minimumScrollFPS": 45,
+            "cellBindings": workAfter.bindings - workBefore.bindings,
+            "cellCreations": workAfter.creations - workBefore.creations,
+            "cellValueWrites": workAfter.valueWrites - workBefore.valueWrites,
+            "cellStyleWrites": workAfter.styleWrites - workBefore.styleWrites,
+            "accessibilityLabelFormats": workAfter.accessibilityFormats - workBefore.accessibilityFormats,
         ], named: "native-csv-foreground.json")
         XCTAssertGreaterThanOrEqual(idleFPS, 45, "BLOCKED_ENV: idle display cadence below 45 FPS; foreground acceptance incomplete")
         XCTAssertGreaterThanOrEqual(framesPerSecond, 45)

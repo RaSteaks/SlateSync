@@ -156,6 +156,9 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - A new table identity resamples content widths and numeric alignment even when
   headers match the previous task. Edits and window resizing preserve manual
   column widths; reused cells adopt the current column alignment.
+- Native column reordering preserves the source column of displayed values and
+  edit commits. Keyboard movement follows visual order; accessible cell labels
+  continue to identify the current row and source header after reuse.
 - Reconciliation preview remains available when every record is incomplete or
   conflicting; export eligibility is checked separately by the shared workflow.
 - Material-identity cell edits participate in matching and metadata scanning.
