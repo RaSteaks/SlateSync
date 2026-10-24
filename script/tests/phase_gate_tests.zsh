@@ -98,6 +98,12 @@ done
 
 assert_success "known phase" gate_valid_phase SM-01
 assert_failure "unknown phase" gate_valid_phase SM-10
+# A fixed timestamp/SHA reproduces concurrent startup without launching jobs.
+first_result="$(gate_create_result_directory "$fixture_root" SM-09 20261024T000000Z abcdef0123456789)"
+print 'original evidence' > "${first_result}/checks.tsv"
+second_result="$(gate_create_result_directory "$fixture_root" SM-09 20261024T000000Z abcdef0123456789)"
+assert_success "same-second Gate runs have distinct evidence directories" test "$first_result" != "$second_result"
+assert_equal "second Gate preserves first evidence" 'original evidence' "$(cat "${first_result}/checks.tsv")"
 assert_exit_status "unknown phase CLI status" 64 \
   "${project_root}/script/phase_gate.sh" SM-10
 assert_failure "missing required tool" command -v slatesync-tool-that-does-not-exist
@@ -110,15 +116,27 @@ print -r -- "ModuleCache: Operation not permitted" > "${fixture_root}/environmen
 assert_equal "environment block classification" BLOCKED_ENV \
   "$(gate_classify_failure "${fixture_root}/environment.log" 1)"
 
-print -r -- '{"result":"Passed","failedTests":0,"testsCount":2}' > "${fixture_root}/xcode-passed.json"
+print -r -- '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' > "${fixture_root}/xcode-passed.json"
 assert_success "passing Xcode result summary" gate_validate_xcode_test_summary \
   "${fixture_root}/xcode-passed.json"
-print -r -- '{"result":"Passed","failedTests":0,"testsCount":2,"message":"permission denied is documented setup text"}' > \
+print -r -- '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0,"message":"permission denied is documented setup text"}' > \
   "${fixture_root}/xcode-passed-environment-word.json"
 assert_success "passing summary ignores non-diagnostic environment text" gate_validate_xcode_test_summary \
   "${fixture_root}/xcode-passed-environment-word.json"
 assert_equal "passing summary classification ignores non-diagnostic environment text" PASS \
   "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-passed-environment-word.json")"
+
+# A passing banner must not approve an empty, skipped, or malformed execution.
+for invalid_summary in \
+  '{"result":"Passed","failedTests":0}' \
+  '{"result":"Passed","failedTests":0,"passedTests":0,"totalTestCount":0,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":0,"passedTests":1,"totalTestCount":2,"skippedTests":1}' \
+  '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":3,"skippedTests":0}' \
+  '{"result":"Passed","failedTests":0,"passedTests":"2","totalTestCount":2,"skippedTests":0}'; do
+  print -r -- "$invalid_summary" > "${fixture_root}/xcode-invalid-pass.json"
+  assert_equal "passing banner rejects incomplete execution: $invalid_summary" FAIL \
+    "$(gate_classify_xcode_test_summary "${fixture_root}/xcode-invalid-pass.json")"
+done
 
 print -r -- '{"result":"Failed","failedTests":1,"testsCount":2}' > "${fixture_root}/xcode-assertion-failure.json"
 # Exercise the packaged caller's summary-to-log-to-outer-classifier boundary
@@ -326,7 +344,7 @@ run_xcode_test_plan_fixture \
 run_xcode_test_plan_fixture \
   xcode-exit-zero-result-pass \
   0 \
-  '{"result":"Passed","failedTests":0,"testsCount":2}' \
+  '{"result":"Passed","failedTests":0,"passedTests":2,"totalTestCount":2,"skippedTests":0}' \
   0 \
   PASS
 
@@ -675,7 +693,7 @@ assert_equal "classifier unreadable log fails closed before missing-tool classif
 # No Swift build or real Library access is possible after prerequisite failure.
 missing_bin="${fixture_root}/missing-bin"
 mkdir -p "$missing_bin"
-for dependency in git python3 swift xcodebuild xcrun lipo codesign open pgrep ps date mkdir tr cat; do
+for dependency in git python3 swift xcodebuild xcrun lipo codesign open pgrep ps date mkdir mktemp plutil tr cat; do
   dependency_path="$(command -v "$dependency")"
   [[ -n "$dependency_path" ]] && ln -s "$dependency_path" "${missing_bin}/${dependency}"
 done

@@ -1,5 +1,29 @@
 # SlateSync 当前项目方案
 
+## 2026-10-24 SM-09 回归修复与 Gate 审查
+
+- 原始 CI `40075670045` 的 7 个 Debug/Release UI 失败：6 个等待 `task.create`，
+  真实截图按钮存在，但 AX identifier 被外层 `sidebar` 覆盖；将 List 标识限制在
+  safeAreaInset 之前，并验证新建/搜索控件各自身份。MCP 高级设置使用稳定标识定位
+  DisclosureGroup，不再假设其文字是独立 StaticText；保留路径选择与状态断言。
+- Release 离屏测试原本依赖系统减少动态效果偏好。本机显式注入 reduced=true 后复现
+  原 CI 的同 6 用例、13 条断言；动画夹具固定 false，新增初始/途中 reduced=true 的
+  真实视图回归，验证立即落到最新页并释放输入屏障。产品默认仍读取系统设置。
+- Gate 审查修复：当前 Release 的版本/build 从 Xcode 工程解析，不再固定 1.1.0/2；
+  包验证仍独立比对源配置，历史封存清单不改写。拒绝空跑/跳过/不完整 XCTest 汇总；
+  Debug 全部用例与 Release 清单的逐项覆盖纳入 Gate 本体，外部复核绑定同一 SHA。
+  同秒同 SHA 运行使用唯一证据目录；发布候选 workflow 校验当前版本并保留失败证据。
+- 诊断按失败 test ID 导出全部附件，避免 --only-failures 丢弃 teardown 截图；各用例
+  独立 manifest，导出一项失败仍继续保留其余证据。对原始 xcresult 离线重放已取回
+  7 个失败用例、10 张截图；原始失败仍被新覆盖校验器拒绝。
+- 本地验证：Release 全套 563 项（4 项按既定专用环境/证据开关跳过）零失败；定向
+  动效/CSV/布局 36 项通过；Xcode Debug build-for-testing 严格 Swift 警告编译通过。
+  离线预检含 Gate helper 142 项、发布契约 12 项、UI 覆盖 17 个负例、打包 26 项和
+  版本/附件导出各 3 项测试通过；差异检查通过。Premium 静态审计仍为既有 HTML
+  文档/原型 69 项；未改动其界面。日志在 `/private/tmp/slatesync-sm09-*.log`。
+- 本机未启动 App、XCUI 或前台性能测试。独立修复分支将执行 GitHub macOS 26 的完整
+  功能 Gate，远端结果未返回前不声明 SM-09 PASS，不改变完整发布性能要求或 Owner 批准。
+
 ## 2026-10-24 App Store 下一版更新为 1.2.0
 
 - 用户确认下一分发版本直接跳到 1.2；Debug / Release / AppStore 的

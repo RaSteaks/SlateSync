@@ -236,6 +236,33 @@ final class ContentMotionTests: XCTestCase {
         XCTAssertFalse(window.isVisible)
     }
 
+    /// Cover the real view for both initial and mid-reveal Reduce Motion, in
+    /// addition to the animated fixtures. Never toggle host system preferences.
+    func testReducedMotionSettlesLatestPageAndReleasesInputShield() async throws {
+        print("CONTENT_MOTION systemReduceMotion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion); testing both injected policies")
+        for initiallyReduced in [false, true] {
+            let state = RegionState()
+            state.reduceMotion = initiallyReduced
+            let host = NSHostingView(rootView: LiveFixture(state: state))
+            host.sizingOptions = []
+            let window = makeWindow(size: CGSize(width: 900, height: 500))
+            window.contentView = host
+            defer { window.contentView = nil; window.close() }
+            try await settle(host)
+            state.page = 1
+            try await settle(host)
+            XCTAssertEqual(descendants(of: NSTextField.self, in: host).count, initiallyReduced ? 1 : 2)
+            state.page = 2
+            try await settle(host)
+            state.reduceMotion = true
+            try await settle(host)
+            XCTAssertEqual(descendants(of: NSTextField.self, in: host).compactMap { $0.identifier?.rawValue }, ["editor-2"])
+            XCTAssertFalse(descendants(of: ContentRevealInputShield.Shield.self, in: host).contains { $0.blocked })
+            XCTAssertEqual(state.navigation.title, "Page 2")
+            XCTAssertFalse(window.isVisible)
+        }
+    }
+
     func testResizeReleasesOutgoingPage() async throws {
         let state = RegionState()
         let host = NSHostingView(rootView: LiveFixture(state: state))
@@ -344,6 +371,9 @@ final class ContentMotionTests: XCTestCase {
 
     @MainActor @Observable final class RegionState {
         var page = 0
+        // Explicit fixture input lets both accessibility policies run without
+        // changing the developer's or hosted runner's system preferences.
+        var reduceMotion = false
         var navigation = ContentRevealNavigation()
     }
 
@@ -353,7 +383,7 @@ final class ContentMotionTests: XCTestCase {
             NavigationSplitView {
                 Text("Sidebar")
             } detail: {
-                ContentRevealRegion(value: state.page, origin: .leading) { page in
+                ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion) { page in
                     Editor(page: page).contentRevealNavigationTitle("Page \(page)")
                 }.sidebarResizeBoundary()
             }
@@ -364,7 +394,7 @@ final class ContentMotionTests: XCTestCase {
     private struct PaintFixture: View {
         let state: RegionState
         var body: some View {
-            ContentRevealRegion(value: state.page, origin: .leading) { page in
+            ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion) { page in
                 NativePaint(color: page == 0 ? NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
                                              : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
             }.sidebarResizeBoundary()

@@ -5,6 +5,16 @@ project_root="${script_dir:h}"
 source "${script_dir}/lib/phase_gate_lib.sh"
 (( $# == 1 )) || { print -u2 'usage: package_smoke.sh <Gate result directory>'; exit 64; }
 result_dir="${1:A}"
+# The Gate records source-derived expectations before building. Never infer
+# acceptance metadata from the extracted app or fall back to a historical name.
+release_identity="$(python3 -B "${script_dir}/release_identity.py")"
+release_version="${release_identity%%$'\n'*}"
+release_build="${release_identity##*$'\n'}"
+python3 - "${result_dir}/release-identity.json" "$release_version" "$release_build" <<'PYIDENTITY'
+import json, sys
+identity = json.load(open(sys.argv[1]))
+assert identity == {"configuration": "Release", "version": sys.argv[2], "build": sys.argv[3]}, "candidate identity changed after build"
+PYIDENTITY
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/slatesync-package-smoke.XXXXXX")"
 # macOS reports the executable under /private/var even when TMPDIR uses
 # /var or a doubled slash. Canonicalize before matching a process for cleanup.
@@ -20,8 +30,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 mkdir "${smoke_root}/consumer"
-ditto -x -k "${result_dir}/artifacts/SlateSync-1.1.0-macOS-universal.zip" "${smoke_root}/consumer"
-"${script_dir}/verify_bundle.sh" "$app" 1.1.0 2 adhoc
+ditto -x -k "${result_dir}/artifacts/SlateSync-${release_version}-macOS-universal.zip" "${smoke_root}/consumer"
+"${script_dir}/verify_bundle.sh" "$app" "$release_version" "$release_build" adhoc
 # Build only the test harness. XCUIApplication(url:) explicitly launches the
 # extracted app, so XCTest cannot silently substitute the development build.
 # Sign the isolated harness explicitly; clean CI runners have no local identity.

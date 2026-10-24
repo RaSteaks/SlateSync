@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -uo pipefail
+script_dir="${0:A:h}"
 
 # Retain raw results even when --only-failures returns an empty manifest. They
 # contain the AX snapshots, screenshots and runner output for hosted macOS.
@@ -27,7 +28,10 @@ while IFS= read -r -d '' bundle; do
       > "${result_dir}/${bundle_name}.summary.json"; then export_status=1; fi
   if ! xcrun xcresulttool get test-results tests --path "$bundle" --format json \
       > "${result_dir}/${bundle_name}.tests.json"; then export_status=1; fi
-  if ! xcrun xcresulttool export attachments --path "$bundle" --output-path "$output_path" --only-failures; then
+  # Explicit failed test IDs include teardown screenshots that --only-failures
+  # omitted in CI. Keep raw bundles as an independent, lossless fallback.
+  if ! python3 -B "${script_dir}/export_failed_test_attachments.py" "$bundle" \
+      "${result_dir}/${bundle_name}.summary.json" "$output_path"; then
     export_status=1
   fi
   if ! xcrun xcresulttool export diagnostics --path "$bundle" \

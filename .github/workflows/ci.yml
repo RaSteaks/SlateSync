@@ -82,10 +82,12 @@ jobs:
           path: |
             ${{ runner.temp }}/native-ci-preflight.log
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/release-identity.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/*.log
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/native-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_plan_tests.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_summary.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_tests.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/ui-scope-evidence.json
@@ -108,9 +110,11 @@ jobs:
           path: |
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/SUMMARY.md
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/release-identity.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/native-evidence.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_summary.json
+            ${{ runner.temp }}/SlateSync-Gate/SM-09/*/xcode_test_plan_tests.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_summary.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/packaged_ui_tests.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/ui-scope-evidence.json

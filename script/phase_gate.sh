@@ -114,7 +114,8 @@ workspace_layout_check() {
 
 required_tools_check() {
   local tool missing=0
-  for tool in git rg python3 swift xcodebuild xcrun lipo codesign open pgrep ps /usr/libexec/PlistBuddy; do
+  # plutil resolves the candidate identity; mktemp isolates each evidence run.
+  for tool in git rg python3 swift xcodebuild xcrun lipo codesign open pgrep ps mktemp plutil /usr/libexec/PlistBuddy; do
     command -v "$tool" >/dev/null 2>&1 || {
       print -u2 -r -- "missing required tool: ${tool}"
       missing=1
@@ -376,7 +377,7 @@ sm09_package_artifacts_check() {
   # this unique, ignored Gate result directory for CI upload and review.
   ./script/package_release.sh \
     "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" \
-    "$package_output" 1.1.0 2 || package_status=$?
+    "$package_output" "$release_version" "$release_build" || package_status=$?
   if (( package_status == 0 )); then
     /usr/bin/ditto "$package_output" "${result_dir}/artifacts" || package_status=$?
   fi
@@ -387,11 +388,11 @@ sm09_package_artifacts_check() {
 sm09_package_artifacts_evidence_check() {
   local name
   for name in \
-    SlateSync-1.1.0-macOS-universal.zip \
-    SlateSync-1.1.0-macOS-universal.dmg \
+    SlateSync-${release_version}-macOS-universal.zip \
+    SlateSync-${release_version}-macOS-universal.dmg \
     SHA256SUMS \
-    SlateSync-1.1.0-manifest.json \
-    SlateSync-1.1.0-release-notes.md; do
+    SlateSync-${release_version}-manifest.json \
+    SlateSync-${release_version}-release-notes.md; do
     [[ -s "${result_dir}/artifacts/${name}" ]] || {
       print -u2 -r -- "missing retained package evidence: ${name}"
       return 1
@@ -517,9 +518,8 @@ review_commit="$(git rev-parse HEAD 2>/dev/null)" || {
   exit "$exit_blocked_environment"
 }
 timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
-result_dir="${results_root}/${phase}/${timestamp}-${review_commit[1,12]}"
-mkdir -p "$result_dir" || {
-  print -u2 -r -- "无法创建 Gate 结果目录: ${result_dir}"
+result_dir="$(gate_create_result_directory "$results_root" "$phase" "$timestamp" "$review_commit")" || {
+  print -u2 -r -- "无法创建独立 Gate 结果目录: ${results_root}/${phase}"
   exit "$exit_blocked_environment"
 }
 checks_tsv="${result_dir}/checks.tsv"
@@ -544,6 +544,21 @@ if ! required_tools_check > "${result_dir}/missing-tools.log" 2>&1; then
     print -r -- "Required tools unavailable; dependent checks NOT_RUN; approvable=false."
     cat "${result_dir}/missing-tools.log"
   } > "${result_dir}/SUMMARY.md"
+  exit "$exit_fail"
+fi
+# Resolve expected metadata from source before building. Reading it from the
+# archive itself would accept a stale or wrongly versioned app as its own oracle.
+if release_identity="$(python3 -B script/release_identity.py --output "${result_dir}/release-identity.json" \
+    2> "${result_dir}/release_identity.log")"; then
+  release_version="${release_identity%%$'\n'*}"
+  release_build="${release_identity##*$'\n'}"
+  print -r -- "$release_identity" >> "${result_dir}/release_identity.log"
+  record_check release_identity true PASS "Release candidate ${release_version} (${release_build})" "${result_dir}/release_identity.log"
+else
+  approvable=false
+  record_check release_identity true FAIL "无法解析当前 Release 版本；不使用历史版本回退" "${result_dir}/release_identity.log"
+  record_check dependent_checks true NOT_RUN "候选版本未知，后续构建与包验收未执行" ""
+  write_result_artifacts FAIL || exit "$exit_blocked_environment"
   exit "$exit_fail"
 fi
 run_check clean_review_target true "审查目标的提交状态符合当前正式/诊断运行模式" clean_workspace_check
@@ -661,13 +676,18 @@ if [[ "$phase" == "SM-01" || "$phase" == "SM-02" ]] || \
   if [[ "$phase" == "SM-09" ]]; then
     run_check sm09_archive_bundle_audit true "Archive hardened runtime、entitlements、依赖和资源审计通过" \
       ./script/verify_bundle.sh \
-        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" 1.1.0 2 adhoc
+        "${result_dir}/SlateSync.xcarchive/Products/Applications/SlateSync.app" "$release_version" "$release_build" adhoc
     run_check sm09_package_artifacts true "同一 audited app 生成并回验 Universal ZIP/DMG" \
       sm09_package_artifacts_gate_check
     run_check sm09_packaged_ui true "ZIP 内 Release app 使用临时 Library 完成界面与退出重开回归" \
       ./script/package_smoke.sh "$result_dir"
   fi
 fi
+
+# Exact execution coverage is part of every Gate invocation, including the
+# protected release lane; the CI post-step is only an independent recheck.
+run_check sm09_ui_execution_coverage true "Debug/Release 必需用例逐项执行且零跳过" \
+  python3 -B script/tests/packaged_ui_contract.py --result-dir "$result_dir"
 
 # 批准检查仅在"状态阶段 == 本阶段且 lifecycleState == COMPLETE"时生效；
 # PASS 合法中间态（Gate PASS 后、Owner 批准前）窗口内按 NOT_APPLICABLE

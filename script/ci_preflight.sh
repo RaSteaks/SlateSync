@@ -8,6 +8,10 @@ cd "$project_root"
 # This entry point never builds or launches an app, captures the display, or
 # runs a foreground performance/UI test. Keep local work and CI on the same
 # fast contracts; the complete SM-09 Gate still runs on the remote macOS runner.
+# Current candidate metadata is separate from sealed historical fixtures.
+python3 -B script/release_identity.py
+python3 -B script/tests/release_identity_tests.py
+python3 -B script/tests/xctest_diagnostics_tests.py
 python3 -B script/tests/sm09_release_contract.py
 python3 -B script/tests/packaged_ui_contract.py --self-test
 ./script/tests/phase_gate_tests.zsh

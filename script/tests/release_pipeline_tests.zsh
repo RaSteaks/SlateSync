@@ -202,5 +202,20 @@ assert_failure "DMG creation failure propagates" env MOCK_CREATE_FAIL=1 \
   "${project_root}/script/package_release.sh" "$app" "$create_failure" 1.1.0 2
 assert_success "DMG failure removes partial output" test ! -e "$create_failure"
 
+# Future candidates must package under their own identity while a stale
+# baseline expectation remains a hard failure. These are disposable fixtures.
+next_app="${fixture_root}/next-version/SlateSync.app"
+/usr/bin/ditto "$app" "$next_app"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 1.2.0' "${next_app}/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 19' "${next_app}/Contents/Info.plist"
+assert_failure "old expected version rejects next candidate" \
+  "${project_root}/script/verify_bundle.sh" "$next_app" 1.1.0 2 adhoc
+assert_failure "wrong expected build rejects next candidate" \
+  "${project_root}/script/verify_bundle.sh" "$next_app" 1.2.0 2 adhoc
+assert_success "next candidate ZIP and DMG round-trip" env MOCK_SOURCE_APP="$next_app" \
+  "${project_root}/script/package_release.sh" "$next_app" "${fixture_root}/next-artifacts" 1.2.0 19
+assert_success "next candidate retains its named evidence" \
+  test -s "${fixture_root}/next-artifacts/SlateSync-1.2.0-manifest.json"
+
 print "Release pipeline tests: ${passed} passed, ${failed} failed"
 (( failed == 0 ))

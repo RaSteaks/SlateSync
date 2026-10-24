@@ -541,6 +541,9 @@ final class SlateSyncUITests: XCTestCase {
         // XCUI; the workspace-owned task action is the stable route witness.
         let taskCreate = app.buttons.matching(identifier: "task.create").firstMatch
         XCTAssertTrue(taskCreate.waitForExistence(timeout: 8))
+        // Both inset controls must retain their own identifiers after the
+        // native sidebar list is assembled; the outer list must not mask them.
+        XCTAssertTrue(app.textFields["workspace.task.search"].waitForExistence(timeout: 3))
         // The sidebar keeps the acquired project visible beside its group
         // heading, independent of the workspace's current detail route.
         let currentProjectName = app.staticTexts["sidebar.currentProjectName"]
@@ -697,7 +700,10 @@ final class SlateSyncUITests: XCTestCase {
             }
             XCTAssertTrue(element.isHittable)
         }
-        let advanced = settings.staticTexts["高级设置"].firstMatch
+        // DisclosureGroup is not a StaticText on every supported macOS. Use
+        // its app-owned identifier, then prove expansion by the picker action.
+        let advanced = settings.descendants(matching: .any)
+            .matching(identifier: "settings.mcp.advanced").firstMatch
         reveal(advanced)
         advanced.click()
         let chooseExecutable = settings.buttons["settings.mcp.executable.choose"].firstMatch

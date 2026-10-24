@@ -206,17 +206,25 @@ struct ContentRevealRegion<Value: Equatable, Content: View>: View {
     let value: Value
     let origin: ContentRevealOrigin
     private let content: (Value) -> Content
+    private let reduceMotionOverride: Bool?
     @State private var presentation: ContentRevealState<Value>
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.contentRevealIsActive) private var ancestorIsActive
 
-    init(value: Value, origin: ContentRevealOrigin, @ViewBuilder content: @escaping (Value) -> Content) {
+    // Production callers inherit the system policy. Offscreen tests inject both
+    // policies because SwiftUI's accessibilityReduceMotion is read-only and a
+    // hosted runner may enable it independently of the developer's machine.
+    init(value: Value, origin: ContentRevealOrigin, reduceMotion: Bool? = nil,
+         @ViewBuilder content: @escaping (Value) -> Content) {
         self.value = value
         self.origin = origin
         self.content = content
+        reduceMotionOverride = reduceMotion
         _presentation = State(initialValue: ContentRevealState(value, origin: origin))
     }
+
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
 
     var body: some View {
         GeometryReader { geometry in

@@ -70,6 +70,14 @@ gate_valid_phase() {
   [[ "${1:-}" =~ '^SM-0[0-9]$' ]]
 }
 
+gate_create_result_directory() {
+  local root="$1" phase="$2" timestamp="$3" commit="$4"
+  mkdir -p "${root}/${phase}" || return 1
+  # Two invocations for one SHA can start in the same second. Never truncate
+  # another run's checks/logs or reuse its archived app as fresh evidence.
+  mktemp -d "${root}/${phase}/${timestamp}-${commit[1,12]}.XXXXXX"
+}
+
 gate_classify_failure() {
   local log_path="$1"
   local exit_status="$2"
@@ -228,7 +236,14 @@ elif failed > 0:
 elif environment_failure:
     print("BLOCKED_ENV")
 elif result in {"passed", "success"} and failed == 0:
-    print("PASS")
+    # A green banner can describe an empty or filtered Test Plan. Require
+    # complete numeric execution counts here; the Gate's named-coverage check
+    # separately proves that these are the intended Debug/Release cases.
+    counts = [summary.get(key) for key in ("passedTests", "totalTestCount", "skippedTests")]
+    valid = all(type(count) is int and count >= 0 for count in counts)
+    valid = valid and counts[0] > 0 and counts[0] == counts[1] and counts[2] == 0
+    valid = valid and not entries and summary.get("expectedFailures", 0) == 0
+    print("PASS" if valid else "FAIL")
 else:
     print("FAIL")
 PY
