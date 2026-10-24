@@ -68,6 +68,9 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   official CLI for user-level registration. Codex updates only slatesync; Claude
   preserves conflicting entries. Client feedback is independent of broker state.
   Source, launcher and grant selection share one native importer presenter.
+  Advanced settings uses the same full-row, keyboard-operable disclosure button
+  as the setup guide: both its label and chevron toggle it, and its accessibility
+  value announces expanded/collapsed state independently of the child controls.
   Direct client-owned stdio sessions remain independent of app lifecycle.
 - Project settings remain project-scoped and never replace machine settings.
 - Switching project/task flushes the single autosave writer before publishing

@@ -693,26 +693,35 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertTrue(settings.buttons["settings.mcp.add.codex"].firstMatch.isEnabled)
         XCTAssertTrue(settings.buttons["settings.mcp.add.claudeCode"].firstMatch.isEnabled)
 
-        func reveal(_ element: XCUIElement) {
+        let content = settings.scrollViews["settings.mcp.guide"].firstMatch
+        func reveal(_ element: XCUIElement) -> Bool {
+            // A native AX element can be present while clipped by its Form.
+            // Require the complete target inside this viewport before clicking.
             for _ in 0..<14 {
-                if element.exists && element.isHittable { return }
-                settings.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -160)
+                let viewport = content.frame.intersection(settings.frame).insetBy(dx: 1, dy: 1)
+                if element.exists, !element.frame.isEmpty,
+                   viewport.contains(element.frame), element.isHittable { return true }
+                let direction: CGFloat = element.exists && element.frame.midY < viewport.midY ? 160 : -160
+                content.scroll(byDeltaX: 0, deltaY: direction)
             }
-            XCTAssertTrue(element.isHittable)
+            recordUIFailure("MCP control is outside the visible viewport: \(element)", app: app)
+            return false
         }
-        // DisclosureGroup is not a StaticText on every supported macOS. Use
-        // its app-owned identifier, then prove expansion by the picker action.
-        let advanced = settings.descendants(matching: .any)
-            .matching(identifier: "settings.mcp.advanced").firstMatch
-        reveal(advanced)
+        // The same full-row button as the setup guide exposes actual expanded
+        // state. Prove expansion before looking for picker controls or scrolling.
+        let advanced = settings.buttons["settings.mcp.advanced"].firstMatch
+        guard reveal(advanced) else { return }
         advanced.click()
+        guard waitForUICondition("MCP advanced section expands", app: app, {
+            advanced.value as? String == "已展开"
+        }) else { return }
         let chooseExecutable = settings.buttons["settings.mcp.executable.choose"].firstMatch
-        reveal(chooseExecutable)
+        guard reveal(chooseExecutable) else { return }
         chooseExecutable.click()
         choosePanelPath(launcher.path, operation: .openFile, app: app)
         XCTAssertEqual(settings.textFields["settings.mcp.executable"].firstMatch.value as? String, launcher.path)
         let chooseSource = settings.buttons["settings.mcp.source.choose"].firstMatch
-        reveal(chooseSource)
+        guard reveal(chooseSource) else { return }
         chooseSource.click()
         // Folder selection uses the same NSOpenPanel as executable selection.
         choosePanelPath(testRoot.path, operation: .openFile, app: app)
@@ -1031,19 +1040,18 @@ final class SlateSyncUITests: XCTestCase {
                 attachReview("输入-\(name)", app: app)
                 let config = app.buttons["workspace.configuration.toggle"].firstMatch
                 XCTAssertTrue(config.isHittable)
-                // Wide layouts can initially open this pane. Establish closed
-                // state before proving that the toolbar action opens it.
+                // Hidden panes stay mounted to preserve drafts, so exists is
+                // not visibility. Only close a control inside the live window.
                 let closeConfig = app.buttons["workspace.configuration.close"].firstMatch
-                if closeConfig.exists {
+                if controlIsVisible(closeConfig, in: main) {
                     closeConfig.click()
-                    XCTAssertTrue(closeConfig.waitForNonExistence(timeout: 5))
+                    guard waitForControl(closeConfig, visible: false, in: main, app: app) else { return }
                 }
                 config.click()
-                XCTAssertTrue(closeConfig.waitForExistence(timeout: 5))
-                XCTAssertTrue(closeConfig.isHittable)
+                guard waitForControl(closeConfig, visible: true, in: main, app: app) else { return }
                 attachReview("配置-\(name)", app: app)
                 closeConfig.click()
-                XCTAssertTrue(closeConfig.waitForNonExistence(timeout: 5))
+                guard waitForControl(closeConfig, visible: false, in: main, app: app) else { return }
                 app.radioButtons["识别结果"].firstMatch.click()
                 let toggle = app.descendants(matching: .any).matching(identifier: "workspace.original.toggle")
                     .firstMatch
@@ -1051,16 +1059,15 @@ final class SlateSyncUITests: XCTestCase {
                 // The first wide result page opens comparison automatically;
                 // blindly toggling would close it and fail the next assertion.
                 let closeOriginal = app.buttons["workspace.original.close"].firstMatch
-                if closeOriginal.exists {
+                if controlIsVisible(closeOriginal, in: main) {
                     closeOriginal.click()
-                    XCTAssertTrue(closeOriginal.waitForNonExistence(timeout: 5))
+                    guard waitForControl(closeOriginal, visible: false, in: main, app: app) else { return }
                 }
                 toggle.click()
-                XCTAssertTrue(closeOriginal.waitForExistence(timeout: 5))
-                XCTAssertTrue(closeOriginal.isHittable)
+                guard waitForControl(closeOriginal, visible: true, in: main, app: app) else { return }
                 attachReview("原稿对照-\(name)", app: app)
                 closeOriginal.click()
-                XCTAssertTrue(closeOriginal.waitForNonExistence(timeout: 5))
+                guard waitForControl(closeOriginal, visible: false, in: main, app: app) else { return }
                 app.radioButtons["Resolve CSV"].firstMatch.click()
                 // Import lives in the More menu on this tab.
                 XCTAssertTrue(app.descendants(matching: .any)["workspace.more"].firstMatch.isHittable)
@@ -1088,6 +1095,44 @@ final class SlateSyncUITests: XCTestCase {
             }
             attachReview(route, app: app)
         }
+    }
+
+    /// Kept-alive, translated panels can remain in macOS's AX tree even with
+    /// accessibilityHidden. Physical visibility and hit testing own clicks.
+    @MainActor
+    private func controlIsVisible(_ control: XCUIElement, in window: XCUIElement) -> Bool {
+        guard control.exists, !control.frame.isEmpty else { return false }
+        return window.frame.contains(control.frame) && control.isHittable
+    }
+
+    @MainActor
+    private func waitForControl(_ control: XCUIElement, visible: Bool,
+                                in window: XCUIElement, app: XCUIApplication) -> Bool {
+        waitForUICondition("Control visibility must become \(visible): \(control)", app: app) {
+            self.controlIsVisible(control, in: window) == visible
+        }
+    }
+
+    @MainActor
+    private func waitForUICondition(_ description: String, app: XCUIApplication,
+                                    _ condition: @escaping @MainActor () -> Bool) -> Bool {
+        let predicate = NSPredicate { _, _ in MainActor.assumeIsolated { condition() } }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app)
+        if XCTWaiter().wait(for: [expectation], timeout: 5) == .completed { return true }
+        recordUIFailure(description, app: app)
+        return false
+    }
+
+    @MainActor
+    private func recordUIFailure(_ message: String, app: XCUIApplication) {
+        // Preserve the complete AX tree as well as a screenshot when a helper
+        // assertion fails; XCTest otherwise may retain only a root snapshot.
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "UI-state-failure-hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        attachReview("界面状态失败", app: app)
+        XCTFail(message)
     }
 
     @MainActor

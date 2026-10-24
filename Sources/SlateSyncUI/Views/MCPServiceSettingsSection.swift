@@ -9,6 +9,7 @@ struct MCPServiceSettingsSection: View {
     @State private var selectsPath = false
     @State private var selectionKind: SelectionKind = .executable
     @State private var selectionError: String?
+    @State private var showsAdvanced = false
 
     private enum SelectionKind {
         case executable, directories, source
@@ -82,24 +83,41 @@ struct MCPServiceSettingsSection: View {
                     .font(.caption).foregroundStyle(.secondary)
             }.disabled(model.isRunning || model.isBusy)
 
-            DisclosureGroup(L10n.tr("高级设置")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    LabeledContent(L10n.tr("启动程序")) {
-                        TextField(L10n.tr("留空自动查找"), text: $model.configuration.executablePath)
-                            .accessibilityIdentifier("settings.mcp.executable")
+            VStack(alignment: .leading, spacing: 8) {
+                // Match the adjacent setup-guide disclosure: the entire label
+                // row is a keyboard-accessible button. Native DisclosureGroup
+                // exposes its label as part of the triangle's AX frame although
+                // clicking that text does not necessarily expand it on macOS.
+                Button {
+                    showsAdvanced.toggle()
+                } label: {
+                    HStack {
+                        Label(L10n.tr("高级设置"), systemImage: showsAdvanced ? "chevron.down" : "chevron.right")
+                        Spacer()
                     }
-                    Button(L10n.tr("选择启动程序…"), systemImage: "folder") { select(.executable) }
-                        .accessibilityIdentifier("settings.mcp.executable.choose")
-                    if let source = model.configuration.sourceDirectory {
-                        Text(verbatim: source).font(.caption.monospaced()).textSelection(.enabled)
-                    }
-                    Button(L10n.tr("选择源码目录…"), systemImage: "folder") { select(.source) }
-                        .accessibilityIdentifier("settings.mcp.source.choose")
-                    Text(L10n.tr("仅在自动查找失败或源码移动后设置。源码目录须包含 MCP/Package.swift 和 script/run_mcp.sh；更改配置前请先停止服务。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }.disabled(model.isRunning || model.isBusy)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showsAdvanced ? L10n.tr("已展开") : L10n.tr("已收起"))
+                .accessibilityIdentifier("settings.mcp.advanced")
+                if showsAdvanced {
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledContent(L10n.tr("启动程序")) {
+                            TextField(L10n.tr("留空自动查找"), text: $model.configuration.executablePath)
+                                .accessibilityIdentifier("settings.mcp.executable")
+                        }
+                        Button(L10n.tr("选择启动程序…"), systemImage: "folder") { select(.executable) }
+                            .accessibilityIdentifier("settings.mcp.executable.choose")
+                        if let source = model.configuration.sourceDirectory {
+                            Text(verbatim: source).font(.caption.monospaced()).textSelection(.enabled)
+                        }
+                        Button(L10n.tr("选择源码目录…"), systemImage: "folder") { select(.source) }
+                            .accessibilityIdentifier("settings.mcp.source.choose")
+                        Text(L10n.tr("仅在自动查找失败或源码移动后设置。源码目录须包含 MCP/Package.swift 和 script/run_mcp.sh；更改配置前请先停止服务。"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.disabled(model.isRunning || model.isBusy)
+                }
             }
-            .accessibilityIdentifier("settings.mcp.advanced")
             if let selectionError { SlateInlineError(selectionError) }
         }
         // Multiple fileImporter modifiers on this Section masked the launcher
