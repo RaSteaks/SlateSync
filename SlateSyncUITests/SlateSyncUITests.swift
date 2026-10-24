@@ -1079,8 +1079,27 @@ final class SlateSyncUITests: XCTestCase {
         search.click()
         search.typeText("不存在的场记任务")
         XCTAssertTrue(app.staticTexts["无匹配任务"].waitForExistence(timeout: 5))
-        app.buttons["workspace.task.search.clear"].click()
-        XCTAssertEqual(search.value as? String, "")
+        let clearSearch = app.buttons["workspace.task.search.clear"]
+        XCTAssertTrue(clearSearch.isHittable)
+        clearSearch.click()
+        // A click returning does not prove that the binding, native field and
+        // filtered task list have all updated. Require all observable effects;
+        // a missed click or stale editor write still fails within this bound.
+        guard waitForUICondition("Task search clears and restores its results", app: app, {
+            search.value as? String == "" && !app.staticTexts["无匹配任务"].exists
+                && (!clearSearch.exists || !clearSearch.isEnabled)
+        }) else { return }
+        // Type without clicking the field: clear must return keyboard focus,
+        // and a later edit must not restore the previous query.
+        app.typeText("SM09-search-probe")
+        guard waitForUICondition("Cleared task search retains input focus", app: app, {
+            search.value as? String == "SM09-search-probe"
+        }) else { return }
+        clearSearch.click()
+        guard waitForUICondition("Task search clears again after editing", app: app, {
+            search.value as? String == "" && !app.staticTexts["无匹配任务"].exists
+                && (!clearSearch.exists || !clearSearch.isEnabled)
+        }) else { return }
         XCTAssertTrue(app.buttons["workspace.preview.enlarge"].exists)
         // Tasks live in the sidebar now; the search field stays reachable.
         XCTAssertTrue(search.isHittable)

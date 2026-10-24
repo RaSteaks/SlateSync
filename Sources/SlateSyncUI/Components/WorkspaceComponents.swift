@@ -155,6 +155,10 @@ struct SlateSearchField: View {
                 focused = true
             } label: {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    // A plain symbol button needs a solid target, including
+                    // the transparent center of the glyph, for pointer clicks.
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L10n.tr("清除{0}", [String(describing: title)])).help(L10n.tr("清除{0}", [String(describing: title)]))
@@ -168,6 +172,8 @@ struct SlateSearchField: View {
         .overlay {
             RoundedRectangle(cornerRadius: SlateSyncTheme.smallRadius, style: .continuous)
                 .strokeBorder(SlateSyncTheme.accent, lineWidth: focused ? 1.5 : 0)
+                // The focus ring is decoration, never a search/clear target.
+                .allowsHitTesting(false)
         }
     }
 }

@@ -236,6 +236,8 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 - `SlateSearchField` owns clearable task/help/category input; clearing preserves
   selection and returns keyboard focus to the field.
+  The clear icon owns a solid 20-point pointer target; its focus decoration
+  never intercepts input. Clearing must restore results and allow immediate typing.
 - Task rail, recognition configuration and original comparison have named,
   accessible toggle controls. Hidden panels are excluded from hit testing and AX.
 - Layout changes first call the window-local `WorkspaceEditorBoundary`, then
