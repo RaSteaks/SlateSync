@@ -1,5 +1,10 @@
 # SlateSync 新版前端 UI · 设计系统
 
+> **2026-10-23 更新：本文所述 Slate Workbench（钨丝琥珀、冷灰阶梯、斜纹、铅笔圈、灯箱、
+> LeaderProgress、玻璃状态胶囊）已被"素面 Bare Face"极简原生方向取代**——系统颜色、
+> 系统控件、工具栏承载身份与动作、任务并入侧栏、四个过条/保条/废条/待定符号。现行规范见根目录
+> `DESIGN.md` 顶部同日小节与 `UX-CONTRACT.md`；下文仅作历史设计档案。
+
 > 状态:**已实施(2026-09-14 第一轮)**。六个共享组件落于 `SlateSyncUI/Components/WorkbenchComponents.swift`,
 > 圆角 Token 增补进 `SlateSyncTheme`,工作台/外壳/设置整合见 `AGENT.md` 顶部 2026-09-14 实施记录。
 > 与原型的有意偏差(行→页映射、表内 TakeMark、徽章过滤)同样记录在 AGENT.md。本文档保留为该视觉语言的规范来源;
@@ -51,8 +56,8 @@ SlateSync 处理的信任链是:**纸质场记单 → 结构化数据 → 已校
 | `accent` | `#F59E0B` | `#B45309` | DESIGN.md `accent-soft` / `primary` |
 | `canvas` | `#1E2229` | `#F6F7F9` | DESIGN.md `canvas-dark` / `canvas-light` |
 | `evidenceSurface`(原 `panel`) | `#2A2F37` | `#FFFFFF` | DESIGN.md `evidence-dark` / `evidence-light` |
-| `ok` | `#7FC9A9` | `#1E7A5A` | DESIGN.md `success-dark` / `success` |
-| `warn` | `#E3C36B` | `#7C6A00` | DESIGN.md `warning-dark` / `warning` |
+| `ok` | `#7FC9A9` | `#17694C` | DESIGN.md `success-dark` / `success`(2026-10-22 亮色加深,自身 14% 底色上 ≥ 4.5:1) |
+| `warn` | `#E3C36B` | `#6B5B00` | DESIGN.md `warning-dark` / `warning`(同上) |
 | `danger` | `#E58873` | `#B03A2E` | DESIGN.md `danger-dark` / `danger` |
 | `paper` | `#F2EEE3` | `#F2EEE3` | 证据内容色(只属于纸面内容),不属于主题 |
 

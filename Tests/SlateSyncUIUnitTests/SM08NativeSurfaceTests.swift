@@ -184,6 +184,32 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertTrue(harness.tableView === table)
     }
 
+    func testFreezeAndThawStillReachVisibleCells() async throws {
+        // updateNSView skips its per-cell sweep unless the enabled state flips
+        // (it runs on every layout-driven update, e.g. each sidebar-collapse
+        // frame). The freeze and its release must still reach existing cells.
+        let harness = CSVHarness(table: fixtureTable())
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        let field = try XCTUnwrap(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? NSTextField)
+        XCTAssertTrue(field.isEditable)
+
+        harness.setEnabled(false)
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertTrue(harness.tableView === table)
+        XCTAssertFalse(field.isEditable, "A frozen app must make visible cells read-only")
+
+        // Repeated layout-driven updates in the same state change nothing.
+        harness.setEnabled(false)
+        try await Task.sleep(for: .milliseconds(40))
+        XCTAssertFalse(field.isEditable)
+
+        harness.setEnabled(true)
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertTrue(field.isEditable, "Releasing the freeze restores editing")
+    }
+
     func testLayoutBoundaryRefusesNativeMarkedText() async throws {
         let harness = CSVHarness(table: fixtureTable())
         defer { harness.unmount() }
@@ -351,21 +377,36 @@ private final class CSVHarness {
     private let tableID = UUID()
     var headers: [String] { input.headers }
     var commits: [CSVCellCommit] = []
-    var host: NSHostingView<EditableCSVTableRepresentable>?
+    // Type-erased so a test can also change the SwiftUI environment (disabled).
+    var host: NSHostingView<AnyView>?
     var window: NSWindow?
     var tableView: NSTableView? { host?.descendants.compactMap { $0 as? NSTableView }.first }
     init(table: ResolveCSVTable) { input = table }
+    private var enabled = true
+    /// Every render carries the same `.disabled` wrapper, so toggling `enabled`
+    /// changes only the environment and never the view type (which would make
+    /// SwiftUI rebuild the native table instead of updating it).
+    private func content(tableID: UUID, table: ResolveCSVTable, density: SlateSyncDensity? = nil) -> AnyView {
+        AnyView(
+            EditableCSVTableRepresentable(tableID: tableID, table: table, revision: 0, density: density) { [weak self] in self?.commits.append($0) }
+                .disabled(!enabled))
+    }
     // Change presentation without changing data identity, as a settings scene does.
     func setDensity(_ density: SlateSyncDensity) {
-        host?.rootView = EditableCSVTableRepresentable(tableID: tableID, table: input, revision: 0, density: density) { [weak self] in self?.commits.append($0) }
+        host?.rootView = content(tableID: tableID, table: input, density: density)
     }
     func replace(_ table: ResolveCSVTable) {
-        host?.rootView = EditableCSVTableRepresentable(tableID: UUID(), table: table, revision: 0) { [weak self] in self?.commits.append($0) }
+        host?.rootView = content(tableID: UUID(), table: table)
+    }
+    /// Mirrors the shared mutation/termination freeze: the same table identity
+    /// under `.disabled`, so only the environment's `isEnabled` changes.
+    func setEnabled(_ enabled: Bool) {
+        self.enabled = enabled
+        host?.rootView = content(tableID: tableID, table: input)
     }
     func mount() async throws {
         _ = NSApplication.shared
-        let content = EditableCSVTableRepresentable(tableID: tableID, table: input, revision: 0) { [weak self] in self?.commits.append($0) }
-        let host = NSHostingView(rootView: content)
+        let host = NSHostingView(rootView: content(tableID: tableID, table: input))
         let window = backgroundTestWindow(width: 1000, height: 600, styleMask: [.titled, .closable, .resizable])
         window.contentView = host
         self.host = host; self.window = window

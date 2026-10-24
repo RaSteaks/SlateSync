@@ -4,9 +4,12 @@ import SwiftUI
 // Product copy uses the shared launch language; user content stays verbatim.
 
 public struct AppRootView: View {
+    // Only the active live page supplies window chrome during a reveal.
+    @State private var revealNavigation = ContentRevealNavigation()
     // Each window starts with visible navigation, independent of AppKit's
     // saved split-view geometry from another project or test launch.
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var workspaceEntryPoint = WorkspaceEntryPoint.input
     // Completion events are observed at the window boundary so they remain
     // observable while WorkspaceView is replaced by another route. The task
@@ -14,7 +17,6 @@ public struct AppRootView: View {
     @State private var unseenSectionsByTask: [String: Set<WorkspaceSection>] = [:]
     @State private var activeWorkspaceSection = WorkspaceSection.input
     @AppStorage("appearance") private var appearance = "system"
-    @AppStorage("density") private var density = "comfortable"
     @Bindable private var session: AppSessionModel
     @Bindable private var projects: ProjectLibraryModel
     private let workspace: WorkspaceModel
@@ -64,16 +66,35 @@ public struct AppRootView: View {
 
     public var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: routeBinding, currentProjectName: currentProjectName)
-                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
+            SidebarView(
+                selection: routeBinding, currentProjectName: currentProjectName, workspace: workspace,
+                runningTaskID: recognition.operation.isRunning ? session.taskID : nil)
+                // SidebarView protects its internal width during native
+                // reveal; keep the column's resize limit on the same policy.
+                .navigationSplitViewColumnWidth(min: SidebarView.minimumColumnWidth, ideal: 230, max: 280)
         } detail: {
             detail
+                // Status lives at the foot of the content column only, so the
+                // sidebar keeps its full height while a job runs or fails.
+                .safeAreaInset(edge: .bottom, spacing: 0) { statusBars }
+                // Keep native split motion at the column boundary; a second
+                // inherited animation makes every nested control lag behind.
+                .sidebarResizeBoundary()
         }
+        // Only the current live page contributes title/subtitle. The outgoing
+        // page stays mounted for its mask, without competing for window chrome.
+        .onPreferenceChange(ContentRevealNavigationKey.self) { navigation in
+            // A third destination waits for the current visual leg, with both
+            // old pages' chrome inactive. Keep the last title until it mounts.
+            if !navigation.title.isEmpty { revealNavigation = navigation }
+        }
+        .navigationTitle(revealNavigation.title)
+        .navigationSubtitle(revealNavigation.subtitle)
+        .sidebarVisibilityAnimation(columnVisibility, reduceMotion: reduceMotion)
         .tint(SlateSyncTheme.accent)
-        .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
-        .controlSize(density == "compact" ? .small : .regular)
-        // One scene-level preference drives native controls and content metrics.
-        .environment(\.slateSyncDensity, SlateSyncDensity(rawValue: density) ?? .comfortable)
+        // Always an explicit scheme (system resolves to the live system value);
+        // see AppearanceController for why never nil.
+        .preferredColorScheme(AppearanceController.colorScheme(for: appearance, systemIsDark: SystemAppearanceMonitor.shared.isDark))
         .safeAreaInset(edge: .top) { sessionError }
         .focusedSceneValue(\.slateSyncActions, focusedActions)
         .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning || session.openingProjectName != nil)
@@ -90,47 +111,6 @@ public struct AppRootView: View {
                     )
                     .padding(24)
                 }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if termination.restartRequired { Text(L10n.tr("项目库已更新，请退出并重新打开 SlateSync。")).padding(12) }
-            // Recognition remains window-owned across Library/Logs/Help routes.
-            // Its status and recovery message must not disappear with a tab.
-            if recognition.operation.isRunning {
-                SlateStatusBar(message: recognition.progress?.message ?? L10n.tr("正在处理场记…"), busy: true) {
-                    Button(L10n.tr("取消")) { recognition.cancel() }
-                }
-            } else if case .failed(let error) = recognition.operation {
-                SlateStatusBar(message: error.message, tone: .error) {
-                    SettingsLink { Text(L10n.tr("检查识别配置")) }
-                }
-            } else if case .succeeded(let message) = recognition.operation, canViewRecognitionResult {
-                // Completion never steals focus or seizes the current page;
-                // the status bar only offers the route to the new results.
-                SlateStatusBar(message: message, tone: .success) {
-                    Button(L10n.tr("查看识别结果")) {
-                        workspaceEntryPoint = .result
-                        if session.route != .workspace {
-                            Task { await session.navigate(to: .workspace) }
-                        }
-                    }
-                }
-            } else if case .succeeded(let message) = recognition.operation {
-                SlateStatusBar(message, tone: .success)
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            // The app bundle owns the notice; render it verbatim in both
-            // languages. This outer inset keeps status actions above the footer.
-            if let notice = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
-                Text(verbatim: notice)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .accessibilityIdentifier("app.copyright")
             }
         }
         .onChange(of: recognition.operation) { _, newValue in
@@ -155,8 +135,61 @@ public struct AppRootView: View {
         }
     }
 
-    @ViewBuilder private var detail: some View {
-        switch session.route {
+    @ViewBuilder private var statusBars: some View {
+            // Blocking restart notice uses the shared feedback surface like
+            // every other window-level message.
+            if termination.restartRequired {
+                SlateStatusBar(L10n.tr("项目库已更新，请退出并重新打开 SlateSync。"), tone: .warning)
+            }
+            // Recognition remains window-owned across Library/Logs/Help routes.
+            // Its status and recovery message must not disappear with a tab.
+            if recognition.operation.isRunning {
+                // The determinate bar advances only with real page completions;
+                // the spinner and the named phase are always shown.
+                let progress = recognition.progress.flatMap { $0.total > 0 ? $0 : nil }
+                SlateStatusBar(message: recognition.progress?.message ?? L10n.tr("正在处理场记…"), busy: true, inline: progress.map { progress in
+                    AnyView(
+                        ProgressView(value: Double(progress.completed), total: Double(progress.total))
+                            .frame(width: 160)
+                            .accessibilityLabel(L10n.tr("识别进度"))
+                            .accessibilityValue(Text(L10n.tr("第 {0} 页,共 {1} 页", [String(progress.completed), String(progress.total)]))))
+                }) {
+                    // The workspace Input page already offers 取消识别 in its
+                    // toolbar; elsewhere this is the only way to stop the run.
+                    if !(session.route == .workspace && activeWorkspaceSection == .input) {
+                        Button(L10n.tr("取消")) { recognition.cancel() }
+                    }
+                }
+            } else if case .failed(let error) = recognition.operation {
+                SlateStatusBar(message: error.message, tone: .error) {
+                    SettingsLink { Text(L10n.tr("检查识别配置")) }
+                }
+            } else if case .succeeded(let message) = recognition.operation, canViewRecognitionResult {
+                // Completion never steals focus or seizes the current page;
+                // the status bar only offers the route to the new results.
+                SlateStatusBar(message: message, tone: .success) {
+                    Button(L10n.tr("查看识别结果")) {
+                        workspaceEntryPoint = .result
+                        if session.route != .workspace {
+                            Task { await session.navigate(to: .workspace) }
+                        }
+                    }
+                }
+            } else if case .succeeded(let message) = recognition.operation {
+                SlateStatusBar(message, tone: .success)
+            }
+    }
+
+    private var detail: some View {
+        // Observe only the committed route: failed saves never start a reveal.
+        // The sidebar and persistent status bar remain outside this region.
+        ContentRevealRegion(value: session.route, origin: .leading) { destination in
+            destinationView(destination)
+        }
+    }
+
+    @ViewBuilder private func destinationView(_ destination: SidebarDestination) -> some View {
+        switch destination {
         case .projects:
             ProjectLibraryView(
                 model: projects,

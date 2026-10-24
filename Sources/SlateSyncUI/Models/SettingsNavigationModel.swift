@@ -10,6 +10,7 @@ public enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Send
     case providers
     case recognition
     case ocr
+    case mcp
     case advanced
 
     public var id: String { rawValue }
@@ -21,7 +22,21 @@ public enum SettingsCategory: String, CaseIterable, Identifiable, Hashable, Send
         case .providers: L10n.tr("模型服务")
         case .recognition: L10n.tr("识别")
         case .ocr: "OCR"
+        // MCP is a protocol name in both supported interface languages.
+        case .mcp: "MCP"
         case .advanced: L10n.tr("高级")
+        }
+    }
+
+    /// SF Symbol for the Settings icon tab.
+    public var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .providers: "server.rack"
+        case .recognition: "text.viewfinder"
+        case .ocr: "doc.text.magnifyingglass"
+        case .mcp: "puzzlepiece.extension"
+        case .advanced: "slider.horizontal.3"
         }
     }
 }

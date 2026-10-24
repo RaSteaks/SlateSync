@@ -140,6 +140,12 @@ public enum L10n {
     /// source text as a localizable template. UI templates can contain project
     /// names or document text and must only be rendered through `tr` explicitly.
     static let productMessagePatternKeys: Set<String> = [
+        // Pipeline diagnostics shown by the shared complete-report sheet.
+        "{0} 的素材编号不在当前 Resolve CSV 中，已跳过。",
+        "{0} 的 Clip Name 与所在素材目录指向不同素材，已跳过。",
+        "{0} 包含自动修正或待复核字段：{1}，导出前请人工校对。",
+        "重复返回 {0}，已保留第一条。",
+        "重复返回 {0} 且字段互相冲突，冲突字段已留空并要求复核。",
         "CSV 中存在多个 {0} 对应列，无法确定应写入哪一列。",
         "CSV 文件超过 {0} MB 上限",
         "CSV 第 {0} 行 {1} 已覆盖：{2}“{3}”→“{4}”。",

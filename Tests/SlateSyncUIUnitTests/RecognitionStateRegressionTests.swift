@@ -10,6 +10,20 @@ import XCTest
 /// draining the progress task must not overwrite .succeeded with .canceled.
 @MainActor
 final class RecognitionStateRegressionTests: XCTestCase {
+    func testEditingCoreFieldAcknowledgesOnlyThatReviewMarker() {
+        let model = RecognitionModel(service: RecognitionStateFake(), settings: RecognitionSettingsFake())
+        model.load(task: .init(editedRecords: [
+            .init(id: "review", cardNumber: "A001", videoCode: "C001", scene: "1", shot: "18", take: "2",
+                  reviewRequiredFields: ["shot", "take"])
+        ]))
+        var saved: [PersistedRecognitionRecord] = []
+        model.receiveResult(.init(tableID: model.resultTableID, rowID: 0, columnID: 3, revision: 0, value: "19")) {
+            saved = $0
+        }
+        XCTAssertEqual(saved.first?.reviewRequiredFields, ["take"])
+        XCTAssertEqual(model.resolveRecords.first?.reviewRequiredFields, ["take"])
+    }
+
     private func startRecognition(_ model: RecognitionModel, taskID: String? = nil) {
         model.recognize(
             .init(projectID: "p1", input: .bytes(Data([0x01]), filename: "a.jpg"), filename: "a.jpg",

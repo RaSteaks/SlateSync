@@ -86,7 +86,10 @@ actor ProviderSettingsCoordinator {
                     : runtimeSnapshot.workflowConfigPath
             ),
             restartRequired: restartRequired,
-            credentialStatuses: credentialStatuses
+            credentialStatuses: credentialStatuses,
+            // Settings can display inherited request limits without saving
+            // defaults over environment or file-based configuration.
+            effectiveValues: runtimeSnapshot.configuration.values
         )
     }
 

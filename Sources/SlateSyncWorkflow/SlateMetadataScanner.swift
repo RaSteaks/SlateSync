@@ -5,7 +5,9 @@ import SlateSyncDomain
 /// without following symbolic links, and all externally visible ordering is
 /// normalized so filesystem enumeration cannot change compatibility output.
 public actor SlateMetadataScanner: SlateMetadataScanning {
-    private struct Candidate: Sendable { let url: URL; let sourceName: String }
+    // Bind a discovered file to its material directory as well as its own
+    // Clip Name; a misplaced generic slate.txt must never update another clip.
+    private struct Candidate: Sendable { let url: URL; let sourceName: String; let directoryKey: String }
     private let registry: SlateMetadataParserRegistry
 
     /// The registry decides which sidecar names are discovered and how their
@@ -52,29 +54,31 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
             try Task.checkCancellation()
             visited += 1
             let directoryName = parts.last ?? ""
-            let directoryKey = root ? "" : ResolveCSVNormalization.extractCombinedMaterialKey(directoryName)
+            // A selected clip root gets the usual identity check only when it
+            // belongs to the expected set. Arbitrary volume/UUID root names can
+            // resemble a clip and must not prune the entire selected tree.
+            let detectedKey = ResolveCSVNormalization.extractCombinedMaterialKey(directoryName)
+            let directoryKey = !root || expected.contains(detectedKey) ? detectedKey : ""
             if !directoryKey.isEmpty {
                 guard expected.contains(directoryKey) else { pruned += 1; return }
                 let camera = directoryKey.split(separator: ":").first.map(String.init) ?? ""
                 let templates = structures[camera] ?? MetadataStructure.defaultTemplates()
                 structures[camera] = templates
-                for name in MetadataStructure.probeNames(templates, directoryName: directoryName) {
-                    let url = current.appending(path: name)
-                    guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]), values.isRegularFile == true, values.isSymbolicLink != true else { continue }
-                    candidates.append(Candidate(url: url, sourceName: (parts + [name]).joined(separator: "/")))
-                    discovered += 1
-                    return
-                }
+                let knownNames = Set(MetadataStructure.probeNames(templates, directoryName: directoryName))
+                // Enumerate all supported sidecars, even after a template hit.
+                // Otherwise conflicting copies never reach the merge guard.
                 let found = entries(current, source: parts.joined(separator: "/")).filter { url in
                     guard registry.hasParser(matching: url.lastPathComponent),
                           let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { return false }
                     return values.isRegularFile == true && values.isSymbolicLink != true
                 }
                 if !found.isEmpty {
-                    structures[camera] = MetadataStructure.learn(directoryName: directoryName, metadataFileNames: found.map(\.lastPathComponent))
-                    learned += 1
+                    if found.contains(where: { !knownNames.contains($0.lastPathComponent) }) {
+                        structures[camera] = MetadataStructure.learn(directoryName: directoryName, metadataFileNames: found.map(\.lastPathComponent))
+                        learned += 1
+                    }
                     for url in found {
-                        candidates.append(Candidate(url: url, sourceName: (parts + [url.lastPathComponent]).joined(separator: "/")))
+                        candidates.append(Candidate(url: url, sourceName: (parts + [url.lastPathComponent]).joined(separator: "/"), directoryKey: directoryKey))
                         discovered += 1
                     }
                 }
@@ -87,7 +91,7 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                 if values.isRegularFile == true, registry.hasParser(matching: entry.lastPathComponent) {
                     let fileKey = ResolveCSVNormalization.extractCombinedMaterialKey(entry.lastPathComponent)
                     if fileKey.isEmpty || expected.contains(fileKey) {
-                        candidates.append(Candidate(url: entry, sourceName: (parts + [entry.lastPathComponent]).joined(separator: "/")))
+                        candidates.append(Candidate(url: entry, sourceName: (parts + [entry.lastPathComponent]).joined(separator: "/"), directoryKey: ""))
                         discovered += 1
                     }
                 } else if values.isDirectory == true {
@@ -114,11 +118,22 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                 // Ambiguous or unregistered names fail closed here instead of
                 // picking a parser by registration order; the failure lands in
                 // the warnings below like any other unparseable candidate.
-                metadata.append(try registry.parse(Data(contentsOf: candidate.url, options: [.mappedIfSafe]), sourceName: candidate.sourceName))
-            } catch {
+                let parsed = try registry.parse(Data(contentsOf: candidate.url, options: [.mappedIfSafe]), sourceName: candidate.sourceName)
+                guard expected.contains(parsed.materialKey) else {
+                    warnings.append("\(candidate.sourceName) 的素材编号不在当前 Resolve CSV 中，已跳过。")
+                    continue
+                }
+                guard candidate.directoryKey.isEmpty || candidate.directoryKey == parsed.materialKey else {
+                    warnings.append("\(candidate.sourceName) 的 Clip Name 与所在素材目录指向不同素材，已跳过。")
+                    continue
+                }
+                metadata.append(parsed)
+            } catch is CancellationError { throw CancellationError() }
+            catch {
                 warnings.append((error as? SlateSyncError)?.message ?? error.localizedDescription)
             }
         }
+        try Task.checkCancellation()
         let found = Set(metadata.map(\.materialKey))
         let missing = expected.subtracting(found).sorted(by: ResolveCSVNormalization.compareMaterialKeys)
         if skippedDeep > 0 { warnings.append("\(skippedDeep) 个目录超过配置的 \(options.maxDepth) 层搜索范围，未继续进入。") }

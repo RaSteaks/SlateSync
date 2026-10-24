@@ -25,8 +25,9 @@ enum ProviderListPresentation {
     }
 }
 
-/// Opaque cards associate diagnostics with their Provider without adding glass
-/// per scrolling row. The established theme owns all visual roles.
+/// Provider cards are system group boxes — the same container the default-model
+/// block beside them uses — so diagnostics stay with their Provider without
+/// adding glass per scrolling row.
 struct ProviderCard<Content: View>: View {
     let title: String
     let source: String
@@ -36,13 +37,22 @@ struct ProviderCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
+        GroupBox {
+            cardContent
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: "network").foregroundStyle(.secondary).accessibilityHidden(true)
                 Text(title).font(.headline).lineLimit(2).help(title)
                 Text(source).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                if isDefault { Label(L10n.tr("默认"), systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(SlateSyncTheme.accent) }
+                // The default marker is a glyph plus a label in the neutral
+                // foreground; the accent is not used for state.
+                if isDefault { Label(L10n.tr("默认"), systemImage: "checkmark").font(.caption).foregroundStyle(.secondary) }
             }
             if !baseURL.isEmpty {
                 Text(baseURL).font(.caption.monospaced()).foregroundStyle(.secondary)
@@ -51,11 +61,8 @@ struct ProviderCard<Content: View>: View {
             if let notes, !notes.isEmpty { Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(2).help(notes) }
             content()
         }
-        .padding(14)
+        .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SlateSyncTheme.evidenceSurface, in: RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius))
-        .overlay(RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius).strokeBorder(isDefault ? SlateSyncTheme.accent : SlateSyncTheme.separator, lineWidth: 1))
-        .accessibilityElement(children: .contain)
     }
 }
 
@@ -156,6 +163,6 @@ struct ProviderDiagnostic: View {
                 .lineLimit(2)
         }
         .font(.caption)
-        .foregroundStyle(isError ? SlateSyncTheme.danger : SlateSyncTheme.secondary)
+        .foregroundStyle(isError ? SlateSyncTheme.dangerText : SlateSyncTheme.secondary)
     }
 }

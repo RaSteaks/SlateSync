@@ -4,6 +4,8 @@ import SwiftUI
 // Product copy uses the shared launch language; user content stays verbatim.
 
 public struct ProjectSettingsView: View {
+    // The outgoing live page keeps its colors but relinquishes window chrome.
+    @Environment(\.contentRevealIsActive) private var revealIsActive
     @Environment(\.slateSyncDensity) private var density
     @Bindable private var model: ProjectSettingsModel
     @Bindable private var recognition: RecognitionModel
@@ -72,7 +74,7 @@ public struct ProjectSettingsView: View {
                     Section(L10n.tr("Resolve 格式")) {
                         TextField(L10n.tr("场"), text: $model.settings.resolve.fieldFormats.scene)
                         TextField(L10n.tr("镜"), text: $model.settings.resolve.fieldFormats.shot)
-                        TextField(L10n.tr("条"), text: $model.settings.resolve.fieldFormats.take)
+                        TextField(L10n.tr("次"), text: $model.settings.resolve.fieldFormats.take)
                         TextField(L10n.tr("好条标记"), text: $model.settings.resolve.comments.goodTake)
                         TextField(L10n.tr("保条标记"), text: $model.settings.resolve.comments.holdTake)
                     }
@@ -97,12 +99,14 @@ public struct ProjectSettingsView: View {
                     .tint(Color.secondary)
             }
         }
-        .navigationTitle(L10n.tr("项目设置"))
+        .contentRevealNavigationTitle(L10n.tr("项目设置"))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") { Task { await model.save() } }
-                    .slatePrimaryActionStyle()
-                    .disabled(model.project == nil || model.operation.isRunning)
+            if revealIsActive {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") { Task { await model.save() } }
+                        .slatePrimaryActionStyle()
+                        .disabled(model.project == nil || model.operation.isRunning)
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {

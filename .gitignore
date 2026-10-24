@@ -36,6 +36,9 @@ SlateSync.code-workspace
 
 # SwiftPM/Xcode outputs and per-user IDE state are reproducible local artifacts.
 /.build/
+# The optional MCP executable resolves its SDK independently from the app.
+/MCP/.build/
+/MCP/.swiftpm/
 /DerivedData/
 # Ignore SwiftPM's Xcode integration cache while leaving future shared package
 # configuration (for example mirrors) eligible for version control.

@@ -17,7 +17,9 @@ public actor ResolveCSVMerger {
         let shot: String
         let take: String
         let comments: String
-        let signature: String
+        let status: String
+        let missing: [String]
+        let reviewFields: [String]
     }
 
     public init() {}
@@ -55,6 +57,15 @@ public actor ResolveCSVMerger {
             columns = try ResolveHeaders.resolve(headers)
         }
 
+        var changes: [ResolveCSVChange] = []
+        var updatedRows = Set<Int>()
+        // Identity edits must participate in the same matching used by the
+        // scanner. Other cell overrides still apply after automatic backfill.
+        let identityColumns = Set(columns.reelName + columns.fileName + columns.clipName + columns.clipDirectory)
+        for edit in edits where identityColumns.contains(edit.columnIndex) {
+            guard rows.indices.contains(edit.rowIndex), headers.indices.contains(edit.columnIndex) else { continue }
+            Self.applySparseEdit(edit.value, column: edit.columnIndex, row: edit.rowIndex, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
+        }
         let rowIndex = Self.buildRowIndex(rows, columns: columns, warnings: &warnings)
         var rowKeys = Array(repeating: "", count: rows.count)
         for (key, numbers) in rowIndex { for number in numbers { rowKeys[number] = key } }
@@ -64,8 +75,6 @@ public actor ResolveCSVMerger {
             let key = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: record.cardNumber, videoCode: record.videoCode)
             if !key.isEmpty, recognizedKeys.insert(key).inserted { recognizedKeyOrder.append(key) }
         }
-        var changes: [ResolveCSVChange] = []
-        var updatedRows = Set<Int>()
         var fpsRows = Set<Int>()
         var dayRows = Set<Int>()
         var fpsMaterials = 0
@@ -126,14 +135,10 @@ public actor ResolveCSVMerger {
             let shot = ResolveCSVNormalization.normalizeShot(record.shot, format: fieldFormats.shot)
             let take = ResolveCSVNormalization.normalizeTake(record.take, format: fieldFormats.take)
             let missing = [(scene, "场次"), (shot, "镜"), (take, "次")].filter { $0.0.isEmpty }.map(\.1)
-            guard missing.isEmpty else {
-                statuses[index] = ResolveRecordStatus(recordIndex: index, status: "incomplete", fileName: fileName, missingFields: missing)
-                warnings.append("第 \(index + 1) 条 \(fileName) 缺少\(missing.joined(separator: "、"))，Scene、Shot、Take 和 Comments 不会写入；有效的 Camera FPS 和 Shoot Day 仍会独立回填。")
-                continue
-            }
             let comment = ResolveCSVNormalization.comment(for: record.takeStatus, legacyGoodTake: record.goodTake, comments: comments)
             let status = record.takeStatus?.rawValue ?? (record.goodTake == true ? TakeStatus.passed.rawValue : record.goodTake == false ? TakeStatus.hold.rawValue : "")
-            candidates.append(Candidate(recordIndex: index, key: key, fileName: fileName, scene: scene, shot: shot, take: take, comments: comment, signature: [scene, shot, take, status].joined(separator: "\0")))
+            candidates.append(Candidate(recordIndex: index, key: key, fileName: fileName, scene: scene, shot: shot, take: take, comments: comment, status: status, missing: missing,
+                reviewFields: record.reviewRequiredFields.filter { ["scene", "shot", "take", "takeStatus"].contains($0) }))
         }
 
         let groups = Dictionary(grouping: candidates, by: \.key)
@@ -143,13 +148,24 @@ public actor ResolveCSVMerger {
         var matchedRecordCount = 0
         for key in groupOrder {
             try Task.checkCancellation()
-            guard let group = groups[key], let primary = group.first else { continue }
-            guard Set(group.map(\.signature)).count == 1 else {
+            guard let group = groups[key], let first = group.first else { continue }
+            // A partial row can still contradict a complete row. Inspect all
+            // available evidence before choosing any exportable candidate.
+            let conflicting = [\Candidate.scene, \.shot, \.take].contains { field in
+                Set(group.map { $0[keyPath: field] }.filter { !$0.isEmpty }).count > 1
+            } || Set(group.map(\.status)).count > 1
+            guard !conflicting else {
                 for candidate in group { statuses[candidate.recordIndex] = ResolveRecordStatus(recordIndex: candidate.recordIndex, status: "conflict", fileName: candidate.fileName) }
-                warnings.append("\(primary.fileName) 在识别结果中出现了互相冲突的场、镜、次或条次状态，这些场记字段已停止写入，请人工校对；有效的 Camera FPS 和 Shoot Day 仍会独立回填。")
+                warnings.append("\(first.fileName) 在识别结果中出现了互相冲突的场、镜、次或条次状态，这些场记字段已停止写入，请人工校对；有效的 Camera FPS 和 Shoot Day 仍会独立回填。")
                 continue
             }
-            for duplicate in group.dropFirst() { statuses[duplicate.recordIndex] = ResolveRecordStatus(recordIndex: duplicate.recordIndex, status: "duplicate", fileName: duplicate.fileName) }
+            for candidate in group where !candidate.missing.isEmpty {
+                statuses[candidate.recordIndex] = ResolveRecordStatus(recordIndex: candidate.recordIndex, status: "incomplete", fileName: candidate.fileName, missingFields: candidate.missing)
+                warnings.append("第 \(candidate.recordIndex + 1) 条 \(candidate.fileName) 缺少\(candidate.missing.joined(separator: "、"))，Scene、Shot、Take 和 Comments 不会写入；有效的 Camera FPS 和 Shoot Day 仍会独立回填。")
+            }
+            let complete = group.filter { $0.missing.isEmpty }
+            guard let primary = complete.first else { continue }
+            for duplicate in complete.dropFirst() { statuses[duplicate.recordIndex] = ResolveRecordStatus(recordIndex: duplicate.recordIndex, status: "duplicate", fileName: duplicate.fileName) }
             guard let matchedRows = rowIndex[key], !matchedRows.isEmpty else {
                 statuses[primary.recordIndex] = ResolveRecordStatus(recordIndex: primary.recordIndex, status: "unmatched", fileName: primary.fileName)
                 warnings.append("\(primary.fileName) 未在 Resolve CSV 的卷名或文件名中找到，不会新增虚构素材行。")
@@ -171,7 +187,11 @@ public actor ResolveCSVMerger {
                 updatedRows.insert(rowNumber)
             }
             matchedRecordCount += 1
-            statuses[primary.recordIndex] = ResolveRecordStatus(recordIndex: primary.recordIndex, status: "matched", fileName: fileNames.first ?? primary.fileName, fileNames: fileNames, rowIndexes: matchedRows, matchedRows: matchedRows.count)
+            // Automatic repairs stay previewable but must remain visible at
+            // the export confirmation boundary until the user reviews them.
+            let reviewFields = Array(Set(group.flatMap(\.reviewFields))).sorted()
+            statuses[primary.recordIndex] = ResolveRecordStatus(recordIndex: primary.recordIndex, status: reviewFields.isEmpty ? "matched" : "review-required", fileName: fileNames.first ?? primary.fileName, fileNames: fileNames, rowIndexes: matchedRows, matchedRows: matchedRows.count, missingFields: reviewFields.isEmpty ? nil : reviewFields)
+            if !reviewFields.isEmpty { warnings.append("\(primary.fileName) 包含自动修正或待复核字段：\(reviewFields.joined(separator: "、"))，导出前请人工校对。") }
         }
 
         let orderedMissingFPS = missingFPSKeys.sorted(by: ResolveCSVNormalization.compareMaterialKeys)
@@ -188,7 +208,7 @@ public actor ResolveCSVMerger {
         // a whole-table cleanup would silently erase unrelated Resolve notes.
         // Preserve request order exactly; a Dictionary here would reintroduce
         // process-randomized audit ordering for multiple manual edits.
-        for edit in edits {
+        for edit in edits where !identityColumns.contains(edit.columnIndex) {
             guard rows.indices.contains(edit.rowIndex), headers.indices.contains(edit.columnIndex) else { continue }
             Self.applySparseEdit(edit.value, column: edit.columnIndex, row: edit.rowIndex, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
         }

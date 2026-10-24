@@ -70,7 +70,8 @@ public struct HelpView: View {
             }
             .frame(minWidth: 420)
         }
-        .navigationTitle(model.english ? "Help" : L10n.tr("帮助"))
+        // Retained outgoing pages relinquish the shared window title.
+        .contentRevealNavigationTitle(model.english ? "Help" : L10n.tr("帮助"))
         // The help model remains mounted while Settings opens, preserving the
         // search query, selected chapter, and native scroll position.
         .safeAreaInset(edge: .bottom) {

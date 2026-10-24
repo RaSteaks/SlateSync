@@ -6,26 +6,113 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
-| Table Selection | Native `List`/`NSTableView` selection | `ProjectLibraryView`, `TaskRailView`, and `EditableCSVTableRepresentable` | Single stable project/task/CSV row identity | UI workflow plus 500/1,000/10k scale tests |
+| Table Selection | Native `List`/`NSTableView` selection | `ProjectLibraryView`, `SidebarView` (task rows), and `EditableCSVTableRepresentable` | Single stable project/task/CSV row identity | UI workflow plus 500/1,000/10k scale tests |
 | Select/Listbox | Native SwiftUI `Picker` | `SettingsRootView` | System menu or segmented style when the value set is bounded | Keyboard and VoiceOver behavior remains platform-owned |
 | Form | Shared SwiftUI form composition | `CreateProjectSheet` and `SettingsRootView` | Sheet form or Settings form | Visible labels, default/cancel actions and focus order in UI tests |
 | Toast | `SlateStatusBar` with feature-owned operation state | `WorkspaceComponents` and `AppRootView` | Inline error/recovery or persistent cross-route recognition status; no toast timers | Native UI workflow and error/export regression tests |
 | CRUD | Feature model backed by workflow façade | `ProjectLibraryModel`, `ProjectSettingsModel`, and UI workflow protocols | SM-08 project/task/settings mutations; views never open Persistence directly | SwiftPM ownership tests plus Xcode workflow/UI tests |
 | Navigation | `NavigationSplitView` shell | `AppRootView` and `SidebarView` | Dedicated macOS Settings scene for global settings | App-launch UI test and native keyboard navigation |
+| Content motion | `ContentRevealRegion`, `SlateMotion` and `WorkspaceResultLayout` | DESIGN.md function-area motion contract | Complementary masks over live committed pages; no content snapshots; original-document handoff within a region | `ContentMotionTests` and offscreen layout/editor regressions |
 
 ## Navigation and scenes
 
 - The primary window uses stable sidebar selection for Project Library,
-  Workspace, Logs and Help.
-- When a project is acquired, the Current Project section header shows its
-  saved name beside the localized label; closing the project removes the name.
+  Project Settings, the open project's tasks, Logs and Help. Choosing a task
+  selects it and opens the Workspace; with no tasks the Workspace stays reachable
+  through its own row. There is no second task column, brand header or sidebar
+  footer (2026-10-23): Settings open with `Cmd-,` and the appearance override
+  lives in Settings › General. The project group (settings + tasks) appears only
+  while a project is open; its header is the project's own name, the New Task
+  button sits at the foot of the sidebar (away from the system's section
+  collapse chevron), and a search field above the list filters tasks without
+  changing the selection. Creating a task answers the click at once: the button
+  becomes a disabled spinner and a pending row appears while the save runs, and
+  a click during creation is dropped, so a slow save never invites repeat clicks. A task whose recognition is running shows a spinner on its row.
+  Operation status (recognition progress, failure, completion, restart notice)
+  sits at the foot of the content column only, never under the sidebar.
+- System-sidebar reveal clips contents below the 190 pt column minimum instead
+  of squeezing the inset labels. The group header keeps its height in both
+  Chinese and English; the native list and adjacent detail remain mounted.
+- Workspace identity and actions live in the window toolbar: task name and live
+  facts (pages · records · status) as title/subtitle, the section picker
+  centered, then one panel toggle (recognition configuration on Input, original
+  comparison on Results), a More menu (choose PDF/image, local slate CSV, save)
+  and the page's primary action — Start/Cancel recognition on Input, Export CSV
+  on Resolve CSV (with Merge beside it; Import CSV… is a More-menu item and the
+  empty state's button), none on Results. The More menu is a bare ellipsis with no
+  menu indicator.
+- The application's copyright notice appears only in the standard About panel.
+- When a project is acquired, the sidebar's project group is titled with its
+  saved name; closing the project removes the group.
 - Global settings open in the dedicated macOS Settings scene with `Cmd-,`.
+- Recognition request fields display saved overrides or effective inherited
+  values without creating overrides on read. Restore defaults edits only the
+  four request drafts; Save validates and commits them. Clearing a field removes
+  its override on Save and returns to the runtime's inherited value.
+  Request timeout is displayed and edited in seconds (30–3600, up to three
+  decimal places); persistence and runtime retain the millisecond contract.
+- The MCP category prepares/builds/starts the helper in one action and retains offline setup
+  instructions and the Model Services link. Automatic start is off initially;
+  enabling it starts now and on future app launches. Disabling it or quitting
+  stops the broker and all its client sessions. Closing Settings keeps it alive.
+  Manual Stop preserves the next-launch policy. Startup failure preserves inputs
+  and offers retry. Executable/grants/model consent persist immediately and are
+  editable only while stopped. Model requests require explicit opt-in.
+  Managed clients use a same-user Unix socket through a stdio bridge. Copy only
+  changes the clipboard and reports success/failure; it never edits a client.
+  Start is enabled without a selected executable or any directory grants. Source
+  discovery/build failure preserves the advanced override and offers retry; a
+  long build can be canceled. Empty grants deny file operations, not connection
+  or discovery. Unexpected helper exit updates service status and permits retry.
+  Explicit Add to Codex / Claude Code first starts if needed, then invokes the
+  official CLI for user-level registration. Codex updates only slatesync; Claude
+  preserves conflicting entries. Client feedback is independent of broker state.
+  Source, launcher and grant selection share one native importer presenter.
+  Direct client-owned stdio sessions remain independent of app lifecycle.
 - Project settings remain project-scoped and never replace machine settings.
 - Switching project/task flushes the single autosave writer before publishing
   the next projection. Failed flush keeps the user in the current context.
 - Workspace segments acknowledge selection synchronously while keeping the
   current editor mounted until saving succeeds. Repeated clicks during that
   save select the latest destination; failure restores the current segment.
+- Committed sidebar, workspace and Settings category changes reveal only the
+  content region using complementary masks over the actual outgoing/incoming
+  pages. No content bitmap is captured, flattened, retagged or replayed. A stable
+  canvas sits outside the masks; native controls keep their normal enabled colors.
+- At most two live pages are mounted. Only the current page contributes window
+  chrome and accessibility content; a clear input shield blocks editing during
+  motion without disabling/dimming controls. Existing save barriers still precede
+  route commitment. Rapid return reuses the retained editor and reverses the
+  same circle, preserving its origin and both pages' mask roles. A third-page
+  request waits for this leg to finish; only the latest queued request starts
+  the next reveal, with at most two mounted pages. Departed pages immediately
+  remove toolbar actions, including nested CSV actions. While the latest page
+  waits to mount, the window keeps its previous title.
+  Resize, appearance changes, detachment and Reduce Motion settle the latest
+  request immediately and clear the queue; obsolete completion tasks cannot
+  finish a newer transition.
+- The stable region and keyed pages remain in the existing SwiftUI hierarchy,
+  preserving environment and preferences. Sidebar visibility animates at the
+  split container; native children receive animation-free layout transactions.
+- Committed reveals, sidebar visibility and in-region handoffs share a 2 s
+  cubic Bézier `(0.4, 0, 0.2, 1)` pace. Only the masks animate during page changes;
+  the independent four-second theme transition is outside this replacement.
+
+- Within a feature, explicit configuration/original-panel toggles and advanced
+  disclosure use the shared handoff after the editor/save barrier. The original
+  and result editor remain mounted; a single layout progress owns their shared
+  edge. Original-page replacement animates only a new bitmap, never repeated
+  layout refreshes. Initial panel defaults, high-frequency table edits and
+  window resizing do not introduce motion; Reduce Motion updates directly.
+- Task-rail toggles retain the fixed-width list and editor, pass the existing
+  save barrier, and use one animated layout for the translated rail and adjacent
+  content; Reduce Motion disables that animation. Pane contents are clipped and
+  do not inherit either sidebar’s resize animation; controls never independently
+  animate stale frames into neighboring panes. Input configuration visibility is chosen on first layout
+  and retained across sidebar resizing, so one toggle never automatically
+  opens or closes another panel. Original comparison resizing preserves the
+  mounted result editor and current-page bitmap without publishing widths to
+  workspace state.
 
 ## Canonical operations
 
@@ -60,6 +147,24 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 
 ## Tables and files
 
+- Recognition freezes source-media replacement at the operation owner, including
+  toolbar/retry actions, drops and late file-picker completions. Preview paging
+  remains available; replacement resumes after recognition drains.
+- A new table identity resamples content widths and numeric alignment even when
+  headers match the previous task. Edits and window resizing preserve manual
+  column widths; reused cells adopt the current column alignment.
+- Reconciliation preview remains available when every record is incomplete or
+  conflicting; export eligibility is checked separately by the shared workflow.
+- Material-identity cell edits participate in matching and metadata scanning.
+  Other explicit cell edits remain the final override.
+- CSV export has a busy state, rejects duplicate submissions, and joins the
+  existing task-switch/close cancellation barrier. A confirmation artifact
+  cannot be accepted for a different table.
+- Automatic corrections retain a review status at export. Editing a core field
+  acknowledges that field only; unresolved source identities also remain visible.
+- Full scan/merge diagnostics use `WorkflowDiagnosticsSheet`; inline truncation
+  must link to that report, never to logs that intentionally store counts only.
+
 - The CSV editor owns its internal scroll region; the surrounding workspace
   does not gain a second fixed-height scroller.
 - `NSTableView` is canonical for the editable 10,000-row CSV grid; SwiftUI Table
@@ -83,8 +188,20 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - The old `helpEnglish` flag no longer controls any screen. Help always follows
   the application language; it continues to search both bundled languages offline.
 - Target WCAG 2.2 AA and native macOS keyboard conventions.
-- All icon-only actions have accessibility labels and help tooltips in the selected language.
+- All icon-only actions have accessibility labels and help tooltips in the selected language. Toolbar and menu glyph controls (project library, workspace, Resolve CSV, logs) describe their function on hover, not just repeat their title; `IconTooltipContractTests` fails when an icon-only label style ships without `.help`.
 - Theme follows system by default, respects increased contrast and reduced motion.
+- Manual appearance changes compare the resolved target with the current window
+  appearance. Different appearances reveal from the top-right corner of each
+  visible window (titlebar and toolbar included) toward its bottom-left over 4 s on a
+  cubic Bézier curve — new appearance inside the circle, old outside — so the whole app changes
+  together; matching appearances only save the preference. Choosing 跟随系统 applies
+  the current macOS appearance to window and content together and keeps following it
+  as macOS changes; a window never ends up half light, half dark. Controls keep their
+  keyboard/VoiceOver semantics, mounted editors and focus. A running reveal
+  retains only the latest pending choice in that window; a choice from another
+  window cancels the older queue and snapshot before saving, even when both
+  choices resolve to the same color. Reduced motion and invalidated window
+  geometry apply only a still-current pending choice and remove the snapshot.
 - Chinese IME composition must not trigger Enter shortcuts, autosave commits,
   search dispatch or table cell completion prematurely.
 
@@ -97,8 +214,11 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   styles. macOS 15–25 retain the same layout and behavior through material and
   semantic-color fallbacks; the package deployment target remains macOS 15.
 - Native sidebar, toolbar, Settings, Sheet, `List`, and `NSTableView` behavior
-  remains platform-owned. Custom glass is limited to bounded application
-  surfaces and is never applied per row in dense or 10,000-row collections.
+  remains platform-owned. Custom glass is limited to bounded floating surfaces
+  (progress cards, search/filter strips, status chips, primary action) and is
+  never applied per row in dense or 10,000-row collections. Docked chrome (workspace
+  heading, configuration panel, library summary, `SlateStatusBar`) uses the opaque
+  `slateDockedSurface` roles in `SlateGlass.swift` instead.
 - Adjacent custom surfaces share one glass container. No first-pass glass
   morphing IDs or new transitions may bypass the existing editor/save barrier.
 - Reduced Transparency switches custom surfaces to opaque Slate fills;
@@ -134,6 +254,14 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - Credential badges retain capsule geometry; custom outlines appear only for accessibility modes.
 - Search owns its focus/separator outline; the configuration panel owns its full-opacity leading rule, avoiding duplicate helper borders.
 - The library summary uses a canvas-backed fallback, including reduced transparency, distinct from the evidence-surface list.
+
+### UI polish pass (2026-10-22)
+
+- Docked chrome is opaque (see the Liquid Glass contract above); the configuration panel is one surface whether docked (from 700 pt of detail width) or overlaid, so its field editors keep identity and IME drafts.
+- When provider/model is missing and the panel is closed, the status bar offers "Open recognition settings" (`workspace.configuration.open`); `workspace.configuration.toggle`/`close` and `workspace.original.toggle`/`close` are unchanged.
+- Inline failures in forms and sheets use `SlateInlineError` (symbol + text) so color is never the only signal; window-level feedback stays on `SlateStatusBar`.
+- Task rail glyphs: failed uses the danger color and processing the amber in-progress signal; text and other states stay neutral.
+- MCP settings fold the long setup guide behind a "设置指南" row (open while the launcher is not yet configured, collapsed afterwards).
 
 
 ## Model service setup and immediate role changes (2026-09-27)

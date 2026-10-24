@@ -133,7 +133,7 @@ struct ProviderConfigurationSheet: View {
                     else { modelConfiguration }
                     if let message {
                         Label(message, systemImage: messageIsError ? "exclamationmark.circle" : "checkmark.circle")
-                            .foregroundStyle(messageIsError ? SlateSyncTheme.danger : SlateSyncTheme.success)
+                            .foregroundStyle(messageIsError ? SlateSyncTheme.dangerText : SlateSyncTheme.successText)
                             .font(.callout).textSelection(.enabled)
                     }
                 }.padding(4)
@@ -219,13 +219,13 @@ struct ProviderConfigurationSheet: View {
                     Button(L10n.tr("删除已保存 API Key"), role: .destructive) { confirmKeyDeletion = true }
                 } else if let providerID, let status = settings.live?.credentialStatuses[providerID],
                           let notice = ProviderListPresentation.credentialNotice(status) {
-                    Text(notice).font(.caption).foregroundStyle(SlateSyncTheme.warning)
+                    Text(notice).font(.caption).foregroundStyle(SlateSyncTheme.warningText)
                 }
             }
             DisclosureGroup(L10n.tr("修改地址"), isExpanded: $editsAddress) {
                 input(L10n.tr("API 基础地址（Base URL）"), text: $draft.baseURL, field: .address)
                 if let warning = ProviderURLGuidance.baseURLWarning(in: draft.baseURL, transport: draft.transport) {
-                    Text(L10n.message(warning)).font(.caption).foregroundStyle(SlateSyncTheme.warning)
+                    Text(L10n.message(warning)).font(.caption).foregroundStyle(SlateSyncTheme.warningText)
                 }
                 if let defaultURL = definition?.defaultBaseURL ?? preset?.baseURL {
                     Button(L10n.tr("恢复默认地址")) { draft.baseURL = defaultURL }
@@ -235,7 +235,7 @@ struct ProviderConfigurationSheet: View {
             DisclosureGroup(L10n.tr("高级配置"), isExpanded: $advanced) { advancedFields.padding(.top, 8) }
             if impactedRoles != nil || (originalRoles != nil && requestChanged) {
                 Label(L10n.tr("此修改会撤销旧验证，并停用该服务的默认和备用模型。保存后请重新验证，可恢复原用途。"), systemImage: "exclamationmark.triangle")
-                    .font(.callout).foregroundStyle(SlateSyncTheme.warning)
+                    .font(.callout).foregroundStyle(SlateSyncTheme.warningText)
                 if let roles = impactedRoles, let providerID {
                     if let pair = roles.primary, pair.providerID == providerID { Text(L10n.tr("默认模型：{0}", [pair.modelID])).font(.caption) }
                     ForEach(roles.backups.filter { $0.providerID == providerID }, id: \.self) { pair in
@@ -365,7 +365,7 @@ struct ProviderConfigurationSheet: View {
         }
     }
     @ViewBuilder private func fieldError(_ field: Field) -> some View {
-        if let error = errors[field] { Text(error).font(.caption).foregroundStyle(SlateSyncTheme.danger) }
+        if let error = errors[field] { Text(error).font(.caption).foregroundStyle(SlateSyncTheme.dangerText) }
     }
     private func validateField(_ field: Field) {
         switch field {

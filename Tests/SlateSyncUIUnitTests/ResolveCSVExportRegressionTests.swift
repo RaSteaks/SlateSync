@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import SlateSyncDomain
 import SlateSyncWorkflow
 @testable import SlateSyncUI
@@ -9,6 +11,63 @@ import XCTest
 /// The retained `<baseName>_场记已回填.csv` filename contract is unchanged.
 @MainActor
 final class ResolveCSVExportRegressionTests: XCTestCase {
+    /// Exercise the real CSV toolbar in an unordered window. The editor remains
+    /// mounted during both a tab reveal and an ancestor route departure.
+    func testRetainedCSVRelinquishesToolbarForTabAndAncestorNavigation() async throws {
+        let model = ResolveCSVModel(service: CSVExportFake())
+        await model.importData(Data(rawCSV.utf8), filename: "fixture.csv")
+        let state = ToolbarState()
+        let controller = NSHostingController(rootView: ToolbarFixture(state: state, model: model))
+        controller.view.frame = CGRect(x: 0, y: 0, width: 900, height: 500)
+        let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: 900, height: 500),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentViewController = controller
+        defer { window.contentViewController = nil; window.close() }
+        func settle() async throws {
+            window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(80))
+            window.contentView?.layoutSubtreeIfNeeded()
+        }
+        try await settle()
+        XCTAssertGreaterThan(try XCTUnwrap(window.toolbar).items.count, 1)
+        XCTAssertNotNil(model.flushEditor)
+        state.page = 1
+        try await settle()
+        XCTAssertEqual(window.toolbar?.items.count, 1, "CSV actions must disappear before its two-second reveal completes")
+        XCTAssertNotNil(model.flushEditor, "The actual CSV editor is still retained")
+        state.page = 0
+        try await settle()
+        XCTAssertGreaterThan(try XCTUnwrap(window.toolbar).items.count, 1, "Returning restores the CSV toolbar")
+        state.ancestorIsActive = false
+        try await settle()
+        XCTAssertEqual(window.toolbar?.items.count, 1, "Leaving the workspace must also remove CSV actions")
+        XCTAssertNotNil(model.flushEditor)
+        XCTAssertFalse(window.isVisible)
+    }
+
+    @MainActor @Observable final class ToolbarState {
+        var page = 0
+        var ancestorIsActive = true
+    }
+
+    private struct ToolbarFixture: View {
+        let state: ToolbarState
+        let model: ResolveCSVModel
+        var body: some View {
+            ContentRevealRegion(value: state.page, origin: .leading) { page in
+                if page == 0 { ResolveCSVView(model: model) }
+                else { Text("Destination") }
+            }
+            .environment(\.contentRevealIsActive, state.ancestorIsActive)
+            // Match the app's persistent navigation chrome. Removing the only
+            // toolbar changes the content size, intentionally ending the reveal.
+            .toolbar {
+                ToolbarItem(placement: .navigation) { Button("Navigation") {} }
+            }
+        }
+    }
+
     private let rawCSV = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\n"
     private let twoRowCSV = "File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,,,,\r\nB002C002.mov,2,,1,\r\n"
 
@@ -106,6 +165,58 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         }
     }
 
+    func testIncompletePreviewReportsDetailsWhileExportStaysBlocked() async throws {
+        let (model, _) = makeModel()
+        await model.importData(Data(rawCSV.utf8), filename: "source.csv")
+        let incomplete = ResolveSlateRecord(cardNumber: "A001", videoCode: "C001", scene: "1")
+        await model.merge(records: [incomplete], metadata: [], settings: .init())
+        XCTAssertEqual(model.lastMergeDiagnostics?.unresolvedStatuses.map(\.status), ["incomplete"])
+        XCTAssertNotNil(model.table)
+        // Preview is diagnostic, whereas exporting remains subject to the
+        // same complete-record admission rule as before this separation.
+        do {
+            _ = try await model.exportData(records: [incomplete], metadata: [], settings: .init())
+            XCTFail("Incomplete-only exports must stay blocked")
+        } catch let error as SlateSyncError { XCTAssertEqual(error.code, "CSV_NO_EXPORT") }
+    }
+
+    func testExportIsBusyAndDrainedBeforeTaskReplacement() async throws {
+        let (model, fake) = makeModel()
+        await model.importData(Data(rawCSV.utf8), filename: "source.csv")
+        await fake.suspendExports()
+        let export = Task { try await model.exportData(records: [record(scene: "1")], metadata: [], settings: .init()) }
+        await fake.waitForExport()
+        XCTAssertTrue(model.operation.isRunning)
+        do {
+            _ = try await model.exportData(records: [record(scene: "2")], metadata: [], settings: .init())
+            XCTFail("A duplicate export must be rejected")
+        } catch let error as SlateSyncError { XCTAssertEqual(error.code, "CSV_BUSY") }
+        let drain = Task { await model.drain() }
+        await Task.yield()
+        await fake.resumeExport()
+        await drain.value
+        model.load(task: .init(id: "new-task"))
+        do { _ = try await export.value; XCTFail("Old task export must be canceled") }
+        catch is CancellationError { }
+        XCTAssertNil(model.lastMergeDiagnostics)
+        XCTAssertNil(model.table)
+        XCTAssertFalse(model.operation.isRunning)
+    }
+
+    func testLateExportCannotHideNewCellEdits() async throws {
+        let (model, fake) = makeModel()
+        await model.importData(Data(rawCSV.utf8), filename: "source.csv")
+        await fake.suspendExports()
+        let export = Task { try await model.exportData(records: [record(scene: "1")], metadata: [], settings: .init()) }
+        await fake.waitForExport()
+        model.receive(.init(tableID: model.tableID, rowID: 0, columnID: 1, revision: model.revision, value: "manual"))
+        await fake.resumeExport()
+        do { _ = try await export.value; XCTFail("A stale export must fail") }
+        catch let error as SlateSyncError { XCTAssertEqual(error.code, "CSV_CHANGED") }
+        XCTAssertEqual(model.table?.rows[0][1], "manual")
+        XCTAssertNil(model.lastMergeDiagnostics)
+    }
+
     // MARK: - persistence carries raw bytes and edits
 
     func testOnTableChangeCarriesRawBytesAndEdits() async throws {
@@ -180,6 +291,15 @@ private actor CSVExportFake: WorkspaceWorkflowServing, ResolveExportWorkflowServ
     private let engine = ResolveCSVEngine()
     private let storedTask: TaskData
     private let taskList: [TaskListItem]
+    private var shouldSuspend = false
+    private var exportStarted = false
+    private var pendingExport: CheckedContinuation<Void, Never>?
+
+    // Deliberately ignore cancellation while suspended to test the caller's
+    // join and stale-publication barriers against a late service response.
+    func suspendExports() { shouldSuspend = true }
+    func waitForExport() async { while !exportStarted { await Task.yield() } }
+    func resumeExport() { shouldSuspend = false; pendingExport?.resume(); pendingExport = nil }
 
     init(storedTask: TaskData = TaskData(), taskList: [TaskListItem] = []) {
         self.storedTask = storedTask
@@ -199,7 +319,17 @@ private actor CSVExportFake: WorkspaceWorkflowServing, ResolveExportWorkflowServ
         settings: ProjectSettings.ResolveSettings,
         edits: [ResolveSparseEdit]
     ) async throws -> ResolveExportArtifact {
-        try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
+        if shouldSuspend {
+            await withCheckedContinuation { pendingExport = $0; exportStarted = true }
+        }
+        return try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
+    }
+
+    func previewResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata],
+        settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]
+    ) async throws -> ResolveMergeResult {
+        try await sm05.previewMerge(source: source, records: records, metadata: metadata,
+            fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
     }
 
     func exportStandalone(records: [ResolveSlateRecord], settings: ProjectSettings.ResolveSettings) async throws -> Data {

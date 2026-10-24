@@ -30,6 +30,23 @@ public actor ProjectTaskStore {
     @discardableResult
     public func saveTask(_ payload: Data, taskID explicitID: String? = nil, replacingKeys: Set<String>? = nil) async throws -> String {
         try await bootstrap()
+        let (id, data) = try prepareTask(payload, taskID: explicitID)
+        // The database owner keeps the row and snapshot under one mutation lock.
+        try await database.saveTaskSnapshot(id, data: data, snapshotURL: snapshotURL(id), writer: writer, replacingKeys: replacingKeys)
+        return id
+    }
+
+    /// Return canonical timestamps and a fresh task list from the creation
+    /// transaction, acknowledged only after the encrypted snapshot is durable.
+    public func createTask(_ payload: Data) async throws -> TaskCreationResult {
+        try await bootstrap()
+        // Creation never overwrites an ID supplied by a stale draft.
+        let newID = PersistenceJSON.sha256Prefix("\(Date().timeIntervalSince1970):\(UUID())", count: 12)
+        let (id, data) = try prepareTask(payload, taskID: newID)
+        return try await database.createTaskSnapshot(id, data: data, snapshotURL: snapshotURL(id), writer: writer)
+    }
+
+    private func prepareTask(_ payload: Data, taskID explicitID: String?) throws -> (id: String, data: Data) {
         var object = try PersistenceJSON.object(from: payload, errorCode: "TASK_INVALID")
         let suppliedID = explicitID ?? PersistenceJSON.string(object["id"])
         let candidate = suppliedID.flatMap { $0.isEmpty ? nil : $0 }
@@ -40,9 +57,7 @@ public actor ProjectTaskStore {
         object["createdAt"] = PersistenceJSON.string(object["createdAt"]) ?? now
         object["updatedAt"] = now
         let data = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
-        // The database owner keeps the row and snapshot under one mutation lock.
-        try await database.saveTaskSnapshot(id, data: data, snapshotURL: snapshotURL(id), writer: writer, replacingKeys: replacingKeys)
-        return id
+        return (id, data)
     }
 
     public func loadTask(_ id: String) async throws -> Data {
@@ -81,50 +96,7 @@ public actor ProjectTaskStore {
 
     public func listTasks() async throws -> [TaskListItem] {
         try await bootstrap()
-        // Project only sidebar fields inside SQLite: image data URLs and full
-        // recognition/CSV arrays must not cross into Swift for every task.
-        // Keep the persisted JSON and ordering unchanged; malformed rows retain
-        // the legacy skip behavior and only actual arrays contribute counts.
-        let rows = try await database.rows("""
-            SELECT CASE WHEN json_valid(data_json) THEN
-                CASE WHEN json_type(data_json) = 'object' THEN json_object(
-                    'id', json_extract(data_json, '$.id'),
-                    'filename', json_extract(data_json, '$.filename'),
-                    'provider', json_extract(data_json, '$.provider'),
-                    'model', json_extract(data_json, '$.model'),
-                    'pageCount', json_extract(data_json, '$.pageCount'),
-                    'scenarioId', json_extract(data_json, '$.scenarioId'),
-                    'status', json_extract(data_json, '$.status'),
-                    'createdAt', json_extract(data_json, '$.createdAt'),
-                    'updatedAt', json_extract(data_json, '$.updatedAt'),
-                    'recordCount', CASE
-                        WHEN json_type(data_json, '$.editedRecords') = 'array'
-                            THEN json_array_length(data_json, '$.editedRecords')
-                        WHEN json_type(data_json, '$.result.records') = 'array'
-                            THEN json_array_length(data_json, '$.result.records')
-                        ELSE 0 END
-                ) END END AS data_json
-            FROM tasks ORDER BY updated_at DESC;
-            """)
-        return rows.compactMap { row in
-            guard
-                let text = row["data_json"] ?? nil,
-                let data = text.data(using: .utf8),
-                let object = try? PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
-            else { return nil }
-            return TaskListItem(
-                id: PersistenceJSON.string(object["id"]),
-                filename: PersistenceJSON.string(object["filename"]),
-                provider: PersistenceJSON.string(object["provider"]),
-                model: PersistenceJSON.string(object["model"]),
-                pageCount: PersistenceJSON.int(object["pageCount"]),
-                scenarioId: PersistenceJSON.string(object["scenarioId"]),
-                recordCount: PersistenceJSON.int(object["recordCount"]) ?? 0,
-                status: PersistenceJSON.string(object["status"]) ?? "unknown",
-                createdAt: PersistenceJSON.string(object["createdAt"]),
-                updatedAt: PersistenceJSON.string(object["updatedAt"])
-            )
-        }
+        return try await database.taskListItems()
     }
 
     public func deleteTask(_ id: String) async throws {

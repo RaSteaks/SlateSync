@@ -51,6 +51,8 @@ public final class ResolveCSVModel {
     private var rawBase64: String?
     private var sparseEdits: [String: String] = [:]
     private var work: Task<Void, Never>?
+    private var exportWork: Task<ResolveExportArtifact, Error>?
+    private var exportID: UUID?
     private var workGeneration = 0
     private var editGeneration = 0
     public var permitsNewOperation: (@MainActor () -> Bool)?
@@ -122,6 +124,9 @@ public final class ResolveCSVModel {
     /// encoding preserves them and every unmatched cell. An empty recognition
     /// list is never exportable (`CSV_NO_EXPORT`).
     public func exportData(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async throws -> Data {
+        guard permitsNewOperation?() != false, !operation.isRunning, exportWork == nil else {
+            throw SlateSyncError(code: "CSV_BUSY", message: L10n.tr("CSV 正在处理中，请稍后重试。"), retryable: true)
+        }
         try flushEditor?()
         guard let current = table else {
             throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
@@ -129,13 +134,37 @@ public final class ResolveCSVModel {
         // Export is guaranteed by construction, not a runtime capability probe.
         // Tasks persisted before raw bytes existed fall back to their staged
         // table; the merge is still recomputed from the latest records.
-        let source: Data
-        if let rawData { source = rawData } else { source = try await service.encodeResolveCSV(current) }
-        let result = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
-        // The export re-merge is also the freshest reconciliation report; the
-        // badge strip shows what the exported bytes actually contain.
-        lastMergeDiagnostics = result.merge
-        return result.data
+        let identity = tableID, edits = editGeneration
+        let raw = rawData, overrides = orderedSparseEdits, service = service
+        workGeneration += 1
+        let generation = workGeneration
+        operation = .running(label: L10n.tr("正在准备导出…"))
+        // Export participates in the same cancel-and-drain lifecycle as merge.
+        // A task switch or newer cell edit cannot publish an obsolete artifact.
+        let task = Task {
+            let source: Data
+            if let raw { source = raw } else { source = try await service.encodeResolveCSV(current) }
+            try Task.checkCancellation()
+            return try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: overrides)
+        }
+        let operationID = UUID()
+        exportID = operationID
+        exportWork = task
+        defer { if exportID == operationID { exportWork = nil; exportID = nil } }
+        do {
+            let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            try Task.checkCancellation()
+            guard generation == workGeneration, identity == tableID else { throw CancellationError() }
+            try requireUnchangedEdits(edits)
+            lastMergeDiagnostics = result.merge
+            operation = .idle
+            return result.data
+        } catch {
+            if generation == workGeneration {
+                operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
+            }
+            throw error
+        }
     }
 
     /// Suggested export filename, frozen from the old renderer naming
@@ -184,7 +213,13 @@ public final class ResolveCSVModel {
         guard let table else {
             throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
         }
-        return try await service.resolveMaterialKeys(in: table)
+        let identity = tableID, edits = editGeneration
+        let keys = try await service.resolveMaterialKeys(in: table)
+        // A directory picker can outlive edits/imports while this actor call
+        // is suspended. Do not start scanning an obsolete material set.
+        guard identity == tableID else { throw CancellationError() }
+        try requireUnchangedEdits(edits)
+        return keys
     }
 
     public func merge(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async {
@@ -199,21 +234,22 @@ public final class ResolveCSVModel {
             // AppKit snapshot awaiting a render pass.
             let source: Data
             if let rawData { source = rawData } else { source = try await service.encodeResolveCSV(current) }
-            let result = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
+            // Preview must publish even a wholly unexportable reconciliation.
+            let result = try await service.previewResolve(source: source, records: records, metadata: metadata, settings: settings, edits: orderedSparseEdits)
             try Task.checkCancellation()
             try requireUnchangedEdits(edits)
-            self.table = result.merge.table
-            lastMergeDiagnostics = result.merge
+            self.table = result.table
+            lastMergeDiagnostics = result
             revision += 1
-            onTableChange?(CSVStageSnapshot(table: result.merge.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
-            operation = .succeeded(message: L10n.tr("已更新 {0} 行", [String(describing: result.merge.updatedRowCount)]))
+            onTableChange?(CSVStageSnapshot(table: result.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
+            operation = .succeeded(message: L10n.tr("已更新 {0} 行", [String(describing: result.updatedRowCount)]))
         }
     }
 
     /// Decode/merge owns a cancel-and-join chain. Selection and close cannot
     /// release the workspace while a late parser still holds its callback.
     private func performWork(_ action: @escaping @MainActor () async throws -> Void) async {
-        guard permitsNewOperation?() != false else { return }
+        guard permitsNewOperation?() != false, exportWork == nil else { return }
         let previous = work
         previous?.cancel()
         workGeneration += 1
@@ -241,6 +277,7 @@ public final class ResolveCSVModel {
 
     public func reset() {
         work?.cancel()
+        exportWork?.cancel()
         workGeneration += 1
         tableID = UUID()
         table = nil
@@ -275,8 +312,11 @@ public final class ResolveCSVModel {
     public func drain() async {
         workGeneration += 1
         work?.cancel()
+        exportWork?.cancel()
         await work?.value
+        _ = try? await exportWork?.value
         work = nil
+        exportWork = nil
         if operation.isRunning { operation = .canceled }
     }
 }

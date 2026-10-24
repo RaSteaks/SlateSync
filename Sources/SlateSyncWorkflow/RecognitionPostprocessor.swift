@@ -37,6 +37,8 @@ public enum RecognitionPostprocessor {
     }
 
     public static func mergeHighAccuracy(_ primary: RecognitionSheet, _ audit: RecognitionSheet) -> HighAccuracyMerge {
+        let primary = reconcileDuplicates(primary)
+        let audit = reconcileDuplicates(audit)
         var records: [RecognitionRecord] = []
         var byKey: [String: Int] = [:]
         var warnings = primary.warnings.map { "主识别：\($0)" } + audit.warnings.map { "核心查漏：\($0)" }
@@ -67,6 +69,29 @@ public enum RecognitionPostprocessor {
             records[index] = primaryRecord
             if !fields.isEmpty { conflicts.append(.init(key: key, fields: fields, primary: primaryRecord, audit: auditRecord)) }
         }
+        // Disagreement inside either pass is as important as disagreement
+        // between passes. It must request a third reading, never first-wins.
+        var requiredByKey: [String: Set<String>] = [:]
+        for record in primary.records + audit.records {
+            guard let key = RecognitionNormalizer.materialKey(record), let required = record.reviewRequiredFields else { continue }
+            requiredByKey[key, default: []].formUnion(required)
+        }
+        let auditOnlySet = Set(auditOnly)
+        // Keep conflict lookup indexed when a page contains many duplicate
+        // disagreements; each reconciled pass already has unique material keys.
+        var conflictIndexes = Dictionary(uniqueKeysWithValues: conflicts.enumerated().map { ($0.element.key, $0.offset) })
+        for record in records {
+            guard let key = RecognitionNormalizer.materialKey(record), !auditOnlySet.contains(key) else { continue }
+            let fields = (requiredByKey[key] ?? []).filter { ["scene", "shot", "take", "takeStatus"].contains($0) }.sorted()
+            guard !fields.isEmpty else { continue }
+            if let index = conflictIndexes[key] {
+                let previous = conflicts[index]
+                conflicts[index] = .init(key: key, fields: Array(Set(previous.fields + fields)).sorted(), primary: previous.primary, audit: previous.audit)
+            } else {
+                conflictIndexes[key] = conflicts.count
+                conflicts.append(.init(key: key, fields: fields, primary: record, audit: record))
+            }
+        }
         // Old compareMaterialRecords sorted missing keys last and, being a
         // modern-JS sort, kept input order for equal (missing) keys.
         // Compute normalization once per record, not inside every comparison.
@@ -88,7 +113,9 @@ public enum RecognitionPostprocessor {
         // trapping on duplicates or dropping keyless records silently (same
         // tolerance as mergeHighAccuracy's primary pass).
         var reviewed: [String: RecognitionRecord] = [:]
-        for record in review.records {
+        let checkedReview = reconcileDuplicates(review)
+        warnings += checkedReview.warnings.filter { !review.warnings.contains($0) }.map { "冲突复核：\($0)" }
+        for record in checkedReview.records {
             guard let key = RecognitionNormalizer.materialKey(record) else {
                 warnings.append("冲突复核返回了一条缺少有效卷号或视频码的记录，已忽略。"); continue
             }
@@ -102,6 +129,7 @@ public enum RecognitionPostprocessor {
                 if let value = reviewed[conflict.key].flatMap({ core($0, field) }) { record = setting(record, field, value: value) }
                 else { record = setting(record, field, value: nil); unresolved.append(field) }
             }
+            record = copy(record, reviewRequired: (record.reviewRequiredFields ?? []).filter { !conflict.fields.contains($0) })
             record = lower(record, fields: unresolved)
             records[index] = record
             warnings.append(unresolved.isEmpty ? "\(conflict.key) 的识别冲突已采用第三次定向复核结果。" : "\(conflict.key) 的冲突字段最终仍无法确认，已留空，请人工核对。")
@@ -110,11 +138,36 @@ public enum RecognitionPostprocessor {
             guard let index = records.firstIndex(where: { RecognitionNormalizer.materialKey($0) == key }) else { continue }
             guard let checked = reviewed[key] else { records.remove(at: index); warnings.append("\(key) 仅在核心查漏中出现，但最终定向复核未确认，已从结果移除。"); continue }
             var record = records[index]
-            for field in ["scene", "shot", "take", "takeStatus"] { if let value = core(checked, field) { record = setting(record, field, value: value) } }
-            records[index] = lower(record)
+            // Existence confirmation does not confirm missing/contradictory
+            // fields. Keep third-pass unknowns blank instead of reviving audit guesses.
+            let fields = ["scene", "shot", "take", "takeStatus"]
+            for field in fields { record = setting(record, field, value: core(checked, field)) }
+            record = copy(record, reviewRequired: checked.reviewRequiredFields)
+            records[index] = lower(record, fields: fields.filter { core(checked, $0) == nil })
             warnings.append("\(key) 已由最终定向复核确认存在，保留为查漏补回记录，请人工复核场/镜/次。")
         }
         return .init(sheetTitle: merge.result.sheetTitle, records: records, warnings: warnings)
+    }
+
+    /// Preserve the first record's identity/non-core content, but collect every
+    /// contradictory core value before allowing a duplicate key to collapse.
+    private static func reconcileDuplicates(_ sheet: RecognitionSheet) -> RecognitionSheet {
+        var records: [RecognitionRecord] = [], indexes: [String: Int] = [:], warnings = sheet.warnings
+        for record in sheet.records {
+            guard let key = RecognitionNormalizer.materialKey(record) else { records.append(record); continue }
+            guard let index = indexes[key] else { indexes[key] = records.count; records.append(record); continue }
+            var first = records[index]
+            var conflicts = Set(first.reviewRequiredFields ?? [])
+            for field in ["scene", "shot", "take", "takeStatus"] {
+                let left = core(first, field), right = core(record, field)
+                if let left, let right, left != right { conflicts.insert(field) }
+                if left == nil, !conflicts.contains(field) { first = setting(first, field, value: right) }
+            }
+            for field in conflicts { first = setting(first, field, value: nil) }
+            records[index] = lower(first, fields: Array(conflicts))
+            warnings.append(conflicts.isEmpty ? "重复返回 \(key)，已保留第一条。" : "重复返回 \(key) 且字段互相冲突，冲突字段已留空并要求复核。")
+        }
+        return .init(sheetTitle: sheet.sheetTitle, records: records, warnings: warnings)
     }
 
     private static func inherit(_ records: inout [RecognitionRecord], warnings: inout [String]) {

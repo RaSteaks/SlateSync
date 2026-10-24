@@ -10,16 +10,14 @@ struct SlateStatusBar<Actions: View>: View {
     let message: String
     var tone: Tone = .info
     var busy = false
+    /// Optional accessory placed right after the message (a progress bar), so
+    /// a value sits beside the words that describe it.
+    var inline: AnyView?
     @ViewBuilder var actions: () -> Actions
 
-    private var color: Color {
-        switch tone {
-        case .info: SlateSyncTheme.secondary
-        case .success: SlateSyncTheme.success
-        case .warning: SlateSyncTheme.warning
-        case .error: SlateSyncTheme.danger
-        }
-    }
+    // Only the leading glyph carries the tone; the message stays neutral so
+    // a strip never reads as a colored banner.
+    private var color: Color { tone.slateGlassTone.color }
     private var symbol: String {
         switch tone {
         case .info: "info.circle"
@@ -37,15 +35,16 @@ struct SlateStatusBar<Actions: View>: View {
             }
             Text(L10n.message(message)).font(.callout).textSelection(.enabled).fixedSize(
                 horizontal: false, vertical: true)
+            if let inline { inline }
             Spacer(minLength: 8)
             actions()
         }
         // Feedback follows panel density without reducing semantic type sizes.
         .padding(.horizontal, density.panelPadding).padding(.vertical, density.rowPadding + 3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The full-width status surface uses the shared material fallback on
-        // older systems and the native Liquid Glass renderer on macOS 26+.
-        .slateGlassSurface(.status(tone.slateGlassTone), shape: .rectangle)
+        // Full-width feedback is docked chrome: a flat strip with a top
+        // hairline. Glass stays on floating elements.
+        .slateDockedSurface(.status(tone.slateGlassTone), separator: .top)
     }
 }
 
@@ -91,28 +90,35 @@ struct SlatePanelHeading: View {
     }
 }
 
-/// Page identity is deliberately stronger than a panel heading. Both library
-/// and workspace use this composition, while native controls retain focus.
+/// Inline failure text for forms and sheets. The symbol keeps the error
+/// readable without color (Differentiate Without Color); window-level
+/// feedback still belongs to SlateStatusBar.
+struct SlateInlineError: View {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var body: some View {
+        Label {
+            Text(L10n.message(message)).textSelection(.enabled)
+        } icon: {
+            Image(systemName: "exclamationmark.circle")
+        }
+        .foregroundStyle(SlateSyncTheme.dangerText)
+    }
+}
+
+/// Page identity for views that have no window toolbar title of their own: a
+/// semibold title over one secondary line. No icon tile or container.
 struct SlatePageHeading: View {
     let title: String
     let subtitle: String
     let symbol: String
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.title2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 44, height: 44)
-                .background(SlateSyncTheme.secondary.opacity(0.08),
-                            in: RoundedRectangle(cornerRadius: SlateSyncTheme.panelRadius))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.title2.weight(.semibold)).lineLimit(1).help(title)
-                Text(subtitle).font(.callout).foregroundStyle(.secondary)
-                    .lineLimit(2).help(subtitle)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.title2.weight(.semibold)).lineLimit(1).help(title)
+            Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                .lineLimit(2).help(subtitle)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -131,7 +137,8 @@ struct SlateCountLabel: View {
 }
 
 /// Clearing a local search preserves native text entry and returns focus to
-/// the field. No debounce is added to in-memory task/help filtering.
+/// the field. No debounce is added to in-memory task/help filtering. The field
+/// is a quiet system-fill well; the accent appears only as the focus outline.
 struct SlateSearchField: View {
     let title: String
     @Binding var text: String
@@ -155,14 +162,12 @@ struct SlateSearchField: View {
             .opacity(text.isEmpty ? 0 : 1).disabled(text.isEmpty)
             .accessibilityHidden(text.isEmpty)
         }
-        .padding(7)
-        // Search is a real interactive control, so it opts into the shared
-        // glass surface instead of painting a bespoke blur per feature view.
-        // The existing focus/separator outline is the sole custom border.
-        .slateGlassSurface(.control, interactive: true, border: .none)
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(Color(nsColor: .quaternarySystemFill),
+                    in: RoundedRectangle(cornerRadius: SlateSyncTheme.smallRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius).strokeBorder(
-                focused ? SlateSyncTheme.accent : SlateSyncTheme.separator, lineWidth: focused ? 2 : 0.5)
+            RoundedRectangle(cornerRadius: SlateSyncTheme.smallRadius, style: .continuous)
+                .strokeBorder(SlateSyncTheme.accent, lineWidth: focused ? 1.5 : 0)
         }
     }
 }

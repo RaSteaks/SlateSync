@@ -6,6 +6,71 @@ import XCTest
 
 @MainActor
 final class TaskSnapshotTransactionTests: XCTestCase {
+    func testCombinedCreationReturnsCommittedTaskAndFreshList() async throws {
+        for encrypted in [false, true] {
+            let root = try PersistenceTestSupport.temporaryRoot("combined-creation")
+            defer { try? FileManager.default.removeItem(at: root) }
+            if encrypted { try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend()) }
+            let store = try ProjectTaskStore(projectDirectory: root)
+            _ = try await store.saveTask(Data(#"{"id":"existing","customPrompt":"keep"}"#.utf8))
+            _ = try await store.listTasks()
+            // A fresh list must include writes from another connection, even
+            // when that connection was opened after this store's last refresh.
+            let other = try ProjectTaskStore(projectDirectory: root)
+            _ = try await other.saveTask(Data(#"{"id":"external","filename":"External"}"#.utf8))
+            try await other.close()
+            let result = try await store.createTask(Data(#"{"id":"existing","status":"draft","filename":"New","customPrompt":"new"}"#.utf8))
+            let id = try XCTUnwrap(result.task.id)
+            XCTAssertNotEqual(id, "existing", "A stale draft ID must not replace another task")
+            XCTAssertNotNil(result.task.createdAt)
+            XCTAssertEqual(result.task.createdAt, result.task.updatedAt)
+            let items = try await store.listTasks()
+            XCTAssertEqual(result.tasks, items)
+            XCTAssertEqual(Set(result.tasks.compactMap(\.id)), ["existing", "external", id])
+            let summary = try XCTUnwrap(result.tasks.first { $0.id == id })
+            XCTAssertEqual(summary.filename, result.task.filename)
+            XCTAssertEqual(summary.updatedAt, result.task.updatedAt)
+            XCTAssertEqual(summary.status, "draft")
+            let mirror = try LocalProjectEncryption.read(from: root.appending(path: "tasks/\(id).json"))
+            XCTAssertEqual(try JSONDecoder().decode(TaskData.self, from: mirror), result.task)
+            try await store.close()
+
+            let reopened = try ProjectTaskStore(projectDirectory: root)
+            let loaded = try await reopened.loadTask(id)
+            XCTAssertEqual(try JSONDecoder().decode(TaskData.self, from: loaded), result.task)
+            let preserved = try await reopened.loadTask("existing")
+            XCTAssertEqual(try JSONDecoder().decode(TaskData.self, from: preserved).customPrompt, "keep")
+            try await reopened.close()
+        }
+    }
+
+    func testCombinedCreationFailureLeavesNoOrphansAndCanRetry() async throws {
+        for encrypted in [false, true] {
+            for replaceFirst in [false, true] {
+                let root = try PersistenceTestSupport.temporaryRoot("combined-creation-failure")
+                defer { try? FileManager.default.removeItem(at: root) }
+                if encrypted { try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend()) }
+                let store = try ProjectTaskStore(projectDirectory: root, writer: RejectSnapshotWriter(replaceFirst: replaceFirst))
+                do {
+                    _ = try await store.createTask(Data(#"{"filename":"draft"}"#.utf8))
+                    XCTFail("Expected injected failure")
+                } catch { XCTAssertEqual((error as? SlateSyncError)?.code, "TEST_WRITE") }
+                let items = try await store.listTasks()
+                XCTAssertTrue(items.isEmpty)
+                let files = try FileManager.default.contentsOfDirectory(atPath: root.appending(path: "tasks").path)
+                XCTAssertFalse(files.contains { $0.hasSuffix(".json") || $0.hasSuffix(".pending") })
+                try await store.close()
+
+                let reopened = try ProjectTaskStore(projectDirectory: root)
+                let afterRestart = try await reopened.listTasks()
+                XCTAssertTrue(afterRestart.isEmpty)
+                let result = try await reopened.createTask(Data(#"{"filename":"retry"}"#.utf8))
+                XCTAssertEqual(result.tasks.compactMap(\.id), [try XCTUnwrap(result.task.id)])
+                try await reopened.close()
+            }
+        }
+    }
+
     func testFailedCreatesLeaveNoRowsOrImportableSnapshots() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("snapshot-failure")
         defer { try? FileManager.default.removeItem(at: root) }

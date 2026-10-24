@@ -26,5 +26,4 @@ public enum AccessibilityID {
     public static let logsList = "logs.list"
     public static let helpSearch = "help.search"
     public static let settingsAppearance = "settings.appearance"
-    public static let settingsDensity = "settings.density"
 }

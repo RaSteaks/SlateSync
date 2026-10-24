@@ -22,6 +22,16 @@ public actor SM05WorkflowServices {
         self.scenarios = scenarios
     }
 
+    /// Preview remains available for incomplete/conflicting input so both the
+    /// native editor and MCP can explain why an eventual export is blocked.
+    public func previewMerge(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata] = [],
+        fieldFormats: ResolveFieldFormats = .init(), comments: ResolveComments = .init(), edits: [ResolveSparseEdit] = []
+    ) async throws -> ResolveMergeResult {
+        let table = try await csv.decode(source)
+        return try await merger.merge(source: table, records: records, metadata: metadata,
+            fieldFormats: fieldFormats, comments: comments, edits: edits)
+    }
+
     public func mergeAndEncode(
         source: Data,
         records: [ResolveSlateRecord],
@@ -34,14 +44,13 @@ public actor SM05WorkflowServices {
         try comments.validate()
         let clock = ContinuousClock()
         let start = clock.now
-        let table = try await csv.decode(source)
-        let result = try await merger.merge(source: table, records: records, metadata: metadata, fieldFormats: fieldFormats, comments: comments, edits: edits)
+        let result = try await previewMerge(source: source, records: records, metadata: metadata, fieldFormats: fieldFormats, comments: comments, edits: edits)
         // Match export-resolve: manual edits may make an otherwise unchanged
         // merge exportable, but an empty recognition list is never exportable.
         // ResolveSparseEdit is the typed equivalent of a normalized JS edit.
         // Count complete matched records, not updatedRowCount: independent
         // metadata backfills must not mask incomplete recognition records.
-        guard !records.isEmpty, result.matchedRecordCount > 0 || !edits.isEmpty else {
+        guard result.permitsExport(recordCount: records.count, edits: edits) else {
             throw SlateSyncError(code: "CSV_NO_EXPORT", message: "没有匹配到可写入的完整记录，请检查卷号、视频码、场次、镜和次。")
         }
         try Task.checkCancellation()

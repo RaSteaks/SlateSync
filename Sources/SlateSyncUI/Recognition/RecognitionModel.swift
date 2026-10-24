@@ -20,7 +20,7 @@ struct EditableRecognitionRecord: Identifiable, Hashable, Sendable {
     let shotSize: String?
     let cameraPosition: String?
     let confidence: RecognitionConfidence?
-    let reviewRequiredFields: [String]?
+    var reviewRequiredFields: [String]?
 
     init(_ value: RecognitionRecord) {
         id = value.id; sourcePage = value.sourcePage; cardNumber = value.cardNumber ?? ""
@@ -355,7 +355,7 @@ public final class RecognitionModel {
     /// Recognition and Resolve share one native cell editor, including its
     /// marked-text barrier, keyboard semantics and delayed commit behavior.
     public var resultTable: ResolveCSVTable {
-        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("条"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注")],
+        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("次"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注")],
             rows: editableRecords.map { [$0.cardNumber, $0.videoCode, $0.scene, $0.shot, $0.take, $0.takeStatus, $0.description, $0.comments] },
             format: .init())
     }
@@ -387,6 +387,14 @@ public final class RecognitionModel {
     ) {
         guard let index = editableRecords.firstIndex(where: { $0.id == recordID }) else { return }
         editableRecords[index][keyPath: path] = value
+        // Editing a specific core field acknowledges that field only; other
+        // automatic repairs retain their review markers across autosave/reopen.
+        let fields: [(WritableKeyPath<EditableRecognitionRecord, String>, String)] = [
+            (\.scene, "scene"), (\.shot, "shot"), (\.take, "take"), (\.takeStatus, "takeStatus")
+        ]
+        if let field = fields.first(where: { $0.0 == path })?.1 {
+            editableRecords[index].reviewRequiredFields?.removeAll { $0 == field }
+        }
         commit(editableRecords.map(\.persisted))
     }
 

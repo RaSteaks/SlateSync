@@ -29,16 +29,19 @@ public struct LogsView: View {
                     // Keep the native menu at its intrinsic width; the trailing
                     // spacer owns surplus space in the filter strip.
                     .fixedSize()
+                    .help(L10n.tr("按级别筛选日志"))
                     SlateSearchField(title: L10n.tr("筛选分类"), text: $model.category, identifier: "logs.category").frame(maxWidth: 180)
                     Button(L10n.tr("刷新"), systemImage: "arrow.clockwise") { Task { await model.refresh() } }
+                        .help(L10n.tr("重新读取日志"))
                     Button(L10n.tr("打开日志文件夹"), systemImage: "folder") {
                         Task { opener.openDirectory(await model.directory()) }
                     }
+                    .help(L10n.tr("在访达中打开日志文件夹"))
                     Spacer()
                     if model.isRefreshing { ProgressView().controlSize(.small).accessibilityLabel(L10n.tr("正在读取日志")) }
                     if recognition.operation.isRunning {
                         Label(L10n.tr("识别进行中"), systemImage: "viewfinder")
-                            .foregroundStyle(SlateSyncTheme.accent)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(10)
@@ -67,7 +70,8 @@ public struct LogsView: View {
                 }.accessibilityIdentifier(AccessibilityID.logsList)
             }
         }
-        .navigationTitle(L10n.tr("运行日志"))
+        // Retained outgoing pages relinquish the shared window title.
+        .contentRevealNavigationTitle(L10n.tr("运行日志"))
         .safeAreaInset(edge: .bottom) {
             if model.degraded {
                 SlateStatusBar(message: L10n.tr("部分日志无法读取，已保留可用记录。"), tone: .warning) {
@@ -96,6 +100,6 @@ private extension ProductLogSeverity {
     var title: String { switch self { case .debug: L10n.tr("调试"); case .info: L10n.tr("信息"); case .warning: L10n.tr("警告"); case .error: L10n.tr("错误") } }
     var symbol: String { switch self { case .debug: "ladybug"; case .info: "info.circle"; case .warning: "exclamationmark.triangle"; case .error: "xmark.octagon" } }
     // Severity uses the same adaptive semantic colors as feature feedback.
-    // Info stays neutral so amber is reserved for live-recognition signals.
-    var color: Color { switch self { case .debug: .secondary; case .info: .secondary; case .warning: SlateSyncTheme.warning; case .error: SlateSyncTheme.danger } }
+    // Info stays neutral; only warnings and errors carry a status hue.
+    var color: Color { switch self { case .debug: .secondary; case .info: .secondary; case .warning: SlateSyncTheme.warning; case .error: SlateSyncTheme.dangerText } }
 }

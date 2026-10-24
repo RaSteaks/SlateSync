@@ -133,8 +133,54 @@ public final class GlobalSettingsModel {
         }
     }
 
-    public func value(_ key: GlobalSettingKey) -> String { draft[key] ?? "" }
+    private static let recognitionRequestKeys: [GlobalSettingKey] = [
+        .modelRequestTimeoutMS, .modelRequestMaxRetries,
+        .modelPageConcurrency, .maxConcurrentRecognitions,
+    ]
+    private var timeoutSecondsEdit: (text: String, milliseconds: String)?
+
+    /// The editor uses seconds while persisted/runtime values keep their
+    /// millisecond contract. Retain partial input (such as "180.") until it
+    /// changes, and use decimal scaling to preserve existing millisecond precision.
+    public var requestTimeoutSeconds: String {
+        get {
+            let milliseconds = value(.modelRequestTimeoutMS)
+            if let edit = timeoutSecondsEdit, edit.milliseconds == milliseconds { return edit.text }
+            return Self.scaledTimeout(milliseconds, by: Decimal(1) / 1000) ?? milliseconds
+        }
+        set {
+            let milliseconds = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "" : Self.scaledTimeout(newValue, by: 1000) ?? newValue
+            timeoutSecondsEdit = (newValue, milliseconds)
+            setValue(milliseconds, for: .modelRequestTimeoutMS)
+        }
+    }
+
+    private static func scaledTimeout(_ value: String, by factor: Decimal) -> String? {
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let number = JavaScriptCompatibility.number(value),
+              let canonical = JavaScriptCompatibility.numberString(number),
+              let decimal = Decimal(string: canonical, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        return NSDecimalNumber(decimal: decimal * factor).stringValue
+    }
+
+    public func value(_ key: GlobalSettingKey) -> String {
+        // Only missing request overrides inherit a visible value. An explicit
+        // empty draft stays editable and removes the override on the next save.
+        if let value = draft[key] { return value }
+        guard Self.recognitionRequestKeys.contains(key) else { return "" }
+        return live?.effectiveValues[key] ?? GlobalSettingsValidator.defaults[key] ?? ""
+    }
     public func setValue(_ value: String, for key: GlobalSettingKey) { draft[key] = value }
+
+    /// Reset only this pane's four request fields; persistence still requires
+    /// Save, and unrelated settings/provider drafts are preserved.
+    public func restoreRecognitionRequestDefaults() {
+        timeoutSecondsEdit = nil
+        for key in Self.recognitionRequestKeys {
+            draft[key] = GlobalSettingsValidator.defaults[key]
+        }
+    }
 
     /// All immediate selection edits share one scoped commit, including workbench callers.
     @discardableResult
@@ -196,7 +242,15 @@ public final class GlobalSettingsModel {
             // Store loading remains deliberately tolerant for legacy config.
             // Explicit UI saves validate every entered field before any write.
             for (key, value) in values.values {
-                _ = try GlobalSettingsValidator.normalizedPatchValue(value, for: key)
+                do {
+                    _ = try GlobalSettingsValidator.normalizedPatchValue(value, for: key)
+                } catch {
+                    guard key == .modelRequestTimeoutMS else { throw error }
+                    // Match the editor's seconds unit without changing the
+                    // shared validator or the on-disk millisecond range.
+                    throw SlateSyncError(code: "GLOBAL_CONFIG_INVALID",
+                        message: L10n.tr("请求超时必须为 30–3600 秒，最多保留三位小数。"))
+                }
             }
             try GlobalSettingsValidator.validateProviderSelections(values)
             let defaultProvider = values[.defaultProviderID] ?? ""

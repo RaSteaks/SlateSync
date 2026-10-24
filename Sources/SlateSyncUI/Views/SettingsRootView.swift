@@ -7,7 +7,8 @@ import SwiftUI
 public struct SettingsRootView: View {
     @AppStorage(AppLanguage.preferenceKey) private var applicationLanguage = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("appearance") private var appearance = "system"
-    @AppStorage("density") private var density = "comfortable"
+    @State private var appearanceTransition = AppearanceTransition()
+    @Environment(\.slateSyncDensity) private var density
     @Bindable private var settings: GlobalSettingsModel
     @Bindable private var paddleInstaller: PaddleInstallerModel
     @State private var credentialProvider: ProviderSummary?
@@ -27,55 +28,60 @@ public struct SettingsRootView: View {
     @State private var highlightedOCRSubregion: SettingsSubregion?
     private let preferences: UserDefaults
     private let navigation: SettingsNavigationModel
+    private let mcpService: MCPSettingsModel?
+    private static let categoryWidth: CGFloat = 68
+    private static let categorySpacing: CGFloat = 2
 
     public init(
         settings: GlobalSettingsModel,
         paddleInstaller: PaddleInstallerModel,
         navigation: SettingsNavigationModel,
-        preferences: UserDefaults = .standard
+        preferences: UserDefaults = .standard,
+        mcpService: MCPSettingsModel? = nil
     ) {
         self.preferences = preferences
         self.settings = settings
         self.paddleInstaller = paddleInstaller
         self.navigation = navigation
+        // Production injects one app-owned service; previews retain the guide.
+        self.mcpService = mcpService
     }
 
     public var body: some View {
-        // A native segmented category selector keeps the five existing forms
-        // inside one flexible content host. macOS 15's special Settings TabView
-        // host otherwise forces its ideal size into fixed window constraints.
+        // Preference-style icon tabs (symbol over label) sit in one flexible
+        // content host. macOS 15's special Settings TabView host otherwise
+        // forces its ideal size into fixed window constraints, so the tab bar
+        // is drawn here; each tab is a button exposing the selected trait.
         VStack(spacing: 0) {
-            // The segmented control carries its own native bezel; an added
-            // glass card doubles the frame and reads as a black border on the
-            // dark canvas, so the classifier sits directly on the background.
-            Picker(L10n.tr("设置分类"), selection: $category) {
-                ForEach(SettingsCategory.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden()
-            .accessibilityIdentifier("settings.category")
-            .padding(density == "compact" ? 12 : 20)
+            categoryBar
+                .padding(.horizontal, density.panelPadding)
+                .padding(.top, 6).padding(.bottom, 10)
             Divider()
-            Group {
-                switch category {
+            // Category controls stay live while only the form region reveals.
+            ContentRevealRegion(value: category, origin: .topSegment(
+                index: SettingsCategory.allCases.firstIndex(of: category) ?? 0,
+                count: SettingsCategory.allCases.count,
+                width: CGFloat(SettingsCategory.allCases.count) * (Self.categoryWidth + Self.categorySpacing) - Self.categorySpacing
+            )) { destination in
+                switch destination {
                 case .general: general
                 case .providers: providers
                 case .recognition: recognition
                 case .ocr: ocr
+                case .mcp: MCPSettingsView(navigation: navigation, service: mcpService)
                 case .advanced: advanced
                 }
             }
-            .padding(density == "compact" ? 12 : 20)
+            .padding(density.panelPadding)
+            // Grouped forms sit directly on the window background.
+            .scrollContentBackground(.hidden)
         }
-        .slateWindowMinimumSize(width: 700, height: 540)
-        .navigationTitle(L10n.tr("设置"))
-        // Settings shares the workbench canvas instead of the system window
-        // gray, keeping both windows on one neutral scale in each appearance.
+        .slateWindowMinimumSize(width: 700, height: 540, restoresResizableStyle: true)
+        // The window title names the visible pane, as system Settings does.
+        .navigationTitle(category.title)
         .background(SlateSyncTheme.canvas)
         .tint(SlateSyncTheme.accent)
-        .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
-        .controlSize(density == "compact" ? .small : .regular)
-        // One scene-level preference drives native controls and content metrics.
-        .environment(\.slateSyncDensity, SlateSyncDensity(rawValue: density) ?? .comfortable)
+        .preferredColorScheme(AppearanceController.colorScheme(for: appearance, systemIsDark: SystemAppearanceMonitor.shared.isDark))
         .task {
             await settings.load()
             processPendingNavigation()
@@ -143,11 +149,42 @@ public struct SettingsRootView: View {
         )) {
             if let provider = providerPendingDeletion { ProviderDeletionSheet(settings: settings, provider: provider) }
         }
-        .safeAreaInset(edge: .bottom) {
+        // The copyright notice lives in the standard About panel, which reads
+        // the bundle's NSHumanReadableCopyright; Settings only shows errors.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if case .failed(let error) = settings.operation {
                 SlateStatusBar(error.message, tone: .error)
             }
         }
+    }
+
+    /// One icon tab per pane. A plain button keeps keyboard and VoiceOver
+    /// behavior; the selected tab gets the accent glyph and a quiet fill.
+    private var categoryBar: some View {
+        HStack(spacing: Self.categorySpacing) {
+            ForEach(SettingsCategory.allCases) { item in
+                let selected = category == item
+                Button { category = item } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: item.symbol).font(.system(size: 18)).frame(height: 22)
+                        Text(item.title).font(.caption).lineLimit(1)
+                    }
+                    .frame(width: Self.categoryWidth, height: 50)
+                    .foregroundStyle(selected ? SlateSyncTheme.accent : SlateSyncTheme.secondary)
+                    .background(
+                        selected ? Color(nsColor: .quaternaryLabelColor) : .clear,
+                        in: RoundedRectangle(cornerRadius: SlateSyncTheme.controlRadius, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier("settings.category.\(item.rawValue)")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("settings.category")
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -180,10 +217,8 @@ public struct SettingsRootView: View {
         if let subregion = request.subregion {
             focusedOCRSubregion = subregion
             highlightedOCRSubregion = subregion
-            guard !reduceMotion else {
-                navigation.consume(request)
-                return
-            }
+            // The capsule is a static cue, so it clears after the same delay
+            // with Reduce Motion on; skipping the timer left it on screen.
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(1_200))
                 if highlightedOCRSubregion == subregion {
@@ -213,24 +248,33 @@ public struct SettingsRootView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.languageRestart")
                 }
-            } footer: {
+                // Settings is the origin of the appearance reveal.
+                Picker(L10n.tr("外观"), selection: Binding(
+                    get: { appearance },
+                    set: { target in
+                        appearanceTransition.change(to: target, reduceMotion: reduceMotion) {
+                            // Only the stored preference changes here; the views then
+                            // update window and content together, which is what starts
+                            // the reveal.
+                            appearance = target
+                        }
+                    }
+                )) {
+                    Text(L10n.tr("跟随系统")).tag("system")
+                    Text(L10n.tr("浅色")).tag("light")
+                    Text(L10n.tr("深色")).tag("dark")
+                }
+                // macOS Form presents picker titles as sibling static text, so
+                // explicitly name the interactive controls for VoiceOver/XCUI.
+                .accessibilityLabel(L10n.tr("外观"))
+                .accessibilityIdentifier(AccessibilityID.settingsAppearance)
+                .background(AppearanceTransitionAnchor(transition: appearanceTransition, preference: appearance))
+                // A leading, secondary note under both rows (a Section footer
+                // renders trailing-aligned in primary color on this host).
                 Text(L10n.tr("应用语言包含界面、菜单和帮助。更改后请退出并重新打开 SlateSync。"))
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Picker(L10n.tr("外观"), selection: $appearance) {
-                Text(L10n.tr("跟随系统")).tag("system")
-                Text(L10n.tr("浅色")).tag("light")
-                Text(L10n.tr("深色")).tag("dark")
-            }
-            // macOS Form presents picker titles as sibling static text, so
-            // explicitly name the interactive controls for VoiceOver/XCUI.
-            .accessibilityLabel(L10n.tr("外观"))
-            .accessibilityIdentifier(AccessibilityID.settingsAppearance)
-            Picker(L10n.tr("界面密度"), selection: $density) {
-                Text(L10n.tr("舒适")).tag("comfortable")
-                Text(L10n.tr("紧凑")).tag("compact")
-            }
-            .accessibilityLabel(L10n.tr("界面密度"))
-            .accessibilityIdentifier(AccessibilityID.settingsDensity)
         }.formStyle(.grouped)
     }
 
@@ -384,7 +428,8 @@ public struct SettingsRootView: View {
 
     private var providerListSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.tr("模型服务列表") + " · \(matchingProviders.count)").font(.headline)
+            // Count what is listed; unconfigured built-ins sit in the fold below.
+            Text(L10n.tr("模型服务列表") + " · \(matchingProviders.filter { isAdded($0) }.count)").font(.headline)
             ForEach(matchingProviders.filter { isAdded($0) }, id: \.id) { provider in
                 providerRow(provider)
             }
@@ -521,19 +566,50 @@ public struct SettingsRootView: View {
 
     private var recognition: some View {
         Form {
-            Section(L10n.tr("请求")) {
-                settingField(L10n.tr("请求超时（毫秒）"), .modelRequestTimeoutMS)
-                settingField(L10n.tr("超时重试次数"), .modelRequestMaxRetries)
-                settingField(L10n.tr("页并发数"), .modelPageConcurrency)
-                settingField(L10n.tr("全局识别并发数"), .maxConcurrentRecognitions)
+            Section {
+                requestSettingField(L10n.tr("请求超时（秒）"), .modelRequestTimeoutMS)
+                requestSettingField(L10n.tr("超时重试次数"), .modelRequestMaxRetries)
+                requestSettingField(L10n.tr("页并发数"), .modelPageConcurrency)
+                requestSettingField(L10n.tr("全局识别并发数"), .maxConcurrentRecognitions)
+            } header: {
+                Text(L10n.tr("请求"))
+            } footer: {
+                Text(L10n.tr("可按需修改；点击“保存”后生效。"))
             }
             Section(L10n.tr("模型")) {
                 LabeledContent(L10n.tr("可用模型"), value: "\(settings.live?.models.count ?? 0)")
             }
-            Button(L10n.tr("保存")) { Task { await settings.save() } }
-                .slatePrimaryActionStyle()
-                .disabled(settings.operation.isRunning)
-        }.formStyle(.grouped)
+            HStack {
+                Button(L10n.tr("保存")) { Task { await settings.save() } }
+                    .slatePrimaryActionStyle()
+                    .accessibilityIdentifier("settings.recognition.save")
+                Button(L10n.tr("恢复默认值")) { settings.restoreRecognitionRequestDefaults() }
+                    .accessibilityIdentifier("settings.recognition.defaults")
+            }
+        }
+        .formStyle(.grouped)
+        .disabled(settings.operation.isRunning || settings.live == nil)
+    }
+
+    /// Explicit labels and bordered, right-aligned fields keep both the
+    /// inherited default and the editable value visible in grouped forms.
+    /// Only the timeout binding converts the displayed seconds to stored milliseconds.
+    private func requestSettingField(_ title: String, _ key: GlobalSettingKey) -> some View {
+        LabeledContent(title) {
+            TextField(title, text: Binding(
+                get: { key == .modelRequestTimeoutMS ? settings.requestTimeoutSeconds : settings.value(key) },
+                set: {
+                    if key == .modelRequestTimeoutMS { settings.requestTimeoutSeconds = $0 }
+                    else { settings.setValue($0, for: key) }
+                }
+            ))
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 120)
+                .accessibilityLabel(title)
+                .accessibilityIdentifier("settings.recognition.\(key.rawValue)")
+        }
     }
 
     private var ocr: some View {
@@ -589,7 +665,8 @@ public struct SettingsRootView: View {
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(SlateSyncTheme.accent.opacity(0.16), in: .capsule)
+                        .background(.regularMaterial, in: .capsule)
+                        .overlay(Capsule().strokeBorder(SlateSyncTheme.separator, lineWidth: 0.5))
                         .padding(.top, 6)
                         .accessibilityLabel(L10n.tr("已定位到{0}", [String(describing: highlightedOCRSubregion == .vision ? " Vision" : " Paddle OCR")]))
                 }
@@ -610,13 +687,13 @@ public struct SettingsRootView: View {
                 ProgressView(L10n.tr("正在检测 OCR 环境…"))
                 Button(L10n.tr("取消"), role: .cancel) { settings.cancelOCREnvironmentCheck() }
             } else if case .failed(let error) = settings.ocrCheckOperation {
-                Text(L10n.message(error.message)).foregroundStyle(SlateSyncTheme.danger)
+                SlateInlineError(error.message)
             } else if settings.ocrChecks.isEmpty {
                 Text(L10n.tr("尚未检测")).foregroundStyle(.secondary)
             }
             if settings.ocrChecksAreStale {
                 Label(L10n.tr("设置已更改，请重新检测。"), systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(SlateSyncTheme.warning)
+                    .foregroundStyle(SlateSyncTheme.warningText)
             }
             ForEach(settings.ocrChecks) { check in
                 VStack(alignment: .leading, spacing: 4) {
@@ -625,7 +702,7 @@ public struct SettingsRootView: View {
                         Spacer()
                         Label(check.status == .passed ? L10n.tr("通过") : check.status == .failed ? L10n.tr("失败") : L10n.tr("需注意"),
                               systemImage: check.status == .passed ? "checkmark.circle" : check.status == .failed ? "xmark.circle" : "exclamationmark.triangle")
-                            .foregroundStyle(check.status == .passed ? SlateSyncTheme.success : check.status == .failed ? SlateSyncTheme.danger : SlateSyncTheme.warning)
+                            .foregroundStyle(check.status == .passed ? SlateSyncTheme.successText : check.status == .failed ? SlateSyncTheme.dangerText : SlateSyncTheme.warningText)
                     }
                     Text(L10n.message(check.detail)).font(.caption).foregroundStyle(.secondary)
                         .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -668,7 +745,7 @@ public struct SettingsRootView: View {
                 }
                 if settings.live?.restartRequired == true {
                     Text(L10n.tr("工作流配置路径已修改，重启 SlateSync 后生效。"))
-                        .font(.caption).foregroundStyle(SlateSyncTheme.warning)
+                        .font(.caption).foregroundStyle(SlateSyncTheme.warningText)
                 }
             }
             if let snapshot = settings.live?.runtime {
