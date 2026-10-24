@@ -1031,21 +1031,36 @@ final class SlateSyncUITests: XCTestCase {
                 attachReview("输入-\(name)", app: app)
                 let config = app.buttons["workspace.configuration.toggle"].firstMatch
                 XCTAssertTrue(config.isHittable)
-                config.click()
-                attachReview("配置-\(name)", app: app)
-                if app.buttons["workspace.configuration.close"].firstMatch.exists
-                    && app.buttons["workspace.configuration.close"].firstMatch.isHittable
-                {
-                    app.buttons["workspace.configuration.close"].firstMatch.click()
+                // Wide layouts can initially open this pane. Establish closed
+                // state before proving that the toolbar action opens it.
+                let closeConfig = app.buttons["workspace.configuration.close"].firstMatch
+                if closeConfig.exists {
+                    closeConfig.click()
+                    XCTAssertTrue(closeConfig.waitForNonExistence(timeout: 5))
                 }
+                config.click()
+                XCTAssertTrue(closeConfig.waitForExistence(timeout: 5))
+                XCTAssertTrue(closeConfig.isHittable)
+                attachReview("配置-\(name)", app: app)
+                closeConfig.click()
+                XCTAssertTrue(closeConfig.waitForNonExistence(timeout: 5))
                 app.radioButtons["识别结果"].firstMatch.click()
                 let toggle = app.descendants(matching: .any).matching(identifier: "workspace.original.toggle")
                     .firstMatch
                 XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+                // The first wide result page opens comparison automatically;
+                // blindly toggling would close it and fail the next assertion.
+                let closeOriginal = app.buttons["workspace.original.close"].firstMatch
+                if closeOriginal.exists {
+                    closeOriginal.click()
+                    XCTAssertTrue(closeOriginal.waitForNonExistence(timeout: 5))
+                }
                 toggle.click()
-                XCTAssertTrue(app.buttons["workspace.original.close"].waitForExistence(timeout: 5))
+                XCTAssertTrue(closeOriginal.waitForExistence(timeout: 5))
+                XCTAssertTrue(closeOriginal.isHittable)
                 attachReview("原稿对照-\(name)", app: app)
-                app.buttons["workspace.original.close"].click()
+                closeOriginal.click()
+                XCTAssertTrue(closeOriginal.waitForNonExistence(timeout: 5))
                 app.radioButtons["Resolve CSV"].firstMatch.click()
                 // Import lives in the More menu on this tab.
                 XCTAssertTrue(app.descendants(matching: .any)["workspace.more"].firstMatch.isHittable)
