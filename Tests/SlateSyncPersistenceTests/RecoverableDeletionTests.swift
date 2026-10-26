@@ -99,11 +99,12 @@ final class RecoverableDeletionTests: XCTestCase {
         _ = try await store.saveTask(try taskPayload(), taskID: "t2")
 
         try await store.deleteTask("t1")
-        await expectFailure("删除后的任务必须不存在") { try await store.loadTask("t1") }
+        // These reads must throw; their payload is irrelevant to the failure contract.
+        await expectFailure("删除后的任务必须不存在") { _ = try await store.loadTask("t1") }
         XCTAssertFalse(exists(projectDirectory.appending(path: "tasks/t1.json")))
 
         let reopened = try ProjectTaskStore(projectDirectory: projectDirectory)
-        await expectFailure("成功删除后重启，记录必须不存在") { try await reopened.loadTask("t1") }
+        await expectFailure("成功删除后重启，记录必须不存在") { _ = try await reopened.loadTask("t1") }
         _ = try await reopened.loadTask("t2")
     }
 
@@ -163,11 +164,12 @@ final class RecoverableDeletionTests: XCTestCase {
         _ = try await store.saveSession(try diagnosticPayload(), sessionID: "d2")
 
         try await store.deleteSession("d1")
-        await expectFailure("删除后的诊断会话必须不存在") { try await store.loadSession("d1") }
+        // As with deleted tasks, a successful payload would fail this assertion.
+        await expectFailure("删除后的诊断会话必须不存在") { _ = try await store.loadSession("d1") }
         XCTAssertFalse(exists(projectDirectory.appending(path: "diagnostics/d1.json")))
 
         let reopened = try DiagnosticsStore(projectDirectory: projectDirectory)
-        await expectFailure("成功删除后重启，记录必须不存在") { try await reopened.loadSession("d1") }
+        await expectFailure("成功删除后重启，记录必须不存在") { _ = try await reopened.loadSession("d1") }
         _ = try await reopened.loadSession("d2")
     }
 }

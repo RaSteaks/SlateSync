@@ -261,6 +261,18 @@ public struct CustomProviderConfiguration: Codable, Hashable, Sendable {
         self.sourcePresetID = sourcePresetID
     }
 
+    /// Credential changes revoke capability proofs without changing route or
+    /// display metadata. A supplied revision lets an edited draft adopt an
+    /// already-committed revocation instead of incrementing it a second time.
+    public func invalidatingCapabilities(revision: Int? = nil) -> CustomProviderConfiguration {
+        CustomProviderConfiguration(
+            id: id, name: name, label: label, baseUrl: baseUrl,
+            transport: transport, jsonMode: jsonMode, imageDetail: imageDetail,
+            manualModelIds: manualModelIds, revision: revision ?? self.revision + 1,
+            capabilityCache: nil, notes: notes, sourcePresetID: sourcePresetID
+        )
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name

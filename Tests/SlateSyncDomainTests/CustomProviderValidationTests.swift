@@ -215,6 +215,24 @@ final class CustomProviderValidationTests: XCTestCase {
         XCTAssertEqual(sanitized.map(\.id), ["openai-compatible"])
     }
 
+    func testRejectedDuplicatesDoNotReserveIdentityForLaterRecords() {
+        let secondID = "openai-compatible:00000000-0000-4000-8000-000000000002"
+        let thirdID = "openai-compatible:00000000-0000-4000-8000-000000000003"
+        let providers = [
+            CustomProviderConfiguration(id: "openai-compatible", name: "First", baseUrl: "https://first.example"),
+            // Neither rejected record owns its otherwise-unused ID or name.
+            CustomProviderConfiguration(id: secondID, name: " first ", baseUrl: "https://duplicate.example"),
+            CustomProviderConfiguration(id: "openai-compatible", name: "Third", baseUrl: "https://duplicate.example"),
+            CustomProviderConfiguration(id: secondID, name: "Second", baseUrl: "https://second.example"),
+            CustomProviderConfiguration(id: thirdID, name: "Third", baseUrl: "https://third.example"),
+        ]
+
+        let sanitized = CustomProviderValidator.sanitize(providers)
+
+        XCTAssertEqual(sanitized.map(\.id), ["openai-compatible", secondID, thirdID])
+        XCTAssertEqual(sanitized.map(\.name), ["First", "Second", "Third"])
+    }
+
     func testLegacyDecoderNormalizesAliasesEnumsAndRevisionScopedCache() throws {
         let data = Data(
             #"{"id":"openai-compatible:00000000-0000-4000-8000-000000000004","label":"Legacy Gateway","baseUrl":"","url":"https://GATEWAY.example/v1///","transport":" RESPONSES ","jsonMode":"JSON_OBJECT","imageDetail":"unsupported","revision":"4","capabilityCache":{"model-a":{"status":"verified","revision":"4","message":"Bearer secret"},"stale":{"status":"pending","revision":4}},"verification":{"ignored":{"status":"verified","revision":4}}}"#.utf8

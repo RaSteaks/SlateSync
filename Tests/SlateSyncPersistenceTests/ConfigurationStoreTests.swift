@@ -165,6 +165,30 @@ final class ConfigurationStoreTests: XCTestCase {
         XCTAssertEqual(loaded.customProviders[0].capabilityCache?["model-a"]?.message, "[已隐藏]")
     }
 
+    func testLoadingDuplicateNamesDoesNotDiscardLaterValidProviderOrPersistThatLoss() async throws {
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = GlobalConfigStore(applicationSupportRoot: root)
+        let secondID = "openai-compatible:00000000-0000-4000-8000-000000000002"
+        // Legacy files can contain duplicates even though ordinary saves reject
+        // them. Exercise the disk decoder, then an unrelated settings write.
+        let snapshot = GlobalConfigSnapshot(customProviders: [
+            .init(id: "openai-compatible", name: "First", baseUrl: "https://first.example"),
+            .init(id: secondID, name: " first ", baseUrl: "https://duplicate.example"),
+            .init(id: secondID, name: "Second", baseUrl: "https://second.example"),
+        ])
+        try JSONEncoder().encode(snapshot).write(to: store.fileURL)
+
+        let loaded = try await store.load()
+        XCTAssertEqual(loaded.customProviders.map(\.id), ["openai-compatible", secondID])
+        XCTAssertEqual(loaded.customProviders.map(\.name), ["First", "Second"])
+
+        _ = try await store.save(rawValues: ["MAX_BODY_MB": "140"])
+        let restarted = try await GlobalConfigStore(applicationSupportRoot: root).load()
+        XCTAssertEqual(restarted.customProviders.map(\.id), ["openai-compatible", secondID])
+        XCTAssertEqual(restarted.values[.maxBodyMB], "140")
+    }
+
     func testInvalidProviderSaveDoesNotPublishPartialSnapshot() async throws {
         let root = try makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

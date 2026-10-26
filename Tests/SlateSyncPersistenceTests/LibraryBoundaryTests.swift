@@ -49,6 +49,9 @@ final class LibraryBoundaryTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let (libraryRoot, store) = try await makeLibrary(in: root)
         let projectDirectory = libraryRoot.appending(path: "Projects/project-default", directoryHint: .isDirectory)
+        // The fresh owner below must validate the swapped path independently
+        // of the connection that created this fixture.
+        try await store.close()
 
         let outside = root.appending(path: "outside/project", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
@@ -65,6 +68,8 @@ final class LibraryBoundaryTests: XCTestCase {
         let databaseURL = libraryRoot
             .appending(path: "Projects/project-default")
             .appending(path: SQLiteV1.projectDatabaseFilename)
+        // Finish fixture ownership before copying and replacing on-disk paths.
+        try await store.close()
 
         // The outside copy is a valid database: without the boundary check
         // every read would silently succeed through the link.

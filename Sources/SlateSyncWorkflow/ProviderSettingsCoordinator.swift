@@ -135,14 +135,7 @@ actor ProviderSettingsCoordinator {
             }
             var providers = config.customProviders
             if let index = config.customProviders.firstIndex(where: { $0.id == providerID }) {
-                let old = config.customProviders[index]
-                providers[index] = CustomProviderConfiguration(
-                    id: old.id, name: old.name, label: old.label, baseUrl: old.baseUrl,
-                    transport: old.transport, jsonMode: old.jsonMode,
-                    imageDetail: old.imageDetail, manualModelIds: old.manualModelIds,
-                    revision: old.revision + 1, capabilityCache: nil,
-                    notes: old.notes, sourcePresetID: old.sourcePresetID
-                )
+                providers[index] = providers[index].invalidatingCapabilities()
             }
             if values != config.values.values || providers != config.customProviders {
                 _ = try await owner.runtime.globalConfigStore.save(values: values, customProviders: providers)
@@ -170,17 +163,13 @@ actor ProviderSettingsCoordinator {
             values.removeValue(forKey: .defaultProviderID)
             values.removeValue(forKey: .defaultModelID)
             values[.recognitionFailoverChain] = "[]"
-            var providers = config.customProviders
-            for index in providers.indices {
-                let old = providers[index]
-                providers[index] = CustomProviderConfiguration(
-                    id: old.id, name: old.name, label: old.label, baseUrl: old.baseUrl,
-                    transport: old.transport, jsonMode: old.jsonMode, imageDetail: old.imageDetail,
-                    manualModelIds: old.manualModelIds, revision: old.revision + 1,
-                    capabilityCache: nil, notes: old.notes, sourcePresetID: old.sourcePresetID
-                )
-            }
+            let providers = config.customProviders.map { $0.invalidatingCapabilities() }
             _ = try await owner.runtime.globalConfigStore.save(values: values, customProviders: providers)
+            // Publish committed custom-provider revisions before any credential
+            // file work can fail. invalidate() alone clears registrations but
+            // leaves the old proofs stored in the registry's configuration.
+            let refreshed = await owner.runtime.refreshConfiguration()
+            await owner.sharedRegistry?.replace(settings: refreshed.configuration.values, customProviders: providers)
             for definition in ProviderCatalog.definitions {
                 try await owner.runtime.globalConfigStore.invalidateBuiltinCapabilities(providerID: definition.id)
             }
@@ -188,8 +177,6 @@ actor ProviderSettingsCoordinator {
             // same; route-only replace would retain in-memory verified models.
             await owner.sharedRegistry?.invalidate()
             try await owner.runtime.credentialStore.reset()
-            let refreshed = await owner.runtime.refreshConfiguration()
-            await owner.sharedRegistry?.replace(settings: refreshed.configuration.values, customProviders: providers)
         }
     }
 

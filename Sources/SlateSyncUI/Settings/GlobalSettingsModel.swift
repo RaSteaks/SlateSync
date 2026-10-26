@@ -500,14 +500,17 @@ public final class GlobalSettingsModel {
         guard beginOperation() else { return }
         defer { endOperation() }
         operation = .running(label: L10n.tr("正在重置本地凭据…"))
+        let previousProviders = customProviders
+        // Retire transient results as soon as their requests lose ownership;
+        // file failure must not leave a stopped probe showing as running.
         providerRequests.removeAll()
+        discoveryResults.removeAll()
+        providerOperations.removeAll()
+        probeProgress.removeAll()
+        probeResults.removeAll()
+        probingProviderIDs.removeAll()
         do {
             try await service.resetLocalProviderCredentials()
-            discoveryResults.removeAll()
-            providerOperations.removeAll()
-            probeProgress.removeAll()
-            probeResults.removeAll()
-            probingProviderIDs.removeAll()
             draft[.defaultProviderID] = ""
             draft[.defaultModelID] = ""
             draft[.recognitionFailoverChain] = "[]"
@@ -515,16 +518,19 @@ public final class GlobalSettingsModel {
             refreshPreservingDraft(refreshed)
             // Preserve unsaved metadata without preserving proofs made with
             // credentials that have just been removed.
-            customProviders = customProviders.map { old in
-                let revision = max(old.revision + 1, refreshed.customProviders.first { $0.id == old.id }?.revision ?? 1)
-                return CustomProviderConfiguration(id: old.id, name: old.name, label: old.label,
-                    baseUrl: old.baseUrl, transport: old.transport, jsonMode: old.jsonMode,
-                    imageDetail: old.imageDetail, manualModelIds: old.manualModelIds,
-                    revision: revision, capabilityCache: nil, notes: old.notes, sourcePresetID: old.sourcePresetID)
+            customProviders = customProviders.map { current in
+                let previousRevision = previousProviders.first { $0.id == current.id }?.revision ?? current.revision
+                return current.invalidatingCapabilities(revision: max(previousRevision + 1, current.revision))
             }
             operation = .succeeded(message: L10n.tr("本地凭据已重置，请重新填写 API Key。"))
-        } catch is CancellationError { operation = .canceled }
-        catch { operation = .failed(ProductPrivacy.error(error)) }
+        } catch is CancellationError {
+            await refreshAfterCredentialFailure()
+            operation = .canceled
+        } catch {
+            let sanitized = ProductPrivacy.error(error)
+            await refreshAfterCredentialFailure()
+            operation = .failed(sanitized)
+        }
     }
 
     /// The draft identity is returned even after partial failure so retries edit
@@ -885,8 +891,13 @@ public final class GlobalSettingsModel {
             draft[key] = value.values[key]
         }
         customProviders = customProviders.compactMap { current in
-            guard let old = previous.customProviders.first(where: { $0.id == current.id }), old == current else { return current }
-            return value.customProviders.first(where: { $0.id == current.id })
+            guard let old = previous.customProviders.first(where: { $0.id == current.id }) else { return current }
+            let updated = value.customProviders.first(where: { $0.id == current.id })
+            if old == current { return updated }
+            // Preserve unsaved fields, but never let a display edit retain a
+            // proof revoked by a committed credential/configuration change.
+            guard let updated, updated.revision != old.revision else { return current }
+            return current.invalidatingCapabilities(revision: max(current.revision, updated.revision))
         }
         for provider in value.customProviders where !previous.customProviders.contains(where: { $0.id == provider.id }) && !customProviders.contains(where: { $0.id == provider.id }) {
             customProviders.append(provider)
