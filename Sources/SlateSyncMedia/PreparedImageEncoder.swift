@@ -51,11 +51,14 @@ enum PreparedImageEncoder {
         guard let output = source.cropping(to: CGRect(x: 0, y: top, width: source.width, height: max(1, bottom - top))) else { throw MediaFailure.invalidInput }
         return output
     }
-    static func views(_ source: CGImage, operation: MediaOperation) throws -> [PreparedMediaView] {
+    static func views(_ source: CGImage, operation: MediaOperation, includesDetails: Bool = true) throws -> [PreparedMediaView] {
         try operation.check()
         let cropped = try cropped(source, operation: operation)
-        let layout = ImagePreprocessing.detailSegments(height: cropped.height)
         var output = [PreparedMediaView(viewIndex: 0, viewType: .full, image: try encode(cropped, maximum: 2600, quality: 0.92))]
+        // Standard recognition consumes only the full page; avoid allocating
+        // and JPEG-encoding detail views that would immediately be discarded.
+        guard includesDetails else { return output }
+        let layout = ImagePreprocessing.detailSegments(height: cropped.height)
         for (index, segment) in layout.segments.enumerated() {
             try operation.check()
             let w = ImagePreprocessing.coreColumnWidth(cropped.width)

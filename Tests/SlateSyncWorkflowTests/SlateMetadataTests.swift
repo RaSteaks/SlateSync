@@ -98,6 +98,26 @@ final class SlateMetadataTests: XCTestCase {
         XCTAssertEqual(result.stats.learnedStructures, 1)
         XCTAssertEqual(result.stats.readSlateFiles, 2)
     }
+
+    func testSelectedUUIDRootContainingExpectedKeyStillScansChildren() async throws {
+        let temporary = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        // Random UUID roots can accidentally contain A001C001. The selected
+        // container is not a clip leaf when its sidecars live in child folders.
+        let root = temporary.appending(path: "00000000-0000-0000-0000-A001C001ABCD")
+        XCTAssertEqual(ResolveCSVNormalization.extractCombinedMaterialKey(root.lastPathComponent), "A:1:1")
+        for clip in [1, 2] {
+            let prefix = "A001C\(String(format: "%03d", clip))"
+            let directory = root.appending(path: prefix)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data(sample.replacingOccurrences(of: "A004C004", with: prefix).utf8)
+                .write(to: directory.appending(path: "camera-slate.txt"))
+        }
+        let result = try await SlateMetadataScanner().scan(directory: root, options: .init(expectedKeys: ["A:1:1", "A:1:2"]))
+        XCTAssertEqual(result.metadata.map(\.materialKey), ["A:1:1", "A:1:2"])
+        XCTAssertEqual(result.stats.learnedStructures, 1)
+        XCTAssertEqual(result.stats.readSlateFiles, 2)
+    }
 }
 
 private func XCTAssertSlateMetadataError<T>(_ code: String, _ expression: @autoclosure () async throws -> T, file: StaticString = #filePath, line: UInt = #line) async {

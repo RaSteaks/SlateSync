@@ -33,6 +33,7 @@ public struct RecognitionPagePipeline: Sendable {
         pageConcurrency: Int = 2,
         timeoutMilliseconds: Int = 180_000,
         maximumTimeoutRetries: Int = 1,
+        maximumRequestBytes: Int = 80 * 1024 * 1024,
         filename: String,
         progress: ProgressSink? = nil,
         candidates: [ProviderModelSelection] = [],
@@ -44,7 +45,7 @@ public struct RecognitionPagePipeline: Sendable {
         guard !pages.isEmpty, pages.count <= 20, pages.allSatisfy({ !$0.views.isEmpty && $0.views.count <= 3 }) else { throw RecognitionFailure.invalidInput }
         let recoveryKey = recoveryID.map {
             Self.recoveryKey(id: $0, pages: pages, provider: provider, model: model,
-                accuracy: accuracy, formats: formats, prompts: prompts)
+                accuracy: accuracy, formats: formats, prompts: prompts, maximumRequestBytes: maximumRequestBytes)
         }
         let limit = min(6, max(1, pageConcurrency))
         var outputs = Array<PageOutput?>(repeating: nil, count: pages.count)
@@ -67,6 +68,7 @@ public struct RecognitionPagePipeline: Sendable {
                                 accuracy: accuracy, prompts: prompts,
                                 timeoutMilliseconds: timeoutMilliseconds,
                                 maximumTimeoutRetries: maximumTimeoutRetries,
+                                maximumRequestBytes: maximumRequestBytes,
                                 filename: filename, client: client, progress: progress,
                                 completedBeforePage: completedSnapshot
                             )
@@ -76,6 +78,7 @@ public struct RecognitionPagePipeline: Sendable {
                                 accuracy: accuracy, prompts: prompts,
                                 timeoutMilliseconds: timeoutMilliseconds,
                                 maximumTimeoutRetries: maximumTimeoutRetries,
+                                maximumRequestBytes: maximumRequestBytes,
                                 filename: filename, client: client, progress: progress,
                                 completedBeforePage: completedSnapshot
                             )
@@ -108,7 +111,7 @@ public struct RecognitionPagePipeline: Sendable {
         id: String, pages: [RecognitionPageInput], provider: ProviderDescriptor,
         model: ResolvedModel, accuracy: ProjectSettings.AccuracyMode,
         formats: ResolveFieldFormats,
-        prompts: (primary: String, audit: String, review: String)
+        prompts: (primary: String, audit: String, review: String), maximumRequestBytes: Int
     ) -> String {
         var hash = Hasher()
         hash.combine(id)
@@ -122,10 +125,12 @@ public struct RecognitionPagePipeline: Sendable {
         hash.combine(prompts.primary)
         hash.combine(prompts.audit)
         hash.combine(prompts.review)
+        hash.combine(maximumRequestBytes)
         for page in pages {
             hash.combine(page.pageNumber)
             hash.combine(page.fullOCREvidence)
             hash.combine(page.coreOCREvidence)
+            hash.combine(page.scenarioInstruction)
             for view in page.views { hash.combine(view.image) }
         }
         return String(hash.finalize())
@@ -141,6 +146,7 @@ public struct RecognitionPagePipeline: Sendable {
         prompts: (primary: String, audit: String, review: String),
         timeoutMilliseconds: Int,
         maximumTimeoutRetries: Int,
+        maximumRequestBytes: Int,
         filename: String,
         client: ProviderRecognitionClient,
         progress: ProgressSink?,
@@ -176,6 +182,7 @@ public struct RecognitionPagePipeline: Sendable {
                     accuracy: accuracy, prompts: prompts,
                     timeoutMilliseconds: timeoutMilliseconds,
                     maximumTimeoutRetries: maximumTimeoutRetries,
+                    maximumRequestBytes: maximumRequestBytes,
                     filename: filename, client: client, progress: progress,
                     completedBeforePage: completedBeforePage
                 )
@@ -194,7 +201,10 @@ public struct RecognitionPagePipeline: Sendable {
         let message = candidates.count > 1
             ? "主服务与备用服务均不可用，请稍后重试或检查设置"
             : "主服务不可用，请在全局设置中配置备用服务或稍后重试"
-        throw SlateSyncError(code: "PROVIDER_FAILOVER_EXHAUSTED", message: message,
+        // Retain a safe failure category in diagnostics instead of discarding
+        // the last cause. Never copy raw provider text into logs or the UI.
+        let detail = lastError.map { ProductPrivacy.error($0).message }
+        throw SlateSyncError(code: "PROVIDER_FAILOVER_EXHAUSTED", message: detail.map { message + "（" + $0 + "）" } ?? message,
             status: lastError?.status, providerError: true)
     }
 
@@ -207,6 +217,7 @@ public struct RecognitionPagePipeline: Sendable {
         prompts: (primary: String, audit: String, review: String),
         timeoutMilliseconds: Int,
         maximumTimeoutRetries: Int,
+        maximumRequestBytes: Int,
         filename: String,
         client: ProviderRecognitionClient,
         progress: ProgressSink?,
@@ -216,15 +227,19 @@ public struct RecognitionPagePipeline: Sendable {
         let percent = Int((35 + Double(completedBeforePage) / Double(count) * 60).rounded())
         do {
             progress?(.init(phase: "primary", completed: completedBeforePage, total: count, message: "正在主识别第 \(page.pageNumber)/\(count) 页", percent: percent, pageNumber: page.pageNumber))
-            let primaryRequest = request(page: page, stage: .primary, images: page.views.map(\.image), provider: provider, model: model, filename: pageName, prompt: prompts.primary, instruction: page.fullOCREvidence, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries)
+            let primaryRequest = request(page: page, stage: .primary, images: page.views.map(\.image), provider: provider, model: model, filename: pageName, prompt: prompts.primary, instruction: page.fullOCREvidence, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
             if accuracy == .standard {
                 let (sheet, response) = try await Self.stage(primaryRequest, client: client, pageNumber: page.pageNumber)
                 return .init(pageNumber: page.pageNumber, result: sheet, responses: [response])
             }
 
             progress?(.init(phase: "audit", completed: completedBeforePage, total: count, message: "正在独立查漏第 \(page.pageNumber)/\(count) 页", percent: percent, pageNumber: page.pageNumber))
-            let coreImages = page.views.count > 1 ? Array(page.views.dropFirst().map(\.image)) : [page.views[0].image]
-            let auditRequest = request(page: page, stage: .audit, images: coreImages, provider: provider, model: model, filename: pageName + " · 核心字段查漏", prompt: prompts.audit, instruction: page.coreOCREvidence, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries)
+            // Fixed legacy detail crops may omit right-hand camera columns.
+            // Keep the full page as a reference for audit and review; filtered
+            // OCR evidence alone is not proof of content outside attached crops.
+            let coreImages = page.views.map(\.image)
+            let referenceInstruction = "\n附有同页完整参照图，用于核对局部图未覆盖的列；请结合局部放大图复核全部摄影机区块，不要仅依据 OCR 文字作答。"
+            let auditRequest = request(page: page, stage: .audit, images: coreImages, provider: provider, model: model, filename: pageName + " · 核心字段查漏", prompt: prompts.audit + referenceInstruction, instruction: page.coreOCREvidence, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
             async let primaryStage = Self.stage(primaryRequest, client: client, pageNumber: page.pageNumber)
             async let auditStage = Self.stage(auditRequest, client: client, pageNumber: page.pageNumber)
             let ((primary, first), (audit, second)) = try await (primaryStage, auditStage)
@@ -238,7 +253,7 @@ public struct RecognitionPagePipeline: Sendable {
             } + combined.auditOnlyKeys.map { "\($0)（仅核心查漏发现；请先确认图中确实存在此素材）" }
             progress?(.init(phase: "review", completed: completedBeforePage, total: count, message: "正在复核第 \(page.pageNumber) 页的 \(targets.count) 个冲突或查漏候选", percent: percent, pageNumber: page.pageNumber))
             let reviewInstruction = "只复核以下 \(targets.count) 个素材键；图中找不到的键不要输出：\n" + targets.joined(separator: "\n") + evidenceSuffix(page.coreOCREvidence)
-            let reviewRequest = request(page: page, stage: .review, images: coreImages, provider: provider, model: model, filename: pageName + " · 冲突复核", prompt: prompts.review, instruction: reviewInstruction, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries)
+            let reviewRequest = request(page: page, stage: .review, images: coreImages, provider: provider, model: model, filename: pageName + " · 冲突复核", prompt: prompts.review + referenceInstruction, instruction: reviewInstruction, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
             let (review, third) = try await Self.stage(reviewRequest, client: client, pageNumber: page.pageNumber)
             return .init(pageNumber: page.pageNumber, result: RecognitionPostprocessor.applyReview(combined, review: review), responses: [first, second, third])
         } catch is CancellationError { throw RecognitionFailure.canceled }
@@ -267,8 +282,8 @@ public struct RecognitionPagePipeline: Sendable {
         return (sheet, result.response)
     }
 
-    private func request(page: RecognitionPageInput, stage: RecognitionStage, images: [PreparedImage], provider: ProviderDescriptor, model: ResolvedModel, filename: String, prompt: String, instruction: String, timeout: Int, retries: Int) -> RecognitionStageRequest {
-        .init(provider: provider, model: model, stage: stage, filename: filename, images: images, systemPrompt: prompt, userInstruction: instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : instruction, schema: stage == .primary ? RecognitionSchemas.full : RecognitionSchemas.core, timeoutMilliseconds: timeout, maximumTimeoutRetries: retries)
+    private func request(page: RecognitionPageInput, stage: RecognitionStage, images: [PreparedImage], provider: ProviderDescriptor, model: ResolvedModel, filename: String, prompt: String, instruction: String, timeout: Int, retries: Int, budget: Int) -> RecognitionStageRequest {
+        .init(provider: provider, model: model, stage: stage, filename: filename, images: images, systemPrompt: prompt + page.scenarioInstruction, userInstruction: instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : instruction, schema: stage == .primary ? RecognitionSchemas.full : RecognitionSchemas.core, timeoutMilliseconds: timeout, maximumTimeoutRetries: retries, maximumRequestBytes: budget)
     }
 
     private func evidenceSuffix(_ evidence: String) -> String {

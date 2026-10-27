@@ -29,6 +29,7 @@ public struct SettingsRootView: View {
     private let preferences: UserDefaults
     private let navigation: SettingsNavigationModel
     private let mcpService: MCPSettingsModel?
+    private let copyrightNotice: String?
     private static let categoryWidth: CGFloat = 68
     private static let categorySpacing: CGFloat = 2
 
@@ -37,7 +38,8 @@ public struct SettingsRootView: View {
         paddleInstaller: PaddleInstallerModel,
         navigation: SettingsNavigationModel,
         preferences: UserDefaults = .standard,
-        mcpService: MCPSettingsModel? = nil
+        mcpService: MCPSettingsModel? = nil,
+        copyrightNotice: String? = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String
     ) {
         self.preferences = preferences
         self.settings = settings
@@ -45,6 +47,9 @@ public struct SettingsRootView: View {
         self.navigation = navigation
         // Production injects one app-owned service; previews retain the guide.
         self.mcpService = mcpService
+        // Share the About panel's bundle notice; offscreen fixtures inject it
+        // because SwiftPM's test runner does not contain the application plist.
+        self.copyrightNotice = copyrightNotice
     }
 
     public var body: some View {
@@ -149,11 +154,28 @@ public struct SettingsRootView: View {
         )) {
             if let provider = providerPendingDeletion { ProviderDeletionSheet(settings: settings, provider: provider) }
         }
-        // The copyright notice lives in the standard About panel, which reads
-        // the bundle's NSHumanReadableCopyright; Settings only shows errors.
+        // Copyright and filing remain visible across categories, outside their
+        // scrollers and below any error bar. Neither identifier is localized.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if case .failed(let error) = settings.operation {
-                SlateStatusBar(error.message, tone: .error)
+            VStack(spacing: 0) {
+                if case .failed(let error) = settings.operation {
+                    SlateStatusBar(error.message, tone: .error)
+                }
+                VStack(spacing: 4) {
+                    if let copyrightNotice {
+                        Text(verbatim: copyrightNotice)
+                            .accessibilityIdentifier("app.copyright")
+                    }
+                    Text(verbatim: "浙ICP备2026090281号-1A")
+                        .accessibilityIdentifier("settings.icpRegistration")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, density.panelPadding)
+                .padding(.vertical, 8)
             }
         }
     }
@@ -274,6 +296,37 @@ public struct SettingsRootView: View {
                 Text(L10n.tr("应用语言包含界面、菜单和帮助。更改后请退出并重新打开 SlateSync。"))
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Section {
+                // The grouped form supplies the card surface; a native Link makes
+                // the whole row keyboard-accessible and uses the default browser.
+                Link(destination: URL(string: "https://github.com/RaSteaks/SlateSync")!) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .font(.title2)
+                            .foregroundStyle(SlateSyncTheme.secondary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.tr("GitHub 仓库"))
+                                .font(.headline)
+                                .foregroundStyle(SlateSyncTheme.primary)
+                            Text(verbatim: "RaSteaks/SlateSync")
+                                .font(.caption)
+                                .foregroundStyle(SlateSyncTheme.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        Image(systemName: "arrow.up.right")
+                            .foregroundStyle(SlateSyncTheme.secondary)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.vertical, density.rowPadding)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(L10n.tr("在 GitHub 上打开 SlateSync 仓库"))
+                .help(L10n.tr("在浏览器中打开"))
+                .accessibilityIdentifier("settings.repository")
             }
         }.formStyle(.grouped)
     }

@@ -21,12 +21,31 @@ public enum ProductPrivacy {
         let value = SlateSyncError.wrapped(error)
         return SlateSyncError(
             code: message(value.code),
-            message: value.providerError == true ? "Provider 请求失败，请检查设置后重试" : message(value.message),
+            message: value.providerError == true ? providerFailureMessage(value) : message(value.message),
             retryable: value.retryable,
             status: value.status,
             providerError: value.providerError,
             requiresRestart: value.requiresRestart
         )
+    }
+
+    /// Only product-owned labels and numeric HTTP status cross this boundary;
+    /// provider response bodies can contain secrets or private image text.
+    private static func providerFailureMessage(_ error: SlateSyncError) -> String {
+        if error.code == "MODEL_OUTPUT_TRUNCATED" { return "模型输出达到长度上限，未生成完整识别结果" }
+        let detail: String
+        switch error.status ?? 0 {
+        case 401: detail = "服务商认证失败，请检查 API Key"
+        case 402: detail = "服务商余额不足，请检查账户额度"
+        case 403: detail = "服务商拒绝访问，请检查权限"
+        case 408, 504: detail = "模型请求超时，请稍后重试"
+        case 413: detail = "图片请求超过服务商大小限制"
+        case 429: detail = "服务商限流，请稍后重试"
+        case 500...599: detail = "模型服务或连接异常，请稍后重试"
+        default: detail = "Provider 请求失败，请检查设置后重试"
+        }
+        guard let status = error.status, (100...599).contains(status) else { return detail }
+        return detail + "（HTTP \(status)）"
     }
 
     public static func log(_ entry: ProductLogEntry) -> ProductLogEntry {

@@ -36,4 +36,12 @@ private var missingFixtureCapability: SlateSyncError {
 
 extension ScenarioListWorkflowServing {
     func listScenarios(projectID: String) async throws -> [ScenarioSummary] { [] }
+    func listScenarioCandidates(projectID: String) async throws -> [ScenarioCandidate] { [] }
+    func confirmScenarioCandidate(projectID: String, candidateID: String, label: String, existingProfileID: String?) async throws -> ScenarioData {
+        throw missingFixtureCapability
+    }
+    func previewScenarioMerge(projectID: String, sourceID: String, targetID: String) async throws -> ScenarioMergePreview { throw missingFixtureCapability }
+    func mergeScenarioProfiles(projectID: String, preview: ScenarioMergePreview) async throws -> ScenarioMergeReceipt { throw missingFixtureCapability }
+    func latestScenarioMerge(projectID: String) async throws -> ScenarioMergeReceipt? { nil }
+    func undoScenarioMerge(projectID: String, receiptID: String) async throws { throw missingFixtureCapability }
 }

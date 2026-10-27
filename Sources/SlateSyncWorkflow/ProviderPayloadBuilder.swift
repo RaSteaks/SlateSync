@@ -1,10 +1,18 @@
 import Foundation
 import SlateSyncDomain
+import SlateSyncMedia
 
 /// Owns provider-specific wire payloads and the ordered structured-output
 /// fallback ladder. Credentials stay in the transport and never enter JSON.
 public enum ProviderPayloadBuilder {
-    public static func payload(_ request: RecognitionStageRequest, mode: ProviderJSONMode) throws -> Data {
+    /// DeepSeek counts inline Base64 in its 48 MiB body limit. Match the official
+    /// host, not a user-supplied label/model name or a third-party gateway.
+    public static func requestByteLimit(_ request: RecognitionStageRequest) -> Int {
+        request.provider.baseURL.host?.lowercased() == "api.deepseek.com"
+            ? min(request.maximumRequestBytes, 48 * 1024 * 1024) : request.maximumRequestBytes
+    }
+
+    public static func payload(_ request: RecognitionStageRequest, mode: ProviderJSONMode, enforceBudget: Bool = true) throws -> Data {
         let schemaText = String(data: try encoded(request.schema), encoding: .utf8) ?? "{}"
         let needsPromptSchema = mode != .jsonSchema
         let system: String
@@ -20,7 +28,11 @@ public enum ProviderPayloadBuilder {
         let root = request.provider.transport == .responses
             ? responsesPayload(request, mode: mode, system: system, userText: userText)
             : chatPayload(request, mode: mode, system: system, userText: userText)
-        return try encoded(root)
+        let data = try encoded(root)
+        if enforceBudget, data.count > requestByteLimit(request) {
+            throw SlateSyncError(code: "MEDIA_REQUEST_SIZE", message: "压缩后的请求仍超出大小上限")
+        }
+        return data
     }
 
     public static func userText(_ request: RecognitionStageRequest) -> String {
@@ -28,7 +40,7 @@ public enum ProviderPayloadBuilder {
         let count = request.images.count
         let base: String
         if core {
-            base = "以下 \(count) 张图是同一个来源页的核心字段局部放大视图，必须合并为一页识别，不能重复输出记录。来源：\(request.filename)"
+            base = "以下 \(count) 张图来自同一个来源页，请结合完整参照与局部图（如有）复核核心字段，不能重复输出记录。来源：\(request.filename)"
         } else if count > 1 {
             base = "以下 \(count) 张图是同一个来源页的整页图与局部放大图，必须合并为一页识别，不能重复输出记录。来源：\(request.filename)"
         } else {
@@ -73,6 +85,14 @@ public enum ProviderPayloadBuilder {
         } else if mode == .jsonObject {
             root["response_format"] = .object(["type": .string("json_object")])
         }
+        // DeepSeek defaults to high-effort thinking. A real slate exhausted all
+        // 16k output tokens in reasoning and returned no JSON. Transcription uses
+        // non-thinking mode; app-level audit/review remains unchanged. Scope by
+        // official host and documented vision aliases, never by display name.
+        if request.provider.baseURL.host?.lowercased() == "api.deepseek.com",
+           ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"].contains(request.model.apiID) {
+            root["thinking"] = .object(["type": .string("disabled")])
+        }
         if request.provider.providerKind == .openRouter { root["provider"] = .object(["require_parameters": .boolean(true)]) }
         return .object(root)
     }
@@ -88,15 +108,18 @@ public enum ProviderPayloadBuilder {
 /// result while preserving the narrow legacy fallback classification.
 public actor ProviderRecognitionClient {
     private let transport: any ProviderHTTPTransporting
+    private let compression: any MediaRecompressing
 
-    public init(transport: any ProviderHTTPTransporting) { self.transport = transport }
+    public init(transport: any ProviderHTTPTransporting, compression: any MediaRecompressing = MediaPreparationService()) {
+        self.transport = transport; self.compression = compression
+    }
 
     public func recognize(_ request: RecognitionStageRequest) async throws -> RecognitionStageResponse {
         var mode = request.model.jsonMode
         while true {
             try Task.checkCancellation()
             do {
-                let body = try ProviderPayloadBuilder.payload(request, mode: mode)
+                let body = try await fittedPayload(request, mode: mode)
                 let response = try await transport.send(.init(
                     provider: request.provider, purpose: request.stage == .primary ? .recognition : .probe,
                     method: .post, body: body, timeoutMilliseconds: request.timeoutMilliseconds,
@@ -126,7 +149,7 @@ public actor ProviderRecognitionClient {
         while true {
             try Task.checkCancellation()
             do {
-                let body = try ProviderPayloadBuilder.payload(request, mode: mode)
+                let body = try await fittedPayload(request, mode: mode)
                 let wire = try await transport.send(.init(
                     provider: request.provider,
                     purpose: request.stage == .primary ? .recognition : .probe,
@@ -157,6 +180,40 @@ public actor ProviderRecognitionClient {
     }
 
     public func close() async { await transport.close() }
+
+    private func fittedPayload(_ request: RecognitionStageRequest, mode: ProviderJSONMode) async throws -> Data {
+        guard request.maximumRequestBytes > 0 else { throw MediaFailure.invalidInput }
+        let target = floor(Double(ProviderPayloadBuilder.requestByteLimit(request)) * 0.94)
+        var current = request
+        var document: PreparedDocument?
+        for profile in [ImageCompressionProfile?.none] + ImageCompressionProfile.requestProfiles.map(Optional.some) {
+            try Task.checkCancellation()
+            if let profile {
+                if document == nil {
+                    guard !request.images.isEmpty, request.images.count <= 3,
+                          request.images.allSatisfy({ $0.mimeType == "image/jpeg" }) else { break }
+                    let textOnly = try ProviderPayloadBuilder.payload(request.replacingImages([]), mode: mode, enforceBudget: false)
+                    guard Double(textOnly.count) < target else { break }
+                    document = try .init(filename: request.filename, pages: [.init(pageNumber: 1,
+                        views: request.images.enumerated().map { index, image in
+                            .init(viewIndex: index, viewType: index == 0 ? .full : .coreDetail,
+                                  image: try .init(jpeg: image.data, width: image.width, height: image.height))
+                        })])
+                }
+                guard let previous = document else { break }
+                let compressed = try await compression.recompress(previous, profile: profile, operation: .init())
+                document = compressed
+                current = request.replacingImages(compressed.pages[0].views.map(\.image))
+            }
+            // Encode the exact current mode, including schema, OCR, template,
+            // filename and review targets. Reuse these bytes for transport; a
+            // JSON-mode fallback is measured again instead of assuming its size.
+            let body = try ProviderPayloadBuilder.payload(current, mode: mode, enforceBudget: false)
+            try Task.checkCancellation()
+            if Double(body.count) <= target { return body }
+        }
+        throw SlateSyncError(code: "MEDIA_REQUEST_SIZE", message: "压缩后的请求仍超出大小上限")
+    }
 
     public nonisolated static func nextMode(_ current: ProviderJSONMode, error: SlateSyncError) -> ProviderJSONMode? {
         guard [400, 404, 422].contains(error.status ?? -1) else { return nil }
@@ -194,6 +251,13 @@ public actor ProviderRecognitionClient {
                 text = parts.joined()
             }
         case .chatCompletions:
+            // A truncated JSON can still parse after tolerant repair. Never
+            // accept it as a complete slate or retry the same exhausted budget.
+            if case .array(let choices)? = fields["choices"],
+               case .object(let first)? = choices.first,
+               case .string("length")? = first["finish_reason"] {
+                throw SlateSyncError(code: "MODEL_OUTPUT_TRUNCATED", message: "模型输出达到长度上限，未生成完整识别结果", providerError: true)
+            }
             guard case .array(let choices)? = fields["choices"], let first = choices.first,
                   case .object(let choice) = first, case .object(let message)? = choice["message"],
                   let extracted = chatText(message["content"]) else {

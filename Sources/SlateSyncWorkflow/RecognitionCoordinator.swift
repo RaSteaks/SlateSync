@@ -57,6 +57,8 @@ public actor RecognitionCoordinator: RecognitionServing {
     private let pipeline: RecognitionPagePipeline?
     private let client: ProviderRecognitionClient?
     private let mediaFactory: MediaFactory?
+    private let clearMediaSession: @Sendable (String) async -> Void
+    private let closeMediaResources: @Sendable () async -> Void
     private let scenarioPersistence: (any ScenarioMatchingPersistence)?
     private let persistence: (any RecognitionPersistence)?
     private let limiter: RecognitionLimiter
@@ -75,6 +77,7 @@ public actor RecognitionCoordinator: RecognitionServing {
     /// progress/cancel. recognize(_:) fails until runtime dependencies exist.
     public init() {
         registry = nil; pipeline = nil; client = nil; mediaFactory = nil
+        clearMediaSession = { _ in }; closeMediaResources = {}
         scenarioPersistence = nil; persistence = nil; limiter = RecognitionLimiter()
         settings = .init(); clock = SystemProviderClock(); workflowConfiguration = { .init() }
     }
@@ -83,6 +86,8 @@ public actor RecognitionCoordinator: RecognitionServing {
         registry: ProviderRegistry,
         client: ProviderRecognitionClient,
         mediaFactory: @escaping MediaFactory,
+        clearMediaSession: @escaping @Sendable (String) async -> Void = { _ in },
+        closeMediaResources: @escaping @Sendable () async -> Void = {},
         scenarioPersistence: (any ScenarioMatchingPersistence)? = nil,
         persistence: (any RecognitionPersistence)? = nil,
         settings: GlobalSettingValues = .init(),
@@ -92,6 +97,7 @@ public actor RecognitionCoordinator: RecognitionServing {
     ) {
         self.registry = registry; self.client = client
         pipeline = RecognitionPagePipeline(client: client); self.mediaFactory = mediaFactory
+        self.clearMediaSession = clearMediaSession; self.closeMediaResources = closeMediaResources
         self.scenarioPersistence = scenarioPersistence; self.persistence = persistence
         self.settings = settings
         self.limiter = limiter ?? RecognitionLimiter(limit: RecognitionRuntimeOptions.globalConcurrency(settings[.maxConcurrentRecognitions]))
@@ -151,9 +157,10 @@ public actor RecognitionCoordinator: RecognitionServing {
     @discardableResult
     public func cancelAndWait(projectID: String) async -> Bool {
         let values = operations.values.filter { $0.projectID == projectID }
-        guard !values.isEmpty else { return false }
+        guard !values.isEmpty else { await clearMediaSession(projectID); return false }
         values.forEach { $0.task.cancel() }
         for value in values { _ = try? await value.task.value }
+        await clearMediaSession(projectID)
         broadcast(projectID: projectID, .init(phase: "canceled", completed: 0, total: 0, message: "识别已停止", percent: 100))
         return true
     }
@@ -161,11 +168,12 @@ public actor RecognitionCoordinator: RecognitionServing {
     public func close() async {
         if let closeTask { await closeTask.value; return }
         closed = true
-        let tasks = operations.values.map(\.task), client = client, recoveryCache = recoveryCache
+        let tasks = operations.values.map(\.task), client = client, recoveryCache = recoveryCache, closeMediaResources = closeMediaResources
         let task = Task {
             tasks.forEach { $0.cancel() }
             for value in tasks { _ = try? await value.value }
             if let client { await client.close() }
+            await closeMediaResources()
             await recoveryCache.clearAll()
         }
         closeTask = task
@@ -242,18 +250,12 @@ public actor RecognitionCoordinator: RecognitionServing {
             }
             let candidates = FailoverChain.plan(primary: selected, chain: backups)
             let accuracy = projectSettings.accuracyMode
-            let basePrompt = RecognitionPrompts.compose(base: RecognitionPrompts.system, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments)
-            let measure: @Sendable (PreparedDocument) throws -> Int = { document in
-                let groups = document.pages.map { page in JSONValue.array(page.views.map { .string($0.image.dataURL) }) }
-                return try JSONEncoder().encode(JSONValue.object(["providerId": .string(providerID), "modelId": .string(modelID), "filename": .string(request.filename), "systemPrompt": .string(basePrompt), "imageDataGroups": .array(groups)])).count
-            }
             let artifact: MediaOCRArtifact
             do {
                 artifact = try await media.run(
-                    input: request.input, session: "\(request.projectID):\(operationID.uuidString)",
+                    input: request.input, session: request.projectID,
                     accuracy: accuracy == .high ? .high : .standard,
                     cacheEnabled: request.cacheEnabled, legacyRequest: request.legacyRequest,
-                    maxRequestBytes: request.maximumRequestBytes, measure: measure,
                     progress: { mediaProgress in
                         let percent = min(35, mediaProgress.total > 0 ? (mediaProgress.completed * 35 / mediaProgress.total) : 0)
                         Task {
@@ -268,43 +270,53 @@ public actor RecognitionCoordinator: RecognitionServing {
                 )
             } catch { await media.close(); throw error }
             try Task.checkCancellation()
+            let structureStarted = clock.nowMilliseconds()
             let scenario = try await scenarioSelection(explicitID: projectSettings.scenarioId, projectID: request.projectID, artifact: artifact, resolve: projectSettings.resolve, matching: workflow.scenario.matching, persistence: scenarioPersistence)
             try Task.checkCancellation()
             let engine = ScenarioProfileEngine()
-            let scenarioPrompt = if let profile = scenario.profile { await engine.promptInstruction(profile) } else { "" }
+            var pageInstructions: [Int: String] = [:]
+            for (page, profile) in scenario.profiles { pageInstructions[page] = await engine.promptInstruction(profile) }
             let prompts = (
-                primary: RecognitionPrompts.compose(base: RecognitionPrompts.system, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments, scenarioInstruction: scenarioPrompt),
-                audit: RecognitionPrompts.compose(base: RecognitionPrompts.audit, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments, scenarioInstruction: scenarioPrompt),
-                review: RecognitionPrompts.compose(base: RecognitionPrompts.review, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments, scenarioInstruction: scenarioPrompt)
+                primary: RecognitionPrompts.compose(base: RecognitionPrompts.system, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments),
+                audit: RecognitionPrompts.compose(base: RecognitionPrompts.audit, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments),
+                review: RecognitionPrompts.compose(base: RecognitionPrompts.review, customPrompt: projectSettings.customPrompt, slateCSV: request.slateCSVRecords, fieldFormats: projectSettings.resolve.fieldFormats, comments: projectSettings.resolve.comments)
             )
             let pages = artifact.document.pages.map { page -> RecognitionPageInput in
                 let evidence = artifact.evidence.indices.contains(page.pageNumber - 1) ? artifact.evidence[page.pageNumber - 1] : ""
-                return .init(pageNumber: page.pageNumber, views: page.views, fullOCREvidence: evidence, coreOCREvidence: evidence)
+                let core = artifact.coreEvidence.indices.contains(page.pageNumber - 1) ? artifact.coreEvidence[page.pageNumber - 1] : ""
+                return .init(pageNumber: page.pageNumber, views: page.views, fullOCREvidence: evidence, coreOCREvidence: core,
+                             scenarioInstruction: pageInstructions[page.pageNumber] ?? "")
             }
+            let modelStarted = clock.nowMilliseconds()
             let output = try await pipeline.run(
                 pages: pages, provider: provider, model: model, accuracy: accuracy,
                 formats: projectSettings.resolve.fieldFormats, prompts: prompts,
                 pageConcurrency: RecognitionRuntimeOptions.pageConcurrency(globalSettings[.modelPageConcurrency]),
                 timeoutMilliseconds: RecognitionRuntimeOptions.timeoutMilliseconds(globalSettings[.modelRequestTimeoutMS]),
                 maximumTimeoutRetries: RecognitionRuntimeOptions.maximumTimeoutRetries(globalSettings[.modelRequestMaxRetries]),
+                maximumRequestBytes: request.maximumRequestBytes,
                 filename: request.filename, progress: { event in Task { await publish(event) } },
                 candidates: candidates, registry: registry, failoverState: failoverState,
                 recoveryCache: recoveryCache,
                 recoveryID: request.taskID.map { "\(request.projectID):\($0)" }
             )
+            var stageDurations = artifact.stageDurationsMs
+            stageDurations["structure"] = max(0, Int(modelStarted - structureStarted))
+            stageDurations["model"] = max(0, Int(clock.nowMilliseconds() - modelStarted))
             await media.close()
             try Task.checkCancellation()
             await publish(.init(phase: "merge", completed: pages.count, total: pages.count, message: "正在合并逐页结果并检查场、镜、次连续性", percent: 97))
             var warnings = output.result.warnings
             if let warning = artifact.summary.warning { warnings.insert(warning, at: 0) }
             if let warning = scenario.selection?.warning { warnings.append(warning) }
-            let sheet = RecognitionSheet(sheetTitle: output.result.sheetTitle, records: output.result.records, warnings: warnings)
+            var sheet = RecognitionSheet(sheetTitle: output.result.sheetTitle, records: output.result.records, warnings: warnings)
             let duration = max(0, Int((clock.nowMilliseconds() - started).rounded()))
             let ocr = publicOCR(artifact.summary)
             let defaults = RecognitionDefaults(providerId: providerID, modelId: model.publicID, customPrompt: projectSettings.customPrompt)
             var diagnosticID: String?, taskID: String?
             if let persistence {
-                let diagnostic = RecognitionDiagnostic(provider: providerID, model: model.publicID, pageCount: pages.count, recordCount: sheet.records.count, durationMs: duration, stageCount: output.stageCount, ocr: ocr, warningCount: warnings.count, error: nil)
+                let diagnostic = RecognitionDiagnostic(provider: providerID, model: model.publicID, pageCount: pages.count, recordCount: sheet.records.count, durationMs: duration, stageCount: output.stageCount, ocr: ocr, warningCount: warnings.count, error: nil,
+                    scenarioPages: scenario.decisions, stageDurationsMs: stageDurations)
                 diagnosticID = try await persistence.saveDiagnostic(projectID: request.projectID, sessionID: nil, payload: try JSONEncoder().encode(diagnostic))
                 try Task.checkCancellation()
                 let savedSheet = persisted(sheet)
@@ -314,6 +326,24 @@ public actor RecognitionCoordinator: RecognitionServing {
                 try await persistence.touchRecognitionActivity(projectID: request.projectID)
             }
             try Task.checkCancellation()
+            // Learning is auxiliary and starts only after recognition/task save
+            // succeeded. No candidate becomes a formal template automatically.
+            if let scenarioPersistence {
+                for decision in scenario.decisions {
+                    guard !Task.isCancelled, let digest = artifact.sourceDigests[decision.pageNumber] else { break }
+                    do {
+                        try await scenarioPersistence.saveScenarioObservation(projectID: request.projectID,
+                            observation: .init(sourceDigest: digest, decision: decision))
+                    } catch {
+                        let warning = "识别结果已完成，场记版式观察未保存"
+                        if !sheet.warnings.contains(warning) {
+                            sheet = .init(sheetTitle: sheet.sheetTitle, records: sheet.records, warnings: sheet.warnings + [warning])
+                        }
+                        await publish(.init(phase: "scenario", completed: pages.count, total: pages.count,
+                            message: warning, warning: StructuredLogRedactor.redactText(error.localizedDescription)))
+                    }
+                }
+            }
             await publish(.init(phase: "complete", completed: pages.count, total: pages.count, message: "识别完成，共 \(sheet.records.count) 条记录", percent: 100))
             // Persist the recognition-stage detector output so later export
             // stages can dedupe by the stable `type:key` identity instead of
@@ -326,7 +356,7 @@ public actor RecognitionCoordinator: RecognitionServing {
             await media.close()
             if error.code == RecognitionFailure.canceled.code { throw RecognitionFailure.canceled }
             if let persistence {
-                let diagnostic = RecognitionDiagnostic(provider: nil, model: nil, pageCount: 0, recordCount: 0, durationMs: max(0, Int((clock.nowMilliseconds() - started).rounded())), stageCount: 0, ocr: nil, warningCount: 0, error: error)
+                let diagnostic = RecognitionDiagnostic(provider: nil, model: nil, pageCount: 0, recordCount: 0, durationMs: max(0, Int((clock.nowMilliseconds() - started).rounded())), stageCount: 0, ocr: nil, warningCount: 0, error: error, scenarioPages: nil, stageDurationsMs: nil)
                 _ = try? await persistence.saveDiagnostic(projectID: request.projectID, sessionID: nil, payload: JSONEncoder().encode(diagnostic))
             }
             throw error
@@ -335,24 +365,46 @@ public actor RecognitionCoordinator: RecognitionServing {
         }
     }
 
-    private nonisolated static func scenarioSelection(explicitID: String?, projectID: String, artifact: MediaOCRArtifact, resolve: ProjectSettings.ResolveSettings, matching: ScenarioMatchingConfig, persistence: (any ScenarioMatchingPersistence)?) async throws -> (profile: ScenarioProfile?, selection: ScenarioSelection?) {
-        guard let persistence else { return (nil, nil) }
+    private nonisolated static func scenarioSelection(explicitID: String?, projectID: String, artifact: MediaOCRArtifact, resolve: ProjectSettings.ResolveSettings, matching: ScenarioMatchingConfig, persistence: (any ScenarioMatchingPersistence)?) async throws -> (profiles: [Int: ScenarioProfile], selection: ScenarioSelection?, decisions: [ScenarioPageDecision]) {
+        guard let persistence else { return ([:], nil, []) }
         if let explicitID = nonempty(explicitID) {
             do {
                 let data = try await persistence.loadScenario(projectID: projectID, scenarioID: explicitID)
-                let profile = ScenarioProfile(schemaVersion: data.schemaVersion, fingerprintVersion: data.fingerprintVersion, fingerprint: data.fingerprint, label: data.label, layout: data.layout, fields: data.fields, recognition: data.recognition, output: data.output)
-                return (profile, .init(id: data.id, match: "selected", score: 1, fingerprint: data.fingerprint))
-            } catch { throw SlateSyncError(code: "SCENARIO_NOT_FOUND", message: "场记结构不存在", status: 400) }
+                let profile = try await ScenarioProfileEngine().normalize(data.profile)
+                return (Dictionary(uniqueKeysWithValues: artifact.document.pages.map { ($0.pageNumber, profile) }),
+                        .init(id: data.id, match: "selected", score: 1, fingerprint: data.fingerprint), [])
+            } catch is CancellationError { throw RecognitionFailure.canceled }
+            catch let error as SlateSyncError where error.code != "ENOENT" { throw error }
+            catch { throw SlateSyncError(code: "SCENARIO_NOT_FOUND", message: "场记结构不存在", status: 400) }
         }
-        guard artifact.outcome.result?.blockCount ?? 0 > 0 else { return (nil, .init(match: "fallback", score: 0, warning: "本次没有可用 OCR 结构证据，未自动匹配场记结构。")) }
+        guard artifact.outcome.result?.blockCount ?? 0 > 0 else { return ([:], .init(match: "fallback", score: 0, warning: "本次没有可用 OCR 结构证据，未自动匹配场记结构。"), []) }
         do {
             let service = ScenarioMatchingService(projectID: projectID, persistence: persistence)
-            let result = try await service.matchAndSave(input: artifact.observation, resolve: resolve, matching: matching)
-            let data = result.profile
-            let profile = ScenarioProfile(schemaVersion: data.schemaVersion, fingerprintVersion: data.fingerprintVersion, fingerprint: data.fingerprint, label: data.label, layout: data.layout, fields: data.fields, recognition: data.recognition, output: data.output)
-            return (profile, .init(id: data.id, match: result.match, score: result.score, fingerprint: data.fingerprint))
+            let decisions = try await service.evaluate(input: artifact.observation, resolve: resolve, matching: matching)
+            var profiles: [Int: ScenarioProfile] = [:]
+            for decision in decisions {
+                if let data = decision.profile {
+                    profiles[decision.pageNumber] = .init(schemaVersion: data.schemaVersion, fingerprintVersion: data.fingerprintVersion,
+                        fingerprint: data.fingerprint, label: data.label, layout: data.layout, fields: data.fields,
+                        recognition: data.recognition, output: data.output, structure: decision.candidate?.structure ?? data.structure)
+                } else if decision.status == .candidate { profiles[decision.pageNumber] = decision.candidate }
+            }
+            let statuses = Set(decisions.map(\.status))
+            let allReused = !decisions.isEmpty && decisions.allSatisfy { $0.status == .reused }
+            let ids = Set(decisions.compactMap { $0.profile?.id })
+            let shared = allReused && ids.count == 1 ? decisions.first?.profile : nil
+            let warning: String?
+            if allReused { warning = nil }
+            else if decisions.contains(where: { $0.candidate != nil && $0.status != .reused }) {
+                warning = "部分页面版式尚未确认，已使用当前页面证据识别；新版式可在项目设置中确认，不会自动新增正式模板。"
+            } else {
+                warning = "部分页面缺少可靠表头，已使用当前页面证据继续识别，未创建版式候选。"
+            }
+            return (profiles, .init(id: shared?.id, match: statuses.count == 1 ? (statuses.first?.rawValue ?? "insufficient") : "mixed",
+                score: allReused ? (decisions.compactMap(\.score).min() ?? 0) : 0, fingerprint: shared?.fingerprint, warning: warning), decisions)
         } catch {
-            return (nil, .init(match: "fallback", score: 0, warning: "场记结构学习失败，已继续使用默认规则：\(StructuredLogRedactor.redactText(error.localizedDescription))"))
+            if error is CancellationError { throw error }
+            return ([:], .init(match: "fallback", score: 0, warning: "场记结构学习失败，已继续使用默认规则：\(StructuredLogRedactor.redactText(error.localizedDescription))"), [])
         }
     }
 
@@ -386,4 +438,6 @@ private struct RecognitionDiagnostic: Codable, Sendable {
     let ocr: OcrSummary?
     let warningCount: Int
     let error: SlateSyncError?
+    let scenarioPages: [ScenarioPageDecision]?
+    let stageDurationsMs: [String: Int]?
 }

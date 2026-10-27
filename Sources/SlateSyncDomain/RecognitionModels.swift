@@ -39,17 +39,20 @@ public struct RecognitionPageInput: Sendable {
     public let views: [PreparedMediaView]
     public let fullOCREvidence: String
     public let coreOCREvidence: String
+    public let scenarioInstruction: String
 
     public init(
         pageNumber: Int,
         views: [PreparedMediaView],
         fullOCREvidence: String = "",
-        coreOCREvidence: String = ""
+        coreOCREvidence: String = "",
+        scenarioInstruction: String = ""
     ) {
         self.pageNumber = pageNumber
         self.views = views
         self.fullOCREvidence = fullOCREvidence
         self.coreOCREvidence = coreOCREvidence
+        self.scenarioInstruction = scenarioInstruction
     }
 }
 
@@ -64,6 +67,7 @@ public struct RecognitionStageRequest: Sendable {
     public let schema: JSONValue
     public let timeoutMilliseconds: Int
     public let maximumTimeoutRetries: Int
+    public let maximumRequestBytes: Int
 
     public init(
         provider: ProviderDescriptor,
@@ -75,7 +79,8 @@ public struct RecognitionStageRequest: Sendable {
         userInstruction: String? = nil,
         schema: JSONValue,
         timeoutMilliseconds: Int = 180_000,
-        maximumTimeoutRetries: Int = 1
+        maximumTimeoutRetries: Int = 1,
+        maximumRequestBytes: Int = 80 * 1024 * 1024
     ) {
         self.provider = provider
         self.model = model
@@ -87,6 +92,7 @@ public struct RecognitionStageRequest: Sendable {
         self.schema = schema
         self.timeoutMilliseconds = timeoutMilliseconds
         self.maximumTimeoutRetries = maximumTimeoutRetries
+        self.maximumRequestBytes = maximumRequestBytes
     }
 
     /// The synthetic capability probe uses this initializer so its frozen PNG
@@ -101,7 +107,8 @@ public struct RecognitionStageRequest: Sendable {
         userInstruction: String? = nil,
         schema: JSONValue,
         timeoutMilliseconds: Int = 180_000,
-        maximumTimeoutRetries: Int = 1
+        maximumTimeoutRetries: Int = 1,
+        maximumRequestBytes: Int = 80 * 1024 * 1024
     ) {
         self.provider = provider
         self.model = model
@@ -113,6 +120,14 @@ public struct RecognitionStageRequest: Sendable {
         self.schema = schema
         self.timeoutMilliseconds = timeoutMilliseconds
         self.maximumTimeoutRetries = maximumTimeoutRetries
+        self.maximumRequestBytes = maximumRequestBytes
+    }
+
+    public func replacingImages(_ images: [PreparedImage]) -> Self {
+        .init(provider: provider, model: model, stage: stage, filename: filename, images: images,
+              systemPrompt: systemPrompt, userInstruction: userInstruction, schema: schema,
+              timeoutMilliseconds: timeoutMilliseconds, maximumTimeoutRetries: maximumTimeoutRetries,
+              maximumRequestBytes: maximumRequestBytes)
     }
 }
 

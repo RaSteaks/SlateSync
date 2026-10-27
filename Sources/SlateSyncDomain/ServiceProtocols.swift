@@ -32,6 +32,11 @@ public protocol ScenarioProfileProcessing: Sendable {
 public protocol ScenarioMatchingPersistence: Sendable {
     func listScenarios(projectID: String) async throws -> [ScenarioSummary]
     func loadScenario(projectID: String, scenarioID: String) async throws -> ScenarioData
+    /// One read includes explicit associations without mutating saved profiles.
+    func scenarioSnapshot(projectID: String) async throws -> ScenarioMatchingSnapshot
+    func saveScenarioObservation(projectID: String, observation: ScenarioLearningObservation) async throws
+    func listScenarioCandidates(projectID: String) async throws -> [ScenarioCandidate]
+    func confirmScenarioCandidate(projectID: String, candidateID: String, label: String, existingProfileID: String?) async throws -> ScenarioData
     func applyScenarioMatch(
         projectID: String,
         candidate: ScenarioProfile,

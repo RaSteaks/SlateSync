@@ -1,12 +1,27 @@
 # Release and support / 发布与支持
 
+## Acceptance scopes / 验收范围
+
+[SM-09 policy v2](docs/sm09-acceptance-policy.md) separates migration completion
+from full release acceptance. A clean remote `--functional` Gate PASS with
+`completionEligible=true` may support Owner review of native functionality,
+data compatibility, resource safety and local package delivery. Timing/FPS
+remain advisory for that milestone. The existing `approvable` field stays false
+for functional results; it cannot be used as full release evidence.
+
+SM-09 完成范围为原生迁移、功能、数据兼容、资源安全与本地交付包。符合条件的功能
+Gate 证据经 Owner 确认后才能推进阶段状态；性能失败继续如实记录为待办。
+完整发布仍运行下方默认严格 Gate，并要求 `fullAcceptancePassed=true`；迁移完成
+不自动证明性能达标、渠道验收通过或获得发布授权。
+
 ## Local validation / 本地验证
 
-Run `./script/phase_gate.sh SM-09` from a clean commit. The Gate produces one Universal
+Run `./script/phase_gate.sh SM-09` from a clean commit on the GitHub macOS runner.
+Local foreground acceptance requires explicit scheduling. The Gate produces one Universal
 macOS 15+ app and round-trips ZIP and DMG payloads. It also launches the ZIP's Release app
 through the same isolated XCUI scenarios. Preserve the Gate result, manifest and checksums.
 
-在干净提交上运行完整 Gate。产物位于该轮结果目录的 `artifacts/`，ZIP、DMG 和 release notes
+在远端干净提交上运行完整 Gate；本机前台验收须另行安排。产物位于该轮结果目录的 `artifacts/`，ZIP、DMG 和 release notes
 由 `SHA256SUMS` 覆盖；JSON manifest 记录 commit、版本、架构、签名 lane 与 app 内容哈希。
 运行 `shasum -a 256 -c SHA256SUMS` 核验下载内容。不要只根据文件名判断来源。
 

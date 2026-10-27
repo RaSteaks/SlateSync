@@ -13,6 +13,15 @@ func mediaFixture(_ name: String) throws -> Data {
 func mediaFixtureURL(_ name: String) throws -> URL { try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: nil)) }
 
 @MainActor final class MediaPreparationTests: XCTestCase {
+    func testStandardPreparationSkipsDetailsWithoutChangingFullPage() async throws {
+        let service = MediaPreparationService()
+        let input = MediaInput.bytes(try mediaFixture("slate.jpg"), filename: "slate.jpg")
+        let standard = try await service.prepare(input, options: .init(includesDetails: false))
+        let detailed = try await service.prepare(input)
+        XCTAssertEqual(standard.viewCount, 1)
+        XCTAssertEqual(detailed.viewCount, 3)
+        XCTAssertEqual(standard.pages[0].views[0], detailed.pages[0].views[0])
+    }
     func testIndependentGeometryOracles() throws {
         struct Bands: Decodable { let width: Int; let height: Int; let rows: [Int]; let expected: ImagePreprocessing.Band }
         struct Segments: Decodable { let height: Int; let expected: ImagePreprocessing.Layout }

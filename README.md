@@ -292,7 +292,14 @@ Debug 合成 Provider 用例必须全部通过，打包 Release 的实际执行�
 
 日常本机验证优先使用 `./script/ci_preflight.sh`：只运行契约和自测，不启动应用、切换窗口或采集前台画面。
 完整 SM-09 与原生 UI、打包 Release UI 在 GitHub macOS runner 上执行；预检通过仅代表准备完成，
-完整通过以同一提交的远端 `native-test` 和 UI 覆盖证据为准。本机前台验收仅在用户明确安排时进行。
+功能验收以同一提交的远端 `native-test` 和 UI 覆盖证据为准。本机前台验收仅在用户明确安排时进行。
+
+按 [SM-09 验收策略 v2](docs/sm09-acceptance-policy.md)，干净提交的 functional Gate PASS
+且 `completionEligible=true` 可以进入迁移完成审查；Owner 确认后才更新 COMPLETE。
+性能报告独立跟踪，`fullAcceptancePassed=false` 不得表述为完整发布验收通过。
+默认不带 `--functional` 的 Gate 仍执行严格性能预算，正式分发另有渠道验收。
+本工作区新增测试、临时文件与日志统一放在 `/Users/rasteaks/Desktop/SlateSync/1027` 下，
+运行前同时配置临时、缓存和工具输出路径；历史证据路径保持原样。
 
 ## 构建与打包
 

@@ -151,7 +151,8 @@ public actor MCPToolService {
         // The shared coordinator owns all recognition rules; absence of
         // persistence keeps desktop tasks and autosave entirely untouched.
         let coordinator = RecognitionCoordinator(registry: registry,
-            client: ProviderRecognitionClient(transport: transportFactory()), mediaFactory: factory,
+            client: ProviderRecognitionClient(transport: transportFactory()), mediaFactory: factory.make,
+            clearMediaSession: factory.clearSession, closeMediaResources: factory.close,
             settings: snapshot.configuration.values, limiter: recognitionLimiter, workflowConfiguration: { try await config.current() })
         let events = await coordinator.progress(for: "mcp")
         let progressTask = Task {

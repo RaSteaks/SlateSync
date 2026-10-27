@@ -55,6 +55,9 @@ jobs:
         run: swift build -Xswiftc -warnings-as-errors
 
       - name: Run required functional SM-09 Gate
+        # Policy v2: a clean PASS may support migration completion review.
+        # It retains approvable=false/fullAcceptancePassed=false and never
+        # approves a release or updates the recorded phase state itself.
         env:
           SLATESYNC_GATE_RESULTS_DIR: ${{ runner.temp }}/SlateSync-Gate
         run: ./script/phase_gate.sh SM-09 --functional

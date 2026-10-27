@@ -4,6 +4,25 @@ The native implementation may change language, UI framework and process
 boundaries, but must preserve these observable contracts until a recorded
 decision explicitly replaces them.
 
+## SM-09 acceptance scope — Owner decision, 2026-10-27
+
+The Owner requested the SM-09 completion-scope and acceptance-layer revision.
+[Acceptance policy v2](../../docs/sm09-acceptance-policy.md) permits a clean,
+complete functional/local-package Gate PASS to support migration completion
+review. Timing and FPS remain separately reported; functional, data, resource,
+UI and package assertions remain mandatory. The default full release Gate and
+distribution requirements are unchanged. This decision is not a candidate PASS,
+phase approval or release authorization and does not unfreeze SM-05/SM-06 algorithms.
+
+## Retained product contracts
+
+The 2026-10-27 request to implement the recognition optimization plan authorizes
+the scoped [recognition evolution decision](../../docs/recognition-contract-evolution.md):
+versioned structural matching, explicit candidate confirmation, OCR-quality
+images before transfer compression, and runtime/view cache reuse. V1 storage
+and historical oracles remain readable; the affected current algorithms need
+not reproduce the old matching and media orchestration behavior.
+
 - Project Library and project package format version remain `1`.
 - `library.sqlite`, `project.sqlite`, table/index names, WAL, foreign keys and
   busy timeout remain compatible with existing installations.

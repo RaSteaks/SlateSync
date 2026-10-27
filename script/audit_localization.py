@@ -2,7 +2,7 @@
 """Check authored UI copy and interpolation coverage without touching user data.
 
 Swift comments and nested interpolation strings are parsed so translated keys,
-stable route raw values and the bilingual language picker are distinguished.
+stable route raw values, bilingual language picker and filing identifier are distinguished.
 Run from the repository root: python3 script/audit_localization.py.
 """
 import re,json
@@ -57,7 +57,10 @@ def audit():
             elif re.search(r"case\s+\w+\s*=\s*$", prefix):
                 # WorkspaceSection raw values are persisted navigation identity.
                 continue
-            elif path.name == "SettingsRootView.swift" and key in {"语言 / Language", "简体中文"}:
+            elif path.name == "SettingsRootView.swift" and key in {
+                "语言 / Language", "简体中文", "浙ICP备2026090281号-1A"
+            }:
+                # Language names and the exact registration identifier stay verbatim.
                 continue
             elif path.name == "HelpModel.swift" and key in catalog:
                 # Resource-load errors are localized by the status presentation.

@@ -263,7 +263,10 @@ final class BetterProviderTests: XCTestCase {
             XCTFail("All failed services must leave the task incomplete")
         } catch let error as SlateSyncError {
             XCTAssertEqual(error.code, "PROVIDER_FAILOVER_EXHAUSTED")
-            XCTAssertEqual(error.message, "主服务与备用服务均不可用，请稍后重试或检查设置")
+            // Exhaustion retains the product-owned cause without losing the
+            // explicit primary/backup failure summary.
+            XCTAssertTrue(error.message.hasPrefix("主服务与备用服务均不可用，请稍后重试或检查设置"))
+            XCTAssertTrue(error.message.contains("模型请求超时"))
         }
     }
 

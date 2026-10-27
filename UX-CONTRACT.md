@@ -41,7 +41,9 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   on Resolve CSV (with Merge beside it; Import CSV… is a More-menu item and the
   empty state's button), none on Results. The More menu is a bare ellipsis with no
   menu indicator.
-- The application's copyright notice appears only in the standard About panel.
+- The application's copyright notice appears in the standard About panel and
+  the Settings footer, above the ICP filing. Both footer notices remain visible
+  across Settings categories and retain their original text in either language.
 - When a project is acquired, the sidebar's project group is titled with its
   saved name; closing the project removes the group.
 - Global settings open in the dedicated macOS Settings scene with `Cmd-,`.
@@ -118,6 +120,17 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   workspace state.
 
 ## Canonical operations
+
+Pending slate layouts are observations, not formal templates. Project Settings
+offers explicit creation or association with an existing layout, committing
+through the workflow facade and ProjectRuntime lease. Confirmation preserves
+unrelated project-setting drafts; duplicate requests are disabled and stale
+project responses cannot replace the current selection. Refresh has its own
+loading/error state. See docs/local-recognition-optimization-plan.md for the
+matching and persistence policy; native Picker and form controls remain canonical.
+One candidate starts expanded. Candidate-name and merge-picker drafts are
+scoped to the owning project; merging previews configuration differences and
+keeps old IDs as aliases, with a durable, conflict-checked undo operation.
 
 | Operation | Pending | Success | Failure | Focus |
 | --- | --- | --- | --- | --- |

@@ -7,8 +7,10 @@ private actor SM07PipelineTransport: ProviderHTTPTransporting {
     var calls = 0
     var active = 0
     var maximumActive = 0
+    var bodies: [Data] = []
     func send(_ request: ProviderTransportRequest) async throws -> ProviderTransportResponse {
         calls += 1; active += 1; maximumActive = max(maximumActive, active)
+        bodies.append(request.body ?? Data())
         defer { active -= 1 }
         try await Task.sleep(for: .milliseconds(5))
         let bodyText = String(data: request.body ?? Data(), encoding: .utf8) ?? ""
@@ -21,6 +23,30 @@ private actor SM07PipelineTransport: ProviderHTTPTransporting {
 }
 
 @MainActor final class SM07PagePipelineTests: XCTestCase {
+    func testAuditAndReviewKeepFullPageReferenceForColumnsOutsideDetailCrops() async throws {
+        let transport = SM07PipelineTransport()
+        let pipeline = RecognitionPagePipeline(client: ProviderRecognitionClient(transport: transport))
+        let full = try PreparedImage(jpeg: Data([255,216,255,1,255,217]), width: 2, height: 2)
+        let detail = try PreparedImage(jpeg: Data([255,216,255,2,255,217]), width: 1, height: 2)
+        _ = try await pipeline.run(pages: [.init(pageNumber: 1, views: [
+            .init(viewIndex: 0, viewType: .full, image: full), .init(viewIndex: 1, viewType: .coreDetail, image: detail)
+        ])], provider: provider(), model: model(), accuracy: .high, formats: .init(), prompts: ("p", "a", "r"), filename: "slate")
+        func strings(_ value: JSONValue) -> [String] {
+            switch value {
+            case .string(let text): [text]
+            case .array(let values): values.flatMap(strings)
+            case .object(let values): values.values.flatMap(strings)
+            default: []
+            }
+        }
+        let bodies = await transport.bodies
+        XCTAssertEqual(bodies.count, 3)
+        for body in bodies {
+            let content = strings(try JSONDecoder().decode(JSONValue.self, from: body))
+            XCTAssertTrue(content.contains(full.dataURL))
+            XCTAssertTrue(content.contains(detail.dataURL))
+        }
+    }
     private func image() throws -> PreparedImage { try .init(jpeg: Data([0xff, 0xd8, 0xff, 0xd9]), width: 1, height: 1) }
     private func provider() -> ProviderDescriptor { .init(id: "openai", label: "OpenAI", origin: .builtin, providerKind: .openAI, baseURL: URL(string: "https://example.com/v1")!, transport: .responses) }
     private func model() -> ResolvedModel { .init(publicID: "m", apiID: "m", providerID: "openai", label: "m") }
