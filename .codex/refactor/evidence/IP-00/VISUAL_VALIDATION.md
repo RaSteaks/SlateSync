@@ -8,7 +8,7 @@ CLASSIFICATION: **FROZEN LEGACY VISUAL VALIDATION — ACCEPTED BY GATE 01-02;
 NOT THE MODERN CONTINUOUS VISUAL DELIVERABLE**.
 
 Recorded on 2026-08-20 from
-`/Users/rasteaks/Desktop/个人/GitHub/SlateSync`.
+`<repository>`.
 
 ## Capture stability
 

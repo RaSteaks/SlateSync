@@ -1,5 +1,20 @@
 # SlateSync 当前项目方案
 
+## 2026-10-28 当前文件隐私脱敏
+
+- 移除当前文档、历史证据副本和测试夹具中的个人手机号、姓名、开发者标识与本机绝对路径；README 删除本机目录约定，其他说明使用相对路径或明确的私有目录占位符。
+- 原始 Git 对象、历史树身份、封存清单和原始哈希保持不变。新增固定哈希的脱敏清单，仅允许已列明的 UTF-8 字节替换；当前副本逐字节核对，HEAD、暂存区、文件集合与模式继续校验，不放宽验收结果、来源或覆盖要求。
+- 按用户反馈撤回额外的 Xcode 工程与签名配置改动，保留用户恢复的工程设置；本机签名文件恢复到本轮修改前。App 业务源码与资源不变。
+- 验证：17 项证据回归、完整 `./script/ci_preflight.sh`（含 26 项打包脚本自测）、隐私复扫、差异空白检查通过。日志位于 `/private/tmp/slatesync-privacy-cleanup-20261028/`。
+- 按用户要求未构建、未启动 App、未运行前台测试或远端 CI；未提交、推送或重写 Git 历史。工作区已有的识别优化规划改动保留。
+
+## 2026-10-28 场记单结构识别专项规划
+
+- 新增[场记单结构识别优化方案](docs/ocr-structure-optimization-plan.md)，细化动态裁图、行列与合并格证据、减少编码损失和冲突区域复核；从总方案链接到专项文档。
+- 按基线与坐标契约、动态裁图、结构证据、区域复核分阶段实施；无损实验独立验证，保留 20 页／每阶段最多 3 视图、全页参照、独立查漏、历史 JPEG 恢复与现有资源边界。
+- 定义独立留出集、单项及组合对照、质量与资源门槛、代码范围及回退规则。当前仅生成方案，未实施识别改动，未调用 Provider 或安装 OXR。
+- 文档结构、仓库内链接、差异空白检查及无窗口预检通过；预检日志位于 `/private/tmp/slatesync-ocr-plan-preflight.log`。
+
 ## 2026-10-27 未提交改动审查修复
 
 - 模型输出截断按当前页失败进入备用模型链，不重试同一耗尽预算，也不把主服务标记为其他页面不可用。
@@ -17,7 +32,7 @@
 - 对照 DeepSeek 官方 vision／thinking-mode API，以同一0801首页、生产提示词和完整字段Schema实测复现：默认思考耗尽16,000输出token（全部reasoning），77.22秒返回finish_reason=length、无正式内容。
 - 仅官方api.deepseek.com的deepseek-flash及文档列出的旧视觉别名显式发送thinking.disabled；不改变其他网关／模型，不减少App高精度查漏和裁决。完全相同请求仅此参数变化后7.00秒正常结束，返回33条记录、1,977输出token；尚不表示字段精度达标。
 - 同时按官方48MiB限制完整请求体并复用预算压缩；拒绝length截断响应被容错JSON误当完整结果；错误投影保留安全HTTP分类，主备耗尽日志保留脱敏原因，不显示原始响应。
-- 证据在 `/Users/rasteaks/Desktop/SlateSync/1027/deepseek-fix`，不读取人工CSV作为识别上下文，不写正式项目；已构建修复版，当前打开的App尚未切换。
+- 证据在 `${SLATESYNC_VALIDATION_ROOT}/deepseek-fix`，不读取人工CSV作为识别上下文，不写正式项目；已构建修复版，当前打开的App尚未切换。
 
 ## 2026-10-27 真实 OCR 前后实测
 
@@ -27,14 +42,14 @@
 
 ## 2026-10-27 接入人工 CSV 评测真值
 
-- 用户提供 `/Users/rasteaks/Desktop/SlateSync/csv`，只读盘点 38 份 UTF-16 CSV／4,419 行。日期与标准素材键形成 4,156 组，其中 4,147 组关键字段一致、9 组 Take 冲突；122 行非标准键保留待分类。
+- 用户提供 `<ground-truth-root>`，只读盘点 38 份 UTF-16 CSV／4,419 行。日期与标准素材键形成 4,156 组，其中 4,147 组关键字段一致、9 组 Take 冲突；122 行非标准键保留待分类。
 - 全部 PDF 存在同日期 CSV，260820 CSV 暂缺 PDF；映射仍需核对纸面覆盖，未将日期匹配当作完整标注。产物保存于 `1027/recognition-ground-truth`，原文件哈希与行数核对通过。
 - 修订方案与进度，明确评分真值不进入纯图片识别输入、空值不自动作负例、重复和冲突不覆盖。未执行识别准确率测试或调用 Provider。
 
 ## 2026-10-27 识别优化范围收敛与真实数据盘点
 
 - 更新优化方案及实施记录：短期项目无需模板学习；取消逐字段证据界面；本地专用模型不进入本期；优先 PDF 提图／调正、速度和自适应云端复核。
-- 只读检查用户提供的 45 份 PDF，共 170 页、161 个嵌入图片对象、9 页含文字；提取并查看一页原图。产物保存在 `/Users/rasteaks/Desktop/SlateSync/1027/recognition-scope-review`，未改原稿、未调用 Provider，尚未测量字段准确率。
+- 只读检查用户提供的 45 份 PDF，共 170 页、161 个嵌入图片对象、9 页含文字；提取并查看一页原图。产物保存在 `${SLATESYNC_VALIDATION_ROOT}/recognition-scope-review`，未改原稿、未调用 Provider，尚未测量字段准确率。
 - 核实 Native macOS CI 40103344217 在 ae82a714b1eea1d281da2c4c9e46a847ec21dfec 上的 functional SM-09 Gate 和 Debug／打包 UI 覆盖成功；修正远端未完成的旧描述，保留历史批准记录。本地未提交的识别改动仍需自己的验收证据。
 - 本次仅修订范围与检查输入，不宣称自动调正、流水线或自适应跳过复核已经实现。
 
@@ -60,7 +75,7 @@
   Xcode Debug 构建、工具烟测、完整无窗口预检、本地化和差异检查通过。DESIGN
   校验 0 错误（4 警告、1 提示）；网页静态审计仍为未修改历史 HTML 的 69 项问题。
 - 所有本轮测试、日志、截图、缓存及构建产物在
-  /Users/rasteaks/Desktop/SlateSync/1027/recognition-optimization；未启动 App／XCUI、
+  ${SLATESYNC_VALIDATION_ROOT}/recognition-optimization；未启动 App／XCUI、
   未调用真实 Provider、未安装模型、未运行远端 Gate、未提交或推送。
 
 ## 2026-10-27 SM09 完成范围与验收分层修订
@@ -73,7 +88,7 @@
   空证据、未完成、失败、环境阻塞、脏工作区和 NOT_RUN 均不能获得完成资格。
 - 更新阶段包、总兼容契约、阶段政策和开发／发布说明；保留 CURRENT_STATE 的
   REVIEW_READY、历史 review／manifest、必需功能断言与严格性能预算，不提前批准。
-- 新增测试与临时产物统一使用 /Users/rasteaks/Desktop/SlateSync/1027/sm09-acceptance；
+- 新增测试与临时产物统一使用 ${SLATESYNC_VALIDATION_ROOT}/sm09-acceptance；
   新回归已先复现旧实现缺少策略字段。修订后 10 项 CI 策略回归、完整离线预检、
   Zsh／Python 语法、文档链接与差异空白检查通过，日志保存在该目录的 logs 下。
   未启动 App、XCUI、前台性能或远端 Gate，未提交或推送；尚无当前提交的完成验收证据。
@@ -361,8 +376,8 @@
 - 表格：CSV/结果表按内容定宽（最后一列伸展）、数字列右对齐并使用等宽数字、行高 30→26 pt，对账摘要统一为一种橙色三角。
 - 一处行为修正：识别配置面板默认可见性由首个几何回调决定，而首个回调只有 300 pt 的初始提议宽度，会把默认永久钉成“收起”；现在只有测得宽度 ≥ 600 pt（窗口最小宽 960 pt 减侧栏）才决定默认。
 - 测试与文档：更新 WorkbenchComponentTests（四态符号/文案可区分）、SM08 规模测试（改挂侧栏）、布局回归（移除任务分栏三项）、XCUI（设置页签改按钮、移除任务栏开关）；新增仅在设置 `SLATESYNC_DESIGN_SNAPSHOT_DIR` 时运行的 `DesignSnapshotTests`（真实视图离屏整窗渲染）；英文资源与 sm09 清单哈希同步；DESIGN.md、UX-CONTRACT.md、`.claude/ui-design` 同步，旧规范标注已取代。
-- 评论家门（Opus 5 子代理，每轮全新代理、同一 prompt，只读图）：**未达 9/10**。门 1（HTML 样稿，6 轮）6 → 6.5 → 7 → 6.5 → 7 → 7；门 2（真实 SwiftUI 离屏渲染，4 轮）6 → 6 → 6 → 6.5。高分项一致：原生外壳、工具栏结构、色彩克制、项目库；低分项一致：结果/CSV 表没有行内状态符号和问题标记、结果页状态词汇不统一、模型服务设置页仍是卡片堆叠、CSV 页底部多层条、不同标签页间工具栏位置略有漂移。这些意见需要新功能（行内状态符号列、状态筛选、CSV 问题列/筛选）、改写冻结的表格单元，或重做模型服务设置页，已超出用户确认的范围，故停止迭代而非继续微调。评论家各轮原文在 `/Users/rasteaks/Desktop/SlateSync/test/rounds/`。
-- 验证：严格 `swift build`、UI 单元测试 172 项（2 项跳过，0 失败）、`./script/ci_preflight.sh`、本地化审计、Xcode Debug 无签名 `build-for-testing`（含 XCUI 目标）通过。未启动 App、XCUI 或前台验收；离屏渲染来自非活动窗口，看不到强调色填充与 macOS 26 Liquid Glass，真实前台观感、动画与 XCUI 仍待 GitHub runner 或你明确安排的本机前台验收。DESIGN.md 官方 lint 本机未缓存，未执行。证据与评论家各轮原文在 `/Users/rasteaks/Desktop/SlateSync/test/`。
+- 评论家门（Opus 5 子代理，每轮全新代理、同一 prompt，只读图）：**未达 9/10**。门 1（HTML 样稿，6 轮）6 → 6.5 → 7 → 6.5 → 7 → 7；门 2（真实 SwiftUI 离屏渲染，4 轮）6 → 6 → 6 → 6.5。高分项一致：原生外壳、工具栏结构、色彩克制、项目库；低分项一致：结果/CSV 表没有行内状态符号和问题标记、结果页状态词汇不统一、模型服务设置页仍是卡片堆叠、CSV 页底部多层条、不同标签页间工具栏位置略有漂移。这些意见需要新功能（行内状态符号列、状态筛选、CSV 问题列/筛选）、改写冻结的表格单元，或重做模型服务设置页，已超出用户确认的范围，故停止迭代而非继续微调。评论家各轮原文在 `<ui-validation-root>/rounds/`。
+- 验证：严格 `swift build`、UI 单元测试 172 项（2 项跳过，0 失败）、`./script/ci_preflight.sh`、本地化审计、Xcode Debug 无签名 `build-for-testing`（含 XCUI 目标）通过。未启动 App、XCUI 或前台验收；离屏渲染来自非活动窗口，看不到强调色填充与 macOS 26 Liquid Glass，真实前台观感、动画与 XCUI 仍待 GitHub runner 或你明确安排的本机前台验收。DESIGN.md 官方 lint 本机未缓存，未执行。证据与评论家各轮原文在 `<ui-validation-root>/`。
 - 用户前台试用后的三项反馈（同日）：① 深色下工具栏“合并识别结果 / 导出 CSV…”可用与否不够明显——工具栏主操作改用标准 `.borderedProminent`（强调色填充）、合并用 `.bordered`，开始识别同理；② 侧栏“新建任务”按钮紧贴系统分组折叠箭头易误触——移到侧栏底部，分组标题只保留项目名；③ 新建任务慢、无反馈导致重复点击——`WorkspaceModel.isCreatingTask` 在第一个挂起点之前置位，侧栏立即显示“正在新建任务…”占位行并禁用按钮，进行中的再次点击被丢弃（新增 `TaskCreationFeedbackTests`）。此外侧栏图标改为显式中性色（`listItemTint` 在用户机器上仍显示为蓝色）。**新建任务本身的耗时未优化**：读代码可见一次创建要经过保存、重读任务列表、重读新任务三次加密项目快照往返（`withEncryptedSnapshot`），未做实测，也未改持久化层。另：Resolve 格式 / 结果表的“条”改为“次”。
 - 导出 CSV 被折进工具栏溢出箭头（用户截图）：合并或导出尝试后 `lastMergeDiagnostics` 有告警，会在工具栏多出“查看合并报告”按钮，窗口不够宽时 AppKit 把最末尾的主操作“导出 CSV…”挤进 `»`。现在报告入口移到范围行（与“详情”并列），工具栏只留导出 / 合并 / 导入，并按重要性排序（AppKit 先折叠尾部项目，所以最不重要的在最后）。未在真实窗口验证溢出行为。
 - 用户追问工具栏“⋯⌄”旁的空箭头和“像保存的导入图标”（同日）：更多菜单去掉菜单指示箭头并改为中性色（原为跟随全局 tint 的蓝色）；Resolve CSV 页的仅图标“导入 CSV…”按钮（`square.and.arrow.down`，易被误认为保存）移入“更多”菜单，空态按钮保留，XCUI 对应断言改查 `workspace.more`。
@@ -527,7 +542,7 @@
 
 - 内建 OpenRouter 默认仅提供 `qwen/qwen3.7-flash`、`openai/gpt-5.6-luna`、`openai/gpt-5.6-terra`；刷新远端目录时只投影这三个预设。其他已显式验证的模型继续由持久能力证明投影，保留重启、默认/备用及旧任务的既有解析；OpenAI 直连和自定义接口行为保持现状。
 - 共用 Provider 编辑器新增完整 OpenRouter 模型 ID 输入和“验证并添加模型”。复用凭据门控、内置测试图、验证反馈、持久证明与用途提交；非法 ID 原位提示，失败/取消保留输入，成功后清空输入并允许选择用途。未验证输入加入关闭保护；无新增配置格式或存储依赖。
-- 在用户指定的 `/Users/rasteaks/Desktop/SlateSync` 保存一页合成场记 PDF、Resolve 原始 CSV、本地场记 CSV、参考导出 CSV 与测试说明。PDF 共 8 条记录，源 CSV 另有 1 条未匹配素材；覆盖过/保/废/未标记、数字位宽、字母场次、原备注的逗号/引号以及未匹配行保留。原生解析、回填和导出与参考 CSV 逐字节一致；PDF 与 CSV 预览完成视觉检查。
+- 在用户指定的 `<local-fixture-root>` 保存一页合成场记 PDF、Resolve 原始 CSV、本地场记 CSV、参考导出 CSV 与测试说明。PDF 共 8 条记录，源 CSV 另有 1 条未匹配素材；覆盖过/保/废/未标记、数字位宽、字母场次、原备注的逗号/引号以及未匹配行保留。原生解析、回填和导出与参考 CSV 逐字节一致；PDF 与 CSV 预览完成视觉检查。
 - 新增 5 项离线模型目录/手动验证回归，更新受目录收缩影响的旧断言并保留通用端点的价格/隐私断言。工作流和 UI 模型检查共 271 项（包含临时交付文件检查），1 项按环境条件跳过，零失败；临时文件检查代码在验证后移除，避免将机器路径固化进仓库。
 - 原生 Debug build-for-testing 与 OpenRouter XCUI 场景通过：三个预设、非法 ID 拒绝、手动验证、设为默认以及重启恢复。已修正测试定位中的服务简称，实际按钮名称为 OpenRouter API。结果包为 `/private/tmp/slatesync-openrouter-ui-v2.xcresult`。
 - 中英文本地化、DESIGN 文档 lint 与差异检查通过。网页 strict 审计仍为既有 69 项问题，本轮不修复历史 HTML 原型；不将其记为通过。所有模型测试使用合成 transport 和隔离数据，未调用真实厂商 API、使用用户密钥或验证 App Store 签名包。
@@ -637,7 +652,7 @@
 - 保留 SM-09/PR 的 ad-hoc lane 作为不依赖私钥的本地验证；`archive_release.sh` 与 `package_release.sh` 新增显式 `developer-id` lane，要求 Developer ID Application、Team ID 和 secure timestamp。
 - 新增 `script/notarize_app.sh`：提交待分发 app、等待 notary Accepted、staple/validate 后再生成最终 ZIP/DMG；manifest 记录 signing lane、Developer ID 和 notarization 状态。
 - 新增受保护 workflow `.github/workflows/release-developer-id.yml`：复用现有 `CSC_LINK`/`CSC_KEY_PASSWORD`/`CSC_NAME` 和 `APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID` secrets，临时导入 p12、临时钥匙串、公证，并以 `v1.1.0-swift` tag 创建 GitHub Release；私钥、p12 和密码只允许存在于 GitHub Secrets。
-- 本机使用 `Developer ID Application: Yutian Zhu (HF4Y6246CT)` 完成 Universal Release archive 与 bundle 审计；`codesign` 显示 runtime、secure timestamp、TeamIdentifier，公证前 `spctl` 正确显示 `source=Unnotarized Developer ID`。未执行真实 notary submission 或 GitHub 上传。
+- 本机使用 `Developer ID Application: <developer-name> (<team-id>)` 完成 Universal Release archive 与 bundle 审计；`codesign` 显示 runtime、secure timestamp、TeamIdentifier，公证前 `spctl` 正确显示 `source=Unnotarized Developer ID`。未执行真实 notary submission 或 GitHub 上传。
 
 ## 2026-09-20 Swift 原生版本小版本更新
 
@@ -2661,7 +2676,7 @@ Worker 边界、验收证据和最终治理交接。
 - 最终沙盒验证：`npm run check`、`npm run typecheck`、`npm run test:modern`
   （21 个文件、92/92）、`npm run build:modern`、`npm run build:storybook`、
   premium strict audit（0 findings）和 `git diff --check` 均通过；Storybook 仅报告
-  无法写入沙盒外的用户级 `/Users/rasteaks/.storybook/settings.json`，静态产物构建
+  无法写入沙盒外的用户级 `$HOME/.storybook/settings.json`，静态产物构建
   成功，未启动 Electron 前台窗口。
 - `npm run test:node` 共 288 项，287 项通过；唯一失败是既有 baseline 的
   `package.version` 漂移（实时 `0.2.0`、清单 `0.1.0`），与本次自定义接口实现无关。
@@ -2702,7 +2717,7 @@ Worker 边界、验收证据和最终治理交接。
   `src/shared/contracts/index.ts`、Main/Renderer 测试及本节记录。
 - 最终验证：`npm run check`、`npm run typecheck`、`npm run test:modern`（22 个文件、
   94/94）、`npm run build:modern`、`npm run build:storybook` 和 `git diff --check` 均
-  通过。Storybook 仅报告沙盒无法创建用户级 `/Users/rasteaks/.storybook/settings.json`，
+  通过。Storybook 仅报告沙盒无法创建用户级 `$HOME/.storybook/settings.json`，
   静态构建成功。
 - `npm run test:node` 共 302 项，302 项通过；历史 baseline 继续保留其发布时的
   `0.1.0`，测试改为校验当前 `package.json` 与 `package-lock.json` 的 `0.2.0` 发布版本
@@ -2751,7 +2766,7 @@ Worker 边界、验收证据和最终治理交接。
 - 最终验证：`npm run typecheck`、`npm run test:modern`（24 个文件、102/102）、
   `npm run test:node`（305/305）、`npm run check`、`npm run build:modern`、
   `npm run build:storybook` 与 `git diff --check` 均通过。Storybook 仅报告沙盒无法写入
-  用户级 `/Users/rasteaks/.storybook/settings.json`，静态产物构建成功；未启动 Electron
+  用户级 `$HOME/.storybook/settings.json`，静态产物构建成功；未启动 Electron
   GUI E2E，按既有 Owner 明确要求约定保留为后续验证。
 
 ## 2026-09-01 自定义接口注册表 UI 优化
@@ -2771,7 +2786,7 @@ Worker 边界、验收证据和最终治理交接。
   不作为实现指令。Legacy Renderer 保持原有实现，Modern 仍是默认入口。
 - 本轮验证：定向组件测试 2/2、`npm run typecheck`、`npm run check`、`npm run build:modern`、
   `npm run build:storybook`、premium strict audit（0 findings）和 `git diff --check` 通过。
-  Storybook 仅因沙盒无法写入用户级 `/Users/rasteaks/.storybook/settings.json` 发出提示，
+  Storybook 仅因沙盒无法写入用户级 `$HOME/.storybook/settings.json` 发出提示，
   静态产物构建成功。`npm run test:modern` 共 24 个文件、98/99 通过；唯一失败为工作区已有
   的 `legacy-project-library.test.ts` 静态契约仍查找不存在的 `import-project-button`，与本次
   Modern 自定义接口改动无关。
@@ -2790,7 +2805,7 @@ Worker 边界、验收证据和最终治理交接。
   `npm run test:node`（305/305）、`npm run check`、`npm run build:modern`、
   `npm run build:storybook`、premium `audit_project.py --mode strict --no-write`（0 findings）
   与 `git diff --check` 均通过。Storybook 仅报告沙盒无法写入用户级
-  `/Users/rasteaks/.storybook/settings.json`，静态产物构建成功；未启动 Electron GUI E2E，
+  `$HOME/.storybook/settings.json`，静态产物构建成功；未启动 Electron GUI E2E，
   按既有 Owner 明确要求约定保留为后续验证。
 
 ## 2026-09-01 DeepSeek Review comments 修复
@@ -2809,7 +2824,7 @@ Worker 边界、验收证据和最终治理交接。
   遵循项目注释约定补充了相关实现注释。最终验证：`npm test`（Node 306/306、Modern
   104/104）、`npm run typecheck`、`npm run check`、`npm run build:modern`、
   `npm run build:storybook`、premium strict audit（0 findings）和 `git diff --check` 均通过；
-  Storybook 仍仅报告沙盒无法写入用户级 `/Users/rasteaks/.storybook/settings.json`，未启动
+  Storybook 仍仅报告沙盒无法写入用户级 `$HOME/.storybook/settings.json`，未启动
   Electron GUI E2E。
 
 ## 2026-09-01 打包版本地 OCR 引擎路径修复
@@ -2890,7 +2905,7 @@ Worker 边界、验收证据和最终治理交接。
   323/323、Modern Vitest 118/118、`npm run check`、`npm run typecheck`、
   `npm run build:modern`、`npm run build:storybook`、`npm run test:native:abi`
   和 premium strict audit 均通过；Storybook 仅提示沙盒不能写入用户级
-  `/Users/rasteaks/.storybook/settings.json`，静态构建成功。
+  `$HOME/.storybook/settings.json`，静态构建成功。
 - 本机真实 `node scripts/build-vision-ocr.mjs --arch universal` 已执行，但当前
   CommandLineTools 的 SwiftBridging module map 重复定义导致 Foundation/Vision
   编译失败；这是本机 SDK/toolchain 环境问题，不是源码检查失败。仓库已有

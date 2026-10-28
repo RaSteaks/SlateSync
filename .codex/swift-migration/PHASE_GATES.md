@@ -115,7 +115,7 @@ this same Gate; CI must not create a second set of phase rules.
 ## Evidence retention
 
 For the current workspace, new local test/log/temp/build artifacts belong under
-`/Users/rasteaks/Desktop/SlateSync/1027`, with explicit temporary/cache/output
+`${SLATESYNC_VALIDATION_ROOT}`, with explicit temporary/cache/output
 paths. Remote CI uses its isolated runner artifact root; downloaded copies go
 under that local directory. Existing historical paths are not rewritten.
 The repository commits only the short review report, Gate policy, phase package,

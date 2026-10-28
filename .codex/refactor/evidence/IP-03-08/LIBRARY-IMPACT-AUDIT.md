@@ -12,7 +12,7 @@ Library content. No active Electron process was stopped.
 
 ## Audited path
 
-`/Users/rasteaks/Library/Application Support/Local SlateSync Library.slatesync-library`
+`<library-root>`
 
 Observed at `2026-08-21T04:27:20+0800`:
 

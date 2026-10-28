@@ -226,21 +226,6 @@ SlateSyncApp/Resources/PaddleOCR
 `slate.maxDirectoryDepth` 控制原生元数据扫描深度，`scenario.matching` 控制识别时的结构匹配。
 `resolve` 为新建项目提供初始格式；现有项目与任务的显式设置优先，不被全局配置覆盖。
 
-### 本地项目加密
-
-正常启动会自动将项目库索引、项目设置、任务、诊断、场记 Profile 和 JSON 快照转换为
-AES-256-GCM 加密存储。加密密钥保存在本机 macOS 登录钥匙串，无需 Apple 开发者账号。
-旧数据逐文件迁移，认证失败或密钥不可用时停止，保留原文件供恢复。
-
-原始媒体与媒体缓存、机器级配置和日志不在此加密范围。应用内导出的 CSV、项目包和项目库
-保持通用格式；导入到本地项目库后重新加密。迁移时请关闭其他旧版 SlateSync。
-
-跨 Mac 或备份给其他软件使用时，请通过应用内导出。直接复制内部加密目录仍需要原钥匙串；
-丢失密钥无法解密。迁移不会清除已有系统备份或磁盘历史快照中的旧明文数据。
-
-内部 SQLite 在内存中查询并以加密快照原子落盘，避免新增明文数据库日志；这会增加大型
-项目库的内存与读写开销。该加密边界保护本地文件内容，不隐藏目录名称，也不替代整盘加密。
-
 
 ### PaddleOCR
 
@@ -253,71 +238,6 @@ PaddleOCR 是可选功能。App 只携带 runner 源码和固定依赖清单，�
 ```sh
 ./script/paddle_offline_check.sh
 ```
-
-## 数据与安全
-
-- Project Library 和每个项目使用 SQLite v1；迁移和导入会执行版本、路径和内容校验。
-- 项目库边界拒绝越界路径和符号链接，文件写入使用临时文件与原子替换。
-- API Key 只由原生应用的数据服务读取，UI 不直接访问凭据或任意文件系统能力。
-- PDF 原始字节只用于本地逐页栅格化；模型请求发送页面图片与本地 OCR evidence，不发送原始 PDF。
-- OCR 引擎不可用、超时或失败时会按设置降级为页面图片识别；设置为必需时则停止识别并报告错误。
-- 自动测试只使用临时数据根，不应指向个人 Project Library、日志或 Keychain。
-- 不要将用户项目库、`data/`、凭据、模型缓存或本地安装环境提交到 Git。
-
-## 开发与验证
-
-SwiftPM 基线：
-
-```sh
-swift build
-swift test
-```
-
-项目合同和发布链路测试：
-
-```sh
-./script/tests/phase_gate_tests.zsh
-python3 -B script/tests/sm09_release_contract.py
-python3 -B script/tests/packaged_ui_contract.py --self-test
-./script/tests/release_pipeline_tests.zsh
-python3 script/tests/sm09_coverage_tests.py
-python3 script/tests/sm09_inventory_tests.py
-```
-
-
-
-修改 workflow、UI 用例或打包清单后，先运行上述契约和 Gate 自测。CI 会在构建前执行预检；
-Debug 合成 Provider 用例必须全部通过，打包 Release 的实际执行名称必须与交付回归清单一致。
-失败诊断工件包含完整 `.xcresult.zip`、测试树、汇总、截图/AX 附件和运行器日志。
-
-日常本机验证优先使用 `./script/ci_preflight.sh`：只运行契约和自测，不启动应用、切换窗口或采集前台画面。
-完整 SM-09 与原生 UI、打包 Release UI 在 GitHub macOS runner 上执行；预检通过仅代表准备完成，
-功能验收以同一提交的远端 `native-test` 和 UI 覆盖证据为准。本机前台验收仅在用户明确安排时进行。
-
-按 [SM-09 验收策略 v2](docs/sm09-acceptance-policy.md)，干净提交的 functional Gate PASS
-且 `completionEligible=true` 可以进入迁移完成审查；Owner 确认后才更新 COMPLETE。
-性能报告独立跟踪，`fullAcceptancePassed=false` 不得表述为完整发布验收通过。
-默认不带 `--functional` 的 Gate 仍执行严格性能预算，正式分发另有渠道验收。
-本工作区新增测试、临时文件与日志统一放在 `/Users/rasteaks/Desktop/SlateSync/1027` 下，
-运行前同时配置临时、缓存和工具输出路径；历史证据路径保持原样。
-
-## 构建与打包
-
-### 构建 Release 与归档
-
-```sh
-./script/archive_release.sh /private/tmp/SlateSync-release 1.1.0 2
-```
-
-脚本会在仓库外的新目录中生成 Universal `SlateSync.xcarchive`，并验证最低 macOS 版本、
-架构、资源、签名、hardened runtime 和依赖。版本号和 build number 是显式输入，不会改写
-已跟踪的工程文件。
-## 限制与已知边界
-
-- 当前仅支持 macOS 15.0 及以上版本，不提供 Windows 或 Linux 运行时。
-- PaddleOCR 需要用户提供 Python 环境和网络安装条件；Python、虚拟环境和模型不包含在 App 中。
-- 无法确认的识别字段不会被强行写入，必须人工校对。
-- 项目库与项目包当前保持 v1 格式；升级、迁移或回退前应保留独立备份。
 
 ## License
 

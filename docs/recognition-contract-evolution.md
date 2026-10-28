@@ -30,4 +30,4 @@
 
 保持 macOS 15、五个业务模块、中文／英文界面、领域规则、CSV 字节和回填保护、未知字段留空、required／optional OCR 语义、项目隔离及关闭排空。独立评测 CLI 位于 Tools，复用现有库，不进入 App bundle，也不调用模型 Provider。
 
-本地测试、构建、缓存、截图及日志均放在 /Users/rasteaks/Desktop/SlateSync/1027/recognition-optimization。完整前台／XCUI 验收仍使用 GitHub macOS runner。真实准确率和模型选择要依据独立真实评测集，合成夹具通过不代表达到方案中的量化目标。
+本地测试、构建、缓存、截图及日志均放在 ${SLATESYNC_VALIDATION_ROOT}/recognition-optimization。完整前台／XCUI 验收仍使用 GitHub macOS runner。真实准确率和模型选择要依据独立真实评测集，合成夹具通过不代表达到方案中的量化目标。

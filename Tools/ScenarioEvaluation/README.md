@@ -6,9 +6,9 @@
 
 ## 运行
 
-从仓库根目录运行，所有构建、缓存、临时文件和结果都放在指定的 1027 目录：
+从仓库根目录运行，所有构建、缓存、临时文件和结果都放在仓库外的验证目录；可通过 `SLATESYNC_VALIDATION_ROOT` 覆盖默认临时目录：
 
-    EVAL_ROOT=/Users/rasteaks/Desktop/SlateSync/1027/scenario-evaluation
+    EVAL_ROOT="${SLATESYNC_VALIDATION_ROOT:-${TMPDIR:-/tmp}/slatesync-validation}/scenario-evaluation"
     mkdir -p "$EVAL_ROOT/tmp"
     export TMPDIR="$EVAL_ROOT/tmp"
     export RUNNER_TEMP="$EVAL_ROOT/tmp"

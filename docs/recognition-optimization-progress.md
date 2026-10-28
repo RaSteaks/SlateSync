@@ -50,7 +50,7 @@
 | 专用符号模型、Core ML、本地文档视觉模型 | 本期排除，不安装或部署；仅保留未来训练想法，不计入完成门槛 |
 | SM-09 远端功能验收 | 已核实 [40103344217](https://github.com/RaSteaks/SlateSync/actions/runs/40103344217) 对 ae82a714 的功能 Gate 与 Debug／打包 UI 覆盖成功；当前未提交识别改动仍需自身回归，不能继承旧提交验收 |
 
-评测工具说明见 [ScenarioEvaluation](../Tools/ScenarioEvaluation/README.md)。本地测试、截图、日志、缓存和工具烟测均保存在 /Users/rasteaks/Desktop/SlateSync/1027/recognition-optimization 下。
+评测工具说明见 [ScenarioEvaluation](../Tools/ScenarioEvaluation/README.md)。本地测试、截图、日志、缓存和工具烟测均保存在 ${SLATESYNC_VALIDATION_ROOT}/recognition-optimization 下。
 
 ## 本轮额外修正
 
@@ -58,7 +58,7 @@
 
 ## 已执行验证
 
-产物根为 /Users/rasteaks/Desktop/SlateSync/1027/recognition-optimization。
+产物根为 ${SLATESYNC_VALIDATION_ROOT}/recognition-optimization。
 
 | 检查 | 实际结果 | 证据 |
 | --- | --- | --- |
@@ -77,7 +77,7 @@
 
 ## 2026-10-27 数据盘点与范围收敛
 
-测试输入位于 `/Users/rasteaks/Desktop/SlateSync/测试场记单`。45 个 PDF 共 170 页，pypdf 枚举到 161 个图片对象，9 页包含可提取文字；PDF rotation 均为 0。已经提取并查看首个样本的原始图片，未修改任何原稿，也未运行真实 Provider。盘点和样图位于 `/Users/rasteaks/Desktop/SlateSync/1027/recognition-scope-review`。这属于输入兼容性检查，不是字段准确率测量。
+测试输入位于 `<source-pdf-root>`。45 个 PDF 共 170 页，pypdf 枚举到 161 个图片对象，9 页包含可提取文字；PDF rotation 均为 0。已经提取并查看首个样本的原始图片，未修改任何原稿，也未运行真实 Provider。盘点和样图位于 `${SLATESYNC_VALIDATION_ROOT}/recognition-scope-review`。这属于输入兼容性检查，不是字段准确率测量。
 
 短期项目的首个任务无需学习模板，长期模板更新不再是本期依赖；优先 PDF 提图与调正、冷启动／流水线优化、自适应云端复核。取消字段证据展示界面，本地专用模型退出本期范围。
 
@@ -85,7 +85,7 @@
 
 ## 人工 CSV 真值盘点
 
-用户确认 `/Users/rasteaks/Desktop/SlateSync/csv` 已人工核对。38 份 UTF-16 CSV 共 4,419 行，其中 4,297 行具有标准素材键；按日期与键归为 4,156 组，141 组存在重复。4,147 组场／镜／次／Comments 一致，9 组 Take 冲突保留待确认；另有 122 行待分类，未删除或自动修正。
+用户确认 `<ground-truth-root>` 已人工核对。38 份 UTF-16 CSV 共 4,419 行，其中 4,297 行具有标准素材键；按日期与键归为 4,156 组，141 组存在重复。4,147 组场／镜／次／Comments 一致，9 组 Take 冲突保留待确认；另有 122 行待分类，未删除或自动修正。
 
 日期候选映射覆盖全部 PDF，CSV 的 260820 日期暂缺 PDF。日报、分文件和多次导出不能直接拼接评分，仍需确认实际纸面覆盖。纯图片测试隔离正确答案，不向识别模型注入目标 CSV。产物在 `1027/recognition-ground-truth/inventory.json` 和 `ground-truth-candidates.json`；源文件哈希前后一致，行数核对和候选键唯一性检查通过。本轮未调用 Provider，未给出准确率结论。
 

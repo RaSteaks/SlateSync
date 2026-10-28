@@ -36,6 +36,8 @@ SlateSync.code-workspace
 
 # SwiftPM/Xcode outputs and per-user IDE state are reproducible local artifacts.
 /.build/
+# The standalone evaluation package also generates local SwiftPM index caches.
+/Tools/ScenarioEvaluation/.build/
 # The optional MCP executable resolves its SDK independently from the app.
 /MCP/.build/
 /MCP/.swiftpm/

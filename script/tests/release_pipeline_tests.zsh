@@ -83,7 +83,8 @@ if [[ "$*" == *--verify* && "${MOCK_SIGNATURE_FAIL:-0}" == 1 ]]; then exit 1; fi
 if [[ "$1" == -dvvv ]]; then
   [[ "${MOCK_HARDENED_MISSING:-0}" == 1 ]] || print -u2 'CodeDirectory flags=0x10000(runtime)'
   if [[ "${MOCK_SIGNING_LANE:-adhoc}" == developer-id ]]; then
-    print -u2 'Authority=Developer ID Application: Yutian Zhu (HF4Y6246CT)'
+    # Signing assertions need the certificate type, never a real owner/team.
+    print -u2 'Authority=Developer ID Application: Example Developer (TESTTEAM01)'
     print -u2 'Timestamp=2026-09-20 00:00:00 +0000'
   else
     print -u2 'Signature=adhoc'

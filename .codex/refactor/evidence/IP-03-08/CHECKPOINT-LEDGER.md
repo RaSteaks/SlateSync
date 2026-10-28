@@ -190,7 +190,7 @@ Recorded: 2026-08-21 (Asia/Shanghai)
   escalated desktop session. The failure was recorded as an environment
   launch condition, not accepted as product evidence.
 - Storybook cannot write the global settings file under
-  /Users/rasteaks/.storybook in this managed workspace; Storybook build still
+  $HOME/.storybook in this managed workspace; Storybook build still
   completed successfully.
 - The inherited gateway-performance command cannot rewrite protected
   Gate-01/02 evidence/IP-02/performance.json under sandbox permissions. The
