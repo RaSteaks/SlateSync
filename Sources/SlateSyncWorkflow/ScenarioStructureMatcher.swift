@@ -86,8 +86,7 @@ public enum ScenarioStructureMatcher {
         let anchors = view.blocks.compactMap { block -> ScenarioStructure.Anchor? in
             guard block.confidence.isFinite, block.confidence >= 0.5,
                   validBox(block.bboxNormalized) else { return nil }
-            let text = token(block.text)
-            let field = definitions.first { $0.2.contains(text) }?.0 ?? camera(text)
+            let field = fieldIdentifier(for: block.text)
             guard let field else { return nil }
             return .init(field: field, box: block.bboxNormalized)
         }
@@ -106,6 +105,13 @@ public enum ScenarioStructureMatcher {
         // top fraction confuses scan margins with identity and misses low tables.
         let headers = anchors.filter { abs(($0.box[1] + $0.box[3]) / 2 - band.center) <= band.tolerance * 2 }
         return .init(anchors: ordered(Array(Set(headers))))
+    }
+
+    /// Layout planning shares the same printed-field vocabulary as matching;
+    /// this identifies labels, never filled values or saved template ownership.
+    public static func fieldIdentifier(for text: String) -> String? {
+        let normalized = token(text)
+        return definitions.first { $0.2.contains(normalized) }?.0 ?? camera(normalized)
     }
 
     public static func isSufficient(_ structure: ScenarioStructure) -> Bool {

@@ -131,6 +131,8 @@ public struct RecognitionPagePipeline: Sendable {
             hash.combine(page.fullOCREvidence)
             hash.combine(page.coreOCREvidence)
             hash.combine(page.scenarioInstruction)
+            hash.combine(page.layoutInstruction)
+            hash.combine(page.optimizationIdentity)
             for view in page.views { hash.combine(view.image) }
         }
         return String(hash.finalize())
@@ -227,7 +229,8 @@ public struct RecognitionPagePipeline: Sendable {
         let percent = Int((35 + Double(completedBeforePage) / Double(count) * 60).rounded())
         do {
             progress?(.init(phase: "primary", completed: completedBeforePage, total: count, message: "正在主识别第 \(page.pageNumber)/\(count) 页", percent: percent, pageNumber: page.pageNumber))
-            let primaryRequest = request(page: page, stage: .primary, images: page.views.map(\.image), provider: provider, model: model, filename: pageName, prompt: prompts.primary, instruction: page.fullOCREvidence, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
+            let primaryInstruction = [page.fullOCREvidence, page.layoutInstruction].filter { !$0.isEmpty }.joined(separator: "\n")
+            let primaryRequest = request(page: page, stage: .primary, images: page.views.map(\.image), provider: provider, model: model, filename: pageName, prompt: prompts.primary, instruction: primaryInstruction, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
             if accuracy == .standard {
                 let (sheet, response) = try await Self.stage(primaryRequest, client: client, pageNumber: page.pageNumber)
                 return .init(pageNumber: page.pageNumber, result: sheet, responses: [response])
@@ -252,10 +255,21 @@ public struct RecognitionPagePipeline: Sendable {
                 "\(conflict.key)（两次识别冲突；冲突字段：\(conflict.fields.joined(separator: "、"))）"
             } + combined.auditOnlyKeys.map { "\($0)（仅核心查漏发现；请先确认图中确实存在此素材）" }
             progress?(.init(phase: "review", completed: completedBeforePage, total: count, message: "正在复核第 \(page.pageNumber) 页的 \(targets.count) 个冲突或查漏候选", percent: percent, pageNumber: page.pageNumber))
-            let reviewInstruction = "只复核以下 \(targets.count) 个素材键；图中找不到的键不要输出：\n" + targets.joined(separator: "\n") + evidenceSuffix(page.coreOCREvidence)
-            let reviewRequest = request(page: page, stage: .review, images: coreImages, provider: provider, model: model, filename: pageName + " · 冲突复核", prompt: prompts.review + referenceInstruction, instruction: reviewInstruction, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
+            let targetKeys = Set(combined.conflicts.map(\.key) + combined.auditOnlyKeys)
+            let targetRecords = combined.result.records.filter { record in
+                RecognitionNormalizer.materialKey(record).map(targetKeys.contains) ?? false
+            }
+            let reviewImages = try await page.reviewImageProvider?(targetRecords)
+                ?? RecognitionReviewImages(images: coreImages, evidence: page.coreOCREvidence)
+            guard !reviewImages.images.isEmpty, reviewImages.images.count <= 3,
+                  reviewImages.images.first == coreImages.first else { throw RecognitionFailure.invalidInput }
+            let reviewInstruction = "只复核以下 \(targets.count) 个素材键；图中找不到的键不要输出：\n" + targets.joined(separator: "\n") + evidenceSuffix(reviewImages.evidence)
+            let reviewRequest = request(page: page, stage: .review, images: reviewImages.images, provider: provider, model: model, filename: pageName + " · 冲突复核", prompt: prompts.review + referenceInstruction, instruction: reviewInstruction, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
             let (review, third) = try await Self.stage(reviewRequest, client: client, pageNumber: page.pageNumber)
-            return .init(pageNumber: page.pageNumber, result: RecognitionPostprocessor.applyReview(combined, review: review), responses: [first, second, third])
+            let resolved = RecognitionPostprocessor.applyReview(combined, review: review)
+            let result = RecognitionSheet(sheetTitle: resolved.sheetTitle, records: resolved.records,
+                warnings: resolved.warnings + (reviewImages.warning.map { [$0] } ?? []))
+            return .init(pageNumber: page.pageNumber, result: result, responses: [first, second, third])
         } catch is CancellationError { throw RecognitionFailure.canceled }
         catch let error as SlateSyncError { throw RecognitionFailure.page(error, page: page.pageNumber, count: count) }
         catch { throw RecognitionFailure.page(error, page: page.pageNumber, count: count) }

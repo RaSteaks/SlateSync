@@ -44,8 +44,9 @@ public actor LocalOCRService {
         cache = OCRResultCache(capacity: cacheByView ? 64 : 8)
         selection = OCRSelectionPolicy.resolve(raw: settings.rawValues, visionAvailable: visionAvailable, paddleAvailable: paddleAvailable, autoEnable: autoEnable)
     }
-    public func recognize(_ document: PreparedDocument, session: String, cacheEnabled: Bool = true, operation: MediaOperation, progress: MediaProgressSink? = nil) async throws -> OCROutcome {
+    public func recognize(_ document: PreparedDocument, session: String, cacheEnabled: Bool = true, operation: MediaOperation, progress: MediaProgressSink? = nil, localImages: [[LocalOCRImage]]? = nil, deadline: OCRDeadline? = nil, allowsEmptyResult: Bool = false) async throws -> OCROutcome {
         try document.validate(); try operation.check()
+        try LocalOCRImage.validate(localImages, document: document)
         guard !clearing, !closed else { throw MediaFailure.closed }
         guard let engineID = selection.id else { return .disabled }
         let id = UUID(), captured = generation
@@ -57,9 +58,13 @@ public actor LocalOCRService {
                 waiting.forEach { $0.resume() }
             }
         }
+        let supportsLossless = await supportsLosslessInput
+        let effectiveImages = supportsLossless ? localImages : nil
+        let useViewCache = cacheByView || effectiveImages != nil
         let cacheGeneration = await cache.currentGeneration(session: session)
-        let key = try cacheByView ? "" : OCRResultCache.key(document: document, engine: engineID, settings: settings, session: session)
-        if cacheEnabled, !cacheByView, let result = await cache.lookup(key, engine: engineID) {
+        let key = try useViewCache ? "" : OCRResultCache.key(document: document, engine: engineID, settings: settings, session: session)
+        let withinDeadline = deadline.map { SystemOCRClock().nowMilliseconds() < $0.end } ?? true
+        if cacheEnabled, !useViewCache, withinDeadline, let result = await cache.lookup(key, engine: engineID) {
             try operation.check(); guard captured == generation else { throw MediaFailure.canceled }
             progress?(.init(stage: "cache-hit", completed: document.viewCount, total: document.viewCount))
             try operation.check()
@@ -69,20 +74,22 @@ public actor LocalOCRService {
             guard let engine = engineID == .vision ? vision : paddle else { throw MediaFailure.unavailable }
             let result: OCREngineResult
             let allCached: Bool
-            if cacheByView {
+            if useViewCache {
                 (result, allCached) = try await recognizeViews(document, engineID: engineID, engine: engine,
                     session: session, cacheEnabled: cacheEnabled, operation: operation, progress: progress,
-                    cacheGeneration: cacheGeneration)
+                    cacheGeneration: cacheGeneration, localImages: effectiveImages, deadline: deadline)
             } else {
-                result = try await engine.recognize(document, operation: operation, progress: { value in
+                result = try await perform(engine, document: document, localImages: nil, deadline: deadline, operation: operation, progress: { value in
                     if !operation.isCanceled { progress?(value) }
                 })
                 allCached = false
             }
             try operation.check(); guard generation == captured else { throw MediaFailure.canceled }
-            guard result.engine == engineID, result.used, result.blockCount > 0,
-                  result.pages.flatMap(\.views).flatMap(\.blocks).contains(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { throw MediaFailure.unavailable }
-            if cacheEnabled, !cacheByView { await cache.insert(result, key: key, generation: cacheGeneration, operation: operation, session: session) }
+            // Staged callers validate nonempty evidence across the complete
+            // document, so a blank page does not fail a required OCR batch.
+            guard result.engine == engineID, result.used,
+                  allowsEmptyResult || result.pages.flatMap(\.views).flatMap(\.blocks).contains(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { throw MediaFailure.unavailable }
+            if cacheEnabled, !useViewCache { await cache.insert(result, key: key, generation: cacheGeneration, operation: operation, session: session) }
             try operation.check(); guard generation == captured else { throw MediaFailure.canceled }
             return .used(result, cacheHit: allCached)
         } catch {
@@ -105,42 +112,48 @@ public actor LocalOCRService {
     }
     private func recognizeViews(_ document: PreparedDocument, engineID: OCREngineID, engine: any LocalOCREngine,
                                 session: String, cacheEnabled: Bool, operation: MediaOperation,
-                                progress: MediaProgressSink?, cacheGeneration: Int) async throws -> (OCREngineResult, Bool) {
+                                progress: MediaProgressSink?, cacheGeneration: Int, localImages: [[LocalOCRImage]]?, deadline: OCRDeadline?) async throws -> (OCREngineResult, Bool) {
         let start = ProcessInfo.processInfo.systemUptime
         var evidence: [String: OCREngineResult] = [:]
-        var keys: [[String]] = [], missing: [(key: String, image: PreparedImage)] = []
+        var keys: [[String]] = [], missing: [(key: String, image: PreparedImage, local: LocalOCRImage?)] = []
         var scheduled = Set<String>()
-        for page in document.pages {
+        for (pageIndex, page) in document.pages.enumerated() {
             var pageKeys: [String] = []
-            for view in page.views {
+            for (viewIndex, view) in page.views.enumerated() {
                 try operation.check()
+                try deadline?.check(clock: SystemOCRClock(), operation: operation)
                 // Normalize identity for caching, then batch all misses into one
                 // engine lease so document deadlines and worker reuse stay bounded.
                 let single = PreparedDocument(filename: "", pages: [.init(pageNumber: 1,
                     views: [.init(viewIndex: 0, viewType: .full, image: view.image)])])
-                let key = try OCRResultCache.key(document: single, engine: engineID, settings: settings, session: session)
+                let local = localImages?[pageIndex][viewIndex]
+                let key = try local.map { try OCRResultCache.key(image: $0, engine: engineID, settings: settings, session: session) }
+                    ?? OCRResultCache.key(document: single, engine: engineID, settings: settings, session: session)
                 pageKeys.append(key)
                 if scheduled.insert(key).inserted {
                     if cacheEnabled, let cached = await cache.lookup(key, engine: engineID) { evidence[key] = cached }
-                    else { missing.append((key, view.image)) }
+                    else { missing.append((key, view.image, local)) }
                 }
             }
             keys.append(pageKeys)
         }
         if !missing.isEmpty {
             var batch: [PreparedMediaPage] = []
+            var localBatch: [[LocalOCRImage]] = []
             for start in stride(from: 0, to: missing.count, by: 3) {
                 let views = missing[start..<min(start + 3, missing.count)].enumerated().map { index, value in
                     PreparedMediaView(viewIndex: index, viewType: index == 0 ? .full : .coreDetail, image: value.image)
                 }
                 batch.append(.init(pageNumber: batch.count + 1, views: views))
+                localBatch.append(missing[start..<min(start + 3, missing.count)].compactMap(\.local))
             }
             let multiplicities = keys.joined().reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
             let cachedCount = keys.joined().filter { evidence[$0] != nil }.count
             let progressCounts = missing.reduce(into: [cachedCount]) { counts, view in
                 counts.append(counts[counts.count - 1] + multiplicities[view.key, default: 0])
             }
-            let result = try await engine.recognize(.init(filename: document.filename, pages: batch), operation: operation, progress: { value in
+            let result = try await perform(engine, document: .init(filename: document.filename, pages: batch),
+                localImages: localImages == nil ? nil : localBatch, deadline: deadline, operation: operation, progress: { value in
                 // Duplicate views complete with their shared inference, not
                 // before it. Cached views alone contribute to initial progress.
                 if !operation.isCanceled {
@@ -173,6 +186,30 @@ public actor LocalOCRService {
         progress?(.init(stage: missing.isEmpty ? "cache-hit" : engineID.rawValue, completed: document.viewCount, total: document.viewCount))
         return (.init(engine: engineID, modelVersion: evidence.values.first?.modelVersion ?? "", used: evidence.values.allSatisfy(\.used), pages: pages,
                       durationMs: Int((ProcessInfo.processInfo.systemUptime - start) * 1000)), cacheEnabled && missing.isEmpty)
+    }
+    public var supportsLosslessInput: Bool {
+        get async {
+            guard let id = selection.id,
+                  let engine = (id == .vision ? vision : paddle) as? any StagedLocalOCREngine else { return false }
+            return await engine.supportsLosslessInput
+        }
+    }
+    public func deadline(views: Int) -> OCRDeadline {
+        let timeout = selection.id == .paddle ? PaddleOCRConfiguration(settings).timeoutMilliseconds(views: views)
+            : VisionOCRConfiguration(settings).timeoutMilliseconds(views: views)
+        return .init(clock: SystemOCRClock(), timeoutMilliseconds: timeout)
+    }
+    private func perform(_ engine: any LocalOCREngine, document: PreparedDocument, localImages: [[LocalOCRImage]]?,
+                         deadline: OCRDeadline?, operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult {
+        try deadline?.check(clock: SystemOCRClock(), operation: operation)
+        let result: OCREngineResult
+        if let staged = engine as? any StagedLocalOCREngine {
+            result = try await staged.recognize(document, localImages: localImages, deadline: deadline, operation: operation, progress: progress)
+        } else {
+            result = try await engine.recognize(document, operation: operation, progress: progress)
+        }
+        try deadline?.check(clock: SystemOCRClock(), operation: operation)
+        return result
     }
     public func clearSession() async {
         if let clearTask { await clearTask.value; return }

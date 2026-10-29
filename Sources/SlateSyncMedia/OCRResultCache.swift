@@ -58,4 +58,24 @@ public actor OCRResultCache {
         }) }
         return SHA256.hash(data: try encoder.encode(Key(session: session, engine: engine, pages: pages, configuration: config))).map { String(format: "%02x", $0) }.joined()
     }
+
+    /// Alternate local encodings must not reuse observations from the JPEG
+    /// transport image. This namespace retains the existing bounded LRU owner.
+    public static func key(image: LocalOCRImage, engine: OCREngineID, settings: GlobalSettingValues, session: String) throws -> String {
+        struct Key: Encodable {
+            let version: Int
+            let session: String
+            let engine: OCREngineID
+            let format: LocalOCRImage.Format
+            let width: Int
+            let height: Int
+            let digest: Data
+            let configuration: Data
+        }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let configuration = try engine == .vision ? encoder.encode(VisionOCRConfiguration(settings)) : encoder.encode(PaddleOCRConfiguration(settings))
+        let bytes = try encoder.encode(Key(version: 1, session: session, engine: engine, format: image.format,
+            width: image.width, height: image.height, digest: Data(SHA256.hash(data: image.bytes)), configuration: configuration))
+        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
 }

@@ -285,7 +285,12 @@ public actor RecognitionCoordinator: RecognitionServing {
                 let evidence = artifact.evidence.indices.contains(page.pageNumber - 1) ? artifact.evidence[page.pageNumber - 1] : ""
                 let core = artifact.coreEvidence.indices.contains(page.pageNumber - 1) ? artifact.coreEvidence[page.pageNumber - 1] : ""
                 return .init(pageNumber: page.pageNumber, views: page.views, fullOCREvidence: evidence, coreOCREvidence: core,
-                             scenarioInstruction: pageInstructions[page.pageNumber] ?? "")
+                             scenarioInstruction: pageInstructions[page.pageNumber] ?? "",
+                             layoutInstruction: artifact.optimization?.instruction(pageNumber: page.pageNumber) ?? "",
+                             optimizationIdentity: artifact.optimization?.identity ?? "",
+                             reviewImageProvider: artifact.optimization?.reviewProvider(page: page,
+                                fullEvidence: artifact.outcome.result?.pages.first(where: { $0.pageNumber == page.pageNumber })?.views.first,
+                                originalEvidence: core))
             }
             let modelStarted = clock.nowMilliseconds()
             let output = try await pipeline.run(
@@ -307,6 +312,7 @@ public actor RecognitionCoordinator: RecognitionServing {
             try Task.checkCancellation()
             await publish(.init(phase: "merge", completed: pages.count, total: pages.count, message: "正在合并逐页结果并检查场、镜、次连续性", percent: 97))
             var warnings = output.result.warnings
+            warnings += artifact.optimization?.diagnostics ?? []
             if let warning = artifact.summary.warning { warnings.insert(warning, at: 0) }
             if let warning = scenario.selection?.warning { warnings.append(warning) }
             var sheet = RecognitionSheet(sheetTitle: output.result.sheetTitle, records: output.result.records, warnings: warnings)

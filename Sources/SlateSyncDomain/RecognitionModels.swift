@@ -34,25 +34,46 @@ public struct ProviderImage: Hashable, Sendable {
     public var dataURL: String { "data:\(mimeType);base64," + data.base64EncodedString() }
 }
 
+public struct RecognitionReviewImages: Sendable {
+    public let images: [PreparedImage]
+    public let evidence: String
+    public let warning: String?
+    public init(images: [PreparedImage], evidence: String, warning: String? = nil) {
+        self.images = images; self.evidence = evidence; self.warning = warning
+    }
+}
+
 public struct RecognitionPageInput: Sendable {
+    public typealias ReviewImageProvider = @Sendable ([RecognitionRecord]) async throws -> RecognitionReviewImages
     public let pageNumber: Int
     public let views: [PreparedMediaView]
     public let fullOCREvidence: String
     public let coreOCREvidence: String
     public let scenarioInstruction: String
+    /// Tentative geometry is primary-only; the independent audit must not
+    /// inherit a primary answer or use this as proof of page completeness.
+    public let layoutInstruction: String
+    public let optimizationIdentity: String
+    public let reviewImageProvider: ReviewImageProvider?
 
     public init(
         pageNumber: Int,
         views: [PreparedMediaView],
         fullOCREvidence: String = "",
         coreOCREvidence: String = "",
-        scenarioInstruction: String = ""
+        scenarioInstruction: String = "",
+        layoutInstruction: String = "",
+        optimizationIdentity: String = "",
+        reviewImageProvider: ReviewImageProvider? = nil
     ) {
         self.pageNumber = pageNumber
         self.views = views
         self.fullOCREvidence = fullOCREvidence
         self.coreOCREvidence = coreOCREvidence
         self.scenarioInstruction = scenarioInstruction
+        self.layoutInstruction = layoutInstruction
+        self.optimizationIdentity = optimizationIdentity
+        self.reviewImageProvider = reviewImageProvider
     }
 }
 

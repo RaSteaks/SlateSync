@@ -3,7 +3,7 @@ import SlateSyncDomain
 
 /// One immutable settings snapshot drives probes, preload and recognition;
 /// shutdown also drains standalone capability probes owned by this service.
-public actor PaddleOCRService: LocalOCREngine, OCRCapabilityProbing {
+public actor PaddleOCRService: StagedLocalOCREngine, OCRCapabilityProbing {
     private let configuration: PaddleOCRConfiguration
     private let supervisor: OCRProcessSupervisor
     private let paths: OCRRuntimePaths
@@ -19,9 +19,16 @@ public actor PaddleOCRService: LocalOCREngine, OCRCapabilityProbing {
         _ = try await supervisor.execute(configuration: configuration, document: nil, operation: operation)
     }
     public func recognize(_ document: PreparedDocument, operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult {
+        try await recognize(document, localImages: nil, deadline: nil, operation: operation, progress: progress)
+    }
+    // The bundled process protocol remains JPEG. Lossless experiments report
+    // this fallback explicitly instead of changing an installed worker contract.
+    public var supportsLosslessInput: Bool { false }
+    public func recognize(_ document: PreparedDocument, localImages: [[LocalOCRImage]]?, deadline: OCRDeadline?,
+                          operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult {
         try document.validate(); try operation.check()
         guard !closed else { throw MediaFailure.closed }
-        guard let data = try await supervisor.execute(configuration: configuration, document: document, operation: operation, progress: progress) else { throw MediaFailure.protocolError }
+        guard let data = try await supervisor.execute(configuration: configuration, document: document, operation: operation, progress: progress, deadline: deadline) else { throw MediaFailure.protocolError }
         try operation.check()
         return try OCRResponseNormalizer.decode(data, engine: .paddle, fallbackModel: configuration.modelVersion, document: document)
     }

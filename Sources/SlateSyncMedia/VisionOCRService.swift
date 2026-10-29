@@ -6,11 +6,15 @@ public protocol VisionObservationSource: Sendable {
     func observations(_ image: PreparedImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) async throws -> [RawVisionObservation]
     func available(configuration: VisionOCRConfiguration) async -> Bool
 }
+public protocol LosslessVisionObservationSource: VisionObservationSource {
+    func observations(_ image: LocalOCRImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline,
+                      operation: MediaOperation) async throws -> [RawVisionObservation]
+}
 
 /// The request, image and results are owned by this actor for the entire
 /// synchronous Vision call. Its callback receives the request from Vision and
 /// cancels it on the executing thread; no mutable request crosses actors.
-public actor NativeVisionObservationSource: VisionObservationSource {
+public actor NativeVisionObservationSource: LosslessVisionObservationSource {
     private let clock: any OCRClock
     public init(clock: any OCRClock = SystemOCRClock()) { self.clock = clock }
     private nonisolated static func makeRequest(_ configuration: VisionOCRConfiguration) -> VNRecognizeTextRequest {
@@ -31,8 +35,14 @@ public actor NativeVisionObservationSource: VisionObservationSource {
     private static let performQueue = DispatchQueue(label: "com.slatesync.vision.perform", qos: .userInitiated)
 
     public func observations(_ image: PreparedImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) async throws -> [RawVisionObservation] {
+        try await observations(bytes: image.jpeg, configuration: configuration, deadline: deadline, operation: operation)
+    }
+    public func observations(_ image: LocalOCRImage, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) async throws -> [RawVisionObservation] {
+        try await observations(bytes: image.bytes, configuration: configuration, deadline: deadline, operation: operation)
+    }
+    private func observations(bytes: Data, configuration: VisionOCRConfiguration, deadline: OCRDeadline, operation: MediaOperation) async throws -> [RawVisionObservation] {
         try deadline.check(clock: clock, operation: operation)
-        let decoded = try ImageRasterizer.decode(image.jpeg, maximum: 3000)
+        let decoded = try ImageRasterizer.decode(bytes, maximum: 3000)
         let clock = clock
         // VNImageRequestHandler、VNRecognizeTextRequest 和 Vision 的结果类型
         // 都不是 Sendable：它们的整个生命周期（构造、progressHandler、perform、
@@ -73,7 +83,7 @@ public actor NativeVisionObservationSource: VisionObservationSource {
 /// that creates them; the serial queue schedules that closure exactly once
 /// per call, so the continuation is always resumed exactly once and only the
 /// Sendable normalized observations cross back onto the actor.
-public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing {
+public actor VisionOCRService: StagedLocalOCREngine, OCRServing, OCRCapabilityProbing {
     private let configuration: VisionOCRConfiguration
     private let source: any VisionObservationSource
     private let clock: any OCRClock
@@ -94,13 +104,19 @@ public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing 
         return await source.available(configuration: configuration)
     }
     public func recognize(_ document: PreparedDocument, operation: MediaOperation = .init(), progress: MediaProgressSink? = nil) async throws -> OCREngineResult {
+        try await recognize(document, localImages: nil, deadline: nil, operation: operation, progress: progress)
+    }
+    public var supportsLosslessInput: Bool { configuration.binary.isEmpty && source is any LosslessVisionObservationSource }
+    public func recognize(_ document: PreparedDocument, localImages: [[LocalOCRImage]]?, deadline suppliedDeadline: OCRDeadline?,
+                          operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult {
         try document.validate()
-        let deadline = OCRDeadline(clock: clock, timeoutMilliseconds: configuration.timeoutMilliseconds(views: document.viewCount))
+        try LocalOCRImage.validate(localImages, document: document)
+        let deadline = suppliedDeadline ?? OCRDeadline(clock: clock, timeoutMilliseconds: configuration.timeoutMilliseconds(views: document.viewCount))
         return try await withTaskCancellationHandler {
             guard !closed else { throw MediaFailure.closed }
             let lease = try await leases.acquire(operation: operation, deadline: deadline, clock: clock)
             do {
-                let result = try await performRecognition(document, operation: operation, progress: progress, deadline: deadline)
+                let result = try await performRecognition(document, localImages: localImages, operation: operation, progress: progress, deadline: deadline)
                 await leases.release(lease)
                 return result
             } catch {
@@ -110,18 +126,23 @@ public actor VisionOCRService: LocalOCREngine, OCRServing, OCRCapabilityProbing 
         } onCancel: { operation.cancel() }
     }
 
-    private func performRecognition(_ document: PreparedDocument, operation: MediaOperation, progress: MediaProgressSink?, deadline: OCRDeadline) async throws -> OCREngineResult {
+    private func performRecognition(_ document: PreparedDocument, localImages: [[LocalOCRImage]]?, operation: MediaOperation, progress: MediaProgressSink?, deadline: OCRDeadline) async throws -> OCREngineResult {
         if !configuration.binary.isEmpty {
             guard let bridge else { throw SlateSyncError(code: "VISIONOCR_BINARY", message: "Vision OCR 相对路径缺少基准目录") }
             return try await bridge.recognize(document, configuration: configuration, deadline: deadline, operation: operation, progress: progress)
         }
         var pages: [OCRPageEvidence] = [], completed = 0
         let start = clock.nowMilliseconds()
-        for page in document.pages {
+        for (pageIndex, page) in document.pages.enumerated() {
             var views: [OCRViewEvidence] = []
-            for view in page.views {
+            for (viewIndex, view) in page.views.enumerated() {
                 try deadline.check(clock: clock, operation: operation)
-                let observations = try await source.observations(view.image, configuration: configuration, deadline: deadline, operation: operation)
+                let observations: [RawVisionObservation]
+                if let localImages, let lossless = source as? any LosslessVisionObservationSource {
+                    observations = try await lossless.observations(localImages[pageIndex][viewIndex], configuration: configuration, deadline: deadline, operation: operation)
+                } else {
+                    observations = try await source.observations(view.image, configuration: configuration, deadline: deadline, operation: operation)
+                }
                 try deadline.check(clock: clock, operation: operation)
                 views.append(VisionObservationNormalizer.normalize(observations, view: view, configuration: configuration))
                 completed += 1

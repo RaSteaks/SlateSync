@@ -61,6 +61,13 @@ public protocol LocalOCREngine: Sendable {
     func recognize(_ document: PreparedDocument, operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult
     func close() async
 }
+/// Optional native capability used by multi-stage OCR. Existing external engines
+/// keep the JPEG contract; production engines share the caller's deadline.
+public protocol StagedLocalOCREngine: LocalOCREngine {
+    var supportsLosslessInput: Bool { get async }
+    func recognize(_ document: PreparedDocument, localImages: [[LocalOCRImage]]?, deadline: OCRDeadline?,
+                   operation: MediaOperation, progress: MediaProgressSink?) async throws -> OCREngineResult
+}
 public protocol OCRCapabilityProbing: Sendable {
     func isAvailable() async -> Bool
 }

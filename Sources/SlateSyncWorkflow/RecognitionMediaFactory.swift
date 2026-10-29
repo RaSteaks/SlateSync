@@ -12,7 +12,7 @@ public enum RecognitionMediaFactory {
         public let close: @Sendable () async -> Void
     }
     public static func make(runtime: SlateSyncRuntime, values: GlobalSettingValues,
-        resources: OCRRuntimePaths.Resources? = nil
+        resources: OCRRuntimePaths.Resources? = nil, policy: RecognitionOptimizationPolicy = .baseline
     ) async throws -> Resources {
         let probe = VisionOCRService(configuration: VisionOCRConfiguration(values))
         let visionAvailable = await probe.isAvailable()
@@ -25,7 +25,7 @@ public enum RecognitionMediaFactory {
                                   visionAvailable: visionAvailable, paddleAvailable: paddleAvailable, cacheByView: true)
         // Per-task workflows retain independent cancellation. Model weights and
         // project-keyed evidence survive a task, but never the owning runtime.
-        return .init(make: { MediaOCRWorkflow(ocr: ocr, ownsOCR: false) },
+        return .init(make: { MediaOCRWorkflow(ocr: ocr, ownsOCR: false, policy: policy) },
                      clearSession: { await ocr.clearCachedSession($0) }, close: { await ocr.close() })
     }
 

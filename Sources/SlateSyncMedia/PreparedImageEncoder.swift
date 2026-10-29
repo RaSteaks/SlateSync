@@ -32,6 +32,12 @@ enum PreparedImageEncoder {
     static func encode(_ source: CGImage, maximum: Int, quality: Double, upscale: Bool = false) throws -> PreparedImage {
         guard quality.isFinite, (0...1).contains(quality) else { throw MediaFailure.invalidInput }
         let image = try resize(source, maximum: maximum, upscale: upscale)
+        return try encodeResized(image, quality: quality)
+    }
+    /// Shared by the normal JPEG path and same-pixel lossless experiments;
+    /// encoding must not resize a second time and alter the comparison input.
+    static func encodeResized(_ image: CGImage, quality: Double) throws -> PreparedImage {
+        guard quality.isFinite, (0...1).contains(quality) else { throw MediaFailure.invalidInput }
         let bytes = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(bytes, UTType.jpeg.identifier as CFString, 1, nil) else { throw MediaFailure.invalidInput }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
@@ -39,27 +45,42 @@ enum PreparedImageEncoder {
         return try .init(jpeg: bytes as Data, width: image.width, height: image.height)
     }
     static func cropped(_ source: CGImage, operation: MediaOperation) throws -> CGImage {
+        try croppedWithRegion(source, operation: operation).image
+    }
+    private static func croppedWithRegion(_ source: CGImage, operation: MediaOperation) throws -> (image: CGImage, region: PageRegion) {
         let w = min(512, source.width), h = max(1, ImagePreprocessing.round(Double(source.height) * Double(w) / Double(source.width)))
         let ctx = try context(width: w, height: h)
         ctx.draw(source, in: CGRect(x: 0, y: 0, width: w, height: h))
         guard let data = ctx.data else { throw MediaFailure.invalidInput }
         let pixels = Array(UnsafeBufferPointer(start: data.assumingMemoryBound(to: UInt8.self), count: w * h * 4))
         let bounds = try ImagePreprocessing.denseRowBand(rgba: pixels, width: w, height: h, operation: operation)
-        guard bounds.cropped else { return source }
+        guard bounds.cropped else { return (source, .full) }
         let top = max(0, Int(floor(Double(bounds.top) * Double(source.height) / Double(h))))
         let bottom = min(source.height, Int(ceil(Double(bounds.bottom) * Double(source.height) / Double(h))))
         guard let output = source.cropping(to: CGRect(x: 0, y: top, width: source.width, height: max(1, bottom - top))) else { throw MediaFailure.invalidInput }
-        return output
+        return (output, try .init(left: 0, top: Double(top) / Double(source.height), right: 1, bottom: Double(bottom) / Double(source.height)))
     }
-    static func views(_ source: CGImage, operation: MediaOperation, includesDetails: Bool = true) throws -> [PreparedMediaView] {
+    static func views(_ source: CGImage, operation: MediaOperation, includesDetails: Bool = true,
+                      capture: ((CGImage, PreparedMediaView, RecognitionViewMapping) throws -> Void)? = nil) throws -> [PreparedMediaView] {
         try operation.check()
-        let cropped = try cropped(source, operation: operation)
-        var output = [PreparedMediaView(viewIndex: 0, viewType: .full, image: try encode(cropped, maximum: 2600, quality: 0.92))]
+        let content = try croppedWithRegion(source, operation: operation)
+        let cropped = content.image
+        var output: [PreparedMediaView] = []
+        // The capture hook sees exactly the pixels encoded for the historical
+        // view, enabling lossless inputs without a second geometry algorithm.
+        func append(_ raster: CGImage, maximum: Int, quality: Double, upscale: Bool, mapping: RecognitionViewMapping) throws {
+            let resized = try resize(raster, maximum: maximum, upscale: upscale)
+            let view = PreparedMediaView(viewIndex: output.count, viewType: output.isEmpty ? .full : .coreDetail,
+                                         image: try encodeResized(resized, quality: quality))
+            output.append(view)
+            try capture?(resized, view, mapping)
+        }
+        try append(cropped, maximum: 2600, quality: 0.92, upscale: false, mapping: .init(page: content.region))
         // Standard recognition consumes only the full page; avoid allocating
         // and JPEG-encoding detail views that would immediately be discarded.
         guard includesDetails else { return output }
         let layout = ImagePreprocessing.detailSegments(height: cropped.height)
-        for (index, segment) in layout.segments.enumerated() {
+        for segment in layout.segments {
             try operation.check()
             let w = ImagePreprocessing.coreColumnWidth(cropped.width)
             let headerHeight = max(1, layout.header.bottom), bodyHeight = max(1, segment.bottom - segment.top)
@@ -73,7 +94,17 @@ enum PreparedImageEncoder {
             if available > 0, let body = cropped.cropping(to: CGRect(x: 0, y: segment.top, width: w, height: available)) {
                 ctx.draw(body, in: CGRect(x: 0, y: bodyHeight - available, width: w, height: available))
             }
-            output.append(.init(viewIndex: index + 1, viewType: .coreDetail, image: try encode(image(ctx), maximum: 3000, quality: 0.93, upscale: true)))
+            let totalHeight = Double(headerHeight + bodyHeight)
+            let headerPage = try PageRegion(left: 0, top: content.region.top,
+                right: Double(w) / Double(source.width), bottom: min(1, content.region.top + Double(headerHeight) / Double(source.height)))
+            var pieces = [RecognitionViewMapping.Piece(view: try .init(left: 0, top: 0, right: 1, bottom: Double(headerHeight) / totalHeight), page: headerPage)]
+            if available > 0 {
+                pieces.append(.init(view: try .init(left: 0, top: Double(headerHeight) / totalHeight, right: 1,
+                    bottom: Double(headerHeight + available) / totalHeight),
+                    page: try .init(left: 0, top: content.region.top + Double(segment.top) / Double(source.height),
+                        right: Double(w) / Double(source.width), bottom: min(1, content.region.top + Double(segment.top + available) / Double(source.height)))))
+            }
+            try append(image(ctx), maximum: 3000, quality: 0.93, upscale: true, mapping: .init(pieces: pieces))
         }
         try operation.check()
         return output

@@ -7,6 +7,17 @@ public actor MediaPreparationService: MediaPreparing, MediaRecompressing {
     private let clock: any OCRClock
     public init(clock: any OCRClock = SystemOCRClock()) { self.clock = clock }
 
+    /// Opt-in strategies share the legacy reader's file and size protections.
+    /// Only compressed source bytes survive between page requests.
+    public func recognitionSource(_ input: MediaInput, maximumInputBytes: Int = 20 * 1024 * 1024,
+                                  operation: MediaOperation) throws -> RecognitionPageSource {
+        try operation.check()
+        let (data, filename) = try read(input, maximum: maximumInputBytes, operation: operation)
+        let source = try RecognitionPageSource(data: data, filename: filename)
+        try operation.check()
+        return source
+    }
+
     public func prepare(_ input: MediaInput, options: MediaPreparationOptions = .init(), operation: MediaOperation = .init(), progress: MediaProgressSink? = nil) async throws -> PreparedDocument {
         try await withTaskCancellationHandler {
             try operation.check()
