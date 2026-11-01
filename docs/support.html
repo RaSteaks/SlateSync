@@ -426,6 +426,7 @@
         <li><a href="#recognition"><span class="lang-zh">识别方式</span><span class="lang-en">Recognition</span></a></li>
         <li><a href="#fields"><span class="lang-zh">字段回填</span><span class="lang-en">Field mapping</span></a></li>
         <li><a href="#data"><span class="lang-zh">项目与数据</span><span class="lang-en">Projects &amp; data</span></a></li>
+        <li><a href="#mcp"><span class="lang-zh">本机 MCP</span><span class="lang-en">Local MCP</span></a></li>
         <li><a href="#faq"><span class="lang-zh">常见问题</span><span class="lang-en">FAQ</span></a></li>
         <li><a href="#limitations"><span class="lang-zh">已知边界</span><span class="lang-en">Limitations</span></a></li>
         <li><a href="#contact"><span class="lang-zh">联系我们</span><span class="lang-en">Contact</span></a></li>
@@ -472,6 +473,16 @@
         <p><span class="lang-zh">以独立项目包或整个项目库迁移数据；单项目导入创建新项目 ID，整库导入则切换到导入的项目库。</span>
            <span class="lang-en">Move data as a single project package or a whole library. Importing a project creates a new project ID; importing a library switches to the imported library.</span></p>
       </div>
+      <div class="card">
+        <h3><span class="lang-zh">模型服务</span><span class="lang-en">Model services</span></h3>
+        <p><span class="lang-zh">内置 OpenAI、OpenRouter、阿里云、DeepSeek 等服务商预设，也可以添加多个 OpenAI 兼容连接和手动模型 ID。</span>
+           <span class="lang-en">Includes presets for providers such as OpenAI, OpenRouter, Alibaba Cloud and DeepSeek. You can also add multiple OpenAI-compatible connections and manual model IDs.</span></p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-zh">本机 MCP（可选）</span><span class="lang-en">Local MCP (optional)</span></h3>
+        <p><span class="lang-zh">让 Codex、Claude Code 等 AI 客户端在你授权的目录内调用识别、预览与导出工具，默认关闭。</span>
+           <span class="lang-en">Lets AI clients such as Codex and Claude Code call recognition, preview and export tools inside directories you grant. Off by default.</span></p>
+      </div>
     </div>
   </section>
 
@@ -490,8 +501,8 @@
       </li>
       <li>
         <h3><span class="lang-zh">配置 Provider</span><span class="lang-en">Configure a provider</span></h3>
-        <p><span class="lang-zh">在全局设置中添加 OpenAI 兼容视觉服务：Base URL、模型、并发与超时可调，API Key 存入本地 AES-256-GCM 加密文件。</span>
-           <span class="lang-en">In Global Settings, add an OpenAI-compatible vision service: base URL, model, concurrency and timeout are adjustable; the API key is stored in a local AES-256-GCM encrypted file.</span></p>
+        <p><span class="lang-zh">在全局设置中选择内置预设或自定义 OpenAI 兼容接口，填写 API Key 和必要的 Base URL，API Key 存入本地 AES-256-GCM 加密文件。保存后先验证连接，再单独验证模型的视觉能力。</span>
+           <span class="lang-en">In Global Settings, pick a preset or a custom OpenAI-compatible endpoint, then enter the API key and, when needed, the base URL. The key is stored in a local AES-256-GCM encrypted file. After saving, validate the connection, then separately verify the model's vision capability.</span></p>
       </li>
       <li>
         <h3><span class="lang-zh">导入场记单</span><span class="lang-en">Import a slate</span></h3>
@@ -553,8 +564,8 @@
     </div>
     <div class="note">
       <!-- 请求正文还包含文件名与可选项目上下文；认证 Key 通过请求头发送，详见隐私政策。 -->
-      <span class="lang-zh">模型请求发送本地准备的页面图片、OCR 证据和识别上下文，并以配置的 API Key 认证；不发送原始 PDF 文件。</span>
-      <span class="lang-en">Model requests send locally prepared page images, OCR evidence and recognition context, authenticated with the configured API key; they do not send the original PDF file.</span>
+      <span class="lang-zh">模型请求发送本地准备的页面图片与必要的局部放大图、OCR 证据和识别上下文，并以配置的 API Key 认证；不发送原始 PDF 文件。</span>
+      <span class="lang-en">Model requests send locally prepared page images with close-ups when needed, OCR evidence and recognition context, authenticated with the configured API key; they do not send the original PDF file.</span>
     </div>
   </section>
 
@@ -623,7 +634,7 @@
       <div class="card">
         <h3><span class="lang-zh">本地加密</span><span class="lang-en">Local encryption</span></h3>
         <p><span class="lang-zh">正常启动会自动把项目库索引、项目设置、任务、诊断、场记 Profile 与 JSON 快照转换为 AES-256-GCM 加密存储；密钥保存在本机登录钥匙串。原始媒体与缓存、机器级配置和日志不在加密范围内。</span>
-           <span class="lang-en">On first launch the library index, project settings, tasks, diagnostics, slate profiles and JSON snapshots are migrated to AES-256-GCM encrypted storage; the key stays in the login keychain. Raw media and caches, machine-level configuration and logs are outside that scope.</span></p>
+           <span class="lang-en">At launch the library index, project settings, tasks, diagnostics, slate profiles and JSON snapshots are migrated to AES-256-GCM encrypted storage; the key stays in the login keychain. Raw media and caches, machine-level configuration and logs are outside that scope.</span></p>
       </div>
       <div class="card">
         <h3><span class="lang-zh">迁移与备份</span><span class="lang-en">Migration &amp; backup</span></h3>
@@ -635,6 +646,29 @@
         <p><span class="lang-zh">运行日志按天保留 7 天，记录脱敏事件；不记录凭据、原始请求、媒体路径或模型响应正文。</span>
            <span class="lang-en">Run logs are kept locally for 7 days by day and record redacted events only — never credentials, raw requests, media paths or model response bodies.</span></p>
       </div>
+    </div>
+  </section>
+
+  <!-- ===== 本机 MCP ===== -->
+  <section id="mcp">
+    <h2><span class="lang-zh">本机 MCP</span><span class="lang-en">Local MCP</span></h2>
+    <p class="section-sub">
+      <span class="lang-zh">可选的本机服务，让 Codex、Claude Code 等 AI 客户端调用 SlateSync 的识别、元数据扫描、回填预览和 CSV 导出工具。它不启动应用界面，也不修改桌面项目库。</span>
+      <span class="lang-en">An optional local service that lets AI clients such as Codex and Claude Code call SlateSync's recognition, metadata scanning, backfill preview and CSV export tools. It does not open the app window or change your Project Library.</span>
+    </p>
+    <ul class="plain">
+      <li><span class="lang-zh"><strong>启动：</strong>在设置 → MCP 中点击“一键启动 MCP”，应用会查找源码目录、增量构建并启动服务。首次构建需要 Xcode / Swift 工具链和网络。</span>
+          <span class="lang-en"><strong>Start:</strong> in Settings → MCP, click Start MCP. The app finds the source checkout, runs an incremental build and starts the service. The first build needs the Xcode / Swift toolchain and network access.</span></li>
+      <li><span class="lang-zh"><strong>连接：</strong>点击“添加到 Codex”或“添加到 Claude Code”，通过已安装的官方 CLI 写入用户级配置；也可以复制托管配置。</span>
+          <span class="lang-en"><strong>Connect:</strong> click Add to Codex or Add to Claude Code to write a user-level entry with the installed official CLI, or copy the managed configuration.</span></li>
+      <li><span class="lang-zh"><strong>授权：</strong>不添加授权目录也能启动和连接，但所有文件读取和导出都会被拒绝。真实模型请求需要单独允许，可能产生服务商费用。</span>
+          <span class="lang-en"><strong>Grant:</strong> the service starts and connects without directory grants, but every file read and export is denied. Real model requests need separate permission and may incur provider charges.</span></li>
+      <li><span class="lang-zh"><strong>停止：</strong>可以开启“随 SlateSync 自动启动 / 停止”。退出应用会停止服务及全部托管连接，关闭设置窗口不受影响。</span>
+          <span class="lang-en"><strong>Stop:</strong> you can turn on automatic start and stop with SlateSync. Quitting the app stops the service and all managed connections; closing Settings does not.</span></li>
+    </ul>
+    <div class="note">
+      <span class="lang-zh">工具返回的结果会交给你连接的 AI 客户端，该客户端可能把它们发送给自己的服务。详见<a href="privacy.html#mcp">隐私政策第 8 条</a>。</span>
+      <span class="lang-en">Tool results go to the AI client you connect, which may send them to its own service. See <a href="privacy.html#mcp">§8 of the privacy policy</a>.</span>
     </div>
   </section>
 
@@ -665,8 +699,16 @@
     <details>
       <summary><span class="lang-zh">识别时哪些内容会被发送出去？</span><span class="lang-en">What gets sent during recognition?</span></summary>
       <div class="answer">
-        <span class="lang-zh">本地准备页面图片与 OCR 证据后，识别请求还会携带源文件名及可选的项目提示、场记 CSV 记录和版式提示；配置的 API Key 用于请求头认证。原始 PDF 不会上传。没有配置 Provider 时，识别不会产生模型网络请求。详见<a href="privacy.html">隐私政策</a>。</span>
-        <span class="lang-en">After local preparation, recognition sends page images and OCR evidence together with the source filename and optional project prompts, slate CSV records and layout hints. A configured API key is used in the authentication header. The original PDF is not uploaded. With no provider configured, recognition makes no model network request. See our <a href="privacy.html">privacy policy</a>.</span>
+        <span class="lang-zh">本地准备页面图片（必要时含局部放大图）与 OCR 证据后，识别请求还会携带源文件名及可选的项目提示、场记 CSV 记录和版式提示；配置的 API Key 用于请求头认证。原始 PDF 不会上传。没有配置 Provider 时，识别不会产生模型网络请求。详见<a href="privacy.html">隐私政策</a>。</span>
+        <span class="lang-en">After local preparation, recognition sends page images, with close-ups when needed, and OCR evidence together with the source filename and optional project prompts, slate CSV records and layout hints. A configured API key is used in the authentication header. The original PDF is not uploaded. With no provider configured, recognition makes no model network request. See our <a href="privacy.html">privacy policy</a>.</span>
+      </div>
+    </details>
+
+    <details>
+      <summary><span class="lang-zh">验证模型会产生费用吗？</span><span class="lang-en">Does verifying a model cost money?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">可能会。保存配置不发起模型调用，验证连接只刷新模型列表；验证视觉能力会用内置测试图片发起一次模型调用，可能产生费用。测试图片不包含你的场记单或项目内容。</span>
+        <span class="lang-en">It can. Saving makes no model call and validating the connection only refreshes the model list. Verifying vision capability makes one model call with a built-in test image, which may incur a charge. That image contains none of your slates or project content.</span>
       </div>
     </details>
 
@@ -703,6 +745,14 @@
     </details>
 
     <details>
+      <summary><span class="lang-zh">如何归档或删除项目？</span><span class="lang-en">How do I archive or delete a project?</span></summary>
+      <div class="answer">
+        <span class="lang-zh">归档会把项目移出活跃列表，恢复后仍保留项目数据。永久删除是独立操作，需要逐字输入项目名称确认，且无法恢复。</span>
+        <span class="lang-en">Archiving removes a project from the active list and restoring keeps its data. Permanent deletion is a separate action that requires typing the exact project name and cannot be undone.</span>
+      </div>
+    </details>
+
+    <details>
       <summary><span class="lang-zh">识别失败或结果异常怎么办？</span><span class="lang-en">Recognition failed or looks wrong — what now?</span></summary>
       <div class="answer">
         <span class="lang-zh">先在全局设置中检查 Provider 的 Base URL、API Key 与模型是否有效，以及 OCR 配置是否可用；失败时应用会按设置降级为页面图片识别，或在设为必需时停止并报告错误。失败详情可查看帮助中的日志（本地保留 7 天、内容脱敏）。修正配置后可直接重试，当前编辑会先被保留。</span>
@@ -731,6 +781,8 @@
           <span class="lang-en">Unconfirmed fields are never force-written; they must be reviewed manually before export.</span></li>
       <li><span class="lang-zh">项目库与项目包当前为 v1 格式，升级、迁移或回退前请保留独立备份。</span>
           <span class="lang-en">The Project Library and packages use the v1 format; keep a separate backup before upgrading, migrating or rolling back.</span></li>
+      <li><span class="lang-zh">本机 MCP 目前需要本机源码目录，尚未包含在安装包中；Mac App Store 沙盒版本不会启动它。</span>
+          <span class="lang-en">Local MCP currently needs a local source checkout and is not included in the installer. The Mac App Store sandbox build does not start it.</span></li>
     </ul>
   </section>
 

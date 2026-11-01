@@ -320,6 +320,7 @@
   .clause-body p { margin: 0 0 14px; text-wrap: pretty; }
   .clause-body p:last-child { margin-bottom: 0; }
   .clause-body code { color: var(--ink); }
+  .flow-note { margin: 14px 0 0; color: var(--ink-2); font-size: 14.5px; }
 </style>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F7F9">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1E2229">
@@ -386,6 +387,8 @@
             <span class="lang-en">When you run recognition, page images, OCR evidence and recognition context go to the model service you configured. <strong>The original PDF file is not uploaded.</strong></span></li>
         <li><span class="lang-zh">可选的 PaddleOCR <strong>完全在本机运行</strong>；Python 环境与模型由你在本机选择和下载。</span>
             <span class="lang-en">Optional PaddleOCR <strong>runs entirely on your Mac</strong>; you choose and download the Python environment and models yourself.</span></li>
+        <li><span class="lang-zh">可选的本机 MCP <strong>默认关闭</strong>；启用后，你连接的 AI 客户端可以处理你授权目录中的文件并取得结果，模型请求还需单独允许。</span>
+            <span class="lang-en">Optional local MCP is <strong>off by default</strong>. Once enabled, the AI client you connect can process files in directories you grant and receive the results; model requests need separate permission.</span></li>
       </ul>
     </div>
 
@@ -401,6 +404,7 @@
         <li><a href="#ocr"><span class="lang-zh">OCR</span><span class="lang-en">OCR</span></a></li>
         <li><a href="#logs"><span class="lang-zh">日志</span><span class="lang-en">Logs</span></a></li>
         <li><a href="#keys"><span class="lang-zh">API Key</span><span class="lang-en">API keys</span></a></li>
+        <li><a href="#mcp"><span class="lang-zh">本机 MCP</span><span class="lang-en">Local MCP</span></a></li>
         <li><a href="#exports"><span class="lang-zh">导出与共享</span><span class="lang-en">Exports</span></a></li>
         <li><a href="#security"><span class="lang-zh">安全措施</span><span class="lang-en">Security</span></a></li>
         <li><a href="#children"><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></a></li>
@@ -440,9 +444,13 @@
       <div class="flow-arrow flow-exit"><svg viewBox="0 0 12 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 0v34.5M1.5 30 6 34.5 10.5 30"/></svg><span><span class="lang-zh">仅当你运行识别</span><span class="lang-en">Only when you run recognition</span></span></div>
       <div class="flow-box">
         <b><span class="lang-zh">你配置的 AI 服务（OpenAI 兼容接口）</span><span class="lang-en">The AI service you configured (OpenAI-compatible)</span></b>
-        <span><span class="lang-zh">接收页面图片、OCR 证据、识别上下文与认证请求头；原始 PDF 不会上传</span><span class="lang-en">Receives page images, OCR evidence, recognition context and an authentication header; the original PDF is not uploaded</span></span>
+        <span><span class="lang-zh">接收页面图片与必要的局部放大图、OCR 证据、识别上下文与认证请求头；原始 PDF 不会上传</span><span class="lang-en">Receives page images with close-ups when needed, OCR evidence, recognition context and an authentication header; the original PDF is not uploaded</span></span>
       </div>
     </div>
+    <p class="flow-note">
+      <span class="lang-zh">通过本机 MCP 连接 AI 客户端时，工具结果还会交给该客户端，见<a href="#mcp">第 8 条</a>。</span>
+      <span class="lang-en">When an AI client is connected through local MCP, tool results also go to that client; see <a href="#mcp">§8</a>.</span>
+    </p>
   </section>
 
   <!-- ===== 2 我们不收集 ===== -->
@@ -456,8 +464,8 @@
             <span class="lang-en">No analytics, telemetry, ad SDKs or crash reporting; nothing is sent to developer-operated servers.</span></li>
         <li><span class="lang-zh">我们不出售、出租或共享任何用户数据——因为我们从一开始就没有收到过。</span>
             <span class="lang-en">We never sell, rent or share user data — we never receive any in the first place.</span></li>
-        <li><span class="lang-zh">模型请求只指向你配置的服务（见<a href="#providers">第 4 条</a>）；主动安装 PaddleOCR 时还会访问软件源与模型下载服务（见<a href="#ocr">第 5 条</a>）。</span>
-            <span class="lang-en">Model requests go only to the service you configure (see <a href="#providers">§4</a>); an optional PaddleOCR installation also contacts package and model sources (see <a href="#ocr">§5</a>).</span></li>
+        <li><span class="lang-zh">模型请求只指向你配置的服务（见<a href="#providers">第 4 条</a>）；主动安装 PaddleOCR 时还会访问软件源与模型下载服务（见<a href="#ocr">第 5 条</a>）；首次构建本机 MCP 时还会下载依赖（见<a href="#mcp">第 8 条</a>）。</span>
+            <span class="lang-en">Model requests go only to the service you configure (see <a href="#providers">§4</a>); an optional PaddleOCR installation also contacts package and model sources (see <a href="#ocr">§5</a>), and the first local MCP build downloads its dependencies (see <a href="#mcp">§8</a>).</span></li>
       </ul>
     </div>
   </section>
@@ -477,6 +485,8 @@
          <span class="lang-en">Outside this encryption boundary: raw media and media caches, machine-level configuration and run logs. This boundary protects file contents; it does not hide directory names and is not a substitute for full-disk encryption such as FileVault.</span></p>
       <p><span class="lang-zh">若登录钥匙串中的密钥丢失且没有应用内导出的备份，已加密数据无法解密。迁移到新 Mac 请使用应用内导出，不要直接复制内部加密目录。</span>
          <span class="lang-en">If the keychain key is lost without an in-app export, encrypted data cannot be decrypted. To move to a new Mac, use in-app export — do not copy the internal encrypted folder directly.</span></p>
+      <p><span class="lang-zh">项目可以归档并恢复；永久删除需要逐字输入项目名称。诊断证据按项目保留最近 20 次会话。</span>
+         <span class="lang-en">Projects can be archived and restored; permanent deletion requires typing the exact project name. Diagnostic evidence is kept for the latest 20 sessions per project.</span></p>
     </div>
   </section>
 
@@ -485,22 +495,26 @@
     <h2><span class="clause">4</span><span class="lang-zh">你配置的第三方 AI 服务</span><span class="lang-en">Third-party AI services you configure</span></h2>
     <div class="clause-body">
       <!-- 披露范围与 RecognitionPrompts、ProviderPayloadBuilder 和 URLSessionProviderTransport 的实际请求保持一致。 -->
-      <p><span class="lang-zh">识别由你自行选择并配置的 OpenAI 兼容视觉服务完成（包括 Base URL、模型与请求并发等，均可在全局设置中修改）。发起识别时，应用会向该地址发送：</span>
-         <span class="lang-en">Recognition is performed by an OpenAI-compatible vision service that you choose and configure (base URL, model, concurrency and more, all editable in Global Settings). When you start a recognition, the app sends to that address:</span></p>
+      <p><span class="lang-zh">识别由你自行选择并配置的 OpenAI 兼容视觉服务完成（包括 Base URL、模型与请求并发等，均可在全局设置中修改）。应用内置 OpenAI、OpenRouter、阿里云、DeepSeek 等服务商的地址预设，预设本身不会发起连接。发起识别时，应用会向该地址发送：</span>
+         <span class="lang-en">Recognition is performed by an OpenAI-compatible vision service that you choose and configure (base URL, model, concurrency and more, all editable in Global Settings). The app includes address presets for providers such as OpenAI, OpenRouter, Alibaba Cloud and DeepSeek; a preset alone makes no connection. When you start a recognition, the app sends to that address:</span></p>
       <ul class="plain">
-        <li><span class="lang-zh">本地栅格化得到的场记单页面图片；</span>
-            <span class="lang-en">Slate page images rasterized locally;</span></li>
+        <li><span class="lang-zh">本地栅格化得到的场记单页面图片，必要时包括同一页的局部放大图；</span>
+            <span class="lang-en">Slate page images rasterized locally, with close-ups of the same page when needed;</span></li>
         <li><span class="lang-zh">本地 OCR 证据：识别出的文字、置信度与坐标。</span>
             <span class="lang-en">Local OCR evidence: recognized text, confidence and coordinates.</span></li>
-        <li><span class="lang-zh">识别上下文：源文件名、你填写的项目自定义提示，以及启用时的场记 CSV 记录、版式提示和输出字段设置。</span>
-            <span class="lang-en">Recognition context: the source filename, your project custom prompt, and, when used, slate CSV records, layout hints and output-field settings.</span></li>
+        <li><span class="lang-zh">识别上下文：源文件名、你填写的项目自定义提示，以及启用时的场记 CSV 记录（素材、场、镜、次与状态）、版式提示和输出字段设置。</span>
+            <span class="lang-en">Recognition context: the source filename, your project custom prompt, and, when used, slate CSV records (material, scene, shot, take and status), layout hints and output-field settings.</span></li>
         <li><span class="lang-zh">如已配置 API Key，认证请求头会将该 Key 发送给所选服务。</span>
             <span class="lang-en">If an API key is configured, an authentication header sends it to the selected service.</span></li>
       </ul>
       <p><span class="lang-zh">原始 PDF 文件、完整项目库与其他项目内容不会随识别请求发送；API Key 不写入请求正文，但会用于请求头认证。模型发现（列出可用模型）也只与你配置的服务通信。这些内容一旦发送，其处理受该服务商的隐私政策与条款约束，请在选择服务商时自行确认。</span>
          <span class="lang-en">The original PDF file, complete Project Library and other projects' content are not sent with recognition requests. The API key stays out of the request body but is used in the authentication header. Model discovery also talks only to your configured service. Once sent, that content is handled under the provider's own privacy policy and terms — please review them when choosing a provider.</span></p>
-      <p><span class="lang-zh">不配置 Provider 时，应用不会为识别产生任何网络请求。</span>
-         <span class="lang-en">With no provider configured, recognition generates no network requests at all.</span></p>
+      <p><span class="lang-zh">验证连接只刷新模型列表；验证视觉能力时，应用发送的是内置测试图片，不包含你的场记单或项目内容，但可能产生一次模型调用费用。</span>
+         <span class="lang-en">Connection checks only refresh the model list. Vision capability checks send a built-in test image containing none of your slates or project content, and may incur the cost of one model call.</span></p>
+      <p><span class="lang-zh">使用 OpenRouter 时，请求头还包含应用名称和来源地址，默认值分别为 SlateSync 和本项目的 GitHub 地址，用于向该服务标识来源，可在设置中修改。</span>
+         <span class="lang-en">With OpenRouter, request headers also carry an app name and source URL, by default SlateSync and this project's GitHub address, to identify the source to that service. You can change them in Settings.</span></p>
+      <p><span class="lang-zh">不配置 Provider 时，应用不会为识别产生任何网络请求。设置中的服务商官网、密钥和文档链接，以及 GitHub 项目主页，只有在你点击后才由系统浏览器打开。</span>
+         <span class="lang-en">With no provider configured, recognition generates no network requests at all. Provider website, API key and documentation links in Settings, and the GitHub project link, open in your system browser only when you click them.</span></p>
     </div>
   </section>
 
@@ -521,6 +535,8 @@
     <div class="clause-body">
       <p><span class="lang-zh">运行日志只保存在本机 <code>~/Library/Application Support/SlateSync/</code> 下，按天保留 7 天后清理。日志记录脱敏事件，<strong>不包含</strong>凭据、原始请求、媒体路径或模型响应正文，也不会被上传。</span>
          <span class="lang-en">Run logs are stored only under <code>~/Library/Application Support/SlateSync/</code> on your Mac and pruned after 7 days, by day. They record redacted events and <strong>never</strong> contain credentials, raw requests, media paths or model response bodies, and they are never uploaded.</span></p>
+      <p><span class="lang-zh">本机 MCP 的诊断信息单独写入 <code>logs/mcp-service.log</code>、<code>mcp-build.log</code> 和 <code>mcp-client.log</code>，位于同一目录下。这些文件同样只保存在本机、不会被上传，但不适用上述 7 天清理和脱敏规则，可能包含本地路径；不再需要时可以手动删除。</span>
+         <span class="lang-en">Local MCP diagnostics are written separately to <code>logs/mcp-service.log</code>, <code>mcp-build.log</code> and <code>mcp-client.log</code> in the same directory. They also stay on your Mac and are never uploaded, but the 7-day pruning and redaction above do not apply and they may contain local paths. You can delete them manually when no longer needed.</span></p>
     </div>
   </section>
 
@@ -533,9 +549,33 @@
     </div>
   </section>
 
-  <!-- ===== 8 导出与共享 ===== -->
+  <!-- ===== 8 本机 MCP ===== -->
+  <section id="mcp">
+    <h2><span class="clause">8</span><span class="lang-zh">本机 MCP</span><span class="lang-en">Local MCP</span></h2>
+    <div class="clause-body">
+      <!-- 披露范围与 docs/mcp.md、MCPServiceLifecycle 和 MCPSetupOperations 的实际行为保持一致。 -->
+      <p><span class="lang-zh">本机 MCP 是可选功能，默认关闭，只有你在设置中启动后才会运行。它让你连接的 AI 客户端（例如 Codex 或 Claude Code）调用 SlateSync 的识别、元数据扫描、回填预览和 CSV 导出工具，但不会修改桌面项目库、任务、全局设置或 API Key。</span>
+         <span class="lang-en">Local MCP is optional and off by default; it runs only after you start it in Settings. It lets the AI client you connect, such as Codex or Claude Code, call SlateSync's recognition, metadata scanning, backfill preview and CSV export tools. It does not change your Project Library, tasks, global settings or API keys.</span></p>
+      <ul class="plain">
+        <li><span class="lang-zh"><strong>本地通信：</strong>服务通过本机 stdio 和仅当前用户可访问的 Unix socket 通信，不监听网络端口。</span>
+            <span class="lang-en"><strong>Local transport:</strong> the service uses local stdio and a Unix socket restricted to the current user. It listens on no network port.</span></li>
+        <li><span class="lang-zh"><strong>目录授权：</strong>未添加授权目录时，所有文件读取和导出都会被拒绝；路径在解析符号链接后仍须位于授权目录内。</span>
+            <span class="lang-en"><strong>Directory grants:</strong> with no granted directories, every file read and export is denied. Paths must stay inside a grant after symlinks are resolved.</span></li>
+        <li><span class="lang-zh"><strong>交给客户端的内容：</strong>工具返回的识别记录、CSV 预览和元数据会交给你连接的 AI 客户端。该客户端可能把这些内容发送给它自己的服务，处理方式受其隐私政策与条款约束。</span>
+            <span class="lang-en"><strong>What the client receives:</strong> recognition records, CSV previews and metadata returned by the tools go to the AI client you connect. That client may send them to its own service, under its own privacy policy and terms.</span></li>
+        <li><span class="lang-zh"><strong>模型请求：</strong>默认不允许，须单独开启。开启后，工具发起的识别会按<a href="#providers">第 4 条</a>向你配置的服务发送内容，可能产生服务商费用。服务使用本机保存的 API Key 认证，工具结果不包含凭据。</span>
+            <span class="lang-en"><strong>Model requests:</strong> disabled unless you turn them on separately. Once enabled, tool-initiated recognition sends content to your configured service as described in <a href="#providers">§4</a> and may incur provider charges. The service authenticates with the API key saved on your Mac, and tool results never include credentials.</span></li>
+        <li><span class="lang-zh"><strong>构建与连接：</strong>首次构建需要 Xcode / Swift 工具链，并联网下载 MCP SDK 及其依赖。只有在你点击“添加到 Codex”或“添加到 Claude Code”时，应用才会调用对应的官方 CLI 写入客户端配置。</span>
+            <span class="lang-en"><strong>Build and connect:</strong> the first build needs the Xcode / Swift toolchain and downloads the MCP SDK and its dependencies. The app writes client configuration only when you click Add to Codex or Add to Claude Code, using that client's official CLI.</span></li>
+      </ul>
+      <p><span class="lang-zh">这项服务目前需要本机源码目录，尚未包含在安装包中；Mac App Store 沙盒版本不会启动它。</span>
+         <span class="lang-en">The service currently needs a local source checkout and is not included in the installer. The Mac App Store sandbox build does not start it.</span></p>
+    </div>
+  </section>
+
+  <!-- ===== 9 导出与共享 ===== -->
   <section id="exports">
-    <h2><span class="clause">8</span><span class="lang-zh">导出与共享</span><span class="lang-en">Exports &amp; sharing</span></h2>
+    <h2><span class="clause">9</span><span class="lang-zh">导出与共享</span><span class="lang-en">Exports &amp; sharing</span></h2>
     <div class="clause-body">
       <p><span class="lang-zh">导出永远由你发起、由你控制去向：</span>
          <span class="lang-en">Exports are always initiated by you, to destinations you control:</span></p>
@@ -550,9 +590,9 @@
     </div>
   </section>
 
-  <!-- ===== 9 数据安全措施 ===== -->
+  <!-- ===== 10 数据安全措施 ===== -->
   <section id="security">
-    <h2><span class="clause">9</span><span class="lang-zh">安全措施</span><span class="lang-en">Security measures</span></h2>
+    <h2><span class="clause">10</span><span class="lang-zh">安全措施</span><span class="lang-en">Security measures</span></h2>
     <div class="clause-body">
       <ul class="plain">
         <li><span class="lang-zh">项目库执行路径边界校验，拒绝越界路径与符号链接；</span>
@@ -565,27 +605,27 @@
     </div>
   </section>
 
-  <!-- ===== 10 未成年人 ===== -->
+  <!-- ===== 11 未成年人 ===== -->
   <section id="children">
-    <h2><span class="clause">10</span><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></h2>
+    <h2><span class="clause">11</span><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></h2>
     <div class="clause-body">
       <p><span class="lang-zh">SlateSync 是面向影视后期专业工作流程的生产力工具，不面向儿童营销，也不有意收集任何用户的个人信息（包括儿童）。</span>
          <span class="lang-en">SlateSync is a productivity tool for professional film post-production workflows. It is not marketed to children and does not knowingly collect personal information from any user, including children.</span></p>
     </div>
   </section>
 
-  <!-- ===== 11 政策变更 ===== -->
+  <!-- ===== 12 政策变更 ===== -->
   <section id="changes">
-    <h2><span class="clause">11</span><span class="lang-zh">政策变更</span><span class="lang-en">Changes to this policy</span></h2>
+    <h2><span class="clause">12</span><span class="lang-zh">政策变更</span><span class="lang-en">Changes to this policy</span></h2>
     <div class="clause-body">
       <p><span class="lang-zh">若数据处理方式发生变化（例如应用引入新的联网功能），我们会更新本政策并修订生效日期，并通过应用内帮助或发布说明提示。重大变化会在新版本发布前明确说明。</span>
          <span class="lang-en">If how data is handled ever changes (for example, a new networked feature), we will update this policy and its effective date, and surface it through in-app Help or release notes. Material changes will be called out before a new version ships.</span></p>
     </div>
   </section>
 
-  <!-- ===== 12 联系我们 ===== -->
+  <!-- ===== 13 联系我们 ===== -->
   <section id="contact">
-    <h2><span class="clause">12</span><span class="lang-zh">联系我们</span><span class="lang-en">Contact us</span></h2>
+    <h2><span class="clause">13</span><span class="lang-zh">联系我们</span><span class="lang-en">Contact us</span></h2>
     <div class="clause-body">
       <div class="card">
         <p>
