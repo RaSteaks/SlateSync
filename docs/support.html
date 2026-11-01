@@ -121,8 +121,11 @@
   }
   .brand-mark-body { height: 13px; background: var(--ink); }
   .brand-name { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
-  .topbar-link { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--ink-2); }
-  .topbar-link:hover { color: var(--ink); text-decoration: none; }
+  /* 页面切换：支持页与隐私页互为入口，当前页以底线标记 */
+  .topbar-nav { margin-left: auto; display: flex; gap: 16px; }
+  .topbar-nav a { padding: 4px 0; font-size: 14px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .topbar-nav a:hover { color: var(--ink); text-decoration: none; }
+  .topbar-nav a[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
   .lang-toggle {
     font: 600 13px/1 var(--font);
     color: var(--ink-2);
@@ -232,6 +235,8 @@
   }
   .card p { margin: 0; line-height: 2; }
 
+  h2 + .grid, h2 + .steps, h2 + details, h2 + .clause-body, h2 + ul.plain { margin-top: 14px; }
+
   footer {
     border-top: 1px solid var(--line);
     padding: 28px 24px 40px;
@@ -244,6 +249,10 @@
     main { padding: 0 16px 64px; }
     .hero { margin-top: 32px; }
     .toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 360px) {
+    .brand-mark { display: none; }
   }
 
   @media print {
@@ -383,7 +392,10 @@
       <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
       <span class="brand-name">SlateSync</span>
     </span>
-    <a class="topbar-link" href="privacy.html"><span class="lang-zh">隐私政策</span><span class="lang-en">Privacy</span></a>
+    <nav class="topbar-nav" aria-label="页面 / Pages">
+      <a href="support.html" aria-current="page"><span class="lang-zh">支持</span><span class="lang-en">Support</span></a>
+      <a href="privacy.html"><span class="lang-zh">隐私政策</span><span class="lang-en">Privacy</span></a>
+    </nav>
     <!-- 语言切换：持久化到 localStorage，失败时静默回退中文 -->
     <button class="lang-toggle" id="langToggle" type="button">
       <span class="lang-zh" lang="en">English</span><span class="lang-en" lang="zh-Hans">中文</span>
@@ -400,8 +412,8 @@
       <span class="lang-en">SlateSync Support</span>
     </h1>
     <p class="hero-sub">
-      <span class="lang-zh">识别 PDF 或图片场记单，复核场、镜、次及条次状态，再把确认后的结果写回 DaVinci Resolve CSV。本页提供使用指引、常见问题与联系方式。</span>
-      <span class="lang-en">Recognize camera slates from PDFs or images, review scene, shot, take and take-status fields, then write confirmed results back into your DaVinci Resolve CSV. This page covers getting started, FAQs and how to reach us.</span>
+      <span class="lang-zh">识别 PDF 或图片场记单，复核场、镜、次及条次状态，再把确认后的结果写回 DaVinci Resolve CSV。</span>
+      <span class="lang-en">Recognize camera slates from PDFs or images, review scene, shot, take and take-status fields, then write confirmed results back into your DaVinci Resolve CSV.</span>
     </p>
     </div>
 
@@ -409,7 +421,6 @@
     <div class="slate">
       <span class="slate-arm" aria-hidden="true"></span>
       <dl>
-      <div><dt>PRODUCTION</dt><dd>SlateSync</dd></div>
       <div><dt><span class="lang-zh">系统</span><span class="lang-en">SYSTEM</span></dt><dd>macOS 15.0+</dd></div>
       <div><dt><span class="lang-zh">机型</span><span class="lang-en">HARDWARE</span></dt><dd>Apple Silicon / Intel</dd></div>
       <div><dt><span class="lang-zh">界面</span><span class="lang-en">LANGUAGE</span></dt><dd>简体中文 / English</dd></div>
@@ -438,10 +449,6 @@
   <!-- ===== 核心功能 ===== -->
   <section id="features">
     <h2><span class="lang-zh">核心功能</span><span class="lang-en">Core features</span></h2>
-    <p class="section-sub">
-      <span class="lang-zh">从纸质场记单到已校验的 Resolve CSV，SlateSync 把整条信任链留在你的 Mac 上完成。</span>
-      <span class="lang-en">From a paper slate to a verified Resolve CSV — SlateSync keeps the whole chain of trust on your Mac.</span>
-    </p>
     <div class="grid">
       <div class="card">
         <h3><span class="lang-zh">场记单识别</span><span class="lang-en">Slate recognition</span></h3>
@@ -489,10 +496,6 @@
   <!-- ===== 快速上手 ===== -->
   <section id="getting-started">
     <h2><span class="lang-zh">快速上手</span><span class="lang-en">Getting started</span></h2>
-    <p class="section-sub">
-      <span class="lang-zh">六步完成一次完整回填。帮助中的按钮会打开现有功能，不会自动创建项目或启动识别。</span>
-      <span class="lang-en">Six steps take you through a full backfill. In-app Help buttons open existing features; nothing is created or recognized automatically.</span>
-    </p>
     <ol class="steps">
       <li>
         <h3><span class="lang-zh">创建项目</span><span class="lang-en">Create a project</span></h3>
@@ -621,10 +624,6 @@
   <!-- ===== 项目与数据 ===== -->
   <section id="data">
     <h2><span class="lang-zh">项目与数据</span><span class="lang-en">Projects &amp; data</span></h2>
-    <p class="section-sub">
-      <span class="lang-zh">数据都在你的 Mac 上：这是默认位置、加密方式与迁移方法。</span>
-      <span class="lang-en">Everything lives on your Mac. Here is where, how it is protected, and how to move it.</span>
-    </p>
     <div class="grid">
       <div class="card">
         <h3><span class="lang-zh">存储位置</span><span class="lang-en">Where data lives</span></h3>
@@ -675,10 +674,6 @@
   <!-- ===== 常见问题 ===== -->
   <section id="faq">
     <h2><span class="lang-zh">常见问题</span><span class="lang-en">FAQ</span></h2>
-    <p class="section-sub">
-      <span class="lang-zh">没有找到答案？请通过页面底部的联系方式告诉我们。</span>
-      <span class="lang-en">Can't find your answer? Reach us through the contact section below.</span>
-    </p>
 
     <details>
       <summary><span class="lang-zh">SlateSync 需要注册账号吗？</span><span class="lang-en">Do I need an account?</span></summary>
@@ -775,10 +770,6 @@
     <ul class="plain">
       <li><span class="lang-zh">仅支持 macOS 15.0 及以上版本，不提供 Windows 或 Linux 版本。</span>
           <span class="lang-en">macOS 15.0 or later only; there is no Windows or Linux version.</span></li>
-      <li><span class="lang-zh">PaddleOCR 需要自备 Python 环境与网络安装条件，应用不包含 Python 与模型。</span>
-          <span class="lang-en">PaddleOCR needs your own Python environment and network for installation; the app ships no Python and no models.</span></li>
-      <li><span class="lang-zh">无法确认的识别字段不会被强行写入，必须人工校对后才会导出。</span>
-          <span class="lang-en">Unconfirmed fields are never force-written; they must be reviewed manually before export.</span></li>
       <li><span class="lang-zh">项目库与项目包当前为 v1 格式，升级、迁移或回退前请保留独立备份。</span>
           <span class="lang-en">The Project Library and packages use the v1 format; keep a separate backup before upgrading, migrating or rolling back.</span></li>
       <li><span class="lang-zh">本机 MCP 目前需要本机源码目录，尚未包含在安装包中；Mac App Store 沙盒版本不会启动它。</span>
@@ -789,18 +780,12 @@
   <!-- ===== 联系我们 ===== -->
   <section id="contact">
     <h2><span class="lang-zh">联系我们</span><span class="lang-en">Contact us</span></h2>
-    <p class="section-sub">
-      <span class="lang-zh">遇到问题或有功能建议，欢迎通过 GitHub 与我们联系，通常会尽快回复。</span>
-      <span class="lang-en">For issues or feature requests, get in touch on GitHub — we usually respond quickly.</span>
-    </p>
     <div class="card">
       <p>
         <span class="lang-zh">问题反馈与功能建议：</span><span class="lang-en">Bug reports &amp; feature requests: </span>
         <a href="https://github.com/RaSteaks/SlateSync/issues" target="_blank" rel="noopener">github.com/RaSteaks/SlateSync/issues</a><br>
         <span class="lang-zh">项目主页：</span><span class="lang-en">Project home: </span>
-        <a href="https://github.com/RaSteaks/SlateSync" target="_blank" rel="noopener">github.com/RaSteaks/SlateSync</a><br>
-        <span class="lang-zh">隐私政策：</span><span class="lang-en">Privacy policy: </span>
-        <a href="privacy.html"><span class="lang-zh">SlateSync 隐私政策</span><span class="lang-en">SlateSync Privacy Policy</span></a>
+        <a href="https://github.com/RaSteaks/SlateSync" target="_blank" rel="noopener">github.com/RaSteaks/SlateSync</a>
       </p>
     </div>
   </section>
@@ -811,7 +796,7 @@
 </main>
 
 <footer>
-  © 2026 SlateSync · <span class="lang-zh">本页信息适用于当前发布的 macOS 版本。</span><span class="lang-en">This page applies to the current macOS release.</span>
+  © 2026 SlateSync · <a href="privacy.html"><span class="lang-zh">隐私政策</span><span class="lang-en">Privacy Policy</span></a>
 </footer>
 
 <script>
