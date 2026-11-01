@@ -54,10 +54,7 @@
     if (!supported || panel === activePanel()) { setPanel(panel); return; }
     var box = tab.getBoundingClientRect();
     root.style.setProperty('--reveal-x', (box.left + box.width / 2) + 'px');
-    root.classList.add('tab-reveal');
-    document.startViewTransition(function () { setPanel(panel); }).finished.finally(function () {
-      root.classList.remove('tab-reveal');
-    });
+    document.startViewTransition(function () { setPanel(panel); });
   }
 
   // 页签吸顶后切换主题要回到内容开头；页头还在视野内时不滚动，避免页面无故跳动。
