@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   SlateSync 官方隐私政策页（App Store Connect「隐私政策 URL」用）
-  设计遵循 DESIGN.md「素面 Bare Face」：页面结构与应用一致，样式与交互在 site.css / site.js；
+  设计遵循 DESIGN.md「素面 Bare Face」：概览（摘要 + 数据流向）在上，全部条款连续排在下方，样式与交互在 site.css / site.js；
   双语（无选择时跟随浏览器语言），零外部依赖，随系统深浅色自适应。
   事实来源：README「数据与安全 / 本地项目加密 / 配置」、help-sections.json、SlateSyncApp/Info.plist。
 -->
@@ -44,65 +44,54 @@
     <a href="support.html"><span class="lang-zh">支持</span><span class="lang-en">Support</span></a>
     <a href="privacy.html" aria-current="page"><span class="lang-zh">隐私政策</span><span class="lang-en">Privacy</span></a>
   </nav>
-  <!-- 语言切换：持久化到 localStorage，失败时静默回退 -->
-  <button class="lang-toggle" id="langToggle" type="button">
-    <span class="lang-zh" lang="en">English</span><span class="lang-en" lang="zh-Hans">中文</span>
-  </button>
+  <div class="toolbar-end">
+    <div class="search needs-js" role="search">
+      <div class="search-field">
+        <svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.25"/><path d="m9.2 9.2 3.3 3.3"/></svg>
+        <label class="sr-only" for="site-search"><span class="lang-zh">搜索本页</span><span class="lang-en">Search this page</span></label>
+        <input id="site-search" type="search" placeholder="搜索 / Search" autocomplete="off" enterkeyhint="search">
+        <kbd class="search-key" aria-hidden="true">/</kbd>
+        <button class="search-clear" type="button" aria-label="清除 / Clear" hidden>
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m1.5 1.5 7 7m0-7-7 7"/></svg>
+        </button>
+      </div>
+      <div class="search-results" hidden>
+        <p class="search-count" role="status"></p>
+        <ol></ol>
+        <p class="search-empty" hidden><span class="lang-zh">没有结果。</span><span class="lang-en">No results.</span></p>
+      </div>
+    </div>
+    <!-- 语言切换：持久化到 localStorage，失败时静默回退 -->
+    <button class="lang-toggle" id="langToggle" type="button">
+      <span class="lang-zh" lang="en">English</span><span class="lang-en" lang="zh-Hans">中文</span>
+    </button>
+  </div>
 </header>
 
-<div class="workspace">
-  <aside class="sidebar">
-    <div class="search needs-js" role="search">
-      <svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.25"/><path d="m9.2 9.2 3.3 3.3"/></svg>
-      <label class="sr-only" for="site-search"><span class="lang-zh">搜索本页</span><span class="lang-en">Search this page</span></label>
-      <input id="site-search" type="search" placeholder="搜索 / Search" autocomplete="off" enterkeyhint="search">
-      <kbd class="search-key" aria-hidden="true">/</kbd>
-      <button class="search-clear" type="button" aria-label="清除 / Clear" hidden>
-        <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m1.5 1.5 7 7m0-7-7 7"/></svg>
-      </button>
-    </div>
-    <div class="search-results needs-js" hidden>
-      <p class="search-count" role="status"></p>
-      <ol></ol>
-      <p class="search-empty" hidden><span class="lang-zh">没有结果。</span><span class="lang-en">No results.</span></p>
-    </div>
-    <nav class="toc toc-numbered" aria-label="条款导航 / Policy sections">
-      <ol>
-        <li><a href="#flow"><span class="lang-zh">数据流向</span><span class="lang-en">Data flow</span></a></li>
-        <li><a href="#collect"><span class="lang-zh">不收集</span><span class="lang-en">What we don't collect</span></a></li>
-        <li><a href="#local"><span class="lang-zh">本地存储</span><span class="lang-en">Local storage</span></a></li>
-        <li><a href="#providers"><span class="lang-zh">第三方 AI 服务</span><span class="lang-en">Third-party AI</span></a></li>
-        <li><a href="#ocr"><span class="lang-zh">OCR</span><span class="lang-en">OCR</span></a></li>
-        <li><a href="#logs"><span class="lang-zh">日志</span><span class="lang-en">Logs</span></a></li>
-        <li><a href="#keys"><span class="lang-zh">API Key</span><span class="lang-en">API keys</span></a></li>
-        <li><a href="#mcp"><span class="lang-zh">本机 MCP</span><span class="lang-en">Local MCP</span></a></li>
-        <li><a href="#exports"><span class="lang-zh">导出与共享</span><span class="lang-en">Exports</span></a></li>
-        <li><a href="#security"><span class="lang-zh">安全措施</span><span class="lang-en">Security</span></a></li>
-        <li><a href="#children"><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></a></li>
-        <li><a href="#changes"><span class="lang-zh">政策变更</span><span class="lang-en">Policy changes</span></a></li>
-        <li><a href="#contact"><span class="lang-zh">联系</span><span class="lang-en">Contact</span></a></li>
-      </ol>
-    </nav>
-  </aside>
-
-  <div class="canvas">
-    <main id="main" class="sheet">
-      <header class="page-head">
-        <h1>
+<div class="page-head page-head-wide">
+  <div class="page-head-inner">
+    <div>
+      <h1>
       <span class="lang-zh">隐私政策</span>
       <span class="lang-en">Privacy Policy</span>
     </h1>
-        <p class="hero-sub">
+      <p class="hero-sub">
       <span class="lang-zh">本政策说明 SlateSync for macOS 在本机保存什么、发送什么，以及不收集什么。</span>
       <span class="lang-en">This policy explains what SlateSync for macOS stores on your Mac, what it sends, and what it does not collect.</span>
     </p>
-        <!-- 事实条：生效日期与适用范围 -->
-        <dl class="facts">
+    </div>
+    <!-- 生效日期与适用范围 -->
+    <dl class="facts">
           <div><dt><span class="lang-zh">生效日期</span><span class="lang-en">Effective date</span></dt><dd><span class="lang-zh">2026 年 11 月 1 日</span><span class="lang-en">November 1, 2026</span></dd></div>
           <div><dt><span class="lang-zh">适用于</span><span class="lang-en">Applies to</span></dt><dd><span class="lang-zh">SlateSync for macOS（1.1 及后续版本）</span><span class="lang-en">SlateSync for macOS (1.1 and later)</span></dd></div>
         </dl>
-      </header>
+  </div>
+</div>
 
+<main id="main" class="stage">
+  <!-- 概览：结论与数据流向并排；条款全文始终在下方，不折叠，也不放进页签 -->
+  <div class="overview">
+    <div class="overview-inner">
       <!-- 摘要：先给结论，每条都能跳到对应条款 -->
       <section class="summary" id="summary">
       <h2><span class="lang-zh">摘要</span><span class="lang-en">Summary</span></h2>
@@ -120,46 +109,65 @@
       </ul>
       </section>
 
-      <div class="doc">
-
-
-  <!-- ===== 1 数据流向 ===== -->
-  <section id="flow">
-    <h2><span class="clause">1</span><span class="lang-zh">数据流向</span><span class="lang-en">How data moves</span></h2>
-    <p class="section-sub">
-      <span class="lang-zh">识别时，数据只走这条路径。</span>
-      <span class="lang-en">During recognition, data follows this path only.</span>
-    </p>
-    <div class="flow">
-      <div class="flow-zone">
-        <div class="flow-box">
-          <b><span class="lang-zh">你的场记单</span><span class="lang-en">Your slate</span></b>
-          <span>PDF · JPEG · PNG · WebP</span>
+      <!-- ===== 1 数据流向 ===== -->
+      <section id="flow">
+        <h2><span class="clause">1</span><span class="lang-zh">数据流向</span><span class="lang-en">How data moves</span></h2>
+        <p class="section-sub">
+          <span class="lang-zh">识别时，数据只走这条路径。</span>
+          <span class="lang-en">During recognition, data follows this path only.</span>
+        </p>
+        <div class="flow">
+          <div class="flow-zone">
+            <div class="flow-box">
+              <b><span class="lang-zh">你的场记单</span><span class="lang-en">Your slate</span></b>
+              <span>PDF · JPEG · PNG · WebP</span>
+            </div>
+            <div class="flow-arrow"><svg viewBox="0 0 12 24" preserveAspectRatio="xMidYMax meet" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v21.5M1.5 18 6 22.5 10.5 18"/></svg><span><span class="lang-zh">导入，仅保存在本机</span><span class="lang-en">Imported — stored locally only</span></span></div>
+            <div class="flow-box local">
+              <b><span class="lang-zh">你的 Mac：本地处理</span><span class="lang-en">Your Mac: local processing</span></b>
+              <span><span class="lang-zh">逐页栅格化 · Vision / PaddleOCR 文字提取 · 字段校验 · 加密项目库</span><span class="lang-en">Page rasterization · Vision / PaddleOCR text extraction · field validation · encrypted Project Library</span></span>
+            </div>
+            <div class="flow-stay">
+              <b><span class="lang-zh">始终留在本机：</span><span class="lang-en">Always on your Mac:</span></b>
+              <span><span class="lang-zh">项目库（AES-256-GCM 加密）</span><span class="lang-en">Project Library (AES-256-GCM)</span></span>
+              <span><span class="lang-zh">API Key（本地加密文件）</span><span class="lang-en">API keys (local encrypted file)</span></span>
+              <span><span class="lang-zh">运行日志（7 天 · 脱敏）</span><span class="lang-en">Run logs (7 days · redacted)</span></span>
+              <span><span class="lang-zh">全局设置</span><span class="lang-en">Global settings</span></span>
+            </div>
+          </div>
+          <div class="flow-arrow flow-exit"><svg viewBox="0 0 12 44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M6 0v42.5M1.5 38 6 42.5 10.5 38"/></svg><span><span class="lang-zh">仅当你运行识别</span><span class="lang-en">Only when you run recognition</span></span></div>
+          <div class="flow-box">
+            <b><span class="lang-zh">你配置的 AI 服务（OpenAI 兼容接口）</span><span class="lang-en">The AI service you configured (OpenAI-compatible)</span></b>
+            <span><span class="lang-zh">接收页面图片与必要的局部放大图、OCR 证据、识别上下文与认证请求头；原始 PDF 不会上传</span><span class="lang-en">Receives page images with close-ups when needed, OCR evidence, recognition context and an authentication header; the original PDF is not uploaded</span></span>
+          </div>
         </div>
-        <div class="flow-arrow"><svg viewBox="0 0 12 24" preserveAspectRatio="xMidYMax meet" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v21.5M1.5 18 6 22.5 10.5 18"/></svg><span><span class="lang-zh">导入，仅保存在本机</span><span class="lang-en">Imported — stored locally only</span></span></div>
-        <div class="flow-box local">
-          <b><span class="lang-zh">你的 Mac：本地处理</span><span class="lang-en">Your Mac: local processing</span></b>
-          <span><span class="lang-zh">逐页栅格化 · Vision / PaddleOCR 文字提取 · 字段校验 · 加密项目库</span><span class="lang-en">Page rasterization · Vision / PaddleOCR text extraction · field validation · encrypted Project Library</span></span>
-        </div>
-        <div class="flow-stay">
-          <b><span class="lang-zh">始终留在本机：</span><span class="lang-en">Always on your Mac:</span></b>
-          <span><span class="lang-zh">项目库（AES-256-GCM 加密）</span><span class="lang-en">Project Library (AES-256-GCM)</span></span>
-          <span><span class="lang-zh">API Key（本地加密文件）</span><span class="lang-en">API keys (local encrypted file)</span></span>
-          <span><span class="lang-zh">运行日志（7 天 · 脱敏）</span><span class="lang-en">Run logs (7 days · redacted)</span></span>
-          <span><span class="lang-zh">全局设置</span><span class="lang-en">Global settings</span></span>
-        </div>
-      </div>
-      <div class="flow-arrow flow-exit"><svg viewBox="0 0 12 44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M6 0v42.5M1.5 38 6 42.5 10.5 38"/></svg><span><span class="lang-zh">仅当你运行识别</span><span class="lang-en">Only when you run recognition</span></span></div>
-      <div class="flow-box">
-        <b><span class="lang-zh">你配置的 AI 服务（OpenAI 兼容接口）</span><span class="lang-en">The AI service you configured (OpenAI-compatible)</span></b>
-        <span><span class="lang-zh">接收页面图片与必要的局部放大图、OCR 证据、识别上下文与认证请求头；原始 PDF 不会上传</span><span class="lang-en">Receives page images with close-ups when needed, OCR evidence, recognition context and an authentication header; the original PDF is not uploaded</span></span>
-      </div>
+        <p class="flow-note">
+          <span class="lang-zh">通过本机 MCP 连接 AI 客户端时，工具结果还会交给该客户端，见<a href="#mcp">第 8 条</a>。</span>
+          <span class="lang-en">When an AI client is connected through local MCP, tool results also go to that client; see <a href="#mcp">§8</a>.</span>
+        </p>
+      </section>
     </div>
-    <p class="flow-note">
-      <span class="lang-zh">通过本机 MCP 连接 AI 客户端时，工具结果还会交给该客户端，见<a href="#mcp">第 8 条</a>。</span>
-      <span class="lang-en">When an AI client is connected through local MCP, tool results also go to that client; see <a href="#mcp">§8</a>.</span>
-    </p>
-  </section>
+  </div>
+
+  <div class="reading">
+      <nav class="toc toc-numbered" aria-label="条款导航 / Policy sections">
+        <ol>
+          <li><a href="#collect"><span class="lang-zh">不收集</span><span class="lang-en">What we don't collect</span></a></li>
+          <li><a href="#local"><span class="lang-zh">本地存储</span><span class="lang-en">Local storage</span></a></li>
+          <li><a href="#providers"><span class="lang-zh">第三方 AI 服务</span><span class="lang-en">Third-party AI</span></a></li>
+          <li><a href="#ocr"><span class="lang-zh">OCR</span><span class="lang-en">OCR</span></a></li>
+          <li><a href="#logs"><span class="lang-zh">日志</span><span class="lang-en">Logs</span></a></li>
+          <li><a href="#keys"><span class="lang-zh">API Key</span><span class="lang-en">API keys</span></a></li>
+          <li><a href="#mcp"><span class="lang-zh">本机 MCP</span><span class="lang-en">Local MCP</span></a></li>
+          <li><a href="#exports"><span class="lang-zh">导出与共享</span><span class="lang-en">Exports</span></a></li>
+          <li><a href="#security"><span class="lang-zh">安全措施</span><span class="lang-en">Security</span></a></li>
+          <li><a href="#children"><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></a></li>
+          <li><a href="#changes"><span class="lang-zh">政策变更</span><span class="lang-en">Policy changes</span></a></li>
+          <li><a href="#contact"><span class="lang-zh">联系</span><span class="lang-en">Contact</span></a></li>
+        </ol>
+      </nav>
+
+    <div class="doc">
 
   <!-- ===== 2 我们不收集 ===== -->
   <section id="collect">
@@ -344,15 +352,13 @@
     </div>
   </section>
 
-
-      </div>
-    </main>
-
-    <footer class="site-footer">
-      © 2026 SlateSync · <a href="support.html"><span class="lang-zh">支持</span><span class="lang-en">Support</span></a>
-    </footer>
+    </div>
   </div>
-</div>
+</main>
+
+<footer class="site-footer">
+  © 2026 SlateSync · <a href="support.html"><span class="lang-zh">支持</span><span class="lang-en">Support</span></a>
+</footer>
 
 </body>
 </html>
