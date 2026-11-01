@@ -1,5 +1,14 @@
 # SlateSync 当前项目方案
 
+## 2026-11-02 设置窗口最小高度回归修复
+
+- 使用真实设置页、隔离设置服务和 App 的版权文本，在不显示窗口的回归中复现最小外框高度为 560 pt，符合远端 Debug／打包 Release 的失败值。底栏位于 `slateWindowMinimumSize` 之外，导致安全区 inset 再次抬高宿主最小高度。
+- 将最小尺寸修饰器移到整个底栏之后，保留外框 700×540、默认 780×620、原生缩放探针和既有 XCUI 精确尺寸断言；同步解释修饰器顺序约束。
+- 新增真实 `NSHostingController` 最小尺寸传播回归，覆盖有／无版权文本并检查离屏 700×540 外框；可选截图复用既有证据目录开关，不启动 App 或捕获桌面。
+- 严格警告模式下 54 项设置／Provider 定向测试、最终 9 项设置回归、Release 优化构建的同一尺寸回归及完整 `./script/ci_preflight.sh` 通过；无签名严格 Xcode Debug `build-for-testing` 通过，包含 App 和 XCUI 目标的编译，不执行 UI 测试。修复前后日志和 10 张离屏图保存在 `/private/tmp/slatesync-settings-window-20261102/`。
+- 初次构建因沙箱内 SwiftPM 缓存不可写退出；SwiftPM 改用临时缓存，Xcode 在获准访问其缓存后编译通过。网页静态审计前后相同，仍为未修改历史 HTML 的 69 项既有问题。
+- 本轮未启动 App／XCUI、未运行本机前台验收、未提交或推送。完整共享 Test Plan 和 ZIP 内 Release UI 仍需 GitHub macOS runner 复验，离屏结果不等同远端 Gate PASS。
+
 ## 2026-10-29 识别专项离线验证
 
 - 用户已明确允许离线验证，先执行定向回归再做必要集成检查；不调用云端模型或启动 App／前台验收。

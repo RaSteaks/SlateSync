@@ -81,7 +81,6 @@ public struct SettingsRootView: View {
             // Grouped forms sit directly on the window background.
             .scrollContentBackground(.hidden)
         }
-        .slateWindowMinimumSize(width: 700, height: 540, restoresResizableStyle: true)
         // The window title names the visible pane, as system Settings does.
         .navigationTitle(category.title)
         .background(SlateSyncTheme.canvas)
@@ -178,6 +177,10 @@ public struct SettingsRootView: View {
                 .padding(.vertical, 8)
             }
         }
+        // Include the fixed footer in the outer-window minimum. Applying this
+        // before safeAreaInset lets the inset raise the hosting minimum again
+        // (to 560 pt with the shipped copyright notice), blocking 540 pt resize.
+        .slateWindowMinimumSize(width: 700, height: 540, restoresResizableStyle: true)
     }
 
     /// One icon tab per pane. A plain button keeps keyboard and VoiceOver
