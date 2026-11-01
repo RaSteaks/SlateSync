@@ -13,6 +13,7 @@
 <style>
   /* ===== 设计令牌：来源 DESIGN.md / SlateSyncTheme（冷灰 + 钨丝琥珀，2026-09-16 版）===== */
   :root {
+    color-scheme: light dark;
     --canvas: #F6F7F9;        /* 主背景（light） */
     --evidence: #FFFFFF;      /* 证据面 / 卡片 */
     --inset: #EEF0F3;         /* 次级嵌入面 */
@@ -20,13 +21,14 @@
     --ink: #1A1D23;           /* 正文 */
     --ink-2: #5B6470;         /* 次级文字 */
     --accent: #B45309;        /* 钨丝琥珀（light）——只用于焦点与关键操作 */
+    --accent-text: #9A4708;   /* 小字号琥珀：在纸面上也保持 4.5:1 */
     --accent-soft: rgba(180, 83, 9, .08);
     --ok: #1E7A5A;
-    --warn: #7C6A00;
-    --danger: #B03A2E;
     --paper: #F2EEE3;         /* 证据内容色：只属于“纸面”（场记单事实卡） */
     --paper-line: #D8D2C2;
+    --clap-dark: #1A1D23;     /* 场记板打板条的深色条纹，不随深浅色变化 */
     --radius: 10px;
+    --page: 768px;
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
             "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
@@ -40,18 +42,23 @@
       --ink: #E8EAED;
       --ink-2: #9AA3AE;
       --accent: #F59E0B;
+      --accent-text: #F59E0B;
       --accent-soft: rgba(245, 158, 11, .12);
       --ok: #7FC9A9;
-      --warn: #E3C36B;
-      --danger: #E58873;
       --paper: #2E2A22;       /* 暗色下的“灯箱纸面” */
       --paper-line: #4A4436;
     }
   }
+  @media (min-width: 1080px) {
+    :root { --page: 1040px; }
+  }
 
   /* ===== 基础排版 ===== */
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html {
+    scroll-behavior: smooth;
+    scrollbar-color: var(--line) transparent;
+  }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -65,28 +72,41 @@
     line-height: 1.75;
     -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+  a { color: var(--accent-text); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: .18em; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-  code, .mono { font-family: var(--mono); font-size: .92em; }
+  code, .mono { font-family: var(--mono); font-size: .92em; overflow-wrap: anywhere; }
+  strong { color: var(--ink); font-weight: 600; }
 
   /* ===== 语言切换：默认中文，html[data-lang=en] 时显示英文 ===== */
   html[data-lang="en"] .lang-zh { display: none; }
   html:not([data-lang="en"]) .lang-en { display: none; }
 
+  .skip-link {
+    position: fixed; z-index: 20; top: 10px; left: 10px;
+    padding: 6px 12px;
+    background: var(--ink); color: var(--canvas);
+    border-radius: 6px;
+    font-size: 13px; font-weight: 600;
+    transform: translateY(-200%);
+  }
+  .skip-link:focus { transform: none; }
+
   /* ===== 顶栏 ===== */
   .topbar {
     position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 24px;
+    padding: 12px 24px;
     background: color-mix(in srgb, var(--canvas) 88%, transparent);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--line);
   }
   .topbar-inner {
-    width: 100%; max-width: 880px; margin: 0 auto;
-    display: flex; align-items: center; gap: 12px;
+    width: 100%; max-width: var(--page); margin: 0 auto;
+    display: flex; align-items: center; gap: 14px;
   }
+  .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); }
+  a.brand:hover { text-decoration: none; }
   /* 品牌标记：场记板剪影，顶条为琥珀斜纹（签名元素） */
   .brand-mark {
     display: inline-flex; flex-direction: column; flex: none;
@@ -101,8 +121,9 @@
   }
   .brand-mark-body { height: 13px; background: var(--ink); }
   .brand-name { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  .topbar-link { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+  .topbar-link:hover { color: var(--ink); text-decoration: none; }
   .lang-toggle {
-    margin-left: auto;
     font: 600 13px/1 var(--font);
     color: var(--ink-2);
     background: var(--evidence);
@@ -110,78 +131,154 @@
     border-radius: 999px;
     padding: 7px 14px;
     cursor: pointer;
+    transition: color .14s ease, border-color .14s ease;
   }
-  .lang-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  .lang-toggle:hover { color: var(--accent-text); border-color: var(--accent); }
 
-  /* ===== 主体布局 ===== */
-  main { max-width: 880px; margin: 0 auto; padding: 0 24px 80px; }
-  section { margin-top: 56px; scroll-margin-top: 76px; }
-
-  .hero { margin-top: 48px; }
+  /* ===== 页头：说明在左，场记板事实卡在右 ===== */
+  main { max-width: calc(var(--page) + 48px); margin: 0 auto; padding: 0 24px 80px; }
+  .hero { display: grid; gap: 30px; margin-top: 44px; }
   h1 {
-    font-size: clamp(30px, 5vw, 40px);
-    line-height: 1.2; letter-spacing: -.02em; font-weight: 800;
-    margin: 0 0 10px;
+    font-size: clamp(34px, 5vw, 46px);
+    line-height: 1.15; letter-spacing: -.02em; font-weight: 800;
+    margin: 0 0 12px;
+    text-wrap: balance;
   }
-  .hero-sub { color: var(--ink-2); font-size: 17px; max-width: 620px; margin: 0; }
+  .hero-sub { color: var(--ink-2); font-size: 17px; max-width: 620px; margin: 0; text-wrap: pretty; }
 
-  /* 事实卡：纸面材质，借场记单的表单语言呈现设备与版本事实 */
-  .slate-card {
-    margin-top: 28px;
+  /* 场记板：纸面事实卡 + 打板条；页面载入时落板一次，是全页唯一的动效 */
+  .slate {
+    position: relative;
+    margin: 22px 0 0;
+    padding: 6px 20px;
     background: var(--paper);
     border: 1px solid var(--paper-line);
-    border-radius: var(--radius);
-    padding: 18px 22px;
-    display: flex; flex-wrap: wrap; gap: 8px 36px;
-    font-family: var(--mono); font-size: 13.5px; line-height: 1.9;
-    box-shadow: 0 1px 0 var(--paper-line);
+    border-radius: 0 0 var(--radius) var(--radius);
   }
-  .slate-card .row b { font-weight: 600; color: var(--ink-2); margin-right: 8px; }
-
-  /* 锚点导航 */
-  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-  .toc a {
-    font-size: 13.5px; font-weight: 600;
-    color: var(--ink-2);
-    background: var(--evidence);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 6px 14px;
-  }
-  .toc a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
-
-  /* 章节标题：左缘 3px 场记板斜纹（签名元素的克制延续） */
-  h2 {
-    display: flex; align-items: center; gap: 14px;
-    font-size: 22px; font-weight: 700; letter-spacing: -.01em;
-    margin: 0 0 6px;
-  }
-  h2::before {
-    content: ""; flex: none;
-    width: 3px; height: 26px; border-radius: 2px;
+  .slate-arm {
+    position: absolute; left: -1px; right: -1px; top: -19px;
+    height: 18px; border-radius: 5px 5px 0 0;
     background: repeating-linear-gradient(135deg,
-      var(--accent) 0 4px, transparent 4px 8px);
+      var(--clap-dark) 0 15px, var(--accent) 15px 30px);
+    transform-origin: 9px 100%;
   }
-  .section-sub { color: var(--ink-2); margin: 0 0 20px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .slate-arm { animation: slate-clap .5s cubic-bezier(.16, 1, .3, 1) .18s both; }
+    @keyframes slate-clap { from { transform: rotate(-8deg); } }
+  }
+  .slate dl { margin: 0; }
+  .slate div {
+    display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--paper-line);
+  }
+  .slate div:first-child { border-top: 0; }
+  .slate dt { color: var(--ink-2); font-size: 13px; }
+  html[data-lang="en"] .slate dt { font-size: 12px; letter-spacing: .02em; }
+  .slate dd { margin: 0; font-size: 14.5px; font-weight: 600; }
 
-  /* ===== 卡片与网格 ===== */
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-  @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+  /* ===== 正文布局：宽屏侧栏目录，窄屏目录折叠在正文之前 ===== */
+  .layout { margin-top: 36px; }
+  .doc { min-width: 0; }
+  .toc { margin-bottom: 36px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .toc ol {
+    list-style: none; margin: 0; padding: 0; counter-reset: toc;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 16px;
+  }
+  .toc a {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 10px; margin-inline: -10px;
+    border-radius: 6px;
+    font-size: 14px; line-height: 1.45;
+    color: var(--ink-2);
+  }
+  .toc a:hover { color: var(--ink); text-decoration: none; }
+  .toc-numbered a::before {
+    counter-increment: toc; content: counter(toc);
+    flex: none; min-width: 1.4em;
+    font: 600 12px var(--mono); font-variant-numeric: tabular-nums;
+    color: var(--accent-text);
+  }
+
+  section { margin-top: 52px; scroll-margin-top: 84px; }
+  .doc > section:first-child { margin-top: 0; }
+  @media (min-width: 1080px) {
+    .hero { grid-template-columns: minmax(0, 1fr) 340px; gap: 64px; align-items: end; margin-top: 64px; }
+    .layout {
+      display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 64px;
+      align-items: start; margin-top: 56px;
+    }
+    .toc { position: sticky; top: 84px; margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+    .toc ol { display: block; }
+    .toc a[aria-current="location"] { background: var(--inset); color: var(--ink); }
+    .doc { max-width: 720px; }
+  }
+
+  h2 {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 23px; font-weight: 700; letter-spacing: -.01em; line-height: 1.3;
+    margin: 0 0 8px;
+  }
+  .section-sub { color: var(--ink-2); margin: 0 0 20px; text-wrap: pretty; }
+  ul.plain { margin: 0 0 14px; padding-left: 20px; color: var(--ink-2); font-size: 15.5px; }
+  ul.plain li + li { margin-top: 8px; }
+  ul.plain li::marker { color: var(--accent); }
+  ul.plain:last-child { margin-bottom: 0; }
   .card {
     background: var(--evidence);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 18px 20px;
+    padding: 16px 20px;
   }
-  .card h3 { margin: 0 0 6px; font-size: 15.5px; font-weight: 700; }
-  .card p { margin: 0; color: var(--ink-2); font-size: 14.5px; line-height: 1.7; }
+  .card p { margin: 0; line-height: 2; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 24px 40px;
+    color: var(--ink-2); font-size: 13px;
+    text-align: center;
+  }
+
+  @media (max-width: 560px) {
+    .topbar { padding: 10px 16px; }
+    main { padding: 0 16px 64px; }
+    .hero { margin-top: 32px; }
+    .toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media print {
+    .topbar, .toc, .slate-arm, .skip-link { display: none; }
+    html, body { background: #fff; }
+    .slate { border-radius: var(--radius); }
+    .layout { display: block; }
+    .doc { max-width: none; }
+  }
+
+  /* 章节标题：打板条的斜纹切片（签名元素的克制延续） */
+  h2 { align-items: center; }
+  h2::before {
+    content: ""; flex: none;
+    width: 14px; height: 14px; border-radius: 3px;
+    background: repeating-linear-gradient(135deg,
+      var(--clap-dark) 0 3.5px, var(--accent) 3.5px 7px);
+  }
+
+  /* ===== 功能清单：发丝线分栏，事实读起来像一张表而不是一堆卡片 ===== */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 40px; }
+  @media (max-width: 680px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .grid .card {
+    background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+    padding: 16px 0 20px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
+  .grid .card p { color: var(--ink-2); font-size: 15px; line-height: 1.75; text-wrap: pretty; }
 
   /* ===== 快速上手：真实流程，故使用序号 ===== */
   .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
   .steps li {
     counter-increment: step;
     position: relative;
-    padding: 0 0 22px 52px;
+    padding: 0 0 22px 36px;
     border-left: 1px solid var(--line);
     margin-left: 17px;
   }
@@ -192,12 +289,12 @@
     width: 34px; height: 34px; border-radius: 50%;
     display: grid; place-items: center;
     font: 700 14px var(--mono);
-    color: var(--accent);
+    color: var(--accent-text);
     background: var(--canvas);
     border: 1.5px solid var(--accent);
   }
-  .steps h3 { margin: 4px 0 4px; font-size: 15.5px; }
-  .steps p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+  .steps h3 { margin: 4px 0 4px; font-size: 16px; }
+  .steps p { margin: 0; color: var(--ink-2); font-size: 15px; text-wrap: pretty; }
 
   /* ===== 表格 ===== */
   .table-wrap {
@@ -215,73 +312,89 @@
     background: var(--inset);
   }
   tbody tr + tr td { border-top: 1px solid var(--line); }
+  tbody td:first-child { font-weight: 600; white-space: nowrap; }
+  tbody td:not(:first-child) { color: var(--ink-2); }
   td code {
-    background: var(--accent-soft); color: var(--accent);
-    border-radius: 5px; padding: 2px 7px; white-space: nowrap;
+    background: var(--accent-soft); color: var(--accent-text);
+    border-radius: 5px; padding: 2px 7px; white-space: nowrap; font-weight: 500;
   }
 
   /* 提示条 */
   .note {
-    display: flex; gap: 10px;
+    display: flex; gap: 12px;
     background: var(--accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: var(--radius);
     padding: 14px 18px;
-    font-size: 14.5px;
+    font-size: 15px;
     margin-top: 16px;
   }
-  .note::before { content: "◆"; color: var(--accent); flex: none; line-height: 1.75; }
+  .note::before {
+    content: ""; flex: none;
+    width: 8px; height: 8px; margin-top: .72em;
+    background: var(--accent); transform: rotate(45deg);
+  }
 
   /* ===== FAQ（原生 details/summary，可访问性内建）===== */
-  details {
-    background: var(--evidence);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    margin-bottom: 10px;
-  }
+  details { border-top: 1px solid var(--line); }
+  details:last-of-type { border-bottom: 1px solid var(--line); }
   summary {
     cursor: pointer;
-    padding: 15px 20px;
-    font-weight: 600; font-size: 15px;
+    padding: 14px 0;
+    font-weight: 600; font-size: 15.5px;
     list-style: none;
     display: flex; align-items: baseline; gap: 12px;
+    transition: color .14s ease;
   }
+  summary:hover { color: var(--accent-text); }
   summary::-webkit-details-marker { display: none; }
-  summary::before {
-    content: "+"; font: 700 16px var(--mono); color: var(--accent); flex: none;
+  summary::after {
+    content: ""; flex: none;
+    align-self: center;
+    width: 12px; height: 12px; margin-left: auto;
+    background:
+      linear-gradient(var(--accent), var(--accent)) center / 100% 1.5px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) center / 1.5px 100% no-repeat;
+    transition: background-size .16s ease;
   }
-  details[open] summary::before { content: "–"; }
-  details .answer { padding: 0 20px 16px 48px; color: var(--ink-2); font-size: 14.5px; }
+  details[open] summary::after { background-size: 100% 1.5px, 1.5px 0; }
+  details .answer { padding: 0 24px 18px 0; color: var(--ink-2); font-size: 15px; text-wrap: pretty; }
   details .answer code { color: var(--ink); }
-
-  /* 列表与边界 */
-  ul.plain { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 14.5px; }
-  ul.plain li + li { margin-top: 8px; }
-
-  footer {
-    border-top: 1px solid var(--line);
-    padding: 28px 24px 40px;
-    color: var(--ink-2); font-size: 13px;
-    text-align: center;
-  }
 </style>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F7F9">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1E2229">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='17' rx='3' fill='%231A1D23'/%3E%3Crect x='3' y='4' width='26' height='7' rx='2' fill='%23B45309'/%3E%3Cpath d='M9 4h4l-4 7H5zm8 0h4l-4 7h-4z' fill='%231A1D23'/%3E%3C/svg%3E">
+<script>
+  // 语言在首帧前生效，避免英文读者先看到一闪而过的中文；任何存储异常都静默回退中文。
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem('slatesync-support-lang'); } catch (e) { /* 隐私模式下忽略 */ }
+    if (saved === 'en') { document.documentElement.dataset.lang = 'en'; document.documentElement.lang = 'en'; }
+  })();
+</script>
 </head>
 <body>
 
+<a class="skip-link" href="#main"><span class="lang-zh">跳到主要内容</span><span class="lang-en">Skip to content</span></a>
+
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
-    <span class="brand-name">SlateSync</span>
+    <span class="brand">
+      <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
+      <span class="brand-name">SlateSync</span>
+    </span>
+    <a class="topbar-link" href="privacy.html"><span class="lang-zh">隐私政策</span><span class="lang-en">Privacy</span></a>
     <!-- 语言切换：持久化到 localStorage，失败时静默回退中文 -->
-    <button class="lang-toggle" id="langToggle" type="button" aria-pressed="false">
-      <span class="lang-zh">English</span><span class="lang-en">中文</span>
+    <button class="lang-toggle" id="langToggle" type="button">
+      <span class="lang-zh" lang="en">English</span><span class="lang-en" lang="zh-Hans">中文</span>
     </button>
   </div>
 </header>
 
-<main>
+<main id="main">
 
   <div class="hero">
+    <div>
     <h1>
       <span class="lang-zh">SlateSync 支持</span>
       <span class="lang-en">SlateSync Support</span>
@@ -290,25 +403,36 @@
       <span class="lang-zh">识别 PDF 或图片场记单，复核场、镜、次及条次状态，再把确认后的结果写回 DaVinci Resolve CSV。本页提供使用指引、常见问题与联系方式。</span>
       <span class="lang-en">Recognize camera slates from PDFs or images, review scene, shot, take and take-status fields, then write confirmed results back into your DaVinci Resolve CSV. This page covers getting started, FAQs and how to reach us.</span>
     </p>
-
-    <!-- 事实卡：借场记单表单语言呈现设备与版本事实 -->
-    <div class="slate-card">
-      <span class="row"><b>PRODUCTION</b> SlateSync</span>
-      <span class="row"><b class="lang-zh">系统</b><b class="lang-en">SYSTEM</b> macOS 15.0+</span>
-      <span class="row"><b class="lang-zh">机型</b><b class="lang-en">HARDWARE</b> Apple Silicon / Intel</span>
-      <span class="row"><b class="lang-zh">界面</b><b class="lang-en">LANGUAGE</b> 简体中文 / English</span>
     </div>
 
-    <nav class="toc" aria-label="页面导航 / Page sections">
-      <a href="#features"><span class="lang-zh">核心功能</span><span class="lang-en">Features</span></a>
-      <a href="#getting-started"><span class="lang-zh">快速上手</span><span class="lang-en">Getting started</span></a>
-      <a href="#recognition"><span class="lang-zh">识别方式</span><span class="lang-en">Recognition</span></a>
-      <a href="#fields"><span class="lang-zh">字段回填</span><span class="lang-en">Field mapping</span></a>
-      <a href="#data"><span class="lang-zh">项目与数据</span><span class="lang-en">Projects &amp; data</span></a>
-      <a href="#faq"><span class="lang-zh">常见问题</span><span class="lang-en">FAQ</span></a>
-      <a href="#contact"><span class="lang-zh">联系我们</span><span class="lang-en">Contact</span></a>
-    </nav>
+    <!-- 事实卡：借场记单表单语言呈现设备与版本事实 -->
+    <div class="slate">
+      <span class="slate-arm" aria-hidden="true"></span>
+      <dl>
+      <div><dt>PRODUCTION</dt><dd>SlateSync</dd></div>
+      <div><dt><span class="lang-zh">系统</span><span class="lang-en">SYSTEM</span></dt><dd>macOS 15.0+</dd></div>
+      <div><dt><span class="lang-zh">机型</span><span class="lang-en">HARDWARE</span></dt><dd>Apple Silicon / Intel</dd></div>
+      <div><dt><span class="lang-zh">界面</span><span class="lang-en">LANGUAGE</span></dt><dd>简体中文 / English</dd></div>
+      </dl>
+    </div>
+
   </div>
+
+  <div class="layout">
+    <nav class="toc" aria-label="页面导航 / Page sections">
+      <ol>
+        <li><a href="#features"><span class="lang-zh">核心功能</span><span class="lang-en">Features</span></a></li>
+        <li><a href="#getting-started"><span class="lang-zh">快速上手</span><span class="lang-en">Getting started</span></a></li>
+        <li><a href="#recognition"><span class="lang-zh">识别方式</span><span class="lang-en">Recognition</span></a></li>
+        <li><a href="#fields"><span class="lang-zh">字段回填</span><span class="lang-en">Field mapping</span></a></li>
+        <li><a href="#data"><span class="lang-zh">项目与数据</span><span class="lang-en">Projects &amp; data</span></a></li>
+        <li><a href="#faq"><span class="lang-zh">常见问题</span><span class="lang-en">FAQ</span></a></li>
+        <li><a href="#limitations"><span class="lang-zh">已知边界</span><span class="lang-en">Limitations</span></a></li>
+        <li><a href="#contact"><span class="lang-zh">联系我们</span><span class="lang-en">Contact</span></a></li>
+      </ol>
+    </nav>
+
+  <div class="doc">
 
   <!-- ===== 核心功能 ===== -->
   <section id="features">
@@ -629,6 +753,9 @@
     </div>
   </section>
 
+  </div>
+  </div>
+
 </main>
 
 <footer>
@@ -636,20 +763,36 @@
 </footer>
 
 <script>
-  // 语言切换：写入 <html data-lang>，持久化到 localStorage；任何存储异常都静默回退中文。
   (function () {
     var root = document.documentElement;
-    var button = document.getElementById('langToggle');
-    var saved = null;
-    try { saved = localStorage.getItem('slatesync-support-lang'); } catch (e) { /* 隐私模式下忽略 */ }
-    if (saved === 'en') { root.dataset.lang = 'en'; button.setAttribute('aria-pressed', 'true'); }
 
-    button.addEventListener('click', function () {
+    // 语言切换：写入 <html data-lang> 与 lang，持久化到 localStorage。
+    document.getElementById('langToggle').addEventListener('click', function () {
       var next = root.dataset.lang === 'en' ? 'zh' : 'en';
-      if (next === 'en') { root.dataset.lang = 'en'; } else { delete root.dataset.lang; }
-      button.setAttribute('aria-pressed', next === 'en' ? 'true' : 'false');
+      if (next === 'en') { root.dataset.lang = 'en'; root.lang = 'en'; } else { delete root.dataset.lang; root.lang = 'zh-Hans'; }
       try { localStorage.setItem('slatesync-support-lang', next); } catch (e) { /* 忽略 */ }
     });
+
+    // 侧栏目录标记当前阅读的章节；无脚本时目录仍是普通锚点。
+    var links = [].slice.call(document.querySelectorAll('.toc a'));
+    var sections = links.map(function (link) { return document.querySelector(link.getAttribute('href')); });
+    var frame = 0;
+    function markCurrent() {
+      frame = 0;
+      var readingLine = window.innerHeight * 0.35;
+      var current = 0;
+      sections.forEach(function (section, index) {
+        if (section.getBoundingClientRect().top <= readingLine) { current = index; }
+      });
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) { current = sections.length - 1; }
+      links.forEach(function (link, index) {
+        if (index === current) { link.setAttribute('aria-current', 'location'); } else { link.removeAttribute('aria-current'); }
+      });
+    }
+    function schedule() { if (!frame) { frame = window.requestAnimationFrame(markCurrent); } }
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    markCurrent();
   })();
 </script>
 </body>

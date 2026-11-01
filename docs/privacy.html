@@ -14,41 +14,52 @@
 <style>
   /* ===== 设计令牌：来源 DESIGN.md / SlateSyncTheme（冷灰 + 钨丝琥珀，2026-09-16 版）===== */
   :root {
-    --canvas: #F6F7F9;
-    --evidence: #FFFFFF;
-    --inset: #EEF0F3;
-    --line: #E2E5EA;
-    --ink: #1A1D23;
-    --ink-2: #5B6470;
-    --accent: #B45309;
+    color-scheme: light dark;
+    --canvas: #F6F7F9;        /* 主背景（light） */
+    --evidence: #FFFFFF;      /* 证据面 / 卡片 */
+    --inset: #EEF0F3;         /* 次级嵌入面 */
+    --line: #E2E5EA;          /* 发丝级分隔线 */
+    --ink: #1A1D23;           /* 正文 */
+    --ink-2: #5B6470;         /* 次级文字 */
+    --accent: #B45309;        /* 钨丝琥珀（light）——只用于焦点与关键操作 */
+    --accent-text: #9A4708;   /* 小字号琥珀：在纸面上也保持 4.5:1 */
     --accent-soft: rgba(180, 83, 9, .08);
     --ok: #1E7A5A;
-    --paper: #F2EEE3;
+    --paper: #F2EEE3;         /* 证据内容色：只属于“纸面”（场记单事实卡） */
     --paper-line: #D8D2C2;
+    --clap-dark: #1A1D23;     /* 场记板打板条的深色条纹，不随深浅色变化 */
     --radius: 10px;
+    --page: 768px;
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
             "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --canvas: #1E2229;
+      --canvas: #1E2229;      /* 碳素仪架底盘（dark） */
       --evidence: #2A2F37;
       --inset: #232830;
       --line: #3A414C;
       --ink: #E8EAED;
       --ink-2: #9AA3AE;
       --accent: #F59E0B;
+      --accent-text: #F59E0B;
       --accent-soft: rgba(245, 158, 11, .12);
       --ok: #7FC9A9;
-      --paper: #2E2A22;
+      --paper: #2E2A22;       /* 暗色下的“灯箱纸面” */
       --paper-line: #4A4436;
     }
   }
+  @media (min-width: 1080px) {
+    :root { --page: 1040px; }
+  }
 
-  /* ===== 基础排版（与支持页共用同一套外壳）===== */
+  /* ===== 基础排版 ===== */
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html {
+    scroll-behavior: smooth;
+    scrollbar-color: var(--line) transparent;
+  }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -62,28 +73,42 @@
     line-height: 1.75;
     -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+  a { color: var(--accent-text); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: .18em; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-  code, .mono { font-family: var(--mono); font-size: .92em; }
+  code, .mono { font-family: var(--mono); font-size: .92em; overflow-wrap: anywhere; }
+  strong { color: var(--ink); font-weight: 600; }
 
+  /* ===== 语言切换：默认中文，html[data-lang=en] 时显示英文 ===== */
   html[data-lang="en"] .lang-zh { display: none; }
   html:not([data-lang="en"]) .lang-en { display: none; }
+
+  .skip-link {
+    position: fixed; z-index: 20; top: 10px; left: 10px;
+    padding: 6px 12px;
+    background: var(--ink); color: var(--canvas);
+    border-radius: 6px;
+    font-size: 13px; font-weight: 600;
+    transform: translateY(-200%);
+  }
+  .skip-link:focus { transform: none; }
 
   /* ===== 顶栏 ===== */
   .topbar {
     position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 24px;
+    padding: 12px 24px;
     background: color-mix(in srgb, var(--canvas) 88%, transparent);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--line);
   }
   .topbar-inner {
-    width: 100%; max-width: 880px; margin: 0 auto;
-    display: flex; align-items: center; gap: 12px;
+    width: 100%; max-width: var(--page); margin: 0 auto;
+    display: flex; align-items: center; gap: 14px;
   }
-  /* 品牌标记：场记板剪影，顶条为琥珀斜纹 */
+  .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); }
+  a.brand:hover { text-decoration: none; }
+  /* 品牌标记：场记板剪影，顶条为琥珀斜纹（签名元素） */
   .brand-mark {
     display: inline-flex; flex-direction: column; flex: none;
     width: 26px; border-radius: 4px; overflow: hidden;
@@ -97,8 +122,9 @@
   }
   .brand-mark-body { height: 13px; background: var(--ink); }
   .brand-name { font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  .topbar-link { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+  .topbar-link:hover { color: var(--ink); text-decoration: none; }
   .lang-toggle {
-    margin-left: auto;
     font: 600 13px/1 var(--font);
     color: var(--ink-2);
     background: var(--evidence);
@@ -106,109 +132,106 @@
     border-radius: 999px;
     padding: 7px 14px;
     cursor: pointer;
+    transition: color .14s ease, border-color .14s ease;
   }
-  .lang-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  .lang-toggle:hover { color: var(--accent-text); border-color: var(--accent); }
 
-  /* ===== 主体布局 ===== */
-  main { max-width: 880px; margin: 0 auto; padding: 0 24px 80px; }
-  section { margin-top: 56px; scroll-margin-top: 76px; }
-
-  .hero { margin-top: 48px; }
+  /* ===== 页头：说明在左，场记板事实卡在右 ===== */
+  main { max-width: calc(var(--page) + 48px); margin: 0 auto; padding: 0 24px 80px; }
+  .hero { display: grid; gap: 30px; margin-top: 44px; }
   h1 {
-    font-size: clamp(30px, 5vw, 40px);
-    line-height: 1.2; letter-spacing: -.02em; font-weight: 800;
-    margin: 0 0 10px;
+    font-size: clamp(34px, 5vw, 46px);
+    line-height: 1.15; letter-spacing: -.02em; font-weight: 800;
+    margin: 0 0 12px;
+    text-wrap: balance;
   }
-  .hero-sub { color: var(--ink-2); font-size: 17px; max-width: 640px; margin: 0; }
-  .hero-meta { margin-top: 14px; font-size: 13.5px; color: var(--ink-2); font-family: var(--mono); }
+  .hero-sub { color: var(--ink-2); font-size: 17px; max-width: 620px; margin: 0; text-wrap: pretty; }
 
-  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
-  .toc a {
-    font-size: 13.5px; font-weight: 600;
-    color: var(--ink-2);
-    background: var(--evidence);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 6px 14px;
-  }
-  .toc a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
-
-  /* 章节标题：法律条款按条编号（真实序列），左缘 3px 场记板斜纹 */
-  h2 {
-    display: flex; align-items: baseline; gap: 14px;
-    font-size: 22px; font-weight: 700; letter-spacing: -.01em;
-    margin: 0 0 6px;
-  }
-  h2 .clause {
-    font: 700 13px var(--mono); color: var(--accent); flex: none;
-  }
-  h2 .clause::before {
-    content: ""; position: absolute; left: -14px; top: 2px; bottom: 2px; width: 3px;
-    border-radius: 2px;
-    background: repeating-linear-gradient(135deg,
-      var(--accent) 0 4px, transparent 4px 8px);
-  }
-  .section-sub { color: var(--ink-2); margin: 0 0 20px; }
-
-  /* ===== 摘要卡：纸面材质 ===== */
-  .summary-card {
+  /* 场记板：纸面事实卡 + 打板条；页面载入时落板一次，是全页唯一的动效 */
+  .slate {
+    position: relative;
+    margin: 22px 0 0;
+    padding: 6px 20px;
     background: var(--paper);
     border: 1px solid var(--paper-line);
-    border-radius: var(--radius);
-    padding: 20px 24px;
-    margin-top: 28px;
+    border-radius: 0 0 var(--radius) var(--radius);
   }
-  .summary-card h2 { margin-bottom: 12px; }
-  .summary-card ul { margin: 0; padding-left: 20px; font-size: 15px; }
-  .summary-card li + li { margin-top: 10px; }
+  .slate-arm {
+    position: absolute; left: -1px; right: -1px; top: -19px;
+    height: 18px; border-radius: 5px 5px 0 0;
+    background: repeating-linear-gradient(135deg,
+      var(--clap-dark) 0 15px, var(--accent) 15px 30px);
+    transform-origin: 9px 100%;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .slate-arm { animation: slate-clap .5s cubic-bezier(.16, 1, .3, 1) .18s both; }
+    @keyframes slate-clap { from { transform: rotate(-8deg); } }
+  }
+  .slate dl { margin: 0; }
+  .slate div {
+    display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--paper-line);
+  }
+  .slate div:first-child { border-top: 0; }
+  .slate dt { color: var(--ink-2); font-size: 13px; }
+  html[data-lang="en"] .slate dt { font-size: 12px; letter-spacing: .02em; }
+  .slate dd { margin: 0; font-size: 14.5px; font-weight: 600; }
 
-  /* ===== 数据流向图（纯 CSS，无外部资源）===== */
-  .flow { display: flex; flex-direction: column; margin: 8px 0 0; }
-  .flow-box {
-    background: var(--evidence);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 14px 20px;
+  /* ===== 正文布局：宽屏侧栏目录，窄屏目录折叠在正文之前 ===== */
+  .layout { margin-top: 36px; }
+  .doc { min-width: 0; }
+  .toc { margin-bottom: 36px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .toc ol {
+    list-style: none; margin: 0; padding: 0; counter-reset: toc;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 16px;
   }
-  .flow-box b { display: block; font-size: 14px; margin-bottom: 2px; }
-  .flow-box span { color: var(--ink-2); font-size: 13.5px; }
-  .flow-box.local b { color: var(--ok); }
-  .flow-arrow {
-    align-self: center;
-    display: flex; align-items: center; gap: 10px;
+  .toc a {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 10px; margin-inline: -10px;
+    border-radius: 6px;
+    font-size: 14px; line-height: 1.45;
     color: var(--ink-2);
-    font: 600 12.5px var(--mono);
-    padding: 8px 0;
   }
-  .flow-arrow::before { content: "↓"; color: var(--accent); font-size: 15px; }
-  /* “始终留在本机”横条：与本地图同色系，强调数据驻留 */
-  .flow-stay {
-    margin-top: 14px;
-    border: 1px dashed var(--ok);
-    border-radius: var(--radius);
-    padding: 12px 20px;
-    font-size: 13.5px;
-    color: var(--ink-2);
-    display: flex; flex-wrap: wrap; gap: 6px 18px;
-    background: color-mix(in srgb, var(--ok) 6%, transparent);
+  .toc a:hover { color: var(--ink); text-decoration: none; }
+  .toc-numbered a::before {
+    counter-increment: toc; content: counter(toc);
+    flex: none; min-width: 1.4em;
+    font: 600 12px var(--mono); font-variant-numeric: tabular-nums;
+    color: var(--accent-text);
   }
-  .flow-stay b { color: var(--ok); font-weight: 700; }
 
-  /* ===== 条款正文 ===== */
-  .clause-body { color: var(--ink-2); font-size: 14.5px; }
-  .clause-body p { margin: 0 0 14px; }
-  .clause-body p:last-child { margin-bottom: 0; }
-  .clause-body code { color: var(--ink); }
-  ul.plain { margin: 0 0 14px; padding-left: 20px; }
+  section { margin-top: 52px; scroll-margin-top: 84px; }
+  .doc > section:first-child { margin-top: 0; }
+  @media (min-width: 1080px) {
+    .hero { grid-template-columns: minmax(0, 1fr) 340px; gap: 64px; align-items: end; margin-top: 64px; }
+    .layout {
+      display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 64px;
+      align-items: start; margin-top: 56px;
+    }
+    .toc { position: sticky; top: 84px; margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+    .toc ol { display: block; }
+    .toc a[aria-current="location"] { background: var(--inset); color: var(--ink); }
+    .doc { max-width: 720px; }
+  }
+
+  h2 {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 23px; font-weight: 700; letter-spacing: -.01em; line-height: 1.3;
+    margin: 0 0 8px;
+  }
+  .section-sub { color: var(--ink-2); margin: 0 0 20px; text-wrap: pretty; }
+  ul.plain { margin: 0 0 14px; padding-left: 20px; color: var(--ink-2); font-size: 15.5px; }
   ul.plain li + li { margin-top: 8px; }
+  ul.plain li::marker { color: var(--accent); }
   ul.plain:last-child { margin-bottom: 0; }
-
   .card {
     background: var(--evidence);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 18px 20px;
+    padding: 16px 20px;
   }
+  .card p { margin: 0; line-height: 2; }
 
   footer {
     border-top: 1px solid var(--line);
@@ -217,28 +240,121 @@
     text-align: center;
   }
 
-  @media print {
-    .topbar, .toc, .lang-toggle { display: none; }
-    body { background: #fff; }
+  @media (max-width: 560px) {
+    .topbar { padding: 10px 16px; }
+    main { padding: 0 16px 64px; }
+    .hero { margin-top: 32px; }
+    .toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
+
+  @media print {
+    .topbar, .toc, .slate-arm, .skip-link { display: none; }
+    html, body { background: #fff; }
+    .slate { border-radius: var(--radius); }
+    .layout { display: block; }
+    .doc { max-width: none; }
+  }
+
+  /* ===== 摘要：先给结论，条款在后 ===== */
+  .summary-card {
+    grid-column: 1 / -1;
+    background: var(--paper);
+    border: 1px solid var(--paper-line);
+    border-radius: var(--radius);
+    padding: 20px 24px 22px;
+  }
+  .summary-card h2 { margin-bottom: 12px; }
+  .summary-card ul { margin: 0; padding-left: 20px; font-size: 15.5px; }
+  .summary-card li + li { margin-top: 10px; }
+  .summary-card li::marker { color: var(--accent); }
+  @media (min-width: 1080px) {
+    .summary-card ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 56px; }
+    .summary-card li + li { margin-top: 0; }
+  }
+
+  /* 章节标题：法律条款按条编号（真实序列），条款互相引用时靠它定位 */
+  h2 .clause {
+    flex: none; min-width: 1.5em;
+    font: 700 14px var(--mono); font-variant-numeric: tabular-nums;
+    color: var(--accent-text);
+  }
+
+  /* ===== 数据流向图：虚线框是设备边界，只有一条路径穿出它 ===== */
+  .flow { margin-top: 8px; }
+  .flow-zone {
+    padding: 16px;
+    border: 1px dashed var(--ok);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--ok) 6%, transparent);
+  }
+  .flow-box {
+    background: var(--evidence);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+  }
+  .flow-box b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .flow-box span { color: var(--ink-2); font-size: 14px; }
+  .flow-box.local b { color: var(--ok); }
+  .flow-arrow {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 6px 0;
+    color: var(--ink-2);
+    font-size: 13.5px; font-weight: 600;
+  }
+  .flow-arrow svg { flex: none; width: 12px; height: 24px; color: var(--accent); }
+  .flow-exit { position: relative; margin-top: -1px; padding-block: 0 6px; }
+  .flow-exit span { padding-top: 6px; }
+  .flow-exit svg { height: 36px; }
+  /* “始终留在本机”：写在边界之内，强调数据驻留 */
+  .flow-stay {
+    margin-top: 14px;
+    font-size: 14px;
+    color: var(--ink-2);
+    display: flex; flex-wrap: wrap; gap: 4px 18px;
+  }
+  .flow-stay b { color: var(--ok); font-weight: 700; }
+
+  /* ===== 条款正文 ===== */
+  .clause-body { color: var(--ink-2); font-size: 15.5px; line-height: 1.8; }
+  .clause-body p { margin: 0 0 14px; text-wrap: pretty; }
+  .clause-body p:last-child { margin-bottom: 0; }
+  .clause-body code { color: var(--ink); }
 </style>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F7F9">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1E2229">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='12' width='26' height='17' rx='3' fill='%231A1D23'/%3E%3Crect x='3' y='4' width='26' height='7' rx='2' fill='%23B45309'/%3E%3Cpath d='M9 4h4l-4 7H5zm8 0h4l-4 7h-4z' fill='%231A1D23'/%3E%3C/svg%3E">
+<script>
+  // 语言在首帧前生效，避免英文读者先看到一闪而过的中文；任何存储异常都静默回退中文。
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem('slatesync-support-lang'); } catch (e) { /* 隐私模式下忽略 */ }
+    if (saved === 'en') { document.documentElement.dataset.lang = 'en'; document.documentElement.lang = 'en'; }
+  })();
+</script>
 </head>
 <body>
 
+<a class="skip-link" href="#main"><span class="lang-zh">跳到主要内容</span><span class="lang-en">Skip to content</span></a>
+
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
-    <span class="brand-name">SlateSync</span>
+    <a class="brand" href="support.html">
+      <span class="brand-mark" aria-hidden="true"><span class="brand-mark-top"></span><span class="brand-mark-body"></span></span>
+      <span class="brand-name">SlateSync</span>
+    </a>
+    <a class="topbar-link" href="support.html"><span class="lang-zh">支持</span><span class="lang-en">Support</span></a>
     <!-- 语言切换：持久化到 localStorage，失败时静默回退中文 -->
-    <button class="lang-toggle" id="langToggle" type="button" aria-pressed="false">
-      <span class="lang-zh">English</span><span class="lang-en">中文</span>
+    <button class="lang-toggle" id="langToggle" type="button">
+      <span class="lang-zh" lang="en">English</span><span class="lang-en" lang="zh-Hans">中文</span>
     </button>
   </div>
 </header>
 
-<main>
+<main id="main">
 
   <div class="hero">
+    <div>
     <h1>
       <span class="lang-zh">隐私政策</span>
       <span class="lang-en">Privacy Policy</span>
@@ -247,37 +363,53 @@
       <span class="lang-zh">SlateSync 是一款本地优先的 macOS 应用：识别场记单、校对结构、回填 DaVinci Resolve CSV。本政策说明哪些数据留在你的 Mac、哪些内容会发送给你自己配置的模型服务，以及我们不收集什么。</span>
       <span class="lang-en">SlateSync is a local-first macOS app that recognizes camera slates, reviews their structure and backfills DaVinci Resolve CSVs. This policy explains what stays on your Mac, what is sent to model services you configure yourself, and what we never collect.</span>
     </p>
-    <p class="hero-meta">
-      <span class="lang-zh">生效日期：2026 年 9 月 24 日 · 适用于 SlateSync for macOS（1.1 及后续版本）</span>
-      <span class="lang-en">Effective date: September 24, 2026 · Applies to SlateSync for macOS (1.1 and later)</span>
-    </p>
+    </div>
+
+    <!-- 事实卡：与支持页同一块场记板 -->
+    <div class="slate">
+      <span class="slate-arm" aria-hidden="true"></span>
+      <dl>
+      <div><dt><span class="lang-zh">生效日期</span><span class="lang-en">Effective date</span></dt><dd><span class="lang-zh">2026 年 9 月 24 日</span><span class="lang-en">September 24, 2026</span></dd></div>
+      <div><dt><span class="lang-zh">适用于</span><span class="lang-en">Applies to</span></dt><dd><span class="lang-zh">SlateSync for macOS（1.1 及后续版本）</span><span class="lang-en">SlateSync for macOS (1.1 and later)</span></dd></div>
+      </dl>
+    </div>
 
     <!-- 摘要：先给结论，条款在后 -->
     <div class="summary-card">
       <h2><span class="lang-zh">先说结论</span><span class="lang-en">In short</span></h2>
       <ul>
-        <li><span class="lang-zh">SlateSync 没有账号系统，也不向开发者运营的服务器上传任何数据：没有统计、广告或崩溃上报。</span>
-            <span class="lang-en">SlateSync has no account system and uploads nothing to developer-operated servers: no analytics, ads or crash reporting.</span></li>
-        <li><span class="lang-zh">项目数据保存在本机；项目库内容以 AES-256-GCM 加密，密钥保存在本机登录钥匙串。</span>
-            <span class="lang-en">Project data stays on your Mac. Library contents are encrypted with AES-256-GCM; the key lives in your Mac's login keychain.</span></li>
-        <li><span class="lang-zh">你主动识别时，页面图片、OCR 证据及识别上下文会发送给你配置的模型服务；原始 PDF 文件不会上传。</span>
-            <span class="lang-en">When you run recognition, page images, OCR evidence and recognition context go to the model service you configured. The original PDF file is not uploaded.</span></li>
-        <li><span class="lang-zh">可选的 PaddleOCR 完全在本机运行；Python 环境与模型由你在本机选择和下载。</span>
-            <span class="lang-en">Optional PaddleOCR runs entirely on your Mac; you choose and download the Python environment and models yourself.</span></li>
+        <li><span class="lang-zh">SlateSync 没有账号系统，也<strong>不向开发者运营的服务器上传任何数据</strong>：没有统计、广告或崩溃上报。</span>
+            <span class="lang-en">SlateSync has no account system and <strong>uploads nothing to developer-operated servers</strong>: no analytics, ads or crash reporting.</span></li>
+        <li><span class="lang-zh"><strong>项目数据保存在本机</strong>；项目库内容以 AES-256-GCM 加密，密钥保存在本机登录钥匙串。</span>
+            <span class="lang-en"><strong>Project data stays on your Mac.</strong> Library contents are encrypted with AES-256-GCM; the key lives in your Mac's login keychain.</span></li>
+        <li><span class="lang-zh">你主动识别时，页面图片、OCR 证据及识别上下文会发送给你配置的模型服务；<strong>原始 PDF 文件不会上传。</strong></span>
+            <span class="lang-en">When you run recognition, page images, OCR evidence and recognition context go to the model service you configured. <strong>The original PDF file is not uploaded.</strong></span></li>
+        <li><span class="lang-zh">可选的 PaddleOCR <strong>完全在本机运行</strong>；Python 环境与模型由你在本机选择和下载。</span>
+            <span class="lang-en">Optional PaddleOCR <strong>runs entirely on your Mac</strong>; you choose and download the Python environment and models yourself.</span></li>
       </ul>
     </div>
 
-    <nav class="toc" aria-label="条款导航 / Policy sections">
-      <a href="#flow"><span class="lang-zh">数据流向</span><span class="lang-en">Data flow</span></a>
-      <a href="#collect"><span class="lang-zh">不收集</span><span class="lang-en">What we don't collect</span></a>
-      <a href="#local"><span class="lang-zh">本地存储</span><span class="lang-en">Local storage</span></a>
-      <a href="#providers"><span class="lang-zh">第三方 AI 服务</span><span class="lang-en">Third-party AI</span></a>
-      <a href="#ocr"><span class="lang-zh">OCR</span><span class="lang-en">OCR</span></a>
-      <a href="#logs"><span class="lang-zh">日志</span><span class="lang-en">Logs</span></a>
-      <a href="#exports"><span class="lang-zh">导出与共享</span><span class="lang-en">Exports</span></a>
-      <a href="#contact"><span class="lang-zh">联系</span><span class="lang-en">Contact</span></a>
-    </nav>
   </div>
+
+  <div class="layout">
+    <nav class="toc toc-numbered" aria-label="条款导航 / Policy sections">
+      <ol>
+        <li><a href="#flow"><span class="lang-zh">数据流向</span><span class="lang-en">Data flow</span></a></li>
+        <li><a href="#collect"><span class="lang-zh">不收集</span><span class="lang-en">What we don't collect</span></a></li>
+        <li><a href="#local"><span class="lang-zh">本地存储</span><span class="lang-en">Local storage</span></a></li>
+        <li><a href="#providers"><span class="lang-zh">第三方 AI 服务</span><span class="lang-en">Third-party AI</span></a></li>
+        <li><a href="#ocr"><span class="lang-zh">OCR</span><span class="lang-en">OCR</span></a></li>
+        <li><a href="#logs"><span class="lang-zh">日志</span><span class="lang-en">Logs</span></a></li>
+        <li><a href="#keys"><span class="lang-zh">API Key</span><span class="lang-en">API keys</span></a></li>
+        <li><a href="#exports"><span class="lang-zh">导出与共享</span><span class="lang-en">Exports</span></a></li>
+        <li><a href="#security"><span class="lang-zh">安全措施</span><span class="lang-en">Security</span></a></li>
+        <li><a href="#children"><span class="lang-zh">未成年人</span><span class="lang-en">Children</span></a></li>
+        <li><a href="#changes"><span class="lang-zh">政策变更</span><span class="lang-en">Policy changes</span></a></li>
+        <li><a href="#contact"><span class="lang-zh">联系</span><span class="lang-en">Contact</span></a></li>
+      </ol>
+    </nav>
+
+  <div class="doc">
 
   <!-- ===== 1 数据流向 ===== -->
   <section id="flow">
@@ -287,27 +419,29 @@
       <span class="lang-en">During a recognition, data moves along one path only:</span>
     </p>
     <div class="flow">
-      <div class="flow-box">
-        <b><span class="lang-zh">你的场记单</span><span class="lang-en">Your slate</span></b>
-        <span>PDF · JPEG · PNG · WebP</span>
+      <div class="flow-zone">
+        <div class="flow-box">
+          <b><span class="lang-zh">你的场记单</span><span class="lang-en">Your slate</span></b>
+          <span>PDF · JPEG · PNG · WebP</span>
+        </div>
+        <div class="flow-arrow"><svg viewBox="0 0 12 24" preserveAspectRatio="xMidYMax meet" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v21.5M1.5 18 6 22.5 10.5 18"/></svg><span><span class="lang-zh">导入，仅保存在本机</span><span class="lang-en">Imported — stored locally only</span></span></div>
+        <div class="flow-box local">
+          <b><span class="lang-zh">你的 Mac：本地处理</span><span class="lang-en">Your Mac: local processing</span></b>
+          <span><span class="lang-zh">逐页栅格化 · Vision / PaddleOCR 文字提取 · 字段校验 · 加密项目库</span><span class="lang-en">Page rasterization · Vision / PaddleOCR text extraction · field validation · encrypted Project Library</span></span>
+        </div>
+        <div class="flow-stay">
+          <b><span class="lang-zh">始终留在本机：</span><span class="lang-en">Always on your Mac:</span></b>
+          <span><span class="lang-zh">项目库（AES-256-GCM 加密）</span><span class="lang-en">Project Library (AES-256-GCM)</span></span>
+          <span><span class="lang-zh">API Key（本地加密文件）</span><span class="lang-en">API keys (local encrypted file)</span></span>
+          <span><span class="lang-zh">运行日志（7 天 · 脱敏）</span><span class="lang-en">Run logs (7 days · redacted)</span></span>
+          <span><span class="lang-zh">全局设置</span><span class="lang-en">Global settings</span></span>
+        </div>
       </div>
-      <div class="flow-arrow"><span class="lang-zh">导入，仅保存在本机</span><span class="lang-en">Imported — stored locally only</span></div>
-      <div class="flow-box local">
-        <b><span class="lang-zh">你的 Mac：本地处理</span><span class="lang-en">Your Mac: local processing</span></b>
-        <span><span class="lang-zh">逐页栅格化 · Vision / PaddleOCR 文字提取 · 字段校验 · 加密项目库</span><span class="lang-en">Page rasterization · Vision / PaddleOCR text extraction · field validation · encrypted Project Library</span></span>
-      </div>
-      <div class="flow-arrow"><span class="lang-zh">仅当你运行识别</span><span class="lang-en">Only when you run recognition</span></div>
+      <div class="flow-arrow flow-exit"><svg viewBox="0 0 12 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 0v34.5M1.5 30 6 34.5 10.5 30"/></svg><span><span class="lang-zh">仅当你运行识别</span><span class="lang-en">Only when you run recognition</span></span></div>
       <div class="flow-box">
         <b><span class="lang-zh">你配置的 AI 服务（OpenAI 兼容接口）</span><span class="lang-en">The AI service you configured (OpenAI-compatible)</span></b>
         <span><span class="lang-zh">接收页面图片、OCR 证据、识别上下文与认证请求头；原始 PDF 不会上传</span><span class="lang-en">Receives page images, OCR evidence, recognition context and an authentication header; the original PDF is not uploaded</span></span>
       </div>
-    </div>
-    <div class="flow-stay">
-      <b><span class="lang-zh">始终留在本机：</span><span class="lang-en">Always on your Mac:</span></b>
-      <span><span class="lang-zh">项目库（AES-256-GCM 加密）</span><span class="lang-en">Project Library (AES-256-GCM)</span></span>
-      <span><span class="lang-zh">API Key（本地加密文件）</span><span class="lang-en">API keys (local encrypted file)</span></span>
-      <span><span class="lang-zh">运行日志（7 天 · 脱敏）</span><span class="lang-en">Run logs (7 days · redacted)</span></span>
-      <span><span class="lang-zh">全局设置</span><span class="lang-en">Global settings</span></span>
     </div>
   </section>
 
@@ -322,8 +456,8 @@
             <span class="lang-en">No analytics, telemetry, ad SDKs or crash reporting; nothing is sent to developer-operated servers.</span></li>
         <li><span class="lang-zh">我们不出售、出租或共享任何用户数据——因为我们从一开始就没有收到过。</span>
             <span class="lang-en">We never sell, rent or share user data — we never receive any in the first place.</span></li>
-        <li><span class="lang-zh">模型请求只指向你配置的服务（见第 4 条）；主动安装 PaddleOCR 时还会访问软件源与模型下载服务（见第 5 条）。</span>
-            <span class="lang-en">Model requests go only to the service you configure (see §4); an optional PaddleOCR installation also contacts package and model sources (see §5).</span></li>
+        <li><span class="lang-zh">模型请求只指向你配置的服务（见<a href="#providers">第 4 条</a>）；主动安装 PaddleOCR 时还会访问软件源与模型下载服务（见<a href="#ocr">第 5 条</a>）。</span>
+            <span class="lang-en">Model requests go only to the service you configure (see <a href="#providers">§4</a>); an optional PaddleOCR installation also contacts package and model sources (see <a href="#ocr">§5</a>).</span></li>
       </ul>
     </div>
   </section>
@@ -410,8 +544,8 @@
             <span class="lang-en">Exported Resolve CSVs are ordinary files written where you choose;</span></li>
         <li><span class="lang-zh">项目包与项目库导出包含任务、诊断证据、场记 Profile 与设置，但<strong>不包含</strong>全局配置、API Key、OCR 环境或日志；</span>
             <span class="lang-en">Project packages and library exports carry tasks, diagnostics, slate profiles and settings, but <strong>never</strong> global configuration, API keys, OCR environments or logs;</span></li>
-        <li><span class="lang-zh">导入项目包到本地项目库后，内容会按第 3 条重新加密。</span>
-            <span class="lang-en">When a package is imported into a local library, its contents are re-encrypted as described in §3.</span></li>
+        <li><span class="lang-zh">导入项目包到本地项目库后，内容会按<a href="#local">第 3 条</a>重新加密。</span>
+            <span class="lang-en">When a package is imported into a local library, its contents are re-encrypted as described in <a href="#local">§3</a>.</span></li>
       </ul>
     </div>
   </section>
@@ -464,6 +598,9 @@
     </div>
   </section>
 
+  </div>
+  </div>
+
 </main>
 
 <footer>
@@ -471,20 +608,36 @@
 </footer>
 
 <script>
-  // 语言切换：写入 <html data-lang>，持久化到 localStorage；任何存储异常都静默回退中文。
   (function () {
     var root = document.documentElement;
-    var button = document.getElementById('langToggle');
-    var saved = null;
-    try { saved = localStorage.getItem('slatesync-support-lang'); } catch (e) { /* 隐私模式下忽略 */ }
-    if (saved === 'en') { root.dataset.lang = 'en'; button.setAttribute('aria-pressed', 'true'); }
 
-    button.addEventListener('click', function () {
+    // 语言切换：写入 <html data-lang> 与 lang，持久化到 localStorage。
+    document.getElementById('langToggle').addEventListener('click', function () {
       var next = root.dataset.lang === 'en' ? 'zh' : 'en';
-      if (next === 'en') { root.dataset.lang = 'en'; } else { delete root.dataset.lang; }
-      button.setAttribute('aria-pressed', next === 'en' ? 'true' : 'false');
+      if (next === 'en') { root.dataset.lang = 'en'; root.lang = 'en'; } else { delete root.dataset.lang; root.lang = 'zh-Hans'; }
       try { localStorage.setItem('slatesync-support-lang', next); } catch (e) { /* 忽略 */ }
     });
+
+    // 侧栏目录标记当前阅读的章节；无脚本时目录仍是普通锚点。
+    var links = [].slice.call(document.querySelectorAll('.toc a'));
+    var sections = links.map(function (link) { return document.querySelector(link.getAttribute('href')); });
+    var frame = 0;
+    function markCurrent() {
+      frame = 0;
+      var readingLine = window.innerHeight * 0.35;
+      var current = 0;
+      sections.forEach(function (section, index) {
+        if (section.getBoundingClientRect().top <= readingLine) { current = index; }
+      });
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) { current = sections.length - 1; }
+      links.forEach(function (link, index) {
+        if (index === current) { link.setAttribute('aria-current', 'location'); } else { link.removeAttribute('aria-current'); }
+      });
+    }
+    function schedule() { if (!frame) { frame = window.requestAnimationFrame(markCurrent); } }
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    markCurrent();
   })();
 </script>
 </body>
