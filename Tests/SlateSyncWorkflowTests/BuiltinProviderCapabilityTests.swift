@@ -7,6 +7,53 @@ import XCTest
 /// Exercise the real persistence/facade boundary with offline HTTP and Keychain.
 @MainActor
 final class BuiltinProviderCapabilityTests: XCTestCase {
+    func testCredentialChangesPreserveCustomConfigurationAndRevokeProofs() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "custom-credential-proofs-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let facade = makeFacade(root: root, transport: BuiltinProofTransport())
+        let provider = CustomProviderConfiguration(
+            id: "openai-compatible:00000000-0000-4000-8000-000000000002",
+            name: "Gateway", label: "Gateway", baseUrl: "https://example.invalid/v1",
+            transport: .responses, jsonMode: .jsonObject, imageDetail: .low,
+            manualModelIds: ["vision"], revision: 7,
+            capabilityCache: ["vision": .init(status: .verified, revision: 7)],
+            notes: "User-authored notes", sourcePresetID: "custom-preset"
+        )
+        // Each mutation starts from the same verified disk snapshot so bulk
+        // reset cannot pass merely because an individual edit cleared it first.
+        for resetAll in [false, true] {
+            _ = try await facade.saveGlobalSettings(values: .init(), customProviders: [provider])
+            if resetAll {
+                try await facade.resetLocalProviderCredentials()
+            } else {
+                try await facade.setProviderCredential("synthetic-test-key", providerID: provider.id)
+            }
+            let snapshot = try await GlobalConfigStore(applicationSupportRoot: root).load()
+            let saved = try XCTUnwrap(snapshot.customProviders.first)
+            XCTAssertEqual(snapshot.customProviders.count, 1)
+            XCTAssertEqual(saved.revision, 8)
+            XCTAssertNil(saved.capabilityCache)
+            XCTAssertEqual(saved.id, provider.id)
+            XCTAssertEqual(saved.name, provider.name)
+            XCTAssertEqual(saved.label, provider.label)
+            XCTAssertEqual(saved.baseUrl, provider.baseUrl)
+            XCTAssertEqual(saved.transport, provider.transport)
+            XCTAssertEqual(saved.jsonMode, provider.jsonMode)
+            XCTAssertEqual(saved.imageDetail, provider.imageDetail)
+            XCTAssertEqual(saved.manualModelIds, provider.manualModelIds)
+            XCTAssertEqual(saved.notes, provider.notes)
+            XCTAssertEqual(saved.sourcePresetID, provider.sourcePresetID)
+            let registry = try await facade.modelRegistry()
+            do {
+                _ = try await registry.resolveModel(providerID: provider.id, modelID: "vision")
+                XCTFail("Credential changes must revoke the registry's verified model")
+            } catch {
+                XCTAssertEqual((error as? SlateSyncError)?.code, RecognitionFailure.unsupportedModel.code)
+            }
+        }
+        try await facade.drain()
+    }
+
     func testSequentialProbesKeepAliasesAndSurviveDiscoveryAndRestart() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "builtin-proofs-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

@@ -175,13 +175,20 @@ public enum ResolveCSVNormalization {
         guard let card = parseCardNumber(cardNumber) else { return "" }
         let video = normalizeClipNumber(videoCode)
         guard !video.isEmpty, let clip = Int(video.dropFirst()) else { return "" }
+        // A full video identifier carries independent camera/reel evidence.
+        // Do not discard A026 from A026C003 and splice its clip onto A025.
+        // Conflicting identifiers remain unmatchable for manual correction.
+        if let embedded = parseCanonicalMaterialKey(extractCombinedMaterialKey(videoCode)),
+           embedded.camera != card.camera || embedded.reel != card.reel {
+            return ""
+        }
         return "\(card.camera):\(card.reel):\(clip)"
     }
 
     public static func materialPrefix(cardNumber: String?, videoCode: String?) -> String? {
         let card = asciiToken(cardNumber)
         let video = normalizeClipNumber(videoCode)
-        guard parseCardNumber(card) != nil, !video.isEmpty else { return nil }
+        guard !canonicalMaterialKey(cardNumber: card, videoCode: videoCode).isEmpty, !video.isEmpty else { return nil }
         return card + video
     }
 

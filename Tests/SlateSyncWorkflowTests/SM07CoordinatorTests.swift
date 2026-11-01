@@ -40,7 +40,10 @@ private actor SM07CoordinatorOCR: LocalOCREngine {
         return .init(engine: .vision, modelVersion: "fixture", pages: document.pages.map { page in
             .init(pageNumber: page.pageNumber, views: page.views.map { view in
                 .init(viewIndex: view.viewIndex, viewType: view.viewType, width: view.image.width, height: view.image.height, blocks: [
-                    .init(order: 0, text: "A001 C001 1 2 3 √", confidence: 0.95, bbox: [0, 0, 1, 1], bboxNormalized: [0, 0, 1, 1])
+                    .init(order: 0, text: "A001 C001 1 2 3 √", confidence: 0.95, bbox: [0, 0, 1, 1], bboxNormalized: [0, 0.5, 1, 1]),
+                    .init(order: 1, text: "场次", confidence: 0.95, bbox: [0, 0, 1, 1], bboxNormalized: [0.05, 0.1, 0.15, 0.15]),
+                    .init(order: 2, text: "镜", confidence: 0.95, bbox: [0, 0, 1, 1], bboxNormalized: [0.25, 0.1, 0.35, 0.15]),
+                    .init(order: 3, text: "次", confidence: 0.95, bbox: [0, 0, 1, 1], bboxNormalized: [0.45, 0.1, 0.55, 0.15])
                 ])
             })
         })
@@ -54,11 +57,13 @@ private actor SM07CoordinatorTransport: ProviderHTTPTransporting {
     let mode: Mode
     private(set) var calls = 0
     private(set) var closed = false
+    private(set) var bodies: [Data] = []
 
     init(_ mode: Mode = .success) { self.mode = mode }
 
     func send(_ request: ProviderTransportRequest) async throws -> ProviderTransportResponse {
         calls += 1
+        bodies.append(request.body ?? Data())
         if mode == .stall {
             while true { try await Task.sleep(for: .milliseconds(10)) }
         }
@@ -112,6 +117,26 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
 }
 
 @MainActor final class SM07CoordinatorTests: XCTestCase {
+    func testRequestBudgetAppliesPerPageInsteadOfToTheWholeDocument() async throws {
+        let transport = SM07CoordinatorTransport(), ocr = SM07CoordinatorOCR()
+        let image = try PreparedImage(jpeg: Data([255,216,255]) + Data(repeating: 65, count: 50_000) + Data([255,217]), width: 1, height: 1)
+        let document = PreparedDocument(filename: "two-pages.pdf", pages: (1...2).map {
+            .init(pageNumber: $0, views: [.init(viewIndex: 0, viewType: .full, image: image)])
+        })
+        let coordinator = RecognitionCoordinator(registry: ProviderRegistry(), client: .init(transport: transport), mediaFactory: {
+            MediaOCRWorkflow(ocr: LocalOCRService(vision: ocr, paddle: nil, settings: .init(), visionAvailable: true, paddleAvailable: false))
+        })
+        let budget = 112 * 1024
+        let result = try await coordinator.recognize(.init(projectID: "budget", input: .bytes(Data(), filename: "two-pages.pdf"),
+            filename: "two-pages.pdf", providerID: "openai", modelID: "openai/gpt-4o-mini",
+            settings: .init(accuracyMode: .standard), maximumRequestBytes: budget, preparedDocument: document))
+        XCTAssertEqual(result.pageCount, 2)
+        let bodies = await transport.bodies
+        XCTAssertEqual(bodies.count, 2)
+        XCTAssertTrue(bodies.allSatisfy { $0.count <= Int(Double(budget) * 0.94) })
+        XCTAssertGreaterThan(bodies.reduce(0) { $0 + $1.count }, budget)
+        await coordinator.close()
+    }
     private func runtime(
         transport: SM07CoordinatorTransport,
         preparation: SM07CoordinatorPreparation,
@@ -166,11 +191,11 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
                 MediaOCRWorkflow(preparation: preparation, ocr: LocalOCRService(vision: ocr, paddle: nil,
                     settings: .init(), visionAvailable: true, paddleAvailable: false))
             }, scenarioPersistence: scenarios, workflowConfiguration: { try await provider.current() })
-        // Seed one similar profile. Exact and permissive thresholds must then
-        // produce different selections through the real recognition pipeline.
+        // The fixture exposes a confirmed but slightly different header layout
+        // after the first observation; production never auto-confirms it.
         _ = try await coordinator.recognize(request())
         let strict = try await coordinator.recognize(request())
-        XCTAssertEqual(strict.scenario?.match, "created")
+        XCTAssertEqual(strict.scenario?.match, "candidate")
         config.scenario.matching.threshold = 0.5
         try JSONEncoder().encode(config).write(to: url)
         let permissive = try await coordinator.recognize(request())
@@ -324,6 +349,10 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
 /// observable business effect, independent of transport and wall-clock timing.
 private actor ThresholdScenarioPersistence: ScenarioMatchingPersistence {
     private var stored: ScenarioProfile?
+    func scenarioSnapshot(projectID: String) -> ScenarioMatchingSnapshot {
+        // This fixture has only a saved prototype, without manual associations.
+        .init(profiles: stored.map { [.init(id: "known", profile: $0, sampleCount: 1, createdAt: "", updatedAt: "", lastUsedAt: "")] } ?? [])
+    }
     func listScenarios(projectID: String) -> [ScenarioSummary] {
         guard let stored else { return [] }
         return [.init(id: "known", label: stored.label, fingerprint: stored.fingerprint,
@@ -333,6 +362,21 @@ private actor ThresholdScenarioPersistence: ScenarioMatchingPersistence {
     func loadScenario(projectID: String, scenarioID: String) throws -> ScenarioData {
         guard let stored else { throw SlateSyncError(code: "FIXTURE", message: "Missing profile") }
         return .init(id: "known", profile: stored, sampleCount: 1, createdAt: "", updatedAt: "", lastUsedAt: "")
+    }
+    func saveScenarioObservation(projectID: String, observation: ScenarioLearningObservation) {
+        guard stored == nil, let candidate = observation.decision.candidate, let structure = candidate.structure else { return }
+        let adjusted = ScenarioStructure(anchors: structure.anchors.map { anchor in
+            var box = anchor.box
+            if anchor.field == "shot" { box[0] += 0.03; box[2] += 0.03 }
+            return .init(field: anchor.field, box: box)
+        })
+        stored = .init(schemaVersion: 1, fingerprintVersion: 2, fingerprint: candidate.fingerprint, label: candidate.label,
+                       layout: candidate.layout, fields: candidate.fields, recognition: candidate.recognition,
+                       output: candidate.output, structure: adjusted)
+    }
+    func listScenarioCandidates(projectID: String) -> [ScenarioCandidate] { [] }
+    func confirmScenarioCandidate(projectID: String, candidateID: String, label: String, existingProfileID: String?) throws -> ScenarioData {
+        throw SlateSyncError(code: "FIXTURE", message: "Confirmation is not part of this fixture")
     }
     func applyScenarioMatch(projectID: String, candidate: ScenarioProfile, selectedProfileID: String?, observationPayload: Data) -> ScenarioMatchCommit {
         if stored == nil {

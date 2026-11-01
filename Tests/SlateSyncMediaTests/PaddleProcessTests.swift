@@ -44,6 +44,23 @@ struct FakePaddleRuntime: Sendable {
 }
 
 @MainActor final class PaddleProcessTests: XCTestCase {
+    func testIdleWorkerCanBeReleasedAndNextRequestWarmsAgain() async throws {
+        let runtime = try FakePaddleRuntime()
+        defer { runtime.cleanup() }
+        let supervisor = OCRProcessSupervisor(paths: runtime.paths)
+        _ = try await supervisor.execute(configuration: config(), document: document(), operation: .init())
+        let warm = await supervisor.snapshot()
+        XCTAssertTrue(warm.hasWorker)
+        try await supervisor.releaseIdleResources()
+        let idle = await supervisor.snapshot()
+        XCTAssertFalse(idle.hasWorker)
+        XCTAssertEqual(idle.active, 0)
+        _ = try await supervisor.execute(configuration: config(), document: document(), operation: .init())
+        let restarted = await supervisor.snapshot()
+        XCTAssertEqual(restarted.warmups, 2)
+        await supervisor.close(shutdown: true)
+        assertExited(runtime)
+    }
     private func document() async throws -> PreparedDocument { try await MediaPreparationService().prepare(.bytes(mediaFixture("tiny.png"),filename:"tiny.png")).selected(.standard) }
     private func config(_ mode:String = "ch") -> PaddleOCRConfiguration { .init(.init([.paddleOCRLanguage:mode])) }
     private func assertExited(_ runtime: FakePaddleRuntime) {

@@ -123,7 +123,7 @@ without substituting an unsigned or otherwise altered build command.
 Observed conflict: The sandboxed run reached packaging but could not resolve
 `github.com`. The approved network run downloaded and extracted Electron,
 rebuilt `better-sqlite3`, and reached macOS distribution signing with identity
-`Apple Development: 8613857405876 (C9GM69F8R9)`, then produced no further
+`Apple Development: <developer-id> (<team-id>)`, then produced no further
 output for 60 seconds. It was terminated with `SIGINT` rather than allowed to
 wait indefinitely for external Keychain/signing UI. The exact command did not
 pass; no altered unsigned command is claimed as equivalent.

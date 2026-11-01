@@ -2,8 +2,8 @@ import CryptoKit
 import Foundation
 import SlateSyncDomain
 
-/// Deterministic Scenario Profile learning compatible with fingerprint v1.
-/// OCR engines remain out of scope: callers provide normalized page/view data.
+/// Preserves deterministic v1 profile replay and validates/renders both stored
+/// generations. Current automatic matching lives in ScenarioStructureMatcher.
 public actor ScenarioProfileEngine: ScenarioProfileProcessing {
     public static let schemaVersion = 1
     public static let fingerprintVersion = 1
@@ -89,12 +89,16 @@ public actor ScenarioProfileEngine: ScenarioProfileProcessing {
         )
     }
 
-    /// Normalizes imported v1 profiles before comparison or publication.
-    /// Future versions fail closed so this phase never invents schema v2 data.
+    /// V1 envelopes remain readable; fingerprint v2 carries explicit full-page
+    /// structure and cannot be interpreted by the legacy fingerprint algorithm.
     public func normalize(_ profile: ScenarioProfile) throws -> ScenarioProfile {
         guard profile.schemaVersion == Self.schemaVersion,
-              profile.fingerprintVersion == Self.fingerprintVersion else {
+              [1, 2].contains(profile.fingerprintVersion),
+              profile.fingerprintVersion != 2 || profile.structure?.version == 2 else {
             throw SlateSyncError(code: "SCENARIO_VERSION", message: "场记结构版本不受支持")
+        }
+        if let structure = profile.structure, !ScenarioStructureMatcher.isSufficient(structure) {
+            throw SlateSyncError(code: "SCENARIO_BBOX", message: "场记结构字段区域无效")
         }
         try profile.output.resolve.fieldFormats.validate()
         try profile.output.resolve.comments.validate()
@@ -128,15 +132,22 @@ public actor ScenarioProfileEngine: ScenarioProfileProcessing {
             throw SlateSyncError(code: "SCENARIO_FINGERPRINT", message: "场记结构指纹无效")
         }
         let hints = Array(profile.recognition.promptHints.map { Self.utf16Prefix($0.trimmingCharacters(in: .whitespacesAndNewlines), limit: 1_000) }.filter { !$0.isEmpty }.prefix(20))
+        let resolvedFingerprint: String
+        if !fingerprint.isEmpty { resolvedFingerprint = fingerprint }
+        else if let structure = profile.structure, profile.fingerprintVersion == 2 {
+            resolvedFingerprint = try ScenarioStructureMatcher.fingerprint(structure)
+        } else { resolvedFingerprint = Self.fingerprint(layout) }
         return ScenarioProfile(
             schemaVersion: Self.schemaVersion,
-            fingerprintVersion: Self.fingerprintVersion,
-            fingerprint: fingerprint.isEmpty ? Self.fingerprint(layout) : fingerprint,
+            fingerprintVersion: profile.fingerprintVersion,
+            fingerprint: resolvedFingerprint,
             label: Self.label(profile.label).isEmpty ? "自动学习场记结构" : Self.label(profile.label),
             layout: layout,
             fields: fields,
             recognition: ScenarioRecognitionConfig(headerTokens: Self.uniqueSorted(profile.recognition.headerTokens.map(Self.token)), promptHints: hints),
-            output: profile.output
+            output: profile.output,
+            structure: profile.structure,
+            canonicalID: profile.canonicalID
         )
     }
 
@@ -155,6 +166,10 @@ public actor ScenarioProfileEngine: ScenarioProfileProcessing {
     }
 
     public func promptInstruction(_ profile: ScenarioProfile) -> String {
+        if let structure = profile.structure, ScenarioStructureMatcher.isSufficient(structure) {
+            let anchors = structure.anchors.map { "\($0.field)=\($0.box.map(Self.jsNumber).joined(separator: ","))" }.joined(separator: "; ")
+            return "\n\n当前场记版式：\(profile.label)。以下为整页归一化坐标的表头位置，正文须按当前列边界读取：\(anchors)。模板不包含本次填写值；结构不符或无法确认时返回 null。\(profile.recognition.promptHints.joined(separator: "；"))"
+        }
         let entries: [(String, ScenarioFieldProfile)] = [
             ("cardNumber", profile.fields.cardNumber), ("videoCode", profile.fields.videoCode),
             ("scene", profile.fields.scene), ("shot", profile.fields.shot), ("take", profile.fields.take),

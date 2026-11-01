@@ -147,6 +147,12 @@ public protocol ProjectLibraryWorkflowServing: Sendable {
 /// capabilities, rather than optional casts of an unrelated task service.
 public protocol ScenarioListWorkflowServing: Sendable {
     func listScenarios(projectID: String) async throws -> [ScenarioSummary]
+    func listScenarioCandidates(projectID: String) async throws -> [ScenarioCandidate]
+    func confirmScenarioCandidate(projectID: String, candidateID: String, label: String, existingProfileID: String?) async throws -> ScenarioData
+    func previewScenarioMerge(projectID: String, sourceID: String, targetID: String) async throws -> ScenarioMergePreview
+    func mergeScenarioProfiles(projectID: String, preview: ScenarioMergePreview) async throws -> ScenarioMergeReceipt
+    func latestScenarioMerge(projectID: String) async throws -> ScenarioMergeReceipt?
+    func undoScenarioMerge(projectID: String, receiptID: String) async throws
 }
 
 public protocol ProjectContextWorkflowServing: ScenarioListWorkflowServing {

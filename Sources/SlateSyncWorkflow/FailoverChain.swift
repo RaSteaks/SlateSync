@@ -57,7 +57,9 @@ public enum FailoverErrorClassifier {
     public static func disposition(_ error: SlateSyncError) -> Disposition {
         if [RecognitionFailure.canceled.code, RecognitionFailure.invalidInput.code,
             RecognitionFailure.requestTooLarge.code].contains(error.code) { return .none }
-        if error.code == RecognitionFailure.invalidStructuredJSON.code { return .page }
+        // Output exhaustion is specific to this page/model budget. Try the
+        // next model once, without disabling the provider for other pages.
+        if [RecognitionFailure.invalidStructuredJSON.code, "MODEL_OUTPUT_TRUNCATED"].contains(error.code) { return .page }
         if [RecognitionFailure.timeout.code, RecognitionFailure.connection.code,
             RecognitionFailure.invalidResponse.code].contains(error.code) { return .provider }
         if error.code == "PROVIDER_ERROR" {

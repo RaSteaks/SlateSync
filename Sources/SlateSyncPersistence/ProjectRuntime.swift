@@ -145,6 +145,54 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
         return try await context.scenarios.importProfile(profile)
     }
 
+    public func scenarioSnapshot(projectID: String) async throws -> ScenarioMatchingSnapshot {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.snapshot()
+    }
+
+    public func saveScenarioObservation(projectID: String, observation: ScenarioLearningObservation) async throws {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        try await context.scenarios.saveObservation(observation)
+    }
+
+    public func listScenarioCandidates(projectID: String) async throws -> [ScenarioCandidate] {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.listCandidates()
+    }
+
+    public func previewScenarioMerge(projectID: String, sourceID: String, targetID: String) async throws -> ScenarioMergePreview {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.previewMerge(sourceID: sourceID, targetID: targetID)
+    }
+
+    public func mergeScenarioProfiles(projectID: String, preview: ScenarioMergePreview) async throws -> ScenarioMergeReceipt {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.merge(preview)
+    }
+
+    public func latestScenarioMerge(projectID: String) async throws -> ScenarioMergeReceipt? {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.latestMerge()
+    }
+
+    public func undoScenarioMerge(projectID: String, receiptID: String) async throws {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        try await context.scenarios.undoMerge(receiptID)
+    }
+
+    public func confirmScenarioCandidate(projectID: String, candidateID: String, label: String, existingProfileID: String?) async throws -> ScenarioData {
+        let context = try await acquire(projectID)
+        defer { release(projectID) }
+        return try await context.scenarios.confirmCandidate(candidateID, label: label, existingProfileID: existingProfileID)
+    }
+
     /// Keeps the complete atomic match write inside the same project lease used
     /// by every other store operation, so deletion cannot close its database.
     public func applyScenarioMatch(

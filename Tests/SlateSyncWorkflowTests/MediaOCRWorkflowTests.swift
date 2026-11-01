@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import SlateSyncDomain
 import SlateSyncMedia
+import Synchronization
 @testable import SlateSyncWorkflow
 import XCTest
 
@@ -22,10 +23,12 @@ private actor HandoffEngine: LocalOCREngine {
     let log:MediaHandoffLog
     var mode = "success"
     var calls = 0
+    var viewCounts: [Int] = []
     init(_ log:MediaHandoffLog) { self.log = log }
     func setMode(_ value:String) { mode = value }
     func recognize(_ document:PreparedDocument,operation:MediaOperation,progress:MediaProgressSink?) async throws -> OCREngineResult {
-        calls += 1;await log.append("ocr")
+        calls += 1; viewCounts.append(document.viewCount); await log.append("ocr")
+        progress?(.init(stage: "test-start", completed: 0, total: document.viewCount))
         if mode == "failure" { throw MediaFailure.protocolError }
         if mode == "cancel" { operation.cancel();throw MediaFailure.canceled }
         if mode == "wait" { while !operation.isCanceled { try await Task.sleep(for:.milliseconds(5)) };throw MediaFailure.canceled }
@@ -39,7 +42,78 @@ private actor HandoffEngine: LocalOCREngine {
     func waitStarted() async { while calls == 0 { try? await Task.sleep(for:.milliseconds(5)) } }
 }
 
+private actor SmallTransferCompressor: MediaRecompressing {
+    let log: MediaHandoffLog
+    init(_ log: MediaHandoffLog) { self.log = log }
+    func recompress(_ document: PreparedDocument, profile: ImageCompressionProfile, operation: MediaOperation) async throws -> PreparedDocument {
+        await log.append("compress")
+        return try await MediaPreparationService().recompress(document, profile: .init(maxDimension: 32, quality: 0.7), operation: operation)
+    }
+}
+
 @MainActor final class MediaOCRWorkflowTests: XCTestCase {
+    func testViewCacheOnlyRecognizesChangedPagesAndRestoresSourceIdentity() async throws {
+        let engine = HandoffEngine(MediaHandoffLog())
+        let service = LocalOCRService(vision: engine, paddle: nil, settings: .init(),
+            visionAvailable: true, paddleAvailable: false, cacheByView: true)
+        func document(_ second: UInt8) throws -> PreparedDocument {
+            try .init(filename: "sample.pdf", pages: [UInt8(1), second].enumerated().map { index, value in
+                .init(pageNumber: index + 1, views: [.init(viewIndex: 0, viewType: .full,
+                    image: try .init(jpeg: Data([255,216,255,value,255,217]), width: 100, height: 200))])
+            })
+        }
+        _ = try await service.recognize(document(2), session: "A", operation: .init())
+        let changed = try await service.recognize(document(3), session: "A", operation: .init())
+        XCTAssertEqual(changed.result?.pages.map(\.pageNumber), [1, 2])
+        XCTAssertEqual(changed.result?.pages.flatMap(\.views).map(\.viewIndex), [0, 0])
+        XCTAssertEqual(changed.result?.pages.flatMap(\.views).map(\.viewType), [.full, .full])
+        let cached = try await service.recognize(document(3), session: "A", operation: .init())
+        if case .used(_, let hit) = cached { XCTAssertTrue(hit) } else { XCTFail() }
+        _ = try await service.recognize(document(3), session: "B", operation: .init())
+        let calls = await engine.viewCounts
+        XCTAssertEqual(calls, [2, 1, 2])
+        let progress = Mutex<[MediaProgress]>([])
+        _ = try await service.recognize(document(1), session: "duplicate", operation: .init(),
+            progress: { value in progress.withLock { $0.append(value) } })
+        let events = progress.withLock { $0 }
+        XCTAssertEqual(events.first?.completed, 0)
+        XCTAssertEqual(events.last?.completed, 2)
+        XCTAssertTrue(events.allSatisfy { $0.total == 2 })
+        await service.close()
+    }
+    func testTransferBudgetDoesNotReduceLocalOCREvidenceQuality() async throws {
+        let log = MediaHandoffLog(), engine = HandoffEngine(MediaHandoffLog())
+        let workflow = MediaOCRWorkflow(preparation: HandoffPreparation(log), compression: SmallTransferCompressor(log),
+            ocr: LocalOCRService(vision: engine, paddle: nil, settings: .init(), visionAvailable: true, paddleAvailable: false))
+        let artifact = try await workflow.run(input: input(), session: "quality", accuracy: .standard, maxRequestBytes: 1000,
+            measure: { $0.pages[0].views[0].image.width > 32 ? 10_000 : 1 })
+        XCTAssertLessThanOrEqual(artifact.document.pages[0].views[0].image.width, 32)
+        XCTAssertGreaterThan(try XCTUnwrap(artifact.outcome.result?.pages[0].views[0].width), 32)
+        XCTAssertEqual(artifact.stageDurationsMs.keys.sorted(), ["ocr", "prepare", "transfer"])
+        XCTAssertNotEqual(artifact.evidence, artifact.coreEvidence)
+        await workflow.close()
+    }
+
+    func testSharedOCRSurvivesTaskCloseAndClearsOnlyRequestedProjectCache() async throws {
+        let engine = HandoffEngine(MediaHandoffLog())
+        let ocr = LocalOCRService(vision: engine, paddle: nil, settings: .init(), visionAvailable: true, paddleAvailable: false)
+        let first = MediaOCRWorkflow(ocr: ocr, ownsOCR: false)
+        _ = try await first.run(input: input(), session: "A")
+        await first.close()
+        let second = MediaOCRWorkflow(ocr: ocr, ownsOCR: false)
+        let cached = try await second.run(input: input(), session: "A")
+        XCTAssertTrue(cached.summary.cacheHit)
+        let other = try await second.run(input: input(), session: "B")
+        XCTAssertFalse(other.summary.cacheHit)
+        await ocr.clearCachedSession("A")
+        let retained = try await second.run(input: input(), session: "B")
+        XCTAssertTrue(retained.summary.cacheHit)
+        let cleared = try await second.run(input: input(), session: "A")
+        XCTAssertFalse(cleared.summary.cacheHit)
+        let calls = await engine.calls
+        XCTAssertEqual(calls, 3)
+        await second.close(); await ocr.close()
+    }
     private func input() throws -> MediaInput {
         // This workflow test only needs a valid media handoff. Generate its
         // minimal PDF locally instead of tracking a duplicate binary fixture.

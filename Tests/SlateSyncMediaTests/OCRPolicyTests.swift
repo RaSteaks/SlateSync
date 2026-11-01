@@ -107,6 +107,21 @@ actor PolicyEngine: LocalOCREngine {
         await cache.insert(result,key:"cancel",generation:await cache.currentGeneration(),operation:canceled)
         let absent = await cache.lookup("cancel",engine:.vision);XCTAssertNil(absent)
     }
+    func testClearingOneProjectDoesNotInvalidateAnotherPendingCacheInsert() async throws {
+        let cache = OCRResultCache(), engine = PolicyEngine()
+        let result = try await engine.recognize(document(), operation: .init(), progress: nil)
+        let a = await cache.currentGeneration(session: "A"), b = await cache.currentGeneration(session: "B")
+        await cache.clear(session: "A")
+        await cache.insert(result, key: "a", generation: a, operation: .init(), session: "A")
+        await cache.insert(result, key: "b", generation: b, operation: .init(), session: "B")
+        let cleared = await cache.lookup("a", engine: .vision), retained = await cache.lookup("b", engine: .vision)
+        XCTAssertNil(cleared); XCTAssertNotNil(retained)
+        await cache.clear()
+        await cache.insert(result, key: "late-b", generation: b, operation: .init(), session: "B")
+        let stale = await cache.lookup("late-b", engine: .vision)
+        XCTAssertNil(stale)
+    }
+
     func testCacheDisabledSessionIsolationAndClearDuringCompletion() async throws {
         let document = try await document(), engine = PolicyEngine()
         let service = LocalOCRService(vision:engine,paddle:nil,settings:.init(),visionAvailable:true,paddleAvailable:false)

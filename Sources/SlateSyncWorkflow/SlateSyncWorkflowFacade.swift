@@ -213,6 +213,28 @@ public actor SlateSyncWorkflowFacade:
         try await library.projectRuntime().listScenarios(projectID: projectID)
     }
 
+    public func listScenarioCandidates(projectID: String) async throws -> [ScenarioCandidate] {
+        try await library.projectRuntime().listScenarioCandidates(projectID: projectID)
+    }
+
+    public func confirmScenarioCandidate(projectID: String, candidateID: String, label: String, existingProfileID: String?) async throws -> ScenarioData {
+        try await library.projectRuntime().confirmScenarioCandidate(projectID: projectID, candidateID: candidateID,
+                                                                   label: label, existingProfileID: existingProfileID)
+    }
+
+    public func previewScenarioMerge(projectID: String, sourceID: String, targetID: String) async throws -> ScenarioMergePreview {
+        try await library.projectRuntime().previewScenarioMerge(projectID: projectID, sourceID: sourceID, targetID: targetID)
+    }
+    public func mergeScenarioProfiles(projectID: String, preview: ScenarioMergePreview) async throws -> ScenarioMergeReceipt {
+        try await library.projectRuntime().mergeScenarioProfiles(projectID: projectID, preview: preview)
+    }
+    public func latestScenarioMerge(projectID: String) async throws -> ScenarioMergeReceipt? {
+        try await library.projectRuntime().latestScenarioMerge(projectID: projectID)
+    }
+    public func undoScenarioMerge(projectID: String, receiptID: String) async throws {
+        try await library.projectRuntime().undoScenarioMerge(projectID: projectID, receiptID: receiptID)
+    }
+
     public func prepareInput(_ input: MediaInput) async throws -> PreparedDocument {
         try await MediaPreparationService().prepare(input)
     }
@@ -404,7 +426,9 @@ public actor SlateSyncWorkflowFacade:
         let coordinator = RecognitionCoordinator(
             registry: registry,
             client: client,
-            mediaFactory: mediaFactory,
+            mediaFactory: mediaFactory.make,
+            clearMediaSession: mediaFactory.clearSession,
+            closeMediaResources: mediaFactory.close,
             scenarioPersistence: projectRuntime,
             persistence: NativeRecognitionPersistence(runtime: projectRuntime),
             settings: values,

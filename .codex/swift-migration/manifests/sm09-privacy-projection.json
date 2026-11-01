@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "2d732744ac161d9032c1c215f60f176ea3a28667",
+  "purpose": "Exact privacy-only projection of sealed evidence; original Git objects and acceptance assertions remain authoritative. Offsets and lengths are UTF-8 byte ranges in the original blobs.",
+  "files": {
+    ".codex/refactor/DECISION_QUEUE.md": {
+      "sourceSha256": "152fc4d022827d98a11895315cab5d767ad85455d013358d807923035f52aa41",
+      "sanitizedSha256": "0e1211dd153248febdad09085d32294a35c6a9ca0aff694ca8296eb266736fc7",
+      "edits": [
+        {
+          "offset": 8439,
+          "length": 45,
+          "replacement": "Apple Development: <developer-id> (<team-id>)"
+        }
+      ]
+    },
+    ".codex/refactor/evidence/IP-00/VISUAL_CAPTURE_FAILURE.md": {
+      "sourceSha256": "92634172b5013e495b46bd6b0d3685cc330a1e6ee04fef6d59efb0b74e8db874",
+      "sanitizedSha256": "0bf1f906051f24d753e770f60b7b128a83d18bcd9c7835265fa83d20df959beb",
+      "edits": [
+        {
+          "offset": 377,
+          "length": 47,
+          "replacement": "<repository>"
+        },
+        {
+          "offset": 961,
+          "length": 59,
+          "replacement": "<repository>"
+        }
+      ]
+    },
+    ".codex/refactor/evidence/IP-00/VISUAL_VALIDATION.md": {
+      "sourceSha256": "85122b0db4b5e6dba52153ea39ca3b0d727042242192e11663cba50a77b8c5d3",
+      "sanitizedSha256": "f2224ba569617457611572dad42acca181d1d938cf074c92266735eac49958f9",
+      "edits": [
+        {
+          "offset": 351,
+          "length": 47,
+          "replacement": "<repository>"
+        }
+      ]
+    },
+    ".codex/refactor/evidence/IP-03-08/CHECKPOINT-LEDGER.md": {
+      "sourceSha256": "f6550713716f7824dce3139bb24a0b976652b7a59bd9950727cb652b0d8cef94",
+      "sanitizedSha256": "d2acf9239e81459706ff9277670524c6c243da1a923810c3624d73a36cdf4518",
+      "edits": [
+        {
+          "offset": 11240,
+          "length": 26,
+          "replacement": "$HOME/.storybook"
+        }
+      ]
+    },
+    ".codex/refactor/evidence/IP-03-08/LIBRARY-IMPACT-AUDIT.md": {
+      "sourceSha256": "efa0f7d59b955f9431e01618bb6cf1048d9301113b15f75d0e7b8a6afa95a769",
+      "sanitizedSha256": "a6f440127567850b688a6bf1a48e04e03b81153e6e595ed050bc7687d863e369",
+      "edits": [
+        {
+          "offset": 468,
+          "length": 85,
+          "replacement": "<library-root>"
+        }
+      ]
+    },
+    ".codex/swift-migration/manifests/sm09-final-pre-cutover-result.json": {
+      "sourceSha256": "1cc72422c5e63edf72f3d159c4e85c65d514ec3e8ef3687116c968c3189e29fa",
+      "sanitizedSha256": "b185c97d645f8f341d9ae50b2472ae151be7b6bdb7aa56b78b0f2425755f346f",
+      "edits": [
+        {
+          "offset": 423,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 724,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 1049,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 1371,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 1655,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 1968,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 2294,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 2616,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 2900,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 3175,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 3472,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 3772,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 4084,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 4413,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 4725,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 5042,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 5366,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 5694,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 6017,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 6356,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 6687,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 7003,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 7318,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 7613,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 7912,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 8221,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 8546,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 8884,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 9184,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 9501,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 9801,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 10112,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 10455,
+          "length": 54,
+          "replacement": ""
+        },
+        {
+          "offset": 10782,
+          "length": 54,
+          "replacement": ""
+        }
+      ]
+    }
+  }
+}

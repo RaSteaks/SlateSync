@@ -898,8 +898,10 @@ public struct ScenarioProfile: Codable, Hashable, Sendable {
     public let fields: ScenarioFields
     public let recognition: ScenarioRecognitionConfig
     public let output: ScenarioOutputConfig
+    public let structure: ScenarioStructure?
+    public let canonicalID: String?
 
-    public init(schemaVersion: Int, fingerprintVersion: Int, fingerprint: String, label: String, layout: ScenarioLayout, fields: ScenarioFields, recognition: ScenarioRecognitionConfig, output: ScenarioOutputConfig) {
+    public init(schemaVersion: Int, fingerprintVersion: Int, fingerprint: String, label: String, layout: ScenarioLayout, fields: ScenarioFields, recognition: ScenarioRecognitionConfig, output: ScenarioOutputConfig, structure: ScenarioStructure? = nil, canonicalID: String? = nil) {
         self.schemaVersion = schemaVersion
         self.fingerprintVersion = fingerprintVersion
         self.fingerprint = fingerprint
@@ -908,6 +910,8 @@ public struct ScenarioProfile: Codable, Hashable, Sendable {
         self.fields = fields
         self.recognition = recognition
         self.output = output
+        self.structure = structure
+        self.canonicalID = canonicalID
     }
 }
 
@@ -921,6 +925,8 @@ public struct ScenarioData: Codable, Hashable, Sendable {
     public let fields: ScenarioFields
     public let recognition: ScenarioRecognitionConfig
     public let output: ScenarioOutputConfig
+    public let structure: ScenarioStructure?
+    public let canonicalID: String?
     public let sampleCount: Int
     public let createdAt: String
     public let updatedAt: String
@@ -936,10 +942,18 @@ public struct ScenarioData: Codable, Hashable, Sendable {
         fields = profile.fields
         recognition = profile.recognition
         output = profile.output
+        structure = profile.structure
+        canonicalID = profile.canonicalID
         self.sampleCount = sampleCount
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastUsedAt = lastUsedAt
+    }
+
+    public var profile: ScenarioProfile {
+        .init(schemaVersion: schemaVersion, fingerprintVersion: fingerprintVersion, fingerprint: fingerprint,
+              label: label, layout: layout, fields: fields, recognition: recognition, output: output,
+              structure: structure, canonicalID: canonicalID)
     }
 }
 
@@ -954,8 +968,9 @@ public struct ScenarioSummary: Codable, Hashable, Sendable {
     public let createdAt: String
     public let updatedAt: String
     public let lastUsedAt: String
+    public let aliases: [String]?
 
-    public init(id: String, label: String, fingerprint: String, fingerprintVersion: Int, schemaVersion: Int, sampleCount: Int, fieldCount: Int, createdAt: String, updatedAt: String, lastUsedAt: String) {
+    public init(id: String, label: String, fingerprint: String, fingerprintVersion: Int, schemaVersion: Int, sampleCount: Int, fieldCount: Int, createdAt: String, updatedAt: String, lastUsedAt: String, aliases: [String]? = nil) {
         self.id = id
         self.label = label
         self.fingerprint = fingerprint
@@ -966,6 +981,7 @@ public struct ScenarioSummary: Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastUsedAt = lastUsedAt
+        self.aliases = aliases
     }
 }
 

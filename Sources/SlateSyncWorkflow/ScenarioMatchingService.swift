@@ -18,6 +18,15 @@ public actor ScenarioMatchingService {
         self.persistence = persistence
     }
 
+    public func evaluate(input: ScenarioObservationInput, resolve: ProjectSettings.ResolveSettings = .init(),
+                         matching: ScenarioMatchingConfig = .init()) async throws -> [ScenarioPageDecision] {
+        let snapshot = try await persistence.scenarioSnapshot(projectID: projectID)
+        return try ScenarioStructureMatcher.evaluate(input, profiles: snapshot.profiles,
+            confirmedAssociations: snapshot.confirmedAssociations, resolve: resolve, matching: matching)
+    }
+
+    /// Historical v1 replay only. Production recognition uses evaluate and
+    /// commits its observation after success; it must not auto-create here.
     public func matchAndSave(
         input: ScenarioObservationInput,
         resolve: ProjectSettings.ResolveSettings = .init(),
@@ -56,7 +65,7 @@ public actor ScenarioMatchingService {
     }
 
     private static func profile(_ data: ScenarioData) -> ScenarioProfile {
-        ScenarioProfile(schemaVersion: data.schemaVersion, fingerprintVersion: data.fingerprintVersion, fingerprint: data.fingerprint, label: data.label, layout: data.layout, fields: data.fields, recognition: data.recognition, output: data.output)
+        data.profile
     }
 }
 

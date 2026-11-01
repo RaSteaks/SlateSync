@@ -185,6 +185,32 @@ class CIPolicyTests(unittest.TestCase):
             self.assertEqual(value['scope'], 'functional')
             self.assertEqual(value['performancePolicy'], 'advisory')
             self.assertFalse(value['approvable'])
+            self.assertEqual(value['acceptancePolicyVersion'], 2)
+            self.assertTrue(value['completionEligible'])
+            self.assertFalse(value['fullAcceptancePassed'])
+            # Migration completion and strict release acceptance have different
+            # scopes. No dirty, incomplete, blocked or unexecuted run qualifies.
+            for outcome, dirty, functional, checks, completion, full in [
+                ('PASS', 0, 0, 'core\ttrue\tPASS\tcore passed\t\n', True, True),
+                ('PASS', 1, 0, 'core\ttrue\tPASS\tcore passed\t\n', False, False),
+                ('FAIL', 0, 1, 'core\ttrue\tFAIL\tfailed\t\n', False, False),
+                ('BLOCKED_ENV', 0, 1, 'core\ttrue\tBLOCKED_ENV\tunavailable\t\n', False, False),
+                ('PASS', 0, 1, 'core\ttrue\tNOT_RUN\tmissing prerequisite\t\n', False, False),
+                ('PASS', 0, 1, 'core\ttrue\tNOT_APPLICABLE\tnot applicable\t\n', False, False),
+                ('PASS', 0, 1, '', False, False),
+            ]:
+                with self.subTest(outcome=outcome, dirty=dirty, functional=functional, checks=checks):
+                    (root/'checks.tsv').write_text(checks)
+                    scoped = command.replace('allow_dirty=0; functional_only=1;',
+                                             f'allow_dirty={dirty}; functional_only={functional};')
+                    scoped = scoped.replace('approvable=false;', 'approvable=true;')
+                    scoped = scoped.replace('write_result_artifacts PASS', f'write_result_artifacts {outcome}')
+                    native.subprocess.run(['zsh', '-c', scoped, '--', str(root/'functions.zsh'), str(root)],
+                                          check=True, env=dict(os.environ, GITHUB_STEP_SUMMARY=""))
+                    result = json.loads((root/'result.json').read_text())
+                    self.assertEqual(result['completionEligible'], completion)
+                    self.assertEqual(result['fullAcceptancePassed'], full)
+            (root/'checks.tsv').write_text('core\ttrue\tPASS\tfunctional tests passed\t\n')
             # Provisional progress must survive cancellation without certifying
             # the candidate, even when the intended final lane is approvable.
             progress = command.replace('write_result_artifacts PASS',
@@ -194,6 +220,8 @@ class CIPolicyTests(unittest.TestCase):
             snapshot = json.loads((root/'result.json').read_text())
             self.assertFalse(snapshot['executionComplete'])
             self.assertFalse(snapshot['approvable'])
+            self.assertFalse(snapshot['completionEligible'])
+            self.assertFalse(snapshot['fullAcceptancePassed'])
             self.assertEqual(snapshot['activeCheck'], 'mock_build')
             for outcome, functional, dirty, expected in [('PASS', 1, 0, 0), ('FAIL', 1, 0, 1), ('BLOCKED_ENV', 1, 0, 2), ('PASS', 1, 1, 3), ('PASS', 0, 0, 3)]:
                 setup = f'overall_result={outcome}; functional_only={functional}; allow_dirty={dirty}; approvable=false; exit_fail=1; exit_blocked_environment=2; exit_diagnostic_only=3;\n'

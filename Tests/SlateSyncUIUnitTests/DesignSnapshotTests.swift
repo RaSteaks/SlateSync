@@ -111,9 +111,17 @@ private struct Rig {
             UserDefaults.standard.set(true, forKey: "providerFileCredentialNoticeDismissed")
             let global = GlobalSettingsModel(service: settingsService)
             await global.load()
+            // SwiftPM has no app bundle metadata. Render the shipped notice from
+            // its single source so snapshots include the real Settings footer.
+            let projectRoot = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            let info = try PropertyListSerialization.propertyList(
+                from: Data(contentsOf: projectRoot.appending(path: "SlateSyncApp/Info.plist")),
+                format: nil) as? [String: Any]
+            let copyrightNotice = try XCTUnwrap(info?["NSHumanReadableCopyright"] as? String)
             let view = SettingsRootView(
                 settings: global, paddleInstaller: PaddleInstallerModel(service: settingsService),
-                navigation: navigation)
+                navigation: navigation, copyrightNotice: copyrightNotice)
             return Rig(content: AnyView(view), tearDown: {})
         }
 

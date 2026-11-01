@@ -128,7 +128,7 @@ public actor ResolveCSVMerger {
             let key = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: record.cardNumber, videoCode: record.videoCode)
             guard !key.isEmpty, let fileName = ResolveCSVNormalization.materialPrefix(cardNumber: record.cardNumber, videoCode: record.videoCode) else {
                 statuses[index] = ResolveRecordStatus(recordIndex: index, status: "missing-key")
-                warnings.append("第 \(index + 1) 条缺少卷号，或视频码不是 C0XX 格式，不会写入 CSV。")
+                warnings.append("第 \(index + 1) 条缺少卷号、视频码不是 C0XX 格式，或卷号与视频码内的素材标识冲突，不会写入 CSV。")
                 continue
             }
             let scene = ResolveCSVNormalization.normalizeScene(record.scene, format: fieldFormats.scene)

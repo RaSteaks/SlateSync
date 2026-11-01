@@ -13,8 +13,14 @@ public actor OCRProcessSupervisor {
     private var workerKey: Data?
     private var launches = 0, warmups = 0
     private var closingTask: Task<Void, Never>?
-    public init(paths: OCRRuntimePaths, clock: any OCRClock = SystemOCRClock(), factory: (@Sendable (OCRProcessLaunch) -> any OCRProcessTransport)? = nil) {
+    private let idleTimeout: Duration
+    private var idleTask: Task<Void, Never>?
+    private var idleGeneration = 0
+    private var permanentlyClosed = false
+    public init(paths: OCRRuntimePaths, clock: any OCRClock = SystemOCRClock(), factory: (@Sendable (OCRProcessLaunch) -> any OCRProcessTransport)? = nil,
+                idleTimeout: Duration = .seconds(300)) {
         self.paths = paths; self.clock = clock
+        self.idleTimeout = idleTimeout
         self.factory = factory ?? { ManagedOCRProcess(launch: $0, clock: clock) }
     }
     public func snapshot() async -> Snapshot {
@@ -23,18 +29,53 @@ public actor OCRProcessSupervisor {
     }
 
     public func execute(configuration: PaddleOCRConfiguration, document: PreparedDocument?, operation: MediaOperation, progress: MediaProgressSink? = nil, deadline explicitDeadline: OCRDeadline? = nil) async throws -> Data? {
+        idleGeneration += 1
+        idleTask?.cancel(); idleTask = nil
         let deadline = explicitDeadline ?? OCRDeadline(clock: clock, timeoutMilliseconds: configuration.timeoutMilliseconds(views: document?.viewCount ?? 1))
         return try await withTaskCancellationHandler {
             let lease = try await leases.acquire(operation: operation, deadline: deadline, clock: clock)
             do {
                 let result = try await perform(configuration: configuration, document: document, operation: operation, progress: progress, deadline: deadline)
                 await leases.release(lease)
+                scheduleIdleShutdown()
                 return result
             } catch {
                 await leases.release(lease)
                 throw error
             }
         } onCancel: { operation.cancel() }
+    }
+
+    private func scheduleIdleShutdown() {
+        guard !permanentlyClosed, closingTask == nil, worker != nil else { return }
+        idleTask?.cancel()
+        let expected = idleGeneration, timeout = idleTimeout
+        idleTask = Task {
+            do {
+                try await Task.sleep(for: timeout)
+                try await releaseIdleResources(expectedGeneration: expected)
+            } catch {
+                // New work, close, or an expired cleanup lease simply leaves
+                // reclamation to the next idle interval or normal shutdown.
+            }
+        }
+    }
+
+    /// Cleanup takes the same exclusive lease as inference. It never terminates
+    /// another project's active request, and new work invalidates queued cleanup.
+    public func releaseIdleResources() async throws {
+        try await releaseIdleResources(expectedGeneration: idleGeneration)
+    }
+
+    private func releaseIdleResources(expectedGeneration: Int) async throws {
+        let operation = MediaOperation()
+        let lease = try await leases.acquire(operation: operation,
+            deadline: .init(clock: clock, timeoutMilliseconds: 5000), clock: clock)
+        if expectedGeneration == idleGeneration, !Task.isCancelled {
+            await shutdownIdleWorker()
+            worker = nil; workerKey = nil
+        }
+        await leases.release(lease)
     }
 
     private func perform(configuration: PaddleOCRConfiguration, document: PreparedDocument?, operation: MediaOperation, progress: MediaProgressSink?, deadline: OCRDeadline) async throws -> Data? {
@@ -91,6 +132,12 @@ public actor OCRProcessSupervisor {
         return factory(.init(executable: paths.python, arguments: [paths.runner.path] + (server ? ["--server"] : []), directory: paths.workingDirectory, environment: paths.environment))
     }
     public func close(shutdown permanent: Bool = false) async {
+        if permanent { permanentlyClosed = true }
+        idleGeneration += 1
+        let idleTask = idleTask
+        self.idleTask = nil
+        idleTask?.cancel()
+        await idleTask?.value
         if let closingTask {
             // A permanent close arriving during a temporary close upgrades the
             // coordinator state before both callers join the same drain task.

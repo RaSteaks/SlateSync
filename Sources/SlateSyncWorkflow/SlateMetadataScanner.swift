@@ -82,7 +82,10 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                         discovered += 1
                     }
                 }
-                return
+                // A selected container can coincidentally parse as an expected
+                // clip (including a UUID). Without direct sidecars it is not a
+                // leaf: continue into children rather than dropping the subtree.
+                if !root || !found.isEmpty { return }
             }
 
             for entry in entries(current, source: parts.joined(separator: "/")) {

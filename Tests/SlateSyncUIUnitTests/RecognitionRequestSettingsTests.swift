@@ -157,6 +157,61 @@ final class RecognitionRequestSettingsTests: XCTestCase {
         XCTAssertEqual(settings.requestTimeoutSeconds, "270")
     }
 
+    func testSettingsFooterKeepsMinimumOuterWindowSize() async throws {
+        let service = makeService()
+        let settings = try await load(service)
+        let suite = "settings-window-layout-\(UUID())"
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        // SwiftPM's test bundle omits the app notice. Read the shipped value so
+        // this regression includes the same two-line footer as Debug/Release.
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let info = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: projectRoot.appending(path: "SlateSyncApp/Info.plist")),
+            format: nil) as? [String: Any]
+        let copyrightNotice = try XCTUnwrap(info?["NSHumanReadableCopyright"] as? String)
+        let directory = ProcessInfo.processInfo.environment["SLATESYNC_REQUEST_SETTINGS_SNAPSHOT_DIR"].map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        }
+        if let directory { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+        for notice in [nil, copyrightNotice] {
+            let controller = NSHostingController(rootView: SettingsRootView(
+                settings: settings, paddleInstaller: PaddleInstallerModel(service: service),
+                navigation: SettingsNavigationModel(), preferences: preferences, copyrightNotice: notice
+            ).defaultAppStorage(preferences))
+            // Use real minimum-size propagation; forcing a hosting view's frame
+            // can hide an oversized content minimum and cannot catch this bug.
+            controller.sizingOptions = [.minSize]
+            let window = NSWindow(contentRect: CGRect(x: -20_000, y: -20_000, width: 780, height: 620),
+                styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentViewController = controller
+            defer { window.contentViewController = nil; window.close() }
+            for _ in 0..<12 {
+                controller.view.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            let minimum = window.frameRect(forContentRect: CGRect(origin: .zero, size: window.contentMinSize)).size
+            XCTAssertEqual(minimum.width, 700, accuracy: 1, "Footer must fit within the outer-window minimum")
+            XCTAssertEqual(minimum.height, 540, accuracy: 1, "Footer must fit within the outer-window minimum")
+            // Exercise the minimum frame without ordering the window front;
+            // optional evidence renders only this synthetic, offscreen tree.
+            window.setFrame(CGRect(x: -20_000, y: -20_000, width: 700, height: 540), display: false)
+            controller.view.layoutSubtreeIfNeeded()
+            XCTAssertEqual(window.frame.width, 700, accuracy: 1)
+            XCTAssertEqual(window.frame.height, 540, accuracy: 1)
+            if let directory {
+                let host = controller.view
+                let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                try png.write(to: directory.appending(path: "settings-footer-\(notice == nil ? "filing" : "copyright")-700.png"))
+            }
+            XCTAssertFalse(window.isVisible, "Offline verification must never present a window")
+        }
+    }
+
     func testRequestFieldsAreVisibleInOffscreenSettings() async throws {
         let service = makeService()
         let settings = try await load(service)

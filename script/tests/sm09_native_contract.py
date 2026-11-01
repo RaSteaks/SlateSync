@@ -2,6 +2,7 @@
 """Validate retained provenance and executed native acceptance after cutover.
 
 Historical sources are read from the verified Git object, never executed.
+Retained copies permit only the pinned privacy projection of those bytes.
 The baseline test list is a minimum: new tests still run in the full suite.
 """
 import argparse
@@ -11,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -24,6 +26,10 @@ HISTORICAL_PLAN = ROOT / 'Tests/SlateSyncUIUnitTests/Fixtures/SM09/sm09-native-e
 PERFORMANCE_ONLY_TESTS = frozenset({'SlateSyncUIUnitTests.SM08NativeSurfaceTests/testForegroundCSVMeetsDisplayCadenceBudget'})
 
 BASE = '52b2a78f6619145b0999bdccf588d83a95349e7c'
+# Pin the reviewed byte-range projection independently of the historical seal.
+# Neither original personal values nor a general-purpose redaction exemption
+# belongs in the current tree; all non-redacted evidence remains byte-exact.
+PRIVACY_PROJECTION_SHA256 = 'efd4368626e48888a5afe60e14d43f556cadb77071b1514c8b481d67ade65395'
 
 
 def require(value, message):
@@ -49,6 +55,90 @@ def git(*args):
 
 def verify_bytes(data, expected, label):
     require(digest(data) == expected, f'hash drift: {label}')
+
+
+def project_private_evidence(original, entry):
+    verify_bytes(original, entry['sourceSha256'], 'privacy source')
+    # Ranges address original UTF-8 bytes; earlier replacements never shift
+    # later ranges, and the output hash forbids incidental normalization.
+    parts = []
+    cursor = 0
+    for edit in entry['edits']:
+        start, end = edit['offset'], edit['offset'] + edit['length']
+        require(cursor <= start < end <= len(original), 'invalid privacy byte range')
+        parts.extend([original[cursor:start], edit['replacement'].encode('utf-8')])
+        cursor = end
+    projected = b''.join(parts + [original[cursor:]])
+    verify_bytes(projected, entry['sanitizedSha256'], 'privacy projection')
+    return projected
+
+
+def history_entries(reference):
+    entries = {}
+    for record in git('ls-tree', '-r', '-z', reference, '--', '.codex/refactor').split(b'\0'):
+        if not record:
+            continue
+        metadata, path = record.decode().split('\t', 1)
+        mode, kind, oid = metadata.split()
+        require(kind == 'blob', 'non-file historical entry')
+        entries[path] = (mode, oid)
+    return entries
+
+
+def validate_retained_evidence(contract, cutover):
+    projection_bytes = (MANIFESTS / 'sm09-privacy-projection.json').read_bytes()
+    verify_bytes(projection_bytes, PRIVACY_PROJECTION_SHA256, 'privacy policy')
+    projection = json.loads(projection_bytes)
+    source = projection['sourceCommit']
+    require(git('rev-parse', f'{source}:.codex/refactor').decode().strip() == contract['historyTree'],
+            'rewritten historical source tree')
+
+    seal_bytes = (MANIFESTS / 'sm09-final-pre-cutover.json').read_bytes()
+    seal = json.loads(seal_bytes)
+    verify_bytes(seal_bytes, cutover['preCutoverManifestSha256'], 'pre-cutover seal')
+    require(seal_bytes == git('show', '1f28a36:.codex/swift-migration/manifests/sm09-final-pre-cutover.json'),
+            'rewritten seal')
+    result_path = '.codex/swift-migration/manifests/sm09-final-pre-cutover-result.json'
+    original_result = git('show', f'{source}:{result_path}')
+    verify_bytes(original_result, seal['resultSha256'], 'pre-cutover raw result')
+    result_bytes = (ROOT / result_path).read_bytes()
+    require(result_bytes == project_private_evidence(original_result, projection['files'][result_path]),
+            'rewritten projected result')
+
+    # Check every original file, including binaries and modes. Only the five
+    # pinned privacy edits may differ; additions/deletions remain failures.
+    original_entries = history_entries(source)
+    allowed = {}
+    for path, (mode, oid) in original_entries.items():
+        original = git('cat-file', 'blob', oid)
+        entry = projection['files'].get(path)
+        expected = project_private_evidence(original, entry) if entry else original
+        file = ROOT / path
+        require(not file.is_symlink() and file.is_file(), f'missing historical file: {path}')
+        require(file.read_bytes() == expected, f'rewritten historical file: {path}')
+        require(bool(file.stat().st_mode & 0o111) == (mode == '100755'), f'historical mode drift: {path}')
+        expected_oid = subprocess.check_output(['git', 'hash-object', '--stdin'], input=expected).decode().strip() if entry else oid
+        allowed[path] = (mode, {oid, expected_oid})
+
+    paths = set(filter(None, git('ls-files', '--cached', '--others', '--exclude-standard', '-z',
+                                '--', '.codex/refactor').decode().split('\0')))
+    require(paths == set(original_entries), 'historical file set drift')
+    index = {}
+    for record in git('ls-files', '--stage', '-z', '--', '.codex/refactor').split(b'\0'):
+        if record:
+            metadata, path = record.decode().split('\t', 1)
+            mode, oid, stage = metadata.split()
+            require(stage == '0', 'unmerged historical entry')
+            index[path] = (mode, oid)
+    # HEAD/index can retain the original during this uncommitted migration, or
+    # contain its exact projection after staging/commit. A dirty working copy
+    # must never conceal unrelated changes in either Git snapshot.
+    for label, snapshot in [('HEAD', history_entries('HEAD')), ('index', index)]:
+        require(set(snapshot) == set(allowed), f'{label} historical file set drift')
+        for path, (mode, oid) in snapshot.items():
+            expected_mode, expected_oids = allowed[path]
+            require(mode == expected_mode and oid in expected_oids, f'{label} historical drift: {path}')
+    return seal, json.loads(result_bytes)
 
 
 def validate_provenance(cutover, seal, result):
@@ -428,17 +518,8 @@ def validate_execution(result_dir, contract, functional=False, replay_commit=Non
 def run(result_dir=None, before_removal=False, functional=False, replay_commit=None):
     contract = document(MANIFESTS / 'sm09-native-contract.json')
     cutover = document(MANIFESTS / 'sm09-cutover.json')
-    seal_bytes = (MANIFESTS/'sm09-final-pre-cutover.json').read_bytes()
-    seal = json.loads(seal_bytes)
-    result_bytes = (MANIFESTS/'sm09-final-pre-cutover-result.json').read_bytes()
-    validate_provenance(cutover, seal, json.loads(result_bytes))
-    verify_bytes(seal_bytes, cutover['preCutoverManifestSha256'], 'pre-cutover seal')
-    verify_bytes(result_bytes, seal['resultSha256'], 'pre-cutover raw result')
-    # The seal itself was committed before removal; changes after that point
-    # cannot manufacture new compatibility evidence for the same cutover.
-    require(seal_bytes == git('show','1f28a36:.codex/swift-migration/manifests/sm09-final-pre-cutover.json'), 'rewritten seal')
-    require(git('rev-parse','HEAD:.codex/refactor').decode().strip() == contract['historyTree'], 'rewritten historical tree')
-    require(not git('status','--porcelain','--','.codex/refactor').strip(), 'dirty immutable history')
+    seal, result = validate_retained_evidence(contract, cutover)
+    validate_provenance(cutover, seal, result)
     validate_decisions(cutover)
     validate_coverage(document(MANIFESTS / 'sm09-final-coverage-attestation.json'), seal,
                       (MANIFESTS / 'sm09-coverage.json').read_bytes())
@@ -454,6 +535,117 @@ def run(result_dir=None, before_removal=False, functional=False, replay_commit=N
     print('SM-09 offline replay: PASS (not current-commit CI acceptance)' if replay_commit else
           'SM-09 native functional coverage (timing advisory): PASS' if functional else
           'SM-09 native provenance, fixtures, ownership and acceptance: PASS')
+
+
+class PrivacyProjectionTests(unittest.TestCase):
+    def setUp(self):
+        # A local shared clone supplies real immutable Git objects and an
+        # isolated index. Mutations never touch the developer's worktree.
+        temporary = tempfile.TemporaryDirectory(prefix='slatesync-privacy-')
+        self.addCleanup(temporary.cleanup)
+        fixture = Path(temporary.name) / 'repo'
+        subprocess.run(['git', 'clone', '--quiet', '--shared', '--no-checkout', str(ROOT), str(fixture)], check=True)
+        subprocess.run(['git', '-C', str(fixture), 'read-tree', 'HEAD'], check=True)
+        for relative in filter(None, git('ls-files', '-z', '--', '.codex/refactor').decode().split('\0')):
+            destination = fixture / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, destination)
+            shutil.copymode(ROOT / relative, destination)
+        manifests = fixture / '.codex/swift-migration/manifests'
+        manifests.mkdir(parents=True)
+        for name in ['sm09-native-contract.json', 'sm09-cutover.json', 'sm09-final-pre-cutover.json',
+                     'sm09-final-pre-cutover-result.json', 'sm09-privacy-projection.json']:
+            shutil.copyfile(MANIFESTS / name, manifests / name)
+        for name, value in [('ROOT', fixture), ('MANIFESTS', manifests)]:
+            patched = patch(__name__ + '.' + name, value)
+            patched.start()
+            self.addCleanup(patched.stop)
+        self.contract = document(MANIFESTS / 'sm09-native-contract.json')
+        self.cutover = document(MANIFESTS / 'sm09-cutover.json')
+
+    def validate(self):
+        return validate_retained_evidence(self.contract, self.cutover)
+
+    def test_original_index_and_staged_projection_preserve_baseline(self):
+        seal, result = self.validate()
+        validate_provenance(self.cutover, seal, result)
+        original = json.loads(git('show', document(MANIFESTS / 'sm09-privacy-projection.json')['sourceCommit']
+                                  + ':.codex/swift-migration/manifests/sm09-final-pre-cutover-result.json'))
+        # Every check result, timing and overall approval is identical. Only
+        # the machine-specific prefix of each log locator was removed.
+        for check, before in zip(result['checks'], original['checks']):
+            self.assertEqual({k: v for k, v in check.items() if k != 'log'},
+                             {k: v for k, v in before.items() if k != 'log'})
+            if before.get('log'):
+                self.assertTrue(before['log'].endswith(check['log']))
+        self.assertEqual({k: v for k, v in result.items() if k != 'checks'},
+                         {k: v for k, v in original.items() if k != 'checks'})
+        git('add', '--', '.codex/refactor')
+        self.validate()
+
+    def test_redacted_and_unredacted_history_still_reject_content_drift(self):
+        for relative in ['.codex/refactor/DECISION_QUEUE.md', '.codex/refactor/baseline/contracts/environment.json']:
+            with self.subTest(path=relative):
+                path = ROOT / relative
+                original = path.read_bytes()
+                path.write_bytes(original + b'\nchanged evidence\n')
+                with self.assertRaisesRegex(AssertionError, 'rewritten historical file'):
+                    self.validate()
+                path.write_bytes(original)
+
+    def test_private_values_cannot_be_restored_to_current_history(self):
+        relative = '.codex/refactor/DECISION_QUEUE.md'
+        source = document(MANIFESTS / 'sm09-privacy-projection.json')['sourceCommit']
+        (ROOT / relative).write_bytes(git('show', f'{source}:{relative}'))
+        with self.assertRaisesRegex(AssertionError, 'rewritten historical file'):
+            self.validate()
+
+    def test_added_deleted_symlink_and_mode_changes_are_rejected(self):
+        added = ROOT / '.codex/refactor/unreviewed.md'
+        added.write_text('unreviewed')
+        with self.assertRaisesRegex(AssertionError, 'historical file set drift'):
+            self.validate()
+        added.unlink()
+        path = ROOT / '.codex/refactor/DECISION_QUEUE.md'
+        original = path.read_bytes()
+        path.unlink()
+        with self.assertRaisesRegex(AssertionError, 'missing historical file'):
+            self.validate()
+        path.symlink_to('missing-target')
+        with self.assertRaisesRegex(AssertionError, 'missing historical file'):
+            self.validate()
+        path.unlink()
+        path.write_bytes(original)
+        path.chmod(0o755)
+        with self.assertRaisesRegex(AssertionError, 'historical mode drift'):
+            self.validate()
+
+    def test_clean_working_copy_cannot_hide_staged_evidence_changes(self):
+        path = ROOT / '.codex/refactor/DECISION_QUEUE.md'
+        original = path.read_bytes()
+        path.write_bytes(original + b'\nstaged evidence alteration\n')
+        git('add', '--', str(path))
+        path.write_bytes(original)
+        with self.assertRaisesRegex(AssertionError, 'index historical drift'):
+            self.validate()
+
+    def test_result_policy_and_seal_changes_remain_failures(self):
+        for name, expected in [('sm09-final-pre-cutover-result.json', 'rewritten projected result'),
+                               ('sm09-privacy-projection.json', 'hash drift: privacy policy'),
+                               ('sm09-final-pre-cutover.json', 'hash drift: pre-cutover seal')]:
+            with self.subTest(path=name):
+                path = MANIFESTS / name
+                original = path.read_bytes()
+                path.write_bytes(original + b' ')
+                with self.assertRaisesRegex(AssertionError, expected):
+                    self.validate()
+                path.write_bytes(original)
+        path = MANIFESTS / 'sm09-final-pre-cutover-result.json'
+        result = document(path)
+        result['checks'][0]['result'] = 'FAIL'
+        path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(AssertionError, 'rewritten projected result'):
+            self.validate()
 
 
 class ContractTests(unittest.TestCase):
@@ -590,6 +782,8 @@ if __name__ == '__main__':
     if args.replay_commit and not args.result_dir:
         parser.error('--replay-commit requires --result-dir')
     if args.self_test:
-        result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(ContractTests))
+        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case)
+                                   for case in [ContractTests, PrivacyProjectionTests])
+        result = unittest.TextTestRunner().run(suite)
         raise SystemExit(0 if result.wasSuccessful() else 1)
     run(args.result_dir, args.before_removal, args.functional, args.replay_commit)

@@ -23,7 +23,7 @@ OUTPUT = REPO / ".codex/swift-migration/manifests/sm09-final-inventory.json"
 
 # (前缀或文件名精确匹配, 分类, 备注)。规则按顺序首次命中。
 RULES = [
-    (".codex/refactor/", "migration-history", "不可改写的 Electron 时代历史证据（WP-6.3 原样保留）"),
+    (".codex/refactor/", "migration-history", "Electron 历史原始 Git 证据保留；当前副本仅允许固定隐私脱敏"),
     (".codex/swift-migration/", "migration-history", "迁移治理：packages/reviews/manifests/状态文件"),
     (".codex/environments/", "migration-history", "Codex 环境配置（.codex 治理范围）"),
     (".github/workflows/", "release-input", "CI/release lane，WP-4/WP-5 切换为 native-only"),

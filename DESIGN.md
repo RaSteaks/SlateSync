@@ -96,8 +96,9 @@ components:
   唯一等待决定的状态）。结果页摘要是静态图例（符号 + 名称 + 数量），不是筛选。
   结果表本身仍是原生可编辑文本表（状态列为文字），不改写单元格。
 - **设置**：窗口标题跟随当前面板；面板切换为图标页签（符号在上、名称在下，选中为 accent
-  符号 + 静底）；表单直接铺在窗口背景；版权信息只在系统"关于"面板（Info.plist 的
-  NSHumanReadableCopyright）。
+  符号 + 静底）；表单直接铺在窗口背景；版权信息由 Info.plist 的
+  NSHumanReadableCopyright 提供，在系统"关于"面板和设置页底部同时展示。
+  设置页底部居中排列个人版权与 ICP 备案号，使用次级颜色的小号文字，切换分类仍可见。
   识别页的四项请求参数使用显式标签及右对齐的原生带框输入；未保存覆盖时显示当前生效值，
   无环境覆盖时默认超时 180 秒、重试 1 次、页并发 2、全局并发 1。超时以秒编辑（30–3600，
   最多三位小数），读写时转换为内部毫秒值，保留旧配置精度。仅查看不生成覆盖；
@@ -199,10 +200,11 @@ metric table at its comfortable values — panel padding 20 pt, section spacing
 injects the compact metrics; native controls use the regular control size. A
 stale persisted `density` value is ignored.
 
-The copyright notice lives only in the Settings window (2026-10-22): a centered,
-secondary-color caption below the settings content and any error bar, rendered
-verbatim from the app bundle's `NSHumanReadableCopyright`. The main window no
-longer shows it, so recognition status and actions own the bottom edge.
+The copyright notice is restored to the Settings footer (2026-10-27) alongside
+the standard About panel: a centered, secondary-color caption above the ICP
+filing, below the settings content and any error bar. It is rendered verbatim
+from the app bundle's `NSHumanReadableCopyright`. The main window does not show
+it, so recognition status and actions own the bottom edge.
 
 The task rail is 210 pt and can be hidden independently. Its native list stays
 at 210 pt while one layout translates it and places the adjacent content over
@@ -301,6 +303,14 @@ panels use 12px. Pills are reserved for short status badges, never general
 buttons or containers.
 
 ## Components
+
+Project Settings exposes pending slate layouts in the existing grouped form.
+Native DisclosureGroup rows preserve candidate-name drafts by observation ID;
+native Picker owns assignment to a new or existing layout. Confirmation uses
+an ordinary button, shared inline errors and persistent operation feedback.
+One candidate initially expands for review; project identity resets row drafts
+so identical images in different projects never share temporary input state.
+No new palette, window geometry or scrolling surface is introduced.
 
 Appearance changes use `AppearanceTransition` for the Settings picker (the
 sidebar icon was removed 2026-10-23). Only a change in the resolved light/dark

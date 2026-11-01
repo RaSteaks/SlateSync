@@ -71,10 +71,14 @@ public enum CustomProviderValidator {
         for provider in providers {
             guard let normalized = try? normalize(provider) else { continue }
             let nameKey = normalized.name.lowercased()
-            guard seenIDs.insert(normalized.id).inserted,
-                  seenNames.insert(nameKey).inserted else {
+            guard !seenIDs.contains(normalized.id),
+                  !seenNames.contains(nameKey) else {
                 continue
             }
+            // Only retained records own an identity. A rejected duplicate
+            // name must not reserve its ID and hide a later valid provider.
+            seenIDs.insert(normalized.id)
+            seenNames.insert(nameKey)
             result.append(normalized)
         }
         return result
@@ -124,12 +128,12 @@ public enum CustomProviderValidator {
     }
 
     private static func normalizeModelIDs(_ values: [String]) -> [String] {
-        let pattern = #"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"#
         var seen = Set<String>()
         return values.compactMap { value in
             let modelID = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard (1...220).contains(JavaScriptCompatibility.utf16Length(modelID)),
-                  modelID.range(of: pattern, options: .regularExpression) != nil,
+            // Manual IDs and cache keys share one grammar; only manual input
+            // is trimmed, since a proof is bound to its exact persisted key.
+            guard isValidModelID(modelID),
                   seen.insert(modelID).inserted else {
                 return nil
             }

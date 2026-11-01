@@ -71,6 +71,11 @@ public struct ProjectSettingsView: View {
                             .lineLimit(3...8)
                             .accessibilityLabel(L10n.tr("自定义提示词"))
                     }
+                    ScenarioCandidatesSection(model: model)
+                        // Observation IDs are project-local. Identical source
+                        // images in another project must not inherit row drafts.
+                        .id(model.project?.id)
+                        .disabled(recognition.operation.isRunning)
                     Section(L10n.tr("Resolve 格式")) {
                         TextField(L10n.tr("场"), text: $model.settings.resolve.fieldFormats.scene)
                         TextField(L10n.tr("镜"), text: $model.settings.resolve.fieldFormats.shot)
@@ -105,7 +110,7 @@ public struct ProjectSettingsView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button(L10n.tr("保存"), systemImage: "square.and.arrow.down") { Task { await model.save() } }
                         .slatePrimaryActionStyle()
-                        .disabled(model.project == nil || model.operation.isRunning)
+                        .disabled(model.project == nil || model.operation.isRunning || model.scenarioOperation.isRunning)
                 }
             }
         }

@@ -7,7 +7,7 @@ CLASSIFICATION: **HISTORICAL FAILED-RUN DIAGNOSTIC — SUPERSEDED BY THE LATER
 SUCCESSFUL LEGACY CAPTURE; NOT A CURRENT BLOCKER**.
 
 - Recorded at: `2026-08-19T17:08:20Z`
-- Repository: `/Users/rasteaks/Desktop/个人/GitHub/SlateSync`
+- Repository: `<repository>`
 - Platform: macOS 15.7.3, arm64
 - Node: `v24.13.0`
 - Electron: `43.3.0`
@@ -21,7 +21,7 @@ SUCCESSFUL LEGACY CAPTURE; NOT A CURRENT BLOCKER**.
 ```text
 waiting for Electron app readiness
 Visual baseline capture failed: Error: Electron app.whenReady() timed out after 15000ms
-    at Timeout.<anonymous> (file:///Users/rasteaks/Desktop/%E4%B8%AA%E4%BA%BA/GitHub/SlateSync/test-support/baseline/capture-visuals.mjs:48:39)
+    at Timeout.<anonymous> (file://<repository>/test-support/baseline/capture-visuals.mjs:48:39)
     at listOnTimeout (node:internal/timers:605:17)
     at process.processTimers (node:internal/timers:541:7)
 ```

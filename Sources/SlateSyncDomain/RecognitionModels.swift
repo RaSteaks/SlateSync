@@ -34,22 +34,46 @@ public struct ProviderImage: Hashable, Sendable {
     public var dataURL: String { "data:\(mimeType);base64," + data.base64EncodedString() }
 }
 
+public struct RecognitionReviewImages: Sendable {
+    public let images: [PreparedImage]
+    public let evidence: String
+    public let warning: String?
+    public init(images: [PreparedImage], evidence: String, warning: String? = nil) {
+        self.images = images; self.evidence = evidence; self.warning = warning
+    }
+}
+
 public struct RecognitionPageInput: Sendable {
+    public typealias ReviewImageProvider = @Sendable ([RecognitionRecord]) async throws -> RecognitionReviewImages
     public let pageNumber: Int
     public let views: [PreparedMediaView]
     public let fullOCREvidence: String
     public let coreOCREvidence: String
+    public let scenarioInstruction: String
+    /// Tentative geometry is primary-only; the independent audit must not
+    /// inherit a primary answer or use this as proof of page completeness.
+    public let layoutInstruction: String
+    public let optimizationIdentity: String
+    public let reviewImageProvider: ReviewImageProvider?
 
     public init(
         pageNumber: Int,
         views: [PreparedMediaView],
         fullOCREvidence: String = "",
-        coreOCREvidence: String = ""
+        coreOCREvidence: String = "",
+        scenarioInstruction: String = "",
+        layoutInstruction: String = "",
+        optimizationIdentity: String = "",
+        reviewImageProvider: ReviewImageProvider? = nil
     ) {
         self.pageNumber = pageNumber
         self.views = views
         self.fullOCREvidence = fullOCREvidence
         self.coreOCREvidence = coreOCREvidence
+        self.scenarioInstruction = scenarioInstruction
+        self.layoutInstruction = layoutInstruction
+        self.optimizationIdentity = optimizationIdentity
+        self.reviewImageProvider = reviewImageProvider
     }
 }
 
@@ -64,6 +88,7 @@ public struct RecognitionStageRequest: Sendable {
     public let schema: JSONValue
     public let timeoutMilliseconds: Int
     public let maximumTimeoutRetries: Int
+    public let maximumRequestBytes: Int
 
     public init(
         provider: ProviderDescriptor,
@@ -75,7 +100,8 @@ public struct RecognitionStageRequest: Sendable {
         userInstruction: String? = nil,
         schema: JSONValue,
         timeoutMilliseconds: Int = 180_000,
-        maximumTimeoutRetries: Int = 1
+        maximumTimeoutRetries: Int = 1,
+        maximumRequestBytes: Int = 80 * 1024 * 1024
     ) {
         self.provider = provider
         self.model = model
@@ -87,6 +113,7 @@ public struct RecognitionStageRequest: Sendable {
         self.schema = schema
         self.timeoutMilliseconds = timeoutMilliseconds
         self.maximumTimeoutRetries = maximumTimeoutRetries
+        self.maximumRequestBytes = maximumRequestBytes
     }
 
     /// The synthetic capability probe uses this initializer so its frozen PNG
@@ -101,7 +128,8 @@ public struct RecognitionStageRequest: Sendable {
         userInstruction: String? = nil,
         schema: JSONValue,
         timeoutMilliseconds: Int = 180_000,
-        maximumTimeoutRetries: Int = 1
+        maximumTimeoutRetries: Int = 1,
+        maximumRequestBytes: Int = 80 * 1024 * 1024
     ) {
         self.provider = provider
         self.model = model
@@ -113,6 +141,14 @@ public struct RecognitionStageRequest: Sendable {
         self.schema = schema
         self.timeoutMilliseconds = timeoutMilliseconds
         self.maximumTimeoutRetries = maximumTimeoutRetries
+        self.maximumRequestBytes = maximumRequestBytes
+    }
+
+    public func replacingImages(_ images: [PreparedImage]) -> Self {
+        .init(provider: provider, model: model, stage: stage, filename: filename, images: images,
+              systemPrompt: systemPrompt, userInstruction: userInstruction, schema: schema,
+              timeoutMilliseconds: timeoutMilliseconds, maximumTimeoutRetries: maximumTimeoutRetries,
+              maximumRequestBytes: maximumRequestBytes)
     }
 }
 

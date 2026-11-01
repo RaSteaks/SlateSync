@@ -9,8 +9,10 @@ public enum MediaInput: Sendable {
 
 public struct MediaPreparationOptions: Sendable {
     public let maximumInputBytes: Int
-    public init(maximumInputBytes: Int = 20 * 1024 * 1024) {
+    public let includesDetails: Bool
+    public init(maximumInputBytes: Int = 20 * 1024 * 1024, includesDetails: Bool = true) {
         self.maximumInputBytes = maximumInputBytes
+        self.includesDetails = includesDetails
     }
 }
 

@@ -513,10 +513,22 @@ with open(checks_path, encoding="utf-8", newline="") as handle:
                 check['failureDetails'] = [f"Log unavailable: {error}"]
         checks.append(check)
 
+# Policy v2 separates the completed native migration from strict performance
+# acceptance. A clean functional run can support Owner completion approval,
+# while the legacy approvable field retains its full-Gate meaning. Empty or
+# unexecuted evidence must never acquire either new acceptance claim.
+completion_eligible = (
+    phase == "SM-09" and overall == "PASS" and allow_dirty == "0"
+    and bool(checks) and any(item['result'] == "PASS" for item in checks)
+    and all(item['result'] in {"PASS", "NOT_APPLICABLE"} for item in checks)
+)
 payload = {
     "schemaVersion": 1,
+    "acceptancePolicyVersion": 2,
     "scope": "functional" if functional_only == "1" else "full",
     "performancePolicy": "advisory" if functional_only == "1" else "required",
+    "completionEligible": completion_eligible,
+    "fullAcceptancePassed": completion_eligible and functional_only == "0" and approvable == "true",
     "phase": phase, "reviewCommit": commit, "generatedAt": generated_at,
     "overallResult": overall,
     "executionComplete": overall != "IN_PROGRESS",
@@ -536,7 +548,10 @@ def atomic_write(path, text):
 output = Path(output_path)
 summary = [f"# {phase} Gate: {overall}", "", f"- Commit: `{commit}`",
            f"- Scope: {payload['scope']}", f"- Active check: {active or 'none'}",
-           f"- Approvable: {str(payload['approvable']).lower()}", "",
+           f"- Approvable (full Gate): {str(payload['approvable']).lower()}",
+           f"- Migration completion eligible: {str(payload['completionEligible']).lower()}",
+           f"- Full acceptance passed: {str(payload['fullAcceptancePassed']).lower()}",
+           "- Eligibility is evidence for review, not Owner approval or publication authorization.", "",
            "| Check | Result | Detail |", "| --- | --- | --- |"]
 for item in checks:
     message = item['message'].replace('|', r'\|')
@@ -735,7 +750,7 @@ contract_arguments=()
 run_dependent_check "swift_test xcode_test_plan" sm09_native_contract true "原生来源、功能与资源验收符合当前检查范围" \
   python3 -B script/tests/sm09_native_contract.py --result-dir "$result_dir" "${contract_arguments[@]}"
 if (( functional_only )); then
-  record_check sm05_release_performance false NOT_APPLICABLE "性能预算由独立 advisory job 报告；本次不构成完整发布验收" ""
+  record_check sm05_release_performance false NOT_APPLICABLE "性能预算由独立 advisory job 报告，不阻塞迁移完成；本次不构成完整发布验收" ""
 else
   run_dependent_check "$static_checks" sm05_release_performance true "Release 10k CSV 中位数、峰值与线性比例达标" \
     env SM05_PERFORMANCE_GATE=1 swift test -c release --filter ResolveCSVMergerTests/testTenThousandRowIndexedMergeTimingAndScaling

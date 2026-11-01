@@ -246,7 +246,11 @@ public actor GlobalConfigStore {
                 continue
             }
             let nameKey = provider.name.lowercased()
-            guard ids.insert(provider.id).inserted, names.insert(nameKey).inserted else { continue }
+            // Decoding already normalizes each record. Match the registry's
+            // first-retained policy without reserving IDs for rejected names.
+            guard !ids.contains(provider.id), !names.contains(nameKey) else { continue }
+            ids.insert(provider.id)
+            names.insert(nameKey)
             result.append(provider)
         }
         return result
