@@ -8,15 +8,6 @@ import XCTest
 /// snapshot/mask boundary without launching the app or taking display focus.
 @MainActor
 final class AppearanceTransitionTests: XCTestCase {
-    func testSystemPreferenceResolvesToActualAppearance() {
-        for systemIsDark in [false, true] {
-            XCTAssertEqual(AppearanceReveal.isDark("system", systemIsDark: systemIsDark), systemIsDark)
-            XCTAssertEqual(AppearanceReveal.isDark("unknown", systemIsDark: systemIsDark), systemIsDark)
-            XCTAssertFalse(AppearanceReveal.isDark("light", systemIsDark: systemIsDark))
-            XCTAssertTrue(AppearanceReveal.isDark("dark", systemIsDark: systemIsDark))
-        }
-    }
-
     func testCircularHoleRevealsCenterAndEventuallyEveryCorner() {
         for size in [CGSize(width: 960, height: 600), CGSize(width: 1_440, height: 900),
                      CGSize(width: 700, height: 540), CGSize(width: 2_560, height: 1_440)] {
@@ -44,33 +35,6 @@ final class AppearanceTransitionTests: XCTestCase {
         }
     }
 
-    func testRevealUsesBezierTimingAndExpandingPath() throws {
-        let bounds = CGRect(x: 0, y: 0, width: 960, height: 600)
-        let origin = CGPoint(x: 180, y: 30)
-        let start = AppearanceReveal.maskPath(in: bounds, origin: origin, radius: 0.001)
-        let end = AppearanceReveal.maskPath(in: bounds, origin: origin,
-                                            radius: AppearanceReveal.radius(in: bounds, from: origin))
-        let animation = AppearanceReveal.animation(from: start, to: end)
-        XCTAssertEqual(animation.keyPath, "path")
-        XCTAssertEqual(animation.duration, 4.0, "The reveal takes four seconds")
-        XCTAssertTrue((3.0...5.0).contains(animation.duration), "The sweep stays within the 3–5 s budget")
-        let timing = try XCTUnwrap(animation.timingFunction)
-        var point = [Float](repeating: 0, count: 2)
-        timing.getControlPoint(at: 1, values: &point)
-        // Ease-in-out: a gentle start (c1y = 0) and a settled finish (c2y = 1).
-        XCTAssertEqual(point[0], 0.4, accuracy: 0.001)
-        XCTAssertEqual(point[1], 0)
-        timing.getControlPoint(at: 2, values: &point)
-        XCTAssertEqual(point[0], 0.2, accuracy: 0.001)
-        XCTAssertEqual(point[1], 1)
-        // Progress through the first half of the time stays well under half the
-        // radius before the middle of the curve (the change is spread over the
-        // duration, not front-loaded).
-        var early = [Float](repeating: 0, count: 2)
-        timing.getControlPoint(at: 1, values: &early)
-        XCTAssertLessThan(early[1], early[0], "The curve starts slower than linear")
-    }
-
     func testRevealStartsAtTopTrailingCornerAndSweepsToTheOppositeCorner() {
         for size in [CGSize(width: 960, height: 600), CGSize(width: 1_440, height: 900)] {
             let bounds = CGRect(origin: CGPoint(x: 5, y: 9), size: size)
@@ -93,6 +57,9 @@ final class AppearanceTransitionTests: XCTestCase {
         for systemIsDark in [false, true] {
             XCTAssertEqual(AppearanceController.colorScheme(for: "light", systemIsDark: systemIsDark), .light)
             XCTAssertEqual(AppearanceController.colorScheme(for: "dark", systemIsDark: systemIsDark), .dark)
+            // Both system and unknown preferences fall back through the public color-scheme projection.
+            XCTAssertEqual(AppearanceController.colorScheme(for: "unknown", systemIsDark: systemIsDark),
+                           systemIsDark ? .dark : .light)
             // 跟随系统 is applied as the current system value, never as nil.
             XCTAssertEqual(AppearanceController.colorScheme(for: "system", systemIsDark: systemIsDark),
                            systemIsDark ? .dark : .light)

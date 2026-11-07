@@ -4,7 +4,7 @@ import Synchronization
 /// Shared ISO8601 formatters for persistence timestamps. ISO8601DateFormatter
 /// is not thread-safe, so instead of building a fresh instance per call the
 /// module serializes access on Mutex-protected singletons. The rendered bytes
-/// are frozen by PersistenceTimestampsRegressionTests — never change
+/// are frozen by the timestamp cases in ProjectStoresTests — never change
 /// formatOptions without migrating stored snapshots.
 enum PersistenceTimestamps {
     private static let fractional = Mutex({

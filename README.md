@@ -193,6 +193,49 @@ SlateSyncApp/Resources/PaddleOCR
 携带旧 Electron/Node 运行时。历史迁移材料保存在 `.codex/refactor/` 和
 `.codex/swift-migration/`，不参与运行或打包。
 
+## 测试与验证
+
+测试按行为所属层维护。修复先复用现有用例或夹具，只有未覆盖的风险才增加独立用例；
+不按问题数量增长测试文件，也不以测试数量作为质量指标。
+
+| 范围 | 保留的主要覆盖 | 执行入口 |
+| --- | --- | --- |
+| `Tests/SlateSyncDomainTests` | 旧数据解码、配置边界、Provider wire ID、日志脱敏 | `swift test --filter SlateSyncDomainTests` |
+| `Tests/SlateSyncPersistenceTests` | SQLite 事务、加密与凭据、删除恢复、项目包兼容、时间戳 | `swift test --filter SlateSyncPersistenceTests` |
+| `Tests/SlateSyncMediaTests` | PDF/图像、OCR 策略、进程取消与资源释放 | `swift test --filter SlateSyncMediaTests` |
+| `Tests/SlateSyncWorkflowTests` | CSV 合并导出、识别编排与回退、传输边界、场景匹配、MCP 服务生命周期 | `swift test --filter SlateSyncWorkflowTests` |
+| `Tests/SlateSyncUIUnitTests` | 状态所有权、草稿保存、任务创建、设置、离屏原生视图与编辑器身份 | `swift test --filter SlateSyncUIUnitTests` |
+| `MCP/Tests` | 工具授权与导出、串行传输、托管连接 | `swift test --package-path MCP` |
+| `SlateSyncTests` / `SlateSyncUITests` | App 宿主、真实窗口与键盘流程、Debug / 打包 Release 验收 | GitHub macOS runner 的共享 `SlateSync.xctestplan` 和打包测试 |
+| `script/tests` | Gate 准入、验收证据、CI 策略、版本、打包、失败诊断与 MCP stdio 烟测 | `./script/ci_preflight.sh`；MCP 烟测由 `.github/workflows/mcp.yml` 执行 |
+
+日常修改先运行所属套件，跨层改动再运行根目录 `swift test`，并按项目要求执行
+`./script/ci_preflight.sh`。本机保持默认离线模式，不设置前台 Gate 或性能测试开关；
+完整 SM-09、XCUI 和打包验收留给远端 runner。清单／覆盖工具自身变更时另运行
+`python3 -B script/tests/sm09_inventory_tests.py` 和
+`python3 -B script/tests/sm09_coverage_tests.py`；它们不在日常预检链中。设计截图、真实 Paddle 运行时和前台性能
+用例需要专用环境，默认跳过不等于通过。
+
+2026-11-07 清理后，根包包含 90 个测试文件、599 个 XCTest 方法（此前为 99 / 611）。
+MCP 的 14 项、App 宿主的 2 项、XCUI 的 27 项及脚本验收保持原有范围。
+本轮归并关系如下，保留的数据安全与业务流程断言仍由对应套件执行：
+
+| 原独立套件 | 当前所属套件 |
+| --- | --- |
+| `NumericBoundaryTests` | `DomainContractTests` 的配置校验 |
+| `PersistenceTimestampsRegressionTests` | `ProjectStoresTests` |
+| `WorkflowTimestampsRegressionTests` | `ModelCatalogIntegrationTests` |
+| `TaskCreationIntegrationTests` | `TaskCreationFeedbackTests` |
+| `BoundedProviderResponseTests` | `SM07TransportDiscoveryTests` |
+| `RecognitionFallbackRegressionTests` | `SM07PagePipelineTests` |
+| `RecognitionRuntimeLifecycleTests` | `SM07CoordinatorTests` |
+| `MaterialIdentityConsistencyTests` | `ResolveCSVMergerTests` |
+
+另删除 `IconTooltipContractTests` 的源码行扫描、全目录插值算法对照与固定动画参数测试，
+合并 Provider ID、状态标识、时间戳等重复检查。工具提示的可用性由界面审查负责，
+不再用 `.help` 是否出现在相邻八行来代替实际行为。SM-09 固定引用的旧测试保留，
+未改写验收基线或降低远端门槛。
+
 ## 配置
 
 ### 全局设置
