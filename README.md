@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/Platform-macOS%2015%2B-111827?logo=apple&logoColor=white)](https://github.com/RaSteaks/SlateSync)
 [![Xcode](https://img.shields.io/badge/Xcode-26.3-147EFB?logo=xcode&logoColor=white)](https://developer.apple.com/xcode/)
 [![Universal](https://img.shields.io/badge/Build-arm64%20%2B%20x86__64-2563eb)](https://github.com/RaSteaks/SlateSync)
-[![License](https://img.shields.io/badge/License-MIT-2563eb)](./LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-2563eb)](./LICENSE)
 
 <br />
 
@@ -284,4 +284,6 @@ PaddleOCR 是可选功能。App 只携带 runner 源码和固定依赖清单，�
 
 ## License
 
-[MIT](./LICENSE)
+Copyright (c) 2026 RaSteaks
+
+本项目采用 [GNU Affero General Public License v3.0](./LICENSE)（仅第 3 版，`AGPL-3.0-only`）。
