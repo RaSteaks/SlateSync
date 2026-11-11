@@ -1,41 +1,27 @@
 import SlateSyncDomain
 import XCTest
 
-/// SM-09 #13: vendor protocol shapes are one enum whose raw values ARE the
-/// frozen wire IDs. Business logic branches on cases; string literals may
-/// exist only at this Codable/persistence boundary.
+/// Freeze persisted vendor IDs at the Codable boundary, including built-in lookup.
 final class ProviderKindContractTests: XCTestCase {
-    func testProviderKindRawValuesAreFrozenProviderIDs() {
-        XCTAssertEqual(
-            ProviderKind.allCases,
-            [.openAI, .openRouter, .tokenPlan, .dashScope, .openAICompatible]
-        )
-        XCTAssertEqual(
-            ProviderKind.allCases.map(\.rawValue),
-            ["openai", "openrouter", "tokenplan", "dashscope", "openai-compatible"]
-        )
-    }
-
     func testProviderKindJSONRoundTripKeepsLegacyIDs() throws {
-        for kind in ProviderKind.allCases {
-            let data = try JSONEncoder().encode(kind)
-            XCTAssertEqual(String(decoding: data, as: UTF8.self), "\"\(kind.rawValue)\"")
+        let cases: [(ProviderKind, String)] = [
+            (.openAI, "openai"), (.openRouter, "openrouter"), (.tokenPlan, "tokenplan"),
+            (.dashScope, "dashscope"), (.openAICompatible, "openai-compatible"),
+        ]
+        XCTAssertEqual(ProviderKind.allCases, cases.map(\.0))
+        // Literal IDs are independent expectations, not values derived from the enum under test.
+        for (kind, id) in cases {
+            let data = Data("\"\(id)\"".utf8)
+            XCTAssertEqual(kind.rawValue, id)
+            XCTAssertEqual(try JSONEncoder().encode(kind), data)
             XCTAssertEqual(try JSONDecoder().decode(ProviderKind.self, from: data), kind)
+            XCTAssertEqual(ProviderKind(id: id), kind)
         }
-        // Unknown vendor strings fail closed instead of silently mapping.
+        for id in ["openai-compatible:00000000-0000-4000-8000-000000000001",
+                   "01234567-89ab-cdef-0123-456789abcdef", "gemini"] {
+            XCTAssertNil(ProviderKind(id: id))
+        }
         XCTAssertThrowsError(try JSONDecoder().decode(ProviderKind.self, from: Data("\"gemini\"".utf8)))
-    }
-
-    func testProviderKindLookupOnlyMatchesBuiltinIDs() {
-        XCTAssertEqual(ProviderKind(id: "openai"), .openAI)
-        XCTAssertEqual(ProviderKind(id: "openrouter"), .openRouter)
-        XCTAssertEqual(ProviderKind(id: "tokenplan"), .tokenPlan)
-        XCTAssertEqual(ProviderKind(id: "dashscope"), .dashScope)
-        XCTAssertEqual(ProviderKind(id: "openai-compatible"), .openAICompatible)
-        // Custom UUID providers keep string IDs and no vendor kind.
-        XCTAssertNil(ProviderKind(id: "openai-compatible:00000000-0000-4000-8000-000000000001"))
-        XCTAssertNil(ProviderKind(id: "01234567-89ab-cdef-0123-456789abcdef"))
-        XCTAssertNil(ProviderKind(id: "gemini"))
     }
 
     func testProviderOriginRawValuesStayStableForPersistence() throws {

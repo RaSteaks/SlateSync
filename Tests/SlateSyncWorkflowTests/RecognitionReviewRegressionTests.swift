@@ -61,7 +61,7 @@ final class RecognitionReviewRegressionTests: XCTestCase {
         XCTAssertTrue(reviewed.warnings.contains { $0.contains("缺少有效卷号或视频码") }, "缺键复核记录应产生警告：\(reviewed.warnings)")
     }
 
-    // MARK: - #2 card identity must not zero-pad
+    // Physical-card separation is checked through mergePages below; no separate key-wrapper test.
 
     func testCardIdentityFollowsOldNormalizeReel() {
         XCTAssertEqual(RecognitionNormalizer.normalizeCard("A1"), "A1")
@@ -71,11 +71,6 @@ final class RecognitionReviewRegressionTests: XCTestCase {
         XCTAssertEqual(RecognitionNormalizer.normalizeCard("a 1"), "A1")
         XCTAssertNil(RecognitionNormalizer.normalizeCard("///"))
         XCTAssertNil(RecognitionNormalizer.normalizeCard(nil))
-    }
-
-    func testMaterialKeyUsesUnpaddedCard() {
-        XCTAssertEqual(RecognitionNormalizer.materialKey(record(id: "x", card: "A1", clip: "C001", scene: nil)), "A1C001")
-        XCTAssertEqual(RecognitionNormalizer.materialKey(record(id: "x", card: "A01", clip: "C001", scene: nil)), "A01C001")
     }
 
     func testInheritKeepsA1AndA01AsDistinctCards() {
