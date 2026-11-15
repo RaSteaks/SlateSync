@@ -1,5 +1,12 @@
 # SlateSync 当前项目方案
 
+## 2026-11-15 原生预检区分 Pages 脚本与应用残留
+
+- 修复 `sm09_native_contract.py` 将支持／隐私站点的 `docs/site.js` 误判为生产脚本残留的问题。仅允许该精确路径，其他 JavaScript／TypeScript 文件、旧应用目录及 Node／npm／npx 调用继续被拒绝；应用包的网页资源禁入规则保持有效。
+- 在现有原生契约套件中增加路径参数表，以临时共享 Git 仓库覆盖未跟踪和已暂存两种状态；扩展既有打包残留夹具，验证 `docs/site.js` 进入应用包仍被拒绝。同步补充边界注释，未修改站点交互或历史验收证据。
+- 验证：修复前复现原错误及回归失败；修复后原生契约 18 项自测、原生功能检查、完整 `./script/ci_preflight.sh` 全部通过（Gate helper 152 项、打包自测 27 项）。脚本语法与 `git diff --check` 通过。
+- 日志保存在 `/private/tmp/slatesync-pages-contract-fix/`。未启动 App／XCUI／前台 Gate，完整 UI 与发布验收仍由 GitHub macOS runner 执行。
+
 ## 2026-11-07 测试按功能归并与精简
 
 - 按用户要求停止“一次修复一个独立测试”的增长方式；`AGENTS.md` 明确优先复用所属套件和夹具，只为未覆盖风险增加独立用例。`README.md` 补齐根包五层、MCP、App/XCUI、脚本检查的入口和执行边界。
