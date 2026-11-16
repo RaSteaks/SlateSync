@@ -117,6 +117,27 @@ private actor SM07RecognitionPersistence: RecognitionPersistence {
 }
 
 @MainActor final class SM07CoordinatorTests: XCTestCase {
+    /// A configuration save blocks new coordinators through its last write,
+    /// while concurrent requests still share one lazy construction.
+    func testSuspensionRejectsAdmissionUntilExplicitResume() async throws {
+        let owner = RecognitionRuntimeLifecycle()
+        let first = try await owner.coordinator { RecognitionCoordinator() }
+        let reused = try await owner.coordinator {
+            XCTFail("Must share runtime")
+            return RecognitionCoordinator()
+        }
+        XCTAssertTrue(first === reused)
+        await owner.suspend()
+        do {
+            _ = try await owner.coordinator { RecognitionCoordinator() }
+            XCTFail("A configuration transaction still owns admission")
+        } catch { XCTAssertEqual((error as? SlateSyncError)?.code, "RECOGNITION_RECONFIGURING") }
+        await owner.resume()
+        let replacement = try await owner.coordinator { RecognitionCoordinator() }
+        XCTAssertFalse(first === replacement)
+        await owner.reset()
+    }
+
     func testRequestBudgetAppliesPerPageInsteadOfToTheWholeDocument() async throws {
         let transport = SM07CoordinatorTransport(), ocr = SM07CoordinatorOCR()
         let image = try PreparedImage(jpeg: Data([255,216,255]) + Data(repeating: 65, count: 50_000) + Data([255,217]), width: 1, height: 1)

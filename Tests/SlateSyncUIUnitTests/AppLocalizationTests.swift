@@ -32,7 +32,10 @@ final class AppLocalizationTests: XCTestCase {
     }
 
     func testInterpolationPreservesUserTextAndAllowsEnglishReordering() {
+        // Exercise interpolation boundaries with independent expected strings, not a second implementation.
         let userText = "中文项目 {1} %@ 100%"
+        XCTAssertEqual(L10n.tr("归档“{0}”", [], language: .english), "Archive “{0}”")
+        XCTAssertEqual(L10n.tr("未知 {999999999999999999999999} {0}", ["保留 {1}"]), "未知 {999999999999999999999999} 保留 {1}")
         XCTAssertEqual(L10n.tr("归档“{0}”", [userText], language: .english), "Archive “\(userText)”")
         XCTAssertEqual(L10n.tr("归档“{0}”", [userText], language: .simplifiedChinese), "归档“\(userText)”")
         XCTAssertEqual(L10n.tr("正在复核第 {0} 页的 {1} 个冲突或查漏候选", ["3", "2"], language: .english),
@@ -47,28 +50,6 @@ final class AppLocalizationTests: XCTestCase {
                        "Recognition failed on page 1/2: The model request timed out.")
         XCTAssertEqual(L10n.message("中文项目 {1} %@", language: .english), "中文项目 {1} %@")
         XCTAssertEqual(L10n.message("Project 演示", language: .english), "Project 演示")
-    }
-
-    func testCompiledTemplatesMatchReferenceInterpolation() throws {
-        // Compare every shipped template to independent regex interpolation,
-        // including missing args and values that must never be parsed twice.
-        let regex = try NSRegularExpression(pattern: #"\{([0-9]+)\}"#)
-        for language in [AppLanguage.simplifiedChinese, .english] {
-            for (key, translation) in L10n.translations {
-                for arguments in [[], ["中文 {1} %@"], ["2", "{0}", "3"]] {
-                    let template = language == .english ? translation : key
-                    let expected = NSMutableString(string: template)
-                    for match in regex.matches(in: template, range: NSRange(location: 0, length: (template as NSString).length)).reversed() {
-                        let index = Int((template as NSString).substring(with: match.range(at: 1)))
-                        if let index, arguments.indices.contains(index) {
-                            expected.replaceCharacters(in: match.range, with: arguments[index])
-                        }
-                    }
-                    XCTAssertEqual(L10n.tr(key, arguments, language: language), expected as String, key)
-                }
-            }
-        }
-        XCTAssertEqual(L10n.tr("未知 {999999999999999999999999} {0}", ["保留 {1}"]), "未知 {999999999999999999999999} 保留 {1}")
     }
 
     func testDiagnosticMatchingDoesNotReuseGeneralUITemplates() {

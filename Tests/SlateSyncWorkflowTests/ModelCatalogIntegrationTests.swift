@@ -8,6 +8,18 @@ import XCTest
 /// No provider, login Keychain, model download or production library is used.
 @MainActor
 final class ModelCatalogIntegrationTests: XCTestCase {
+    // Discovery and probe metadata retain the legacy second-precision wire format.
+    func testStringRendersPlainInternetDateTime() {
+        XCTAssertEqual(
+            WorkflowTimestamps.string(Date(timeIntervalSinceReferenceDate: 0)),
+            "2001-01-01T00:00:00Z"
+        )
+        XCTAssertEqual(
+            WorkflowTimestamps.string(Date(timeIntervalSinceReferenceDate: 1.5)),
+            "2001-01-01T00:00:01Z"
+        )
+    }
+
     func testDiscoveryAndProbeReachAnAlreadyCreatedRecognitionCoordinator() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "catalog-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

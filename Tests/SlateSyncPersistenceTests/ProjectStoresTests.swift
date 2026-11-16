@@ -4,6 +4,32 @@ import XCTest
 @testable import SlateSyncPersistence
 
 final class ProjectStoresTests: XCTestCase {
+    // Persisted timestamp compatibility includes concurrent formatting and legacy parsing.
+    func testConcurrentTimestampCallsStayWellFormed() async {
+        // Exact expected bytes also detect corruption during shared formatter access.
+        await withTaskGroup(of: String.self) { group in
+            for index in 0..<64 {
+                group.addTask {
+                    let date = Date(timeIntervalSinceReferenceDate: index.isMultiple(of: 2) ? 0 : 1.5)
+                    let expected = index.isMultiple(of: 2) ? "2001-01-01T00:00:00.000Z" : "2001-01-01T00:00:01.500Z"
+                    let actual = PersistenceJSON.timestamp(date)
+                    return actual == expected ? "" : "\(actual) != \(expected)"
+                }
+            }
+            for await mismatch in group { XCTAssertEqual(mismatch, "") }
+        }
+    }
+
+    func testParseAcceptsBothTimestampShapesAndRejectsGarbage() {
+        // v1 library import validation must keep accepting second-precision
+        // stamps: the fractional formatter alone cannot parse them.
+        XCTAssertEqual(PersistenceTimestamps.parse("2001-01-01T00:00:01.500Z"), Date(timeIntervalSinceReferenceDate: 1.5))
+        XCTAssertEqual(PersistenceTimestamps.parse("2001-01-01T00:00:01Z"), Date(timeIntervalSinceReferenceDate: 1))
+        XCTAssertNil(PersistenceTimestamps.parse(""))
+        XCTAssertNil(PersistenceTimestamps.parse("not-a-timestamp"))
+        XCTAssertNil(PersistenceTimestamps.parse("2001-01-01"))
+    }
+
     func testConcurrentTaskPatchesPreserveEveryFieldAcrossConnections() async throws {
         for encrypted in [false, true] {
             let root = try PersistenceTestSupport.temporaryRoot("atomic-task-patches")

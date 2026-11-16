@@ -171,8 +171,13 @@ assert_failure "bundle symlink is rejected" "${project_root}/script/verify_bundl
 
 renderer_app="${fixture_root}/renderer/SlateSync.app"
 /usr/bin/ditto "$app" "$renderer_app"
-print '<html></html>' > "${renderer_app}/Contents/Resources/index.html"
-assert_failure "renderer residue is rejected" "${project_root}/script/verify_bundle.sh" "$renderer_app" 1.1.0 2 adhoc
+# The repository's Pages asset exception never permits web assets in the app.
+for web_asset in index.html docs/site.js; do
+  mkdir -p "${renderer_app}/Contents/Resources/${web_asset:h}"
+  print 'web asset' > "${renderer_app}/Contents/Resources/${web_asset}"
+  assert_failure "renderer residue is rejected: ${web_asset}" "${project_root}/script/verify_bundle.sh" "$renderer_app" 1.1.0 2 adhoc
+  rm "${renderer_app}/Contents/Resources/${web_asset}"
+done
 
 developer_package_output="${fixture_root}/developer-id-artifacts"
 assert_success "Developer ID package lane" env MOCK_SIGNING_LANE=developer-id \

@@ -207,7 +207,7 @@ keeps old IDs as aliases, with a durable, conflict-checked undo operation.
 - The old `helpEnglish` flag no longer controls any screen. Help always follows
   the application language; it continues to search both bundled languages offline.
 - Target WCAG 2.2 AA and native macOS keyboard conventions.
-- All icon-only actions have accessibility labels and help tooltips in the selected language. Toolbar and menu glyph controls (project library, workspace, Resolve CSV, logs) describe their function on hover, not just repeat their title; `IconTooltipContractTests` fails when an icon-only label style ships without `.help`.
+- All icon-only actions have accessibility labels and help tooltips in the selected language. Toolbar and menu glyph controls (project library, workspace, Resolve CSV, logs) describe their function on hover, not just repeat their title; verify hover text and accessibility labels on the rendered controls during UI review; source-line proximity is not evidence that a tooltip belongs to the right control.
 - Theme follows system by default, respects increased contrast and reduced motion.
 - Manual appearance changes compare the resolved target with the current window
   appearance. Different appearances reveal from the top-right corner of each

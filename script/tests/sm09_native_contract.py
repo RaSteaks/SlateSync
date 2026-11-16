@@ -298,7 +298,11 @@ def validate_tree(cutover):
             continue
         if path.startswith(('.codex/', 'Tests/')) or path in ('DESIGN.md', 'UX-CONTRACT.md'):
             continue
-        require(not re.search(r'\.(mjs|cjs|js|jsx|ts|tsx)$', path), f'production script residue: {path}')
+        # This exact asset serves the standalone GitHub Pages support/privacy
+        # site. Other scripts remain forbidden, including under docs/; the
+        # independent bundle audit rejects all JavaScript shipped in the app.
+        require(path == 'docs/site.js' or not re.search(r'\.(mjs|cjs|js|jsx|ts|tsx)$', path),
+                f'production script residue: {path}')
         require(not path.startswith(('electron/', 'src/', 'lib/', 'public/', 'test/', 'test-support/', '.storybook/')),
                 f'legacy path residue: {path}')
         if path.endswith(('.sh', '.zsh')):
@@ -649,6 +653,45 @@ class PrivacyProjectionTests(unittest.TestCase):
 
 
 class ContractTests(unittest.TestCase):
+    def test_tree_allows_only_the_pages_script_and_preserves_runtime_checks(self):
+        # Exercise real Git enumeration with both untracked and indexed files;
+        # the shared clone preserves ancestry without changing the worktree.
+        with tempfile.TemporaryDirectory(prefix='slatesync-tree-') as directory:
+            fixture = Path(directory) / 'repo'
+            subprocess.run(['git', 'clone', '--quiet', '--shared', '--no-checkout', str(ROOT), str(fixture)], check=True)
+            with patch(__name__ + '.ROOT', fixture):
+                git('read-tree', '--empty')
+                cases = [
+                    ('docs/site.js', 'document.documentElement.lang = "en";', None),
+                    ('docs/check.sh', '#!/bin/sh\necho docs\n', None),
+                    ('docs/other.js', '', 'production script residue'),
+                    ('docs/nested/site.js', '', 'production script residue'),
+                    ('Sources/SlateSyncUI/site.js', '', 'production script residue'),
+                    ('SlateSyncApp/Resources/site.js', '', 'production script residue'),
+                    ('electron/main.swift', '', 'legacy path residue'),
+                    ('docs/node.sh', '#!/bin/sh\nnode site.js\n', 'removed interpreter invoked'),
+                    ('docs/npm.zsh', '#!/bin/zsh\nnpm run build\n', 'removed interpreter invoked'),
+                    ('docs/npx.sh', '#!/bin/sh\nnpx tool\n', 'removed interpreter invoked'),
+                ] + [(f'script/residue.{extension}', '', 'production script residue')
+                     for extension in ('mjs', 'cjs', 'js', 'jsx', 'ts', 'tsx')]
+                for relative, content, error in cases:
+                    path = fixture / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(content)
+                    for indexed in (False, True):
+                        with self.subTest(path=relative, indexed=indexed):
+                            if indexed:
+                                git('add', '--', relative)
+                            # Historical removal hashes are validated separately;
+                            # this fixture isolates the current-tree boundary.
+                            if error:
+                                with self.assertRaisesRegex(AssertionError, error):
+                                    validate_tree({'removed': []})
+                            else:
+                                validate_tree({'removed': []})
+                    git('update-index', '--force-remove', '--', relative)
+                    path.unlink()
+
     def test_current_mapping_preserves_baseline_and_retirement_evidence(self):
         baseline = document(MANIFESTS / 'sm09-native-contract.json')
         before = copy.deepcopy(baseline)
