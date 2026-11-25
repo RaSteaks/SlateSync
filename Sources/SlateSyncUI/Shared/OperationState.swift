@@ -23,6 +23,7 @@ public enum AccessibilityID {
     public static let recognize = "recognition.start"
     public static let recognitionCancel = "recognition.cancel"
     public static let csvTable = "csv.table"
+    public static let csvExportDelivery = "csv.exportDelivery"
     public static let logsList = "logs.list"
     public static let helpSearch = "help.search"
     public static let settingsAppearance = "settings.appearance"

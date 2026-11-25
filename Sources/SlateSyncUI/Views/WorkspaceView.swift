@@ -419,7 +419,8 @@ public struct WorkspaceView: View {
             VStack(spacing: 0) {
                 ResolveCSVView(
                     model: csv, recognition: recognition, workspace: workspace,
-                    onImport: { presentImport(.resolveCSV) })
+                    onImport: { presentImport(.resolveCSV) },
+                    onShowResults: { sectionBinding.wrappedValue = .result })
                 Divider()
                 metadataPanel
             }
@@ -658,49 +659,35 @@ public struct WorkspaceView: View {
     }
 
     private var metadataPanel: some View {
-        VStack(alignment: .leading) {
-            DisclosureGroup(metadata.operation.isRunning ? L10n.tr("场记元数据 · 扫描中…") : L10n.tr("场记元数据 · 扫描与回填")) {
-                Button(L10n.tr("选择目录并扫描…")) { presentImport(.metadata) }
-                    .disabled(workspace.selectedTaskID == nil || csv.table == nil)
-                if case .failed(let error) = metadata.operation {
-                    SlateInlineError(error.message)
-                }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Label(L10n.tr("场记元数据"), systemImage: "folder").fontWeight(.medium)
                 if metadata.operation.isRunning {
+                    ProgressView().controlSize(.small)
                     Button(L10n.tr("取消扫描"), role: .cancel) { metadata.cancel() }
+                } else {
+                    Button(L10n.tr("选择目录并扫描…")) { presentImport(.metadata) }
+                        .disabled(workspace.selectedTaskID == nil || csv.table == nil)
                 }
+                Spacer(minLength: 4)
                 if let result = metadata.result {
-                    LabeledContent(L10n.tr("已读取"), value: L10n.tr("{0} 条", [String(describing: result.metadata.count)]))
-                    LabeledContent(L10n.tr("警告"), value: L10n.tr("{0} 条", [String(describing: result.warnings.count)]))
-                    LabeledContent(L10n.tr("缺少素材"), value: L10n.tr("{0} 条", [String(describing: result.missingKeys.count)]))
-                    if !result.missingKeys.isEmpty {
-                        Text(result.missingKeys.prefix(8).joined(separator: "、"))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                    // Scanner warnings share the reconciliation alert language:
-                    // dim severity background with a leading edge, capped inline
-                    // so the disclosure never grows a second scroller.
-                    ForEach(result.warnings.prefix(6), id: \.self) { warning in
-                        WarnRow(severity: .warning) {
-                            Text(L10n.message(warning)).font(.caption).lineLimit(2)
-                        }
-                    }
+                    Text(L10n.tr("已读取 {0} 条 · 缺少素材 {1} · 警告 {2}",
+                                 [String(result.metadata.count), String(result.missingKeys.count), String(result.warnings.count)]))
+                        .foregroundStyle(.secondary)
                     if !result.warnings.isEmpty || !result.missingKeys.isEmpty {
-                        // Logs intentionally contain counts only. Full warning
-                        // text and every missing clip remain in this local report.
+                        // Keep every finding reachable without consuming grid rows.
                         Button(L10n.tr("查看完整扫描报告")) {
-                            let missing = result.missingKeys.map {
-                                L10n.tr("素材 {0} 缺少元数据", [$0])
-                            }
+                            let missing = result.missingKeys.map { L10n.tr("素材 {0} 缺少元数据", [$0]) }
                             metadataReport = WorkflowDiagnosticReport(title: L10n.tr("元数据扫描报告"),
                                 messages: result.warnings.map { L10n.message($0) } + missing)
-                        }.font(.caption)
+                        }
                     }
                 }
             }
+            if case .failed(let error) = metadata.operation { SlateInlineError(error.message) }
         }
-        .padding(density.panelPadding)
+        .font(.caption).buttonStyle(.borderless)
+        .padding(.horizontal, density.panelPadding).padding(.vertical, 6)
         .disabled(recognition.operation.isRunning)
     }
 

@@ -887,7 +887,7 @@ final class SlateSyncUITests: XCTestCase {
         // accessibility label is empty and whose value carries the message,
         // so the witness reads the value.
         let missing = "没有匹配到可写入的完整记录"
-        let export = app.buttons["导出 CSV…"].firstMatch
+        let export = app.descendants(matching: .any).matching(identifier: "csv.exportDelivery").firstMatch
         expectation(for: NSPredicate { _, _ in export.exists && export.isEnabled }, evaluatedWith: app)
         waitForExpectations(timeout: 8)
         export.click()
@@ -900,17 +900,37 @@ final class SlateSyncUITests: XCTestCase {
         // edit makes this otherwise unmatched CSV exportable; assert the actual
         // delivered file and raw-source preservation instead of a removed button.
         let table = app.tables["可编辑 Resolve CSV"].firstMatch
-        let scene = table.textFields["第 1 行，Scene"].firstMatch
+        let scene = table.textFields["第 2 行，Scene"].firstMatch
         XCTAssertTrue(scene.waitForExistence(timeout: 5))
-        // Native row selection does not itself begin field editing. Return
-        // enters the first column; Tab follows the grid's existing keyboard route.
-        table.tableRows.firstMatch.click()
-        app.typeKey(.return, modifierFlags: [])
-        app.typeKey(.tab, modifierFlags: [])
+        // Select by worksheet address: Scene is the first review field and
+        // the imported header occupies CSV row one.
+        scene.doubleClick()
         app.typeKey("a", modifierFlags: .command)
         app.typeText("087B")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertEqual(scene.value as? String, "087B")
+        // The arrow chooses a recipient. A relative filename opens the directory
+        // picker once and the same delivery then proceeds to its warning and save.
+        export.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).click()
+        let finalCut = app.menuItems["Final Cut Pro · 导入事件（FCPXML）"].firstMatch
+        XCTAssertTrue(finalCut.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.menuItems["DaVinci Resolve · 导入素材到媒体池（XML）"].exists)
+        XCTAssertTrue(app.menuItems["Premiere Pro · 导入素材箱（XML）"].exists)
+        finalCut.click()
+        choosePanelPath(testRoot.path, operation: .openDirectory, app: app)
+        let xmlWarnings = app.sheets.buttons["仍要导出文件"].firstMatch
+        XCTAssertTrue(xmlWarnings.waitForExistence(timeout: 8))
+        xmlWarnings.click()
+        choosePanelPath(outputDirectory.path, operation: .saveDirectory, app: app)
+        let xmlURL = outputDirectory.appending(path: "source_场记已回填.fcpxml")
+        let xmlSaved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            FileManager.default.fileExists(atPath: xmlURL.path)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [xmlSaved], timeout: 8), .completed)
+        let xml = try XMLDocument(contentsOf: xmlURL)
+        let media = try XCTUnwrap(xml.nodes(forXPath: "//media-rep/@src").first?.stringValue)
+        XCTAssertEqual(URL(string: media)?.standardizedFileURL.path, testRoot.appending(path: "A001C001.mov").standardizedFileURL.path)
+        // Using Final Cut leaves the main half bound to template-preserving CSV.
         export.click()
         // Scope to the actual sheet: macOS 26 also exposes a same-named
         // Touch Bar item that exists but cannot receive an ordinary click.
@@ -923,9 +943,8 @@ final class SlateSyncUITests: XCTestCase {
             for: NSPredicate { _, _ in FileManager.default.fileExists(atPath: exported.path) },
             evaluatedWith: app)
         waitForExpectations(timeout: 8)
-        // The merger adds the configured Comments column while leaving all
-        // existing unmatched cells untouched except the explicit Scene edit.
-        let expected = Data("File Name,Scene,Shot,Take,Comments\r\nA001C001.mov,087B,002,03,\r\n".utf8)
+        // A missing optional Resolve field must not change the imported schema.
+        let expected = Data("File Name,Scene,Shot,Take\r\nA001C001.mov,087B,002,03\r\n".utf8)
         XCTAssertEqual(try Data(contentsOf: exported), expected)
         XCTAssertEqual(try Data(contentsOf: input), bytes)
         // The migrated library must still accept a brand-new task; creation
@@ -1433,11 +1452,12 @@ final class SlateSyncUITests: XCTestCase {
 
     private enum PanelOperation: String {
         case openFile
+        case openDirectory
         case saveDirectory
 
         var panelIdentifier: String {
             switch self {
-            case .openFile:
+            case .openFile, .openDirectory:
                 return "open-panel"
             case .saveDirectory:
                 return "save-panel"
@@ -1448,6 +1468,8 @@ final class SlateSyncUITests: XCTestCase {
             switch self {
             case .openFile:
                 return "打开文件"
+            case .openDirectory:
+                return "选择素材目录"
             case .saveDirectory:
                 return "选择保存目录"
             }

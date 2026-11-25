@@ -38,7 +38,7 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
   centered, then one panel toggle (recognition configuration on Input, original
   comparison on Results), a More menu (choose PDF/image, local slate CSV, save)
   and the page's primary action — Start/Cancel recognition on Input, Export CSV
-  on Resolve CSV (with Merge beside it; Import CSV… is a More-menu item and the
+  on Resolve CSV (default full-template export with alternative recipients in its split menu, with Merge beside it; Import CSV… is a More-menu item and the
   empty state's button), none on Results. The More menu is a bare ellipsis with no
   menu indicator.
 - The application's copyright notice appears in the standard About panel and

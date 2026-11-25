@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SlateSyncDomain
+import SlateSyncWorkflow
 
 // Product copy uses the shared launch language; user content stays verbatim.
 
@@ -43,7 +44,12 @@ public final class ResolveCSVModel {
     // Reconciliation diagnostics from the latest canonical merge (badge
     // strip + detail rows). Purely presentational retention: export bytes
     // keep coming from the same frozen re-merge path.
-    public private(set) var lastMergeDiagnostics: ResolveMergeResult?
+    // A cheap publication token lets the worksheet index findings once per merge,
+    // including exports that refresh diagnostics without replacing the table.
+    private(set) var diagnosticsGeneration = 0
+    public private(set) var lastMergeDiagnostics: ResolveMergeResult? {
+        didSet { diagnosticsGeneration += 1 }
+    }
     // Retained raw import bytes (the old worker's metadataTable) plus the
     // manual edits keyed "row:column"; a canonical export re-merges from
     // these instead of re-encoding the merged display table.
@@ -51,7 +57,7 @@ public final class ResolveCSVModel {
     private var rawBase64: String?
     private var sparseEdits: [String: String] = [:]
     private var work: Task<Void, Never>?
-    private var exportWork: Task<ResolveExportArtifact, Error>?
+    private var exportWork: Task<(ResolveMergeResult, PreparedMetadata), Error>?
     private var exportID: UUID?
     private var workGeneration = 0
     private var editGeneration = 0
@@ -111,19 +117,32 @@ public final class ResolveCSVModel {
         onTableChange?(CSVStageSnapshot(table: current, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
     }
 
-    public func encodedData() async throws -> Data {
+    public func encodedData(format: MetadataDeliveryFormat = .csv, mediaDirectory: URL? = nil) async throws -> Data {
+        do { return try await preparedTable(format: format, mediaDirectory: mediaDirectory).data }
+        catch let issue as DeliveryInputIssue { throw issue.error }
+    }
+
+    func preparedTable(format: MetadataDeliveryFormat, mediaDirectory: URL?) async throws -> PreparedMetadata {
         try flushEditor?()
         guard let table else {
             throw SlateSyncError(code: "CSV_EMPTY", message: L10n.tr("请先导入 Resolve CSV"))
         }
-        return try await service.encodeResolveCSV(table)
+        if format == .csv { return try await PreparedMetadata(service.encodeResolveCSV(table)) }
+        return try await MetadataDeliveryEncoder().prepare(table, as: format, name: filename ?? "SlateSync", mediaDirectory: mediaDirectory)
     }
 
     /// Export re-merges the retained raw table using the latest recognition.
     /// Only matched values are normalized; manual sparse edits apply last and
     /// encoding preserves them and every unmatched cell. An empty recognition
     /// list is never exportable (`CSV_NO_EXPORT`).
-    public func exportData(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings) async throws -> Data {
+    public func exportData(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, format: MetadataDeliveryFormat = .csv, mediaDirectory: URL? = nil) async throws -> Data {
+        do {
+            return try await prepareExport(records: records, metadata: metadata, settings: settings, format: format, mediaDirectory: mediaDirectory).data
+        } catch let issue as DeliveryInputIssue { throw issue.error }
+    }
+
+    func prepareExport(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings,
+                       format: MetadataDeliveryFormat, mediaDirectory: URL?) async throws -> PreparedMetadata {
         guard permitsNewOperation?() != false, !operation.isRunning, exportWork == nil else {
             throw SlateSyncError(code: "CSV_BUSY", message: L10n.tr("CSV 正在处理中，请稍后重试。"), retryable: true)
         }
@@ -136,6 +155,7 @@ public final class ResolveCSVModel {
         // table; the merge is still recomputed from the latest records.
         let identity = tableID, edits = editGeneration
         let raw = rawData, overrides = orderedSparseEdits, service = service
+        let name = filename ?? "SlateSync"
         workGeneration += 1
         let generation = workGeneration
         operation = .running(label: L10n.tr("正在准备导出…"))
@@ -145,20 +165,32 @@ public final class ResolveCSVModel {
             let source: Data
             if let raw { source = raw } else { source = try await service.encodeResolveCSV(current) }
             try Task.checkCancellation()
-            return try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: overrides)
+            let result = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: overrides)
+            guard format != .csv else { return (result.merge, PreparedMetadata(result.data)) }
+            // Convert this exact merge inside the cancellable export task. A stale
+            // preview or a second merge could discard manual edits or change alerts.
+            let payload = try await MetadataDeliveryEncoder().prepare(result.merge.table, as: format, name: name, mediaDirectory: mediaDirectory)
+            return (result.merge, payload)
         }
         let operationID = UUID()
         exportID = operationID
         exportWork = task
         defer { if exportID == operationID { exportWork = nil; exportID = nil } }
         do {
-            let result = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            let (merge, payload) = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
             try Task.checkCancellation()
             guard generation == workGeneration, identity == tableID else { throw CancellationError() }
             try requireUnchangedEdits(edits)
-            lastMergeDiagnostics = result.merge
+            lastMergeDiagnostics = merge
             operation = .idle
-            return result.data
+            return payload
+        } catch let issue as DeliveryInputIssue {
+            guard generation == workGeneration, identity == tableID else { throw CancellationError() }
+            switch issue {
+            case .relativeMedia: operation = .idle
+            case .field: operation = .failed(issue.error)
+            }
+            throw issue
         } catch {
             if generation == workGeneration {
                 operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))
@@ -305,7 +337,9 @@ public final class ResolveCSVModel {
 
     public func report(_ error: Error) { operation = .failed(ProductPrivacy.error(error)) }
 
-    public func exported() { operation = .succeeded(message: L10n.tr("CSV 已导出")) }
+    public func exported(format: MetadataDeliveryFormat = .csv) {
+        operation = .succeeded(message: format == .csv ? L10n.tr("CSV 已导出") : L10n.tr("元数据文件已导出"))
+    }
 
     /// Local edit timers belong to the visible coordinator; the shared
     /// workspace barrier flushes it before this owner is released.

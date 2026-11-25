@@ -91,6 +91,27 @@ struct CSVCellWorkMetrics: Sendable {
 /// for every reused cell. The cache belongs to this cell, not the whole table.
 @MainActor
 final class CSVTableTextField: NSTextField {
+    var active = false { didSet { if active != oldValue { needsDisplay = true } } }
+    var warns = false { didSet { if warns != oldValue { needsDisplay = true } } }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if active {
+            NSColor.controlAccentColor.setStroke()
+            NSBezierPath(rect: bounds.insetBy(dx: 1, dy: 1)).stroke()
+        }
+        if warns {
+            // The native accessibility help conveys the same status as this corner flag.
+            NSColor.systemOrange.setFill()
+            let flag = NSBezierPath()
+            flag.move(to: .init(x: bounds.maxX - 7, y: bounds.minY))
+            flag.line(to: .init(x: bounds.maxX, y: bounds.minY))
+            flag.line(to: .init(x: bounds.maxX, y: bounds.minY + 7))
+            flag.close()
+            flag.fill()
+        }
+    }
+
     private var representedRow = -1
     private var representedHeader = ""
     private var cachedLabel: String?
@@ -123,6 +144,14 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
     @Environment(\.slateSyncDensity) private var sceneDensity
     private let density: SlateSyncDensity?
     private var effectiveDensity: SlateSyncDensity { density ?? sceneDensity }
+    var worksheet: CSVWorksheet?
+
+    func worksheet(_ configuration: CSVWorksheet) -> Self {
+        var grid = self
+        grid.worksheet = configuration
+        return grid
+    }
+
     public let tableID: UUID
     public let table: ResolveCSVTable
     public let revision: Int
@@ -157,6 +186,11 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableView.allowsEmptySelection = true
         // Content-sized columns; only the last one stretches to fill the width.
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        if worksheet != nil {
+            tableView.gridStyleMask = [.solidVerticalGridLineMask]
+            tableView.target = context.coordinator
+            tableView.action = #selector(Coordinator.selectWorksheetCell(_:))
+        }
         tableView.rowSizeStyle = .custom
         // Density owns fixed row heights; do not ask every reused text field
         // to determine automatic row geometry while traversing a large table.
@@ -176,6 +210,21 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
+        if worksheet != nil {
+            let ruler = CSVWorksheetRuler(scrollView: scrollView, orientation: .verticalRuler)
+            ruler.materialHeader = context.coordinator.identityColumn.map { table.headers[$0] }
+            ruler.reservedThicknessForMarkers = 0
+            ruler.ruleThickness = 150
+            ruler.labelForRow = { [weak coordinator = context.coordinator] row in
+                guard let coordinator, let column = coordinator.identityColumn else { return nil }
+                return coordinator.value(row: row, column: column)
+            }
+            ruler.toolTip = L10n.tr("CSV 行号与素材标识")
+            scrollView.verticalRulerView = ruler
+            scrollView.hasVerticalRuler = true
+            scrollView.hasHorizontalRuler = false
+            scrollView.rulersVisible = true
+        }
         tableView.delegate = context.coordinator
         tableView.dataSource = context.coordinator
         return scrollView
@@ -189,6 +238,10 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
 
     public func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let tableView = context.coordinator.tableView else { return }
+        // Applying a jump can synchronously emit a native selection event.
+        // Its SwiftUI owner already published the requested address.
+        context.coordinator.updating = true
+        defer { context.coordinator.updating = false }
         context.coordinator.parent = self
         context.coordinator.applyDensity()
         // AppKit controls must explicitly honor SwiftUI's shared mutation/
@@ -210,13 +263,17 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         // A new task/import can keep the same headers but have entirely
         // different content. Resample once per table identity; ordinary edits
         // and layout updates preserve the user's manually resized columns.
-        if context.coordinator.headers != table.headers || context.coordinator.columnTableID != tableID {
+        if context.coordinator.headers != table.headers || context.coordinator.columnTableID != tableID ||
+            context.coordinator.reviewColumns != worksheet?.reviewColumns {
             context.coordinator.rebuildColumns(for: tableView)
         }
         // Different result tables may both start at revision zero. Identity
         // changes must invalidate native rows even when the revision matches.
+        defer { context.coordinator.applyWorksheetJump() }
+        if worksheet != nil { scrollView.verticalRulerView?.needsDisplay = true }
         guard context.coordinator.renderedRevision != revision ||
-                context.coordinator.renderedTableID != tableID else { return }
+                context.coordinator.renderedTableID != tableID ||
+                context.coordinator.diagnosticsGeneration != worksheet?.diagnosticsGeneration else { return }
         let origin = scrollView.contentView.bounds.origin
         let selected = CSVKeyboardNavigation.validSelection(
             tableView.selectedRowIndexes,
@@ -226,6 +283,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableView.selectRowIndexes(selected, byExtendingSelection: false)
         scrollView.contentView.scroll(to: origin)
         scrollView.reflectScrolledClipView(scrollView.contentView)
+        context.coordinator.diagnosticsGeneration = worksheet?.diagnosticsGeneration
         context.coordinator.renderedRevision = revision
         context.coordinator.renderedTableID = tableID
     }
@@ -261,7 +319,61 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         // Prepared once per schema/table identity. Avoid bridging and searching
         // tableColumns for every cell request; native visual order can change.
         private var columnBindings: [ObjectIdentifier: ColumnBinding] = [:]
-        private var sourceColumnIdentifiers: [NSUserInterfaceItemIdentifier] = []
+        fileprivate var reviewColumns: Bool?
+        fileprivate var identityColumn: Int?
+        fileprivate var updating = false
+        fileprivate var diagnosticsGeneration: Int?
+        private var lastJump: UUID?
+
+        @objc fileprivate func selectWorksheetCell(_ sender: NSTableView) {
+            guard sender.clickedRow >= 0, sender.tableColumns.indices.contains(sender.clickedColumn),
+                  let binding = columnBindings[ObjectIdentifier(sender.tableColumns[sender.clickedColumn])] else { return }
+            activate(.init(row: sender.clickedRow, column: binding.sourceIndex))
+        }
+
+        private var activeCell: CSVWorksheetCell?
+
+        private func activate(_ cell: CSVWorksheetCell?) {
+            guard let tableView, parent.worksheet != nil, cell != activeCell else { return }
+            let previous = activeCell
+            activeCell = cell
+            for address in [previous, cell].compactMap({ $0 }) {
+                let index = tableView.column(withIdentifier: .init("csv.column.\(address.column)"))
+                guard index >= 0, address.row < tableView.numberOfRows else { continue }
+                let field = tableView.view(atColumn: index, row: address.row, makeIfNecessary: false) as? CSVTableTextField
+                field?.active = address == cell
+                tableView.tableColumns[index].headerCell.font = address == cell ? .boldSystemFont(ofSize: NSFont.smallSystemFontSize) : Self.headerFont
+            }
+            tableView.headerView?.needsDisplay = true
+            if !updating { parent.worksheet?.onActiveCell(cell) }
+        }
+
+        fileprivate func applyWorksheetJump() {
+            guard let jump = parent.worksheet?.jump, jump.id != lastJump, jump.tableID == parent.tableID,
+                  let tableView else { return }
+            lastJump = jump.id
+            if let editingField { finishEditing(editingField) }
+            guard let row = jump.row, (0..<tableView.numberOfRows).contains(row) else {
+                tableView.deselectAll(nil)
+                activate(nil)
+                return
+            }
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            tableView.scrollRowToVisible(row)
+            guard let source = jump.column else { activate(nil); return }
+            let visual = tableView.column(withIdentifier: .init("csv.column.\(source)"))
+            guard visual >= 0 else { activate(nil); return }
+            tableView.scrollColumnToVisible(visual)
+            activate(.init(row: row, column: source))
+            // With a real key window the next keystroke edits the located field.
+            if tableView.window?.isKeyWindow == true, parent.isEnabled {
+                tableView.editColumn(visual, row: row, with: nil, select: true)
+            }
+        }
+
+        public func tableViewSelectionDidChange(_ notification: Notification) {
+            if let tableView, let activeCell, tableView.selectedRow != activeCell.row { activate(nil) }
+        }
         private(set) var cellWork = CSVCellWorkMetrics()
         fileprivate var timer: Task<Void, Never>?
         private weak var editingField: NSTextField?
@@ -271,6 +383,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         public func controlTextDidBeginEditing(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
             let cell = cellIdentity(for: field)
+            activate(.init(row: cell.row, column: cell.column))
             editingField = field
             lastCommittedValue = field.stringValue
             editingIdentity = CSVCellCommit(tableID: parent.tableID, rowID: cell.row,
@@ -351,7 +464,17 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 field.delegate = self
             }
             field.tag = row * max(1, parent.table.headers.count) + column
-            field.bindAccessibility(row: row, header: binding.header)
+            if let worksheet = parent.worksheet {
+                let address = CSVWorksheetCell(row: row, column: column)
+                field.active = activeCell == address
+                let warns = worksheet.warnings.contains(address)
+                if field.warns != warns {
+                    field.warns = warns
+                    field.setAccessibilityHelp(warns ? L10n.tr("此字段需要核对") : nil)
+                }
+            }
+            // The Resolve worksheet counts its header as spreadsheet row one.
+            field.bindAccessibility(row: parent.worksheet == nil ? row : row + 1, header: binding.header)
             // AppKit reuses cells across tables; alignment belongs to the
             // current sampled column, not to the cell's creation-time table.
             // AppKit setters may invalidate text/layout/display even for an
@@ -429,12 +552,19 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         /// as clip names are not truncated.
         fileprivate func rebuildColumns(for tableView: NSTableView) {
             columnBindings.removeAll(keepingCapacity: true)
-            sourceColumnIdentifiers.removeAll(keepingCapacity: true)
+            activeCell = nil
+            reviewColumns = parent.worksheet?.reviewColumns
             tableView.tableColumns.forEach(tableView.removeTableColumn)
             headers = parent.table.headers
             columnTableID = parent.tableID
             let rows = parent.table.rows.prefix(Self.sampleRows)
-            for (index, title) in headers.enumerated() {
+            let layout = CSVWorksheet.layout(headers: headers, review: reviewColumns == true)
+            identityColumn = layout.identity
+            if let ruler = tableView.enclosingScrollView?.verticalRulerView as? CSVWorksheetRuler {
+                ruler.materialHeader = identityColumn.map { headers[$0] }
+            }
+            for (position, index) in layout.columns.enumerated() {
+                let title = headers[index]
                 let shown = title.isEmpty ? L10n.tr("第 {0} 列", [String(describing: index + 1)]) : title
                 let values = rows.compactMap { $0.indices.contains(index) ? $0[index] : nil }.filter { !$0.isEmpty }
                 let numeric = !values.isEmpty && values.allSatisfy { $0.allSatisfy { $0.isNumber || $0 == "." || $0 == "-" } }
@@ -446,14 +576,13 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 let column = NSTableColumn(identifier: .init("csv.column.\(index)"))
                 column.title = shown
                 column.minWidth = numeric ? 40 : 52
-                column.maxWidth = index == headers.count - 1 ? 10_000 : 480
+                column.maxWidth = position == layout.columns.count - 1 ? 10_000 : 480
                 column.width = min(max(natural, column.minWidth), 360)
                 column.headerCell.alignment = numeric ? .right : .left
                 column.headerCell.font = Self.headerFont
                 columnBindings[ObjectIdentifier(column)] = ColumnBinding(
                     sourceIndex: index, reuseIdentifier: .init("csv.cell.\(index)"),
                     header: title, alignment: numeric ? .right : .left)
-                sourceColumnIdentifiers.append(column.identifier)
                 tableView.addTableColumn(column)
             }
             renderedRevision = -1
@@ -499,11 +628,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             let cell = cellIdentity(for: field)
             // Cell tags/commits use source columns. Keyboard movement uses the
             // current visual order, including a native header drag reorder.
-            guard sourceColumnIdentifiers.indices.contains(cell.column) else {
-                finishEditing(field)
-                return true
-            }
-            let visualColumn = tableView.column(withIdentifier: sourceColumnIdentifiers[cell.column])
+            let visualColumn = tableView.column(withIdentifier: .init("csv.column.\(cell.column)"))
             guard visualColumn >= 0 else {
                 finishEditing(field)
                 return true
@@ -527,7 +652,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             return (field.tag / count, field.tag % count)
         }
 
-        private func value(row: Int, column: Int) -> String {
+        fileprivate func value(row: Int, column: Int) -> String {
             guard parent.table.rows.indices.contains(row),
                   parent.table.rows[row].indices.contains(column) else { return "" }
             return parent.table.rows[row][column]

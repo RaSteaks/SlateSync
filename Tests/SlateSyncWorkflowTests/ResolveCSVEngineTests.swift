@@ -37,6 +37,84 @@ final class ResolveCSVEngineTests: XCTestCase {
         XCTAssertEqual(encoded, source)
     }
 
+    func testDeliveryFilesCarrySourceIdentityTimingAndEditedMetadata() async throws {
+        let source = ResolveCSVTable(headers: ["File Name", "Clip Directory", "FPS", "Duration", "Start TC", "End TC",
+            "Reel Name", "Resolution", "Tracks", "Scene", "Shot", "Take", "Comments", "Camera FPS", "Shoot Day"],
+            rows: [["A & B.mov", "/Volumes/素材", "30000/1001", "00:00:02;00", "00:01:00;02", "00:01:02;02",
+                    "R1", "1920x1080", "VA1A2", "007", "02", "03", "中文<&>\nnext\tnote", "60", "26-11-25"]], format: .init())
+        let encoder = MetadataDeliveryEncoder()
+        let ale = try await encoder.prepare(source, as: .ale, name: "Day 1")
+        XCTAssertEqual(ale.preview, .avid(tape: "R1", start: "00:01:00;02", fps: "29.97"))
+        let expected = "Heading\r\nFIELD_DELIM\tTABS\r\nVIDEO_FORMAT\t1080\r\nFPS\t29.97\r\n\r\nColumn\r\n"
+            + "Name\tTracks\tStart\tEnd\tTape\tSource File\tScene\tShot\tTake\tComments\tCamera FPS\tShoot Day\r\n\r\nData\r\n"
+            + "A & B.mov\tVA1A2\t00:01:00;02\t00:01:02;02\tR1\tA & B.mov\t007\t02\t03\t中文<&> next note\t60\t26-11-25\r\n"
+        XCTAssertEqual(ale.data, Data(expected.utf8))
+
+        for format in [MetadataDeliveryFormat.fcpxml, .xmeml] {
+            let file = try await encoder.prepare(source, as: format, name: "Day <1>")
+            XCTAssertEqual(file.preview, format == .xmeml ? .premiere(scene: "007", shotTake: "02/03") : nil)
+            let xml = try XMLDocument(data: file.data)
+            func value(_ xpath: String) throws -> String? { try xml.nodes(forXPath: xpath).first?.stringValue }
+            let path: String?
+            if format == .fcpxml {
+                XCTAssertEqual(try value("/fcpxml/@version"), "1.9")
+                XCTAssertEqual(try value("//event/@name"), "Day <1>")
+                XCTAssertEqual(try value("//asset/@id"), try value("//asset-clip/@ref"))
+                XCTAssertEqual(try value("//md[@key='com.apple.proapps.scene']/@value"), "007")
+                XCTAssertEqual(try value("//md[@key='com.apple.proapps.reel']/@value"), "R1")
+                XCTAssertEqual(try value("//asset-clip/note"), "中文<&>\nnext\tnote")
+                path = try value("//media-rep/@src")
+            } else {
+                XCTAssertEqual(try value("/xmeml/@version"), "5")
+                XCTAssertEqual(try value("//project/name"), "Day <1>")
+                XCTAssertEqual(try value("//clip/duration"), "60")
+                XCTAssertEqual(try value("//clip/rate/timebase"), "30")
+                XCTAssertEqual(try value("//clip/rate/ntsc"), "TRUE")
+                XCTAssertEqual(try value("//timecode/frame"), "1800")
+                XCTAssertEqual(try value("//timecode/displayformat"), "DF")
+                XCTAssertEqual(try value("//logginginfo/shottake"), "02/03")
+                XCTAssertEqual(try value("//logginginfo/lognote"), "中文<&>\nnext\tnote")
+                XCTAssertEqual(try value("//comments/mastercomment1"), "Camera FPS: 60")
+                path = try value("//file/pathurl")
+            }
+            XCTAssertEqual(path.flatMap(URL.init(string:))?.path, "/Volumes/素材/A & B.mov")
+        }
+    }
+
+    func testDeliveryRejectsUnusableMediaAndPreservesArbitraryColumnsInJSON() async throws {
+        let encoder = MetadataDeliveryEncoder()
+        var table = ResolveCSVTable(headers: ["File Name", "Tag", "Tag", "Camera FPS"],
+            rows: [["A.mov", "", "same header", "120"]], format: .init())
+        let data = try await encoder.encode(table, as: .json, name: "Test")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["columns"] as? [String], table.headers)
+        XCTAssertEqual(json["rows"] as? [[String]], table.rows)
+        await XCTAssertSlateErrorAsync("DELIVERY_FIELD", try await encoder.encode(table, as: .fcpxml, name: "Test"))
+        let root = URL(fileURLWithPath: "/Volumes/A")
+        let xml = try await encoder.encode(table, as: .fcpxml, name: "Test", mediaDirectory: root)
+        XCTAssertEqual(try XMLDocument(data: xml).nodes(forXPath: "//media-rep/@src").first?.stringValue, "file:///Volumes/A/A.mov")
+        var network = table
+        network.headers.append("File Path")
+        network.rows[0].append(#"\\server\share\A.mov"#)
+        let shared = try await encoder.encode(network, as: .fcpxml, name: "Test")
+        XCTAssertEqual(try XMLDocument(data: shared).nodes(forXPath: "//media-rep/@src").first?.stringValue, "file://server/share/A.mov")
+        // A sensor rate alone cannot set the playback timebase.
+        await XCTAssertSlateErrorAsync("DELIVERY_FIELD", try await encoder.encode(table, as: .xmeml, name: "Test", mediaDirectory: root))
+        table.headers = ["File Name", "FPS", "Video Format", "Start TC", "End TC", "Tracks", "Tape"]
+        table.rows = [["A.mov", "29.97", "1080", "00:01:00;01", "00:02:00;02", "V", "R"]]
+        await XCTAssertSlateErrorAsync("DELIVERY_FIELD", try await encoder.encode(table, as: .ale, name: "Test"))
+        table.rows[0][3] = "00:01:00;02"
+        table.rows.append(["B.mov", "25", "1080", "00:00:00:00", "00:00:02:00", "V", "R"])
+        do {
+            _ = try await encoder.prepare(table, as: .ale, name: "Test")
+            XCTFail("Mixed playback rates need a worksheet correction")
+        } catch DeliveryInputIssue.field(let row, let column, _) {
+            XCTAssertEqual(row, 3)
+            XCTAssertEqual(column, 1)
+        }
+        await XCTAssertSlateErrorAsync("DELIVERY_FIELD", try await encoder.encode(table, as: .ale, name: "Test"))
+    }
+
     func testRejectsMissingIdentifierAndUnclosedQuote() async throws {
         let engine = ResolveCSVEngine()
         await XCTAssertSlateErrorAsync("CSV_COLUMNS", try await engine.decode(Data("Scene,Shot\n1,2\n".utf8)))

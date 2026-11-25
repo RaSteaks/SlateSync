@@ -25,11 +25,11 @@ public actor SM05WorkflowServices {
     /// Preview remains available for incomplete/conflicting input so both the
     /// native editor and MCP can explain why an eventual export is blocked.
     public func previewMerge(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata] = [],
-        fieldFormats: ResolveFieldFormats = .init(), comments: ResolveComments = .init(), edits: [ResolveSparseEdit] = []
+        fieldFormats: ResolveFieldFormats = .init(), comments: ResolveComments = .init(), edits: [ResolveSparseEdit] = [], preserveTemplate: Bool = false
     ) async throws -> ResolveMergeResult {
         let table = try await csv.decode(source)
         return try await merger.merge(source: table, records: records, metadata: metadata,
-            fieldFormats: fieldFormats, comments: comments, edits: edits)
+            fieldFormats: fieldFormats, comments: comments, edits: edits, preserveTemplate: preserveTemplate)
     }
 
     public func mergeAndEncode(
@@ -38,13 +38,13 @@ public actor SM05WorkflowServices {
         metadata: [PersistedSlateMetadata] = [],
         fieldFormats: ResolveFieldFormats = .init(),
         comments: ResolveComments = .init(),
-        edits: [ResolveSparseEdit] = []
+        edits: [ResolveSparseEdit] = [], preserveTemplate: Bool = false
     ) async throws -> ResolveExportArtifact {
         try fieldFormats.validate()
         try comments.validate()
         let clock = ContinuousClock()
         let start = clock.now
-        let result = try await previewMerge(source: source, records: records, metadata: metadata, fieldFormats: fieldFormats, comments: comments, edits: edits)
+        let result = try await previewMerge(source: source, records: records, metadata: metadata, fieldFormats: fieldFormats, comments: comments, edits: edits, preserveTemplate: preserveTemplate)
         // Match export-resolve: manual edits may make an otherwise unchanged
         // merge exportable, but an empty recognition list is never exportable.
         // ResolveSparseEdit is the typed equivalent of a normalized JS edit.

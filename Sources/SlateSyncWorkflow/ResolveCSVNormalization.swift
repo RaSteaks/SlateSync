@@ -351,20 +351,34 @@ public enum ResolveCSVNormalization {
     }
 }
 
-struct ResolveColumnIndexes: Sendable {
-    var fileName: [Int] = []
-    var clipDirectory: [Int] = []
-    var reelName: [Int] = []
-    var clipName: [Int] = []
-    var shot = -1
-    var scene = -1
-    var take = -1
-    var comments = -1
-    var cameraFPS = -1
-    var shootDay = -1
+package struct ResolveColumnIndexes: Sendable {
+    package var fileName: [Int] = []
+    package var clipDirectory: [Int] = []
+    package var reelName: [Int] = []
+    package var clipName: [Int] = []
+    package var shot = -1
+    package var scene = -1
+    package var take = -1
+    package var comments = -1
+    package var cameraFPS = -1
+    package var shootDay = -1
+
+    /// Recognition diagnostics use both persisted field IDs and the merger's
+    /// original missing-field tokens, regardless of the interface language.
+    package func reviewColumn(for field: String) -> Int? {
+        let index = switch field {
+        case "scene", "场次": scene
+        case "shot", "镜": shot
+        case "take", "次": take
+        case "takeStatus": comments
+        default: -1
+        }
+        return index >= 0 ? index : nil
+    }
+
 }
 
-enum ResolveHeaders {
+package enum ResolveHeaders {
     private static let aliases: [(String, [String])] = [
         ("fileName", ["File Name", "Filename", "文件名"]),
         ("clipDirectory", ["Clip Directory", "片段目录", "素材目录"]),
@@ -378,7 +392,7 @@ enum ResolveHeaders {
         ("shootDay", ["Shoot Day", "ShootDay", "拍摄日期", "拍攝日期"]),
     ]
 
-    static func resolve(_ headers: [String]) throws -> ResolveColumnIndexes {
+    package static func resolve(_ headers: [String]) throws -> ResolveColumnIndexes {
         var result = ResolveColumnIndexes()
         for (field, names) in aliases {
             let accepted = Set(names.map(ResolveCSVNormalization.normalizeHeader))

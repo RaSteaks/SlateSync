@@ -81,7 +81,7 @@ components:
   失败显示橙色三角，处理中/识别中显示小转圈）；分组标题就是项目名称本身（半粗），
   无项目时该分组不出现。无品牌头与底部入口：
   设置走 ⌘,，外观在 设置 › 通用 选择。
-- **主操作槽**：输入页为"开始识别 ↔ 取消识别"，Resolve CSV 页为"导出 CSV…"（合并在其旁；导入在"更多"菜单里，
+- **主操作槽**：输入页为"开始识别 ↔ 取消识别"，Resolve CSV 页为"导出 Resolve CSV…"分体按钮（主按钮导出全表，箭头按接收方选择交付用途；合并在其旁；导入在"更多"菜单里，
   空态也有按钮），识别结果页没有主操作；工具栏尾部顺序固定为"主操作 / 更多 / 面板开关"。
   状态栏只在内容列底部（不压过侧栏）：识别进度为紧跟文字的真实页码原生进度条，取消只在
   工具栏没有取消的页面出现；识别期间只冻结配置表单，并在其表头显示锁图标，证据页面不变暗。
@@ -382,7 +382,7 @@ Recognition progress remains visible across routes in the app shell.
 Buttons combine safe/danger intent with native emphasis. Forms keep visible
 labels and inline recovery. Project rows/cards expose one primary open action and
 separate contextual actions. The editable CSV surface is an NSTableView bridge
-with stable columns, native selection, IME-safe editing and bounded scrolling.
+with native selection, IME-safe editing and bounded scrolling. The Resolve worksheet pins CSV row numbers (header = row 1) and material labels in the leading gutter. The review preset shows available Scene, Shot, Take, Camera FPS, Shoot Day and Comments fields. All Columns exposes every editable source field. Both presets commit by source coordinates and export only the imported template columns in their original order.
 
 ## Do's and Don'ts
 

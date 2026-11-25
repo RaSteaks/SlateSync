@@ -152,9 +152,43 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         XCTAssertEqual(table.rows[0][1], "001")
         XCTAssertEqual(table.rows[0][4], "ok", "Comments 手动编辑必须与预览一致：\(table.rows)")
         XCTAssertEqual(table.rows[0][5], "备注信息", "透传列的手动编辑必须逐字节保留：\(table.rows)")
+        let json = try await model.exportData(records: [record(scene: "002")], metadata: [], settings: .init(), format: .json)
+        let sheet = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
+        XCTAssertEqual(sheet["columns"] as? [String], table.headers)
+        XCTAssertEqual((sheet["rows"] as? [[String]])?.first, ["A001C001.mov", "002", "01", "01", "ok", "备注信息"])
     }
 
     // MARK: - #6 empty-record export guard
+
+    func testXMLDirectoryRecoveryUsesFullCurrentTask() async throws {
+        let (model, _) = makeModel()
+        await model.importData(Data(twoRowCSV.utf8), filename: "A.csv")
+        func prepare(_ directory: URL?) async throws -> PreparedMetadata {
+            try await model.prepareExport(records: [record(scene: "001")], metadata: [], settings: .init(),
+                                          format: .fcpxml, mediaDirectory: directory)
+        }
+        do {
+            _ = try await prepare(nil)
+            XCTFail("Relative filenames require a media directory")
+        } catch DeliveryInputIssue.relativeMedia(let row) {
+            XCTAssertEqual(row, 2)
+            XCTAssertEqual(model.operation, .idle)
+        }
+        let folder = URL(fileURLWithPath: "/Volumes/Day-A")
+        let file = try await prepare(folder)
+        let xml = try XMLDocument(data: file.data)
+        XCTAssertEqual(try xml.nodes(forXPath: "//media-rep/@src").compactMap(\.stringValue),
+                       ["file:///Volumes/Day-A/A001C001.mov", "file:///Volumes/Day-A/B002C002.mov"])
+        XCTAssertTrue(try XCTUnwrap(model.lastMergeDiagnostics).reviewIssueCount > 0)
+
+        let oldTable = model.tableID
+        await model.importData(Data(rawCSV.utf8), filename: "B.csv")
+        XCTAssertNotEqual(model.tableID, oldTable)
+        do {
+            _ = try await prepare(nil)
+            XCTFail("The next task must resolve its own media paths")
+        } catch DeliveryInputIssue.relativeMedia { }
+    }
 
     func testExportWithoutRecordsThrowsNoExport() async throws {
         let (model, _) = makeModel()
@@ -180,6 +214,19 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
             _ = try await model.exportData(records: [incomplete], metadata: [], settings: .init())
             XCTFail("Incomplete-only exports must stay blocked")
         } catch let error as SlateSyncError { XCTAssertEqual(error.code, "CSV_NO_EXPORT") }
+    }
+
+    func testReviewFindingsLocateEveryMatchingTemplateCell() async throws {
+        let (model, _) = makeModel()
+        let csv = "Camera FPS,File Name,Scene\n25,A001C001.mov,1\n30,A001C001.mov,1\n"
+        await model.importData(Data(csv.utf8), filename: "source.csv")
+        await model.merge(records: [record(scene: "1"), .init(cardNumber: "B002", videoCode: "C099", scene: "1", shot: "2", take: "1")],
+            metadata: [.init(materialKey: "A:1:1", shootDay: "2026-07-01")], settings: .init())
+        let result = try XCTUnwrap(model.lastMergeDiagnostics)
+        let issues = ResolveCSVView.diagnosticsRows(result)
+        XCTAssertEqual(issues.filter { $0.column == 0 }.compactMap(\.row), [0, 1])
+        XCTAssertEqual(issues.filter { $0.row == nil }.count, 1, "An unmatched recognition record has no CSV destination")
+        XCTAssertEqual(model.table?.headers, ["Camera FPS", "File Name", "Scene"])
     }
 
     func testExportIsBusyAndDrainedBeforeTaskReplacement() async throws {
@@ -324,14 +371,14 @@ private actor CSVExportFake: WorkspaceWorkflowServing, ResolveExportWorkflowServ
         if shouldSuspend {
             await withCheckedContinuation { pendingExport = $0; exportStarted = true }
         }
-        return try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
+        return try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: true)
     }
 
     func previewResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata],
         settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]
     ) async throws -> ResolveMergeResult {
         try await sm05.previewMerge(source: source, records: records, metadata: metadata,
-            fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
+            fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: true)
     }
 
     func exportStandalone(records: [ResolveSlateRecord], settings: ProjectSettings.ResolveSettings) async throws -> Data {

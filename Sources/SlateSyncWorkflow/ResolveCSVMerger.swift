@@ -31,7 +31,8 @@ public actor ResolveCSVMerger {
         fieldFormats: ResolveFieldFormats = .init(),
         comments: ResolveComments = .init(),
         edits: [ResolveSparseEdit] = [],
-        knownAnomalyKeys: Set<String> = []
+        knownAnomalyKeys: Set<String> = [],
+        preserveTemplate: Bool = false
     ) throws -> ResolveMergeResult {
         try fieldFormats.validate()
         try comments.validate()
@@ -50,6 +51,12 @@ public actor ResolveCSVMerger {
             ? [(\.shot, "Shot"), (\.scene, "Scene"), (\.take, "Take"), (\.comments, "Comments")]
             : [(\.shot, "Shot"), (\.scene, "Scene"), (\.take, "Take"), (\.comments, "Comments"), (\.cameraFPS, "Camera FPS"), (\.shootDay, "Shoot Day")]
         for (path, header) in required where columns[keyPath: path] < 0 {
+            // The desktop worksheet writes into the imported Resolve template.
+            // Other workflow callers retain the established column-creation policy.
+            if preserveTemplate {
+                warnings.append("原 CSV 缺少 \(header) 列，已跳过此字段。")
+                continue
+            }
             headers.append(header)
             rows.indices.forEach { rows[$0].append("") }
             addedColumns.append(header)
@@ -88,7 +95,7 @@ public actor ResolveCSVMerger {
             try Task.checkCancellation()
             guard let matchedRows = rowIndex[key], !matchedRows.isEmpty else { continue }
             let sidecar = metadataIndex[key]
-            if let sidecar, !sidecar.sensorFPS.isEmpty {
+            if columns.cameraFPS >= 0, let sidecar, !sidecar.sensorFPS.isEmpty {
                 fpsMaterials += 1
                 for rowNumber in matchedRows {
                     fpsRows.insert(rowNumber)
@@ -99,8 +106,8 @@ public actor ResolveCSVMerger {
                         warnings.append("CSV 第 \(rowNumber + 2) 行 \(fileName.isEmpty ? ResolveCSVNormalization.canonicalKeyToMaterialPrefix(key) : fileName) 已覆盖：\(headers[columns.cameraFPS])“\(previous)”→“\(sidecar.sensorFPS)”。")
                     }
                 }
-            } else if !metadata.isEmpty { missingFPSKeys.insert(key) }
-            if let sidecar, !sidecar.shootDay.isEmpty {
+            } else if columns.cameraFPS >= 0, !metadata.isEmpty { missingFPSKeys.insert(key) }
+            if columns.shootDay >= 0, let sidecar, !sidecar.shootDay.isEmpty {
                 dayMaterials += 1
                 for rowNumber in matchedRows {
                     dayRows.insert(rowNumber)
@@ -111,7 +118,7 @@ public actor ResolveCSVMerger {
                         warnings.append("CSV 第 \(rowNumber + 2) 行 \(fileName.isEmpty ? ResolveCSVNormalization.canonicalKeyToMaterialPrefix(key) : fileName) 已覆盖：\(headers[columns.shootDay])“\(previous)”→“\(sidecar.shootDay)”。")
                     }
                 }
-            } else if !metadata.isEmpty { missingDayKeys.insert(key) }
+            } else if columns.shootDay >= 0, !metadata.isEmpty { missingDayKeys.insert(key) }
         }
 
         let unrecognizedKeys = rowIndex.keys.filter { !recognizedKeys.contains($0) }.sorted(by: ResolveCSVNormalization.compareMaterialKeys)

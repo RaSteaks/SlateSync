@@ -1,5 +1,6 @@
 import AppKit
 import SlateSyncDomain
+import SlateSyncWorkflow
 import SwiftUI
 import XCTest
 
@@ -66,6 +67,50 @@ final class CSVColumnLayoutTests: XCTestCase {
         XCTAssertFalse(fixture.window.isVisible)
     }
 
+    func testWorksheetJumpAndEditExportIntoOriginalTemplate() async throws {
+        // A bilingual, reordered template has no Shot, Take or Shoot Day. Only
+        // the selected source FPS may change; preserve BOM, delimiters and CRLF.
+        let original = "\u{feff}Notes;摄影机帧率;文件名;场景\r\nkeep;25;A001C001.mov;001\r\nother;30;B001C001.mov;old\r\n"
+        let bytes = Data(original.utf8)
+        let source = try await ResolveCSVEngine().decode(bytes)
+        let id = UUID()
+        let fps = CSVWorksheetCell(row: 0, column: 1)
+        let commits = CommitRecorder()
+        let bridge = EditableCSVTableRepresentable(tableID: id, table: source, revision: 0,
+            onCommit: { commits.values.append($0) })
+        var sheet = CSVWorksheet(reviewColumns: true, jump: .init(tableID: id, row: 0, column: 1),
+            diagnosticsGeneration: 1, warnings: [fps], onActiveCell: { _ in })
+        let fixture = Fixture(rootView: bridge.worksheet(sheet))
+        defer { fixture.close() }
+        try await fixture.settle()
+        let table = try XCTUnwrap(fixture.table)
+        XCTAssertEqual(table.tableColumns.map(\.title), ["场景", "摄影机帧率"])
+        XCTAssertEqual(table.selectedRow, 0)
+        let ruler = try XCTUnwrap(table.enclosingScrollView?.verticalRulerView as? CSVWorksheetRuler)
+        XCTAssertEqual(ruler.labelForRow?(1), "B001C001.mov")
+        let field = try XCTUnwrap(table.view(atColumn: 1, row: 0, makeIfNecessary: true) as? CSVTableTextField)
+        XCTAssertTrue(field.active)
+        XCTAssertTrue(field.warns)
+        XCTAssertEqual(field.accessibilityLabel(), L10n.tr("第 {0} 行，{1}", ["2", "摄影机帧率"]))
+        let coordinator = try XCTUnwrap(field.delegate as? EditableCSVTableRepresentable.Coordinator)
+        coordinator.controlTextDidBeginEditing(.init(name: NSControl.textDidBeginEditingNotification, object: field))
+        field.stringValue = "24"
+        try coordinator.flushEdit()
+        let edit = try XCTUnwrap(commits.values.last)
+        sheet.reviewColumns = false
+        fixture.host.rootView = bridge.worksheet(sheet)
+        try await fixture.settle()
+        XCTAssertEqual(table.tableColumns.map(\.title), source.headers)
+        let exported = try await SM05WorkflowServices().mergeAndEncode(source: bytes,
+            records: [.init(cardNumber: "A001", videoCode: "C001", scene: "1", shot: "1", take: "1")],
+            metadata: [.init(materialKey: "A:1:1", sensorFps: "50", shootDay: "2026-01-02")],
+            edits: [.init(rowIndex: edit.rowID, columnIndex: edit.columnID, value: edit.value)],
+            preserveTemplate: true)
+        XCTAssertEqual(exported.data, Data("\u{feff}Notes;摄影机帧率;文件名;场景\r\nkeep;24;A001C001.mov;001\r\nother;30;B001C001.mov;old\r\n".utf8))
+        XCTAssertTrue(exported.merge.addedColumns.isEmpty)
+        XCTAssertFalse(fixture.window.isVisible)
+    }
+
     func testSameHeadersWithNewIdentityRefreshWidthsAndReusedCellAlignment() async throws {
         let fixture = Fixture(value: "1")
         defer { fixture.close() }
@@ -122,8 +167,12 @@ final class CSVColumnLayoutTests: XCTestCase {
         let host: NSHostingView<EditableCSVTableRepresentable>
         let window: NSWindow
 
-        init(value: String, onCommit: @escaping @MainActor @Sendable (CSVCellCommit) -> Void = { _ in }) {
-            host = NSHostingView(rootView: Self.surface(id: UUID(), value: value, onCommit: onCommit))
+        convenience init(value: String, onCommit: @escaping @MainActor @Sendable (CSVCellCommit) -> Void = { _ in }) {
+            self.init(rootView: Self.surface(id: UUID(), value: value, onCommit: onCommit))
+        }
+
+        init(rootView: EditableCSVTableRepresentable) {
+            host = NSHostingView(rootView: rootView)
             window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 640, height: 400),
                 styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
