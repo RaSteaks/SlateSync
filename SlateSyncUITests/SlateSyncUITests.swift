@@ -896,11 +896,17 @@ final class SlateSyncUITests: XCTestCase {
         // accessibility label is empty and whose value carries the message,
         // so the witness reads the value.
         let missing = "没有匹配到可写入的完整记录"
-        let export = window.toolbars.descendants(matching: .any).matching(identifier: "csv.exportDelivery").firstMatch
+        // AppKit exposes a split control as a popup with two actionable
+        // children. XCTest chose the parent's top border on both SM-09 runners.
+        let delivery = window.toolbars.popUpButtons["csv.exportDelivery"].firstMatch
+        let export = delivery.children(matching: .button).firstMatch
+        let formats = delivery.children(matching: .menuButton).firstMatch
+        let center = CGVector(dx: 0.5, dy: 0.5)
         guard waitForUICondition("工作表已加载，导出分体按钮应在工具栏内可见、可用且可点击", app: app, timeout: 8, {
             self.controlIsVisible(export, in: window) && export.isEnabled
+                && self.controlIsVisible(formats, in: window) && formats.isEnabled
         }) else { return }
-        export.click()
+        export.coordinate(withNormalizedOffset: center).click()
         let surfaced = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", missing, missing)
         ).firstMatch
@@ -918,7 +924,7 @@ final class SlateSyncUITests: XCTestCase {
         XCTAssertEqual(scene.value as? String, "087B")
         // The arrow chooses a recipient. A relative filename opens the directory
         // picker once and the same delivery then proceeds to its warning and save.
-        export.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).click()
+        formats.coordinate(withNormalizedOffset: center).click()
         let finalCut = app.menuItems["Final Cut Pro · 导入事件（FCPXML）"].firstMatch
         XCTAssertTrue(finalCut.waitForExistence(timeout: 4))
         XCTAssertTrue(app.menuItems["DaVinci Resolve · 导入素材到媒体池（XML）"].exists)
@@ -938,7 +944,7 @@ final class SlateSyncUITests: XCTestCase {
         let media = try XCTUnwrap(xml.nodes(forXPath: "//media-rep/@src").first?.stringValue)
         XCTAssertEqual(URL(string: media)?.standardizedFileURL.path, testRoot.appending(path: "A001C001.mov").standardizedFileURL.path)
         // Using Final Cut leaves the main half bound to template-preserving CSV.
-        export.click()
+        export.coordinate(withNormalizedOffset: center).click()
         // Scope to the actual sheet: macOS 26 also exposes a same-named
         // Touch Bar item that exists but cannot receive an ordinary click.
         let confirmWarnings = app.sheets.buttons["仍要导出 CSV"].firstMatch
