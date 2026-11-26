@@ -190,6 +190,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             tableView.gridStyleMask = [.solidVerticalGridLineMask]
             tableView.target = context.coordinator
             tableView.action = #selector(Coordinator.selectWorksheetCell(_:))
+            tableView.doubleAction = #selector(Coordinator.editWorksheetCell(_:))
         }
         tableView.rowSizeStyle = .custom
         // Density owns fixed row heights; do not ask every reused text field
@@ -324,6 +325,15 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         fileprivate var updating = false
         fileprivate var diagnosticsGeneration: Int?
         private var lastJump: UUID?
+
+        // A worksheet double-click must move keyboard focus out of the toolbar
+        // (including a failed Export action) and into this exact field editor.
+        @objc fileprivate func editWorksheetCell(_ sender: NSTableView) {
+            guard sender.clickedRow >= 0, sender.clickedColumn >= 0,
+                  let field = sender.view(atColumn: sender.clickedColumn, row: sender.clickedRow, makeIfNecessary: false) as? NSTextField,
+                  field.isEditable, let window = sender.window, window.makeFirstResponder(field) else { return }
+            field.selectText(nil)
+        }
 
         @objc fileprivate func selectWorksheetCell(_ sender: NSTableView) {
             guard sender.clickedRow >= 0, sender.tableColumns.indices.contains(sender.clickedColumn),
@@ -609,7 +619,12 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
 
         private func finishEditing(_ field: NSTextField) {
             timer?.cancel()
+            // AppKit normally copies the shared field editor back to the control
+            // on Return. We handle Return ourselves, so synchronously publish
+            // the final text to both the control (including AX) and the model.
+            let finalText = field.currentEditor()?.string ?? field.stringValue
             commit(field)
+            if field.stringValue != finalText { field.stringValue = finalText }
             editingField = nil
             editingIdentity = nil
             lastCommittedValue = nil
