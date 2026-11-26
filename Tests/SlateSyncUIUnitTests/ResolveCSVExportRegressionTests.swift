@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 import SlateSyncDomain
+import SlateSyncMedia
+import SlateSyncPersistence
 import SlateSyncWorkflow
 @testable import SlateSyncUI
 import XCTest
@@ -43,6 +45,52 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         try await settle()
         XCTAssertEqual(window.toolbar?.items.count, 1, "Leaving the workspace must also remove CSV actions")
         XCTAssertNotNil(model.flushEditor)
+        XCTAssertFalse(window.isVisible)
+    }
+
+    func testExportStaysVisibleAtGateWindowWidths() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let locator = ApplicationSupportLocator(root: root)
+        let runtime = SlateSyncRuntime(locator: locator, environment: [:])
+        let library = ProjectLibraryStartupService(locator: locator, machineSettings: runtime.machineSettingsStore,
+            environment: [:], forceIsolatedRoot: true)
+        let service = SlateSyncWorkflowFacade(library: library, runtime: runtime,
+            logs: LocalLogStore(directory: root.appending(path: "logs")),
+            paddleInstaller: PaddleOCRInstallerService(userDataRoot: root, requirementsURL: root.appending(path: "unused.txt")),
+            allowsExternalOperations: false)
+        let csv = ResolveCSVModel(service: service)
+        await csv.importData(Data(rawCSV.utf8), filename: "source.csv")
+        // The sidebar and real workspace picker compete for toolbar space in SM-09.
+        // Testing only ResolveCSVView, or counting installed items, misses overflow.
+        let shell = NavigationSplitView {
+            Text("SM09").navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
+        } detail: {
+            WorkspaceView(workspace: WorkspaceModel(service: service), recognition: RecognitionModel(service: service, settings: service),
+                csv: csv, metadata: MetadataScanModel(service: service), media: MediaInputModel(service: service), entryPoint: .resolveCSV)
+        }
+        let controller = NSHostingController(rootView: shell)
+        let window = NSWindow(contentRect: CGRect(x: -5000, y: -5000, width: 960, height: 652),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentViewController = controller
+        defer { window.contentViewController = nil; window.close() }
+        for (width, compact) in [(960, true), (1440, false), (1024, true)] {
+            window.setContentSize(CGSize(width: width, height: 652))
+            let title = compact ? L10n.tr("导出 CSV…") : L10n.tr("导出 Resolve CSV…")
+            let mergeTitle = L10n.tr("合并识别结果")
+            // Layout and native toolbar updates may land on different run-loop turns.
+            let deadline = ContinuousClock.now + .seconds(2)
+            repeat {
+                controller.view.superview?.layoutSubtreeIfNeeded()
+                if window.toolbar?.visibleItems?.contains(where: { $0.label == title && $0.isEnabled }) == true,
+                   window.toolbar?.items.contains(where: { $0.label == mergeTitle }) == !compact { break }
+                try await Task.sleep(for: .milliseconds(30))
+            } while ContinuousClock.now < deadline
+            let toolbar = try XCTUnwrap(window.toolbar)
+            XCTAssertTrue(toolbar.visibleItems?.contains { $0.label == title && $0.isEnabled } == true, "Export at width \(width)")
+            XCTAssertEqual(toolbar.items.contains { $0.label == mergeTitle }, !compact)
+        }
         XCTAssertFalse(window.isVisible)
     }
 

@@ -878,6 +878,15 @@ final class SlateSyncUITests: XCTestCase {
         csvTab.click()
         app.buttons["导入 CSV…"].firstMatch.click()
         choosePanelPath(input.path, operation: .openFile, app: app)
+        // The open panel disappearing does not establish that XCTest has
+        // reacquired the document window. Require the imported value before
+        // diagnosing toolbar visibility or attempting the first export.
+        app.activate()
+        let window = app.windows.firstMatch
+        let scene = window.tables["可编辑 Resolve CSV"].firstMatch.textFields["第 2 行，Scene"].firstMatch
+        guard waitForUICondition("导入 source.csv 后应能读取首行 Scene 87A", app: app, timeout: 8, {
+            scene.exists && scene.isHittable && scene.value as? String == "87A"
+        }) else { return }
         // Retained Worker fail-closed boundary (public/resolve-csv.js
         // export-resolve): the frozen legacy record carries no 卷号/视频码, so
         // its material key is missing-key, matchedRecordCount stays 0 and no
@@ -887,9 +896,10 @@ final class SlateSyncUITests: XCTestCase {
         // accessibility label is empty and whose value carries the message,
         // so the witness reads the value.
         let missing = "没有匹配到可写入的完整记录"
-        let export = app.descendants(matching: .any).matching(identifier: "csv.exportDelivery").firstMatch
-        expectation(for: NSPredicate { _, _ in export.exists && export.isEnabled }, evaluatedWith: app)
-        waitForExpectations(timeout: 8)
+        let export = window.toolbars.descendants(matching: .any).matching(identifier: "csv.exportDelivery").firstMatch
+        guard waitForUICondition("工作表已加载，导出分体按钮应在工具栏内可见、可用且可点击", app: app, timeout: 8, {
+            self.controlIsVisible(export, in: window) && export.isEnabled
+        }) else { return }
         export.click()
         let surfaced = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", missing, missing)
@@ -899,9 +909,6 @@ final class SlateSyncUITests: XCTestCase {
         // The workbench intentionally has one export route. A manual sparse
         // edit makes this otherwise unmatched CSV exportable; assert the actual
         // delivered file and raw-source preservation instead of a removed button.
-        let table = app.tables["可编辑 Resolve CSV"].firstMatch
-        let scene = table.textFields["第 2 行，Scene"].firstMatch
-        XCTAssertTrue(scene.waitForExistence(timeout: 5))
         // Select by worksheet address: Scene is the first review field and
         // the imported header occupies CSV row one.
         scene.doubleClick()
@@ -1151,11 +1158,11 @@ final class SlateSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func waitForUICondition(_ description: String, app: XCUIApplication,
+    private func waitForUICondition(_ description: String, app: XCUIApplication, timeout: TimeInterval = 5,
                                     _ condition: @escaping @MainActor () -> Bool) -> Bool {
         let predicate = NSPredicate { _, _ in MainActor.assumeIsolated { condition() } }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app)
-        if XCTWaiter().wait(for: [expectation], timeout: 5) == .completed { return true }
+        if XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed { return true }
         recordUIFailure(description, app: app)
         return false
     }

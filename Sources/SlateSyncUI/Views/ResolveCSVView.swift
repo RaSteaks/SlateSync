@@ -18,6 +18,9 @@ public struct ResolveCSVView: View {
     @State private var directoryRequest: DirectoryRequest?
     @State private var failedCell: CSVWorksheetJump?
     @State private var preparing = false
+    // Start compact until the detail column is measured. The sidebar, title and
+    // workspace picker share the window toolbar with this page.
+    @State private var compactToolbar = true
     @State private var reviewColumns = true
     @State private var issues: [DiagnosticRow] = []
     @State private var indexedGeneration = 0
@@ -106,16 +109,18 @@ public struct ResolveCSVView: View {
             }
         }
         .disabled(recognition?.operation.isRunning == true)
+        .onGeometryChange(for: Bool.self) { $0.size.width < 880 } action: { compactToolbar = $0 }
         .toolbar {
             if revealIsActive {
-                // Import is an icon (with a help tag); merge and export carry titles.
-                ToolbarItemGroup(placement: .primaryAction) {
-                    // AppKit collapses trailing toolbar items into the overflow chevron
-                    // first when the window is narrow, so the order is by importance:
-                    // the accent-filled export, then merge (a bordered secondary).
-                    // Import is in the More menu; the empty state also offers it.
+                // Separate items let AppKit overflow Merge independently. At the
+                // SM-09 window widths, reserve the primary slot for Export alone.
+                ToolbarItem(placement: .primaryAction) {
                     exportAction.slateToolbarPrimaryStyle().labelStyle(.titleAndIcon)
-                    mergeButton.buttonStyle(.bordered).labelStyle(.titleAndIcon)
+                }
+                if !compactToolbar, recognition != nil, workspace != nil {
+                    ToolbarItem(placement: .primaryAction) {
+                        mergeButton.buttonStyle(.bordered).labelStyle(.titleAndIcon)
+                    }
                 }
             }
         }
@@ -426,9 +431,9 @@ public struct ResolveCSVView: View {
     }
 
     /// Merge plus the report entry, for the recovery menu. The window toolbar
-    /// shows only `mergeButton`: an extra toolbar item that appears after a merge
+    /// keeps the report in the scope line: an extra item that appears after a merge
     /// or failed export pushes the primary Export action into the overflow chevron
-    /// on a normal-width window, so the report lives in the scope line instead.
+    /// on a normal-width window.
     @ViewBuilder private var mergeActions: some View {
         mergeButton
         reportButton
@@ -468,8 +473,12 @@ public struct ResolveCSVView: View {
     private var exportAction: some View {
         Menu {
             deliveryItems
+            if compactToolbar, recognition != nil, workspace != nil {
+                Divider()
+                mergeButton
+            }
         } label: {
-            Label(L10n.tr("导出 Resolve CSV…"), systemImage: "square.and.arrow.up")
+            Label(compactToolbar ? L10n.tr("导出 CSV…") : L10n.tr("导出 Resolve CSV…"), systemImage: "square.and.arrow.up")
         } primaryAction: {
             // The main half always writes the Resolve template, independently
             // of the recipient used by the previous delivery.
