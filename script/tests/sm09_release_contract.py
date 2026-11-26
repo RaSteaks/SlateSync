@@ -124,30 +124,39 @@ def validate_workflows(ci: str, release: str) -> None:
     validate_yaml_shape(ci, "ci.yml")
     validate_yaml_shape(release, "release.yml")
     combined = ci + "\n" + release
-    require(combined.count("runs-on: macos-26") == 3, "runner image drift")
-    require(
-        combined.count("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer") == 3,
-        "Xcode selection drift",
-    )
-    # 功能与发布 workflow 共用同一门禁预算；预算调整必须两份文件与
-    # 本断言同一提交更新，防止单边漂移。
-    require(combined.count("timeout-minutes: 60") == 2, "native Gate execution budget drift")
+    # Check the work each event can actually schedule. A manual Gate elsewhere
+    # in the file must not satisfy the fast check's contract (or vice versa).
+    jobs = dict(re.findall(r"^  ([\w-]+):\n(.*?)(?=^  [\w-]+:|\Z)", ci.split("\njobs:\n", 1)[-1], re.M | re.S))
+    require({"native-test", "csv-ui", "functional", "performance"} <= jobs.keys(), "native CI job missing")
+    for job in [*jobs.values(), release]:
+        require("runs-on: macos-26" in job, "runner image drift")
+    for workflow in (ci, release):
+        require("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer" in workflow, "Xcode selection drift")
+    require("timeout-minutes: 60" in jobs["functional"] and "timeout-minutes: 60" in release,
+            "full Gate execution budget drift")
     forbidden = re.compile(
         r"actions/setup-node|\bnpm\b|\bnpx\b|\bnode\b|electron-builder|\bgh\s+release\b|"
         r"CSC_LINK|APPLE_APP_SPECIFIC_PASSWORD|notarytool",
         re.IGNORECASE,
     )
     require(forbidden.search(combined) is None, "Node/Electron/distribution action remains in native workflows")
-    for required in (
-        "xcodebuild -version",
-        "swift --version",
-        "./script/phase_gate.sh SM-09",
-    ):
-        require(required in ci, f"CI native command missing: {required}")
-    require("./script/phase_gate.sh SM-09 --functional" in ci, "merge CI must explicitly select functional scope")
-    primary, separator, advisory = ci.partition("\n  performance:")
-    require(separator and "continue-on-error:" not in primary, "required functional job must fail closed")
-    require(advisory.count("continue-on-error: true") == 2 and "script/performance_report.py" in advisory,
+    quick = jobs["native-test"]
+    require("    if: github.event_name != 'workflow_dispatch' || inputs.profile == 'quick'\n" in quick,
+            "push and PR must run quick validation")
+    for command in ("./script/ci_preflight.sh", "swift test -Xswiftc -warnings-as-errors", "-configuration AppStore"):
+        require(command in quick, f"quick CI command missing: {command}")
+    require(all(tool not in quick for tool in ("phase_gate.sh", "performance_report.py", "-only-testing:", "archive_release.sh")),
+            "expensive acceptance moved into automatic CI")
+    for job, mode in (("csv-ui", "csv-ui"), ("functional", "sm09"), ("performance", "performance")):
+        require(f"    if: github.event_name == 'workflow_dispatch' && inputs.profile == '{mode}'\n" in jobs[job],
+                f"{job} must require explicit dispatch")
+    require(all("continue-on-error:" not in jobs[job] for job in ("native-test", "csv-ui", "functional")),
+            "validation failures must propagate")
+    require("-only-testing:SlateSyncUITests/SlateSyncUITests/testLegacyLibraryCSVExportAndReopenInDeliveredApp" in jobs["csv-ui"]
+            and "CSV.xcresult" in jobs["csv-ui"], "focused CSV UI execution or evidence missing")
+    require("./script/phase_gate.sh SM-09 --functional" in jobs["functional"] and "packaged_ui_contract.py" in jobs["functional"],
+            "manual functional Gate or execution coverage missing")
+    require(jobs["performance"].count("continue-on-error: true") == 2 and "script/performance_report.py" in jobs["performance"],
             "independent advisory performance job missing")
     require("--functional" not in release, "release acceptance must retain strict performance budgets")
     require("./script/phase_gate.sh SM-09" in release, "release native Gate missing")

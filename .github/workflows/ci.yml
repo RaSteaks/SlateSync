@@ -6,54 +6,96 @@ on:
   pull_request:
     branches: [swift-rewrite]
   workflow_dispatch:
+    inputs:
+      profile:
+        description: Validation to run
+        type: choice
+        required: true
+        default: quick
+        options:
+          - quick
+          - csv-ui
+          - sm09
+          - performance
 
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   native-test:
+    # Keep this check name stable for existing branch protection rules.
     name: Swift, Xcode and local package validation
+    if: github.event_name != 'workflow_dispatch' || inputs.profile == 'quick'
     runs-on: macos-26
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-    # Complete Debug and packaged Release UI matrices now exceed the former
-    # 30-minute budget on hosted runners; the 2026-10-01 run measured 45m38s,
-    # so keep all checks with one hosted-runner slow day of headroom.
-    timeout-minutes: 60
+    timeout-minutes: 30
+    concurrency:
+      group: native-quick-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          # Provenance and cutover ancestry must be available on cold runners.
+          # The offline preflight verifies historical migration fixtures in Git.
           fetch-depth: 0
-
-      - name: Verify pinned Apple toolchain
+      - name: Verify Apple toolchain
         run: |
-          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
-          grep -Fx 'Xcode 26.3' "$RUNNER_TEMP/xcode-version.txt"
-          grep -Fx 'Build version 17C529' "$RUNNER_TEMP/xcode-version.txt"
+          xcodebuild -version | grep -Fx 'Build version 17C529'
           swift --version
-          sw_vers
-
-      - name: Install Gate dependencies
-        # Gate scripts require ripgrep for source and log validation.
+      - name: Install preflight dependency
+        run: command -v rg || brew install ripgrep
+      - name: Run offline contracts
+        run: ./script/ci_preflight.sh
+      - name: Build and test the Swift package
+        run: swift test -Xswiftc -warnings-as-errors
+      - name: Compile the App Store app for the runner architecture
         run: |
-          if ! command -v rg >/dev/null 2>&1; then
-            brew install ripgrep
-          fi
-          rg --version
+          xcodebuild -quiet -project SlateSync.xcodeproj -scheme SlateSync \
+            -configuration AppStore -destination 'platform=macOS' \
+            ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
 
-      - name: Validate Gate contracts before building
+  csv-ui:
+    name: CSV export UI regression (Debug)
+    if: github.event_name == 'workflow_dispatch' && inputs.profile == 'csv-ui'
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the legacy CSV import, edit and export scenario
         shell: bash
         run: |
-          # Share the no-window local preflight. Its positive baseline runs
-          # before negative fixtures; pipefail preserves failures through tee.
-          set -euo pipefail
-          ./script/ci_preflight.sh 2>&1 | tee "$RUNNER_TEMP/native-ci-preflight.log"
+          mkdir -p "$RUNNER_TEMP/csv-ui"
+          xcodebuild -project SlateSync.xcodeproj -scheme SlateSync -testPlan SlateSync \
+            -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=- \
+            -parallel-testing-enabled NO \
+            -only-testing:SlateSyncUITests/SlateSyncUITests/testLegacyLibraryCSVExportAndReopenInDeliveredApp \
+            -resultBundlePath "$RUNNER_TEMP/csv-ui/CSV.xcresult" test
+          # A stale test selector can produce zero executions; check the actual result.
+          xcrun xcresulttool get test-results summary --format json --path "$RUNNER_TEMP/csv-ui/CSV.xcresult" \
+            | tee "$RUNNER_TEMP/csv-ui/summary.json" \
+            | jq -e '.result == "Passed" and .passedTests == 1 and .failedTests == 0 and .skippedTests == 0'
+      - name: Keep the focused XCTest result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-ui-result
+          path: ${{ runner.temp }}/csv-ui/
+          retention-days: 7
 
-      - name: Run strict Swift build
-        run: swift build -Xswiftc -warnings-as-errors
-
+  functional:
+    name: Full functional SM-09 acceptance
+    if: github.event_name == 'workflow_dispatch' && inputs.profile == 'sm09'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Gate toolchain and dependency
+        run: |
+          xcodebuild -version | grep -Fx 'Build version 17C529'
+          command -v rg || brew install ripgrep
       - name: Run required functional SM-09 Gate
         # Policy v2: a clean PASS may support migration completion review.
         # It retains approvable=false/fullAcceptancePassed=false and never
@@ -84,7 +126,6 @@ jobs:
         with:
           name: native-ci-diagnostics
           path: |
-            ${{ runner.temp }}/native-ci-preflight.log
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/result.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/release-identity.json
             ${{ runner.temp }}/SlateSync-Gate/SM-09/*/checks.tsv
@@ -132,11 +173,10 @@ jobs:
   # into the required functional job's result. Its assertions remain strict.
   performance:
     name: Performance report (non-blocking)
+    if: github.event_name == 'workflow_dispatch' && inputs.profile == 'performance'
     runs-on: macos-26
     continue-on-error: true
     timeout-minutes: 20
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - name: Checkout
         uses: actions/checkout@v4

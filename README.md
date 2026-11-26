@@ -229,6 +229,21 @@ SlateSyncApp/Resources/PaddleOCR
 `python3 -B script/tests/sm09_coverage_tests.py`；它们不在日常预检链中。设计截图、真实 Paddle 运行时和前台性能
 用例需要专用环境，默认跳过不等于通过。
 
+### GitHub CI 的执行范围
+
+推送到 `swift-rewrite` 或向它提交 PR 时，**Native macOS CI** 默认执行离线预检、SwiftPM 编译与测试，以及当前架构的 AppStore 配置编译（免签名）。同一 PR 或分支上的新提交会取消过时的快速检查。可选 MCP 服务继续使用独立的 `Local MCP server` 工作流。
+
+需要真实窗口或交付包时，进入 **Actions → Native macOS CI → Run workflow**，选定分支和 `profile`：
+
+| profile | 检查 | 用途 |
+| --- | --- | --- |
+| `quick` | 与普通 push / PR 相同 | 日常反馈 |
+| `csv-ui` | 只运行 Debug 的旧项目 CSV 导入、编辑、导出和重开用例，保存 `.xcresult` | 单独复现单元格编辑或导出失败 |
+| `sm09` | 完整功能 Gate，含 Debug UI、Universal 归档、ZIP/DMG、打包 Release UI 及覆盖核验 | 按需验证候选提交 |
+| `performance` | 独立的性能基准和报告 | 需要比较耗时或资源消耗时运行 |
+
+也可以用 `gh workflow run ci.yml --ref swift-rewrite -f profile=csv-ui` 单独启动 CSV 调试。快速检查通过只表示该提交通过了日常检查。需要完整发布候选证据时，通过 `release.yml` 手动运行严格 Gate，见 [发布说明](RELEASE.md)。
+
 2026-11-07 清理后，根包包含 90 个测试文件、599 个 XCTest 方法（此前为 99 / 611）。
 MCP 的 14 项、App 宿主的 2 项、XCUI 的 27 项及脚本验收保持原有范围。
 本轮归并关系如下，保留的数据安全与业务流程断言仍由对应套件执行：

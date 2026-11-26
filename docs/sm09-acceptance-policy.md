@@ -11,8 +11,10 @@
 | 层级 | 入口与场所 | 必须满足 | 结果用途 |
 | --- | --- | --- | --- |
 | 本地开发检查 | 定向离线测试、构建、ci_preflight；不启动前台 | 受影响行为与静态契约通过 | 开发反馈，不能单独确认阶段完成 |
-| 功能及迁移完成验收 | GitHub macOS runner 执行 phase_gate.sh SM-09 --functional | 原生构建、功能、数据、资源、完整必需 UI、归档及 ZIP／DMG 交付验收通过 | 合并证据；干净提交的完整 PASS 可提交 SM-09 完成审查 |
-| 性能报告 | 独立 performance job，使用现有严格断言 | 如实报告耗时、FPS、内存及错误 | 对功能合并和迁移完成非阻塞；失败保留为性能待办 |
+| 日常远端 CI | `swift-rewrite` 的 push／PR，或手动 `quick` | 离线预检、SwiftPM 测试、AppStore 配置编译 | 日常合并检查 |
+| 定向远端排错 | 手动 `csv-ui` | Debug 旧项目 CSV 编辑与导出用例 | 复现问题，提供 XCTest 证据 |
+| 功能及迁移完成验收 | 手动选择 `sm09` 在 GitHub macOS runner 执行 phase_gate.sh SM-09 --functional | 原生构建、功能、数据、资源、完整必需 UI、归档及 ZIP／DMG 交付验收通过 | 合并证据；干净提交的完整 PASS 可提交 SM-09 完成审查 |
+| 性能报告 | 手动选择 `performance` 运行独立基准，使用现有严格断言 | 如实报告耗时、FPS、内存及错误 | 对功能合并和迁移完成非阻塞；失败保留为性能待办 |
 | 完整发布候选验收 | GitHub macOS runner 执行 phase_gate.sh SM-09，不加 --functional | 功能及交付检查与全部现行性能预算通过 | 当前候选的完整技术验收，不自动发布 |
 | 分发渠道验收 | Developer ID 或 Mac App Store 的独立流程 | 相应签名、公证／商店签名、沙盒及上传要求 | 仅证明实际执行的渠道步骤；不等同于商店审核或发布授权 |
 

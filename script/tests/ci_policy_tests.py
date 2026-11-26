@@ -234,6 +234,14 @@ class CIPolicyTests(unittest.TestCase):
         release.validate_workflows(ci, rel)
         with self.assertRaises(AssertionError):
             release.validate_workflows(ci.replace('  native-test:', '  native-test:\n    continue-on-error: true'), rel)
+        # Expensive jobs should never be scheduled by an ordinary push or PR.
+        for profile in ("sm09", "performance", "csv-ui"):
+            with self.subTest(profile=profile), self.assertRaises(AssertionError):
+                release.validate_workflows(ci.replace(
+                    f"    if: github.event_name == 'workflow_dispatch' && inputs.profile == '{profile}'\n", ""), rel)
+        with self.assertRaises(AssertionError):
+            release.validate_workflows(ci.replace("run: swift test -Xswiftc -warnings-as-errors",
+                                                  "run: ./script/phase_gate.sh SM-09 --functional"), rel)
         with self.assertRaises(AssertionError):
             release.validate_workflows(ci, rel.replace('./script/phase_gate.sh SM-09', './script/phase_gate.sh SM-09 --functional'))
 
