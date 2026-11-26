@@ -31,7 +31,8 @@ public final class MediaInputModel {
 
     public func plan(_ urls: [URL]) async throws -> [MediaIntakePart] {
         var result: [MediaIntakePart] = []
-        for url in urls {
+        var seen: Set<URL> = []
+        for url in urls where seen.insert(url.standardizedFileURL).inserted {
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             result += try await service.intakeParts(for: url)

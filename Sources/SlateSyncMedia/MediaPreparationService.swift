@@ -110,9 +110,22 @@ public actor MediaPreparationService: MediaPreparing, MediaRecompressing {
     /// Detect split points before allocating any raster views. Each child still
     /// passes through the normal document/page/byte admission path.
     public func intakeParts(for url: URL) throws -> [MediaIntakePart] {
-        guard url.pathExtension.lowercased() == "pdf" else { return [.init(url: url)] }
-        guard let document = PDFDocument(url: url), !document.isLocked, document.pageCount > 0 else { throw MediaFailure.invalidInput }
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        let attributes = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
+        guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else { throw MediaFailure.invalidInput }
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        let signature = try file.read(upToCount: 12) ?? Data()
+        let size = attributes.fileSize ?? 0
+        if !signature.starts(with: Data("%PDF-".utf8)) {
+            let jpeg = signature.starts(with: [0xff, 0xd8, 0xff])
+            let png = signature.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+            let webp = signature.starts(with: Data("RIFF".utf8)) && signature.suffix(4) == Data("WEBP".utf8)
+            guard jpeg || png || webp else { throw SlateSyncError(code: "MEDIA_IMAGE_DECODE", message: "请选择 PDF、JPEG、PNG 或 WebP 文件。") }
+            guard size <= MediaPreparationOptions().maximumInputBytes else { throw sizeError() }
+            return [.init(url: url)]
+        }
+        guard let document = PDFDocument(url: url), document.pageCount > 0 else { throw MediaFailure.invalidInput }
+        guard !document.isLocked else { throw SlateSyncError(code: "PDF_PASSWORD", message: "PDF 已加密，请先移除密码") }
         if document.pageCount <= Self.maximumPages && size <= MediaPreparationOptions().maximumInputBytes { return [.init(url: url)] }
         var parts: [MediaIntakePart] = []
         func append(_ range: ClosedRange<Int>) throws {

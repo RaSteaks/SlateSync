@@ -162,7 +162,13 @@ public struct AppRootView: View {
                 }
             } else if case .failed(let error) = recognition.operation {
                 SlateStatusBar(message: error.message, tone: .error) {
-                    SettingsLink { Text(L10n.tr("检查识别配置")) }
+                    if error.code.contains("PROVIDER") || error.code.contains("MODEL") || error.code.contains("CREDENTIAL") {
+                        SettingsLink { Text(L10n.tr("检查识别配置")) }
+                    }
+                    Button(L10n.tr("返回输入页重试")) {
+                        workspaceEntryPoint = .retryInput
+                        if session.route != .workspace { Task { await session.navigate(to: .workspace) } }
+                    }
                 }
             } else if case .succeeded(let message) = recognition.operation, canViewRecognitionResult {
                 // Completion never steals focus or seizes the current page;

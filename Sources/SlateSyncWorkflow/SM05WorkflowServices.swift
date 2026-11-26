@@ -45,8 +45,8 @@ public actor SM05WorkflowServices {
         let clock = ContinuousClock()
         let start = clock.now
         let result = try await previewMerge(source: source, records: records, metadata: metadata, fieldFormats: fieldFormats, comments: comments, edits: edits, preserveTemplate: preserveTemplate)
-        // Match export-resolve: manual edits may make an otherwise unchanged
-        // merge exportable, but an empty recognition list is never exportable.
+        // A manual edit may be the entire delivery. An otherwise unchanged
+        // backfill must still have a complete match to writable columns.
         // ResolveSparseEdit is the typed equivalent of a normalized JS edit.
         // Count complete matched records, not updatedRowCount: independent
         // metadata backfills must not mask incomplete recognition records.

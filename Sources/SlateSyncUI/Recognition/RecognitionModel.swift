@@ -166,7 +166,8 @@ public final class RecognitionModel {
     func addRecord(commit: ([PersistedRecognitionRecord]) -> Void) {
         guard commitVisibleEditor() else { return }
         filterStatus(nil)
-        editableRecords.append(.init(.init(id: UUID().uuidString), fallbackID: UUID().uuidString))
+        let id = UUID().uuidString
+        editableRecords.append(.init(.init(id: id), fallbackID: id))
         commit(editableRecords.map(\.persisted))
     }
 

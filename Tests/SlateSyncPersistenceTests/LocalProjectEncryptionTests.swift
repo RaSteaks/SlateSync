@@ -95,6 +95,47 @@ final class LocalProjectEncryptionTests: XCTestCase {
         try await database.close()
     }
 
+    func testChunkedProjectReusesUnchangedBlocksAndRejectsIncompleteCommits() async throws {
+        let root = try PersistenceTestSupport.temporaryRoot("encrypted-blocks")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await LocalProjectEncryption.prepare(at: root, backend: InMemoryKeychainBackend())
+        let url = root.appending(path: SQLiteV1.projectDatabaseFilename)
+        let database = try SQLiteDatabase(url: url)
+        try await database.executeScript("CREATE TABLE media(id INTEGER PRIMARY KEY, payload BLOB); CREATE TABLE edits(value TEXT);")
+        _ = try await database.execute("INSERT INTO media VALUES(1, zeroblob(3145728));")
+        _ = try await database.execute("INSERT INTO edits VALUES('old');")
+        let directory = root.appending(path: EncryptedSQLiteBlocks.directoryName)
+        let before = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        XCTAssertGreaterThan(before.count, 8)
+        let oldBlocks = try Dictionary(uniqueKeysWithValues: before.map { ($0.lastPathComponent, try Data(contentsOf: $0)) })
+        let orphan = directory.appending(path: UUID().uuidString + ".chunk")
+        try Data("interrupted unpublished block".utf8).write(to: orphan)
+        let second = try SQLiteDatabase(url: url)
+        _ = try await second.execute("UPDATE edits SET value='new';")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+        let after = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        let retained = after.filter { oldBlocks[$0.lastPathComponent] != nil }
+        XCTAssertGreaterThanOrEqual(retained.count, before.count - 3)
+        for file in retained { XCTAssertEqual(try Data(contentsOf: file), oldBlocks[file.lastPathComponent]) }
+        let visible = try await database.scalar("SELECT value FROM edits;")
+        XCTAssertEqual(visible, "new")
+        try await second.close(); try await database.close()
+
+        // The index alone is insufficient to open a v2 store. An interrupted
+        // copy or swapped block must fail closed without changing its manifest.
+        let head = try Data(contentsOf: url)
+        let file = try XCTUnwrap(retained.first)
+        let original = try Data(contentsOf: file)
+        try Data("broken".utf8).write(to: file, options: .atomic)
+        XCTAssertThrowsError(try SQLiteDatabase(url: url))
+        XCTAssertEqual(try Data(contentsOf: url), head)
+        try original.write(to: file, options: .atomic)
+        let reopened = try SQLiteDatabase(url: url)
+        let length = try await reopened.scalar("SELECT length(payload) FROM media;")
+        XCTAssertEqual(length, "3145728")
+        try await reopened.close()
+    }
+
     func testOpeningEncryptedDatabaseDoesNotRewriteSnapshot() async throws {
         let root = try PersistenceTestSupport.temporaryRoot("encrypted-open-read-only")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -217,7 +258,10 @@ final class LocalProjectEncryptionTests: XCTestCase {
         let project = try await original.createProject(name: "Secret Project Name", description: "private-description")
         let projectURL = internalURL.appending(path: "Projects/\(project.id)")
         let tasks = try ProjectTaskStore(projectDirectory: projectURL)
-        let payload = Data(#"{"id":"private-task","text":"confidential-dialogue"}"#.utf8)
+        // Cross the local v2 threshold before the v1 -> encrypted migration.
+        // Both portable export paths must materialize ordinary SQLite again.
+        let large = Data(repeating: 0x53, count: 1024 * 1024).base64EncodedString()
+        let payload = try JSONSerialization.data(withJSONObject: ["id": "private-task", "text": "confidential-dialogue", "original": large])
         _ = try await tasks.saveTask(payload)
         try await tasks.close()
         try await original.close()
@@ -242,6 +286,14 @@ final class LocalProjectEncryptionTests: XCTestCase {
         let exportURL = root.appending(path: "Portable.slatesync-library")
         _ = try await ProjectLibraryTransfer.exportLibrary(from: internalURL, to: exportURL)
         XCTAssertFalse(FileManager.default.fileExists(atPath: exportURL.appending(path: LocalProjectEncryption.markerName).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectURL.appending(path: EncryptedSQLiteBlocks.directoryName).path))
+        XCTAssertFalse(try FileManager.default.subpathsOfDirectory(atPath: exportURL.path).contains { $0.hasSuffix(".chunk") })
+        let portableProject = exportURL.appending(path: "Projects/\(project.id)")
+        let standalone = try ProjectTaskStore(projectDirectory: portableProject)
+        let downgraded = try await standalone.loadTask("private-task")
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: downgraded) as? [String: Any])
+        XCTAssertEqual(decoded["original"] as? String, large)
+        try await standalone.close()
         let exportedDatabase = try Data(contentsOf: exportURL.appending(path: "library.sqlite"))
         XCTAssertTrue(exportedDatabase.starts(with: Data("SQLite format 3".utf8)))
         _ = try JSONSerialization.jsonObject(with: Data(contentsOf: exportURL.appending(path: "library.json")))

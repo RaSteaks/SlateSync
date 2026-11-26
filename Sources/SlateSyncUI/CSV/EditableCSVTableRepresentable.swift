@@ -409,9 +409,15 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         // changes must invalidate native rows even when the revision matches.
         defer { context.coordinator.applyWorksheetJump() }
         if worksheet != nil { scrollView.verticalRulerView?.needsDisplay = true }
-        guard context.coordinator.renderedRevision != revision ||
-                context.coordinator.renderedTableID != tableID ||
-                context.coordinator.diagnosticsGeneration != worksheet?.diagnosticsGeneration else { return }
+        if context.coordinator.renderedRevision == revision, context.coordinator.renderedTableID == tableID {
+            if context.coordinator.diagnosticsGeneration != worksheet?.diagnosticsGeneration {
+                // Redecorate the visible cells without replacing the field editor
+                // when an in-progress manual correction invalidates diagnostics.
+                context.coordinator.refreshWarningCells()
+                context.coordinator.diagnosticsGeneration = worksheet?.diagnosticsGeneration
+            }
+            return
+        }
         let origin = scrollView.contentView.bounds.origin
         let selected = CSVKeyboardNavigation.validSelection(
             tableView.selectedRowIndexes,
@@ -477,6 +483,23 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             guard sender.clickedRow >= 0, sender.tableColumns.indices.contains(sender.clickedColumn),
                   let binding = columnBindings[ObjectIdentifier(sender.tableColumns[sender.clickedColumn])] else { return }
             activate(.init(row: sender.clickedRow, column: binding.sourceIndex))
+        }
+
+        fileprivate func refreshWarningCells() {
+            guard let table = tableView else { return }
+            let visible = table.rows(in: table.visibleRect)
+            guard visible.location != NSNotFound else { return }
+            for row in visible.location..<NSMaxRange(visible) {
+                for (position, column) in table.tableColumns.enumerated() {
+                    guard let source = columnBindings[ObjectIdentifier(column)]?.sourceIndex,
+                          let field = table.view(atColumn: position, row: row, makeIfNecessary: false) as? CSVTableTextField else { continue }
+                    let warns = parent.worksheet?.warnings.contains(.init(row: row, column: source)) == true
+                    if field.warns != warns {
+                        field.warns = warns
+                        field.setAccessibilityHelp(warns ? L10n.tr("此字段需要核对") : nil)
+                    }
+                }
+            }
         }
 
         private var activeCell: CSVWorksheetCell?

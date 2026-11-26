@@ -114,7 +114,12 @@ private struct ScenarioCandidateRow: View {
                         }.padding().frame(minWidth: 540, minHeight: 460)
                          .task(id: source) {
                              sourceImage = nil; sourceError = nil
-                             do { sourceImage = NSImage(data: try await originalPage(source)) }
+                             do {
+                                 guard let image = NSImage(data: try await originalPage(source)) else {
+                                     throw SlateSyncError(code: "SCENARIO_SOURCE", message: L10n.tr("找不到对应的原稿页。"))
+                                 }
+                                 sourceImage = image
+                             }
                              catch { sourceError = ProductPrivacy.error(error).message }
                          }
                     }

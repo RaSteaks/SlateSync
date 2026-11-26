@@ -1468,5 +1468,16 @@
   "离线启动程序已就绪": "Offline executable ready",
   "离线工作前请先构建，或在高级设置选择已有启动程序。": "Build the helper before working offline, or choose an existing executable in Advanced Settings.",
   "匹配 {0} 条 · 更新 {1} 行 · 修改 {2} 格": "Matched {0} records · Updated {1} rows · Changed {2} cells",
-  "本地场记已更新": "Local slate updated"
+  "本地场记已更新": "Local slate updated",
+  "工作表待重新核对。": "Worksheet review needs refreshing.",
+  "重新核对": "Refresh reconciliation",
+  "返回输入页重试": "Return to Input to retry",
+  "重新选择位置…": "Choose the location again…",
+  "请选择 PDF、JPEG、PNG 或 WebP 文件。": "Choose a PDF, JPEG, PNG or WebP file.",
+  "项目分块缺失或验证失败，请恢复完整项目库或导入 v1 备份。": "Project blocks are missing or could not be verified. Restore the complete library or import a v1 backup.",
+  "无法同步项目分块，请检查存储设备": "Could not synchronize project storage. Check the storage device.",
+  "项目分块入口无效": "Invalid project block manifest.",
+  "待交付": "Awaiting delivery",
+  "已交付": "Delivered",
+  "待交付 {0}": "{0} awaiting delivery"
 }

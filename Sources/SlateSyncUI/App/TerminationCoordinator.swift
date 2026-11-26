@@ -176,8 +176,8 @@ public final class TerminationCoordinator {
         guard libraryMutationTask == nil, !isMutatingLibrary, !isDraining, !restartRequired else {
             throw SlateSyncError(code: "LIBRARY_BUSY", message: L10n.tr("项目库正在更新或等待重启，请稍后重试"), retryable: true)
         }
-        // All windows freeze editing before the shared mutation starts. Each
-        // writer and operation drains, including windows that are not focused.
+        // Library-wide mutations drain every window. A single-project export
+        // instead joins that project's writers while unrelated jobs continue.
         isMutatingLibrary = projectID == nil
         exportingProjectID = projectID
         let task = Task { @MainActor [windows] in

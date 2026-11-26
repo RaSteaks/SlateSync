@@ -576,6 +576,9 @@ public enum ProjectLibraryTransfer {
     ) throws {
         var allowed: Set<String> = ["project.json", SQLiteV1.projectDatabaseFilename, "tasks", "diagnostics"]
         if package { allowed.insert(projectPackageManifest) }
+        if !package, try LocalProjectEncryption.identifier(for: root.appending(path: SQLiteV1.projectDatabaseFilename)) != nil {
+            allowed.insert(EncryptedSQLiteBlocks.directoryName)
+        }
         if allowSQLiteArtifacts {
             allowed.formUnion(["project.sqlite-wal", "project.sqlite-shm"])
         }
@@ -611,6 +614,9 @@ public enum ProjectLibraryTransfer {
             throw transferError("INVALID_PROJECT_PACKAGE", "传输树不能包含符号链接")
         }
         if isTemporary(source.lastPathComponent) { return }
+        // SQLite online backup reconstructs a complete portable v1 database.
+        // Local chunk envelopes must never travel alongside that database.
+        if values.isDirectory == true, source.lastPathComponent == EncryptedSQLiteBlocks.directoryName { return }
         if values.isDirectory == true {
             try SecureFilePermissions.prepareDirectory(at: target)
             for entry in try FileManager.default.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) {
@@ -644,7 +650,7 @@ public enum ProjectLibraryTransfer {
             }
         )
         while let source = enumerator?.nextObject() as? URL {
-            if isTemporary(source.lastPathComponent) {
+            if isTemporary(source.lastPathComponent) || source.lastPathComponent == EncryptedSQLiteBlocks.directoryName {
                 // Skipping descendants on a regular lock file can skip its
                 // siblings, including the database that still needs backup.
                 if try source.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {

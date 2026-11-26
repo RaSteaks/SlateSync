@@ -23,8 +23,10 @@ public struct CSVStageSnapshot: Sendable {
     public let edits: [String: String]
     public let rawBase64: String?
     public let invalidatesScan: Bool
+    public let merged: Bool
 
-    public init(table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?, invalidatesScan: Bool = false) {
+    public init(table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?, invalidatesScan: Bool = false, merged: Bool = false) {
+        self.merged = merged
         self.table = table
         self.filename = filename
         self.edits = edits
@@ -41,6 +43,7 @@ public final class ResolveCSVModel {
     public private(set) var tableID = UUID()
     public private(set) var table: ResolveCSVTable?
     public private(set) var revision = 0
+    public private(set) var needsReview = false
     public private(set) var filename: String?
     public private(set) var operation: OperationState = .idle
     // Reconciliation diagnostics from the latest canonical merge (badge
@@ -83,6 +86,7 @@ public final class ResolveCSVModel {
             tableID = UUID()
             table = decoded
             self.filename = filename
+            needsReview = false
             // A fresh import replaces the retained raw source and clears the
             // edits from any previous table geometry.
             rawData = data
@@ -118,7 +122,7 @@ public final class ResolveCSVModel {
         // this canonical table plus raw bytes/edits through Workspace's single
         // autosave writer.
         let identityChanged = (try? ResolveHeaders.resolve(current.headers).identityColumns.contains(commit.columnID)) ?? false
-        if lastMergeDiagnostics != nil { lastMergeDiagnostics = nil }
+        invalidateReview()
         onTableChange?(CSVStageSnapshot(table: current, filename: filename, edits: sparseEdits, rawBase64: rawBase64, invalidatesScan: identityChanged))
     }
 
@@ -138,8 +142,8 @@ public final class ResolveCSVModel {
 
     /// Export re-merges the retained raw table using the latest recognition.
     /// Only matched values are normalized; manual sparse edits apply last and
-    /// encoding preserves them and every unmatched cell. An empty recognition
-    /// list is never exportable (`CSV_NO_EXPORT`).
+    /// encoding preserves them and every unmatched cell. Manual-only changes
+    /// can be delivered independently of a recognition result.
     public func exportData(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, format: MetadataDeliveryFormat = .csv, mediaDirectory: URL? = nil) async throws -> Data {
         do {
             return try await prepareExport(records: records, metadata: metadata, settings: settings, format: format, mediaDirectory: mediaDirectory).data
@@ -195,6 +199,7 @@ public final class ResolveCSVModel {
             guard generation == workGeneration, identity == tableID else { throw CancellationError() }
             try requireUnchangedEdits(edits)
             lastMergeDiagnostics = merge
+            needsReview = false
             operation = .idle
             return payload
         } catch let issue as DeliveryInputIssue {
@@ -285,8 +290,9 @@ public final class ResolveCSVModel {
             try requireUnchangedEdits(edits)
             self.table = result.table
             lastMergeDiagnostics = result
+            needsReview = false
             revision += 1
-            onTableChange?(CSVStageSnapshot(table: result.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
+            onTableChange?(CSVStageSnapshot(table: result.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64, merged: true))
             operation = .succeeded(message: L10n.tr("匹配 {0} 条 · 更新 {1} 行 · 修改 {2} 格", [String(result.matchedRecordCount), String(result.updatedRowCount), String(result.changedCellCount)]))
         }
     }
@@ -320,7 +326,15 @@ public final class ResolveCSVModel {
         }
     }
 
+    public func invalidateReview() {
+        guard lastMergeDiagnostics != nil else { return }
+        needsReview = true
+        lastMergeDiagnostics = nil
+        if !operation.isRunning { operation = .idle }
+    }
+
     public func reset() {
+        needsReview = false
         work?.cancel()
         exportWork?.cancel()
         workGeneration += 1
@@ -337,6 +351,7 @@ public final class ResolveCSVModel {
 
     public func load(task: TaskData?) {
         reset()
+        needsReview = task?.production?.mergedWorksheet == true
         table = task?.resolveCsvTable
         filename = task?.resolveCsvFilename
         // Restore the retained raw bytes and the manual edits so a reloaded

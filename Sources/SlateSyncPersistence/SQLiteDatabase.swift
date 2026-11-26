@@ -36,7 +36,7 @@ public actor SQLiteDatabase {
     private let openMode: OpenMode
     // Cache the exact authenticated envelope, not filesystem timestamps. Equal-size
     // in-place edits on coarse-timestamp volumes must invalidate cached plaintext.
-    private var loadedSnapshot: Data?
+    private var loadedSnapshot: EncryptedSQLiteSnapshot.State?
 
     // `nonisolated(unsafe)` is restricted to storage so deinit can close the C
     // handle. All operational access remains actor-isolated.
@@ -597,14 +597,14 @@ public actor SQLiteDatabase {
             }
             do {
                 let bytes = try Data(contentsOf: snapshotURL)
-                if loadedSnapshot != bytes {
+                if loadedSnapshot?.envelope != bytes {
                     // Load the exact bytes compared here; plaintext/WAL inputs
                     // return nil and must always be reloaded on the next access.
                     loadedSnapshot = try EncryptedSQLiteSnapshot.load(url: snapshotURL, into: handle, bytes: bytes)
                 }
                 let result = try operation(self)
                 if writing {
-                    loadedSnapshot = try EncryptedSQLiteSnapshot.save(handle: handle, to: snapshotURL, id: encryptionID)
+                    loadedSnapshot = try EncryptedSQLiteSnapshot.save(handle: handle, to: snapshotURL, id: encryptionID, previous: loadedSnapshot)
                 }
                 return result
             } catch {

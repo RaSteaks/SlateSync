@@ -83,6 +83,26 @@ public actor ResolveCSVMerger {
         var rowIndex = Self.buildRowIndex(rows, columns: columns, warnings: &warnings)
         var rowKeys = Array(repeating: "", count: rows.count)
         for (key, numbers) in rowIndex { for number in numbers { rowKeys[number] = key } }
+        // Roll/clip numbers can repeat across shooting days. A duplicate key is
+        // safe for fan-out only if the source rows do not contradict one another.
+        let disambiguators = columns.filePath + columns.clipDirectory + columns.startTC + [columns.shootDay].filter { $0 >= 0 }
+        func conflicts(_ indexes: [Int]) -> Bool {
+            guard indexes.count > 1 else { return false }
+            for column in columns.fileName {
+                let paths = Set(indexes.compactMap { index -> String? in
+                    let name = rows[index][column]
+                    guard name.contains("/") || name.contains("\\") else { return nil }
+                    return (name.replacingOccurrences(of: "\\", with: "/") as NSString).deletingLastPathComponent
+                })
+                if paths.count > 1 { return true }
+            }
+            for column in disambiguators {
+                let values = Set(indexes.map { ResolveCSVNormalization.clean(rows[$0][column]) }.filter { !$0.isEmpty })
+                if values.count > 1 { return true }
+            }
+            return false
+        }
+        var ambiguousKeys = Set(rowIndex.keys.filter { conflicts(rowIndex[$0] ?? []) })
         // Explicit names/paths are used only for records without a usable
         // camera key, or a full path deliberately assigned by the operator.
         let namedKeys = Set(records.map(Self.recordKey).filter { $0.hasPrefix("file:") })
@@ -99,26 +119,10 @@ public actor ResolveCSVMerger {
                 rowKeys[index] = name
                 rowIndex[name, default: []].append(index)
             }
+            // A manual assignment must never make the remaining generic camera
+            // key appear safe by elimination. Keep the original collisions.
+            for name in namedKeys where conflicts(rowIndex[name] ?? []) { ambiguousKeys.insert(name) }
         }
-        // Roll/clip numbers can repeat across shooting days. A duplicate key is
-        // safe for fan-out only if the source rows do not contradict one another.
-        let disambiguators = columns.filePath + columns.clipDirectory + columns.startTC + [columns.shootDay].filter { $0 >= 0 }
-        let ambiguousKeys = Set(rowIndex.compactMap { key, indexes -> String? in
-            guard indexes.count > 1 else { return nil }
-            for column in columns.fileName {
-                let paths = Set(indexes.compactMap { index -> String? in
-                    let name = rows[index][column]
-                    guard name.contains("/") || name.contains("\\") else { return nil }
-                    return (name.replacingOccurrences(of: "\\", with: "/") as NSString).deletingLastPathComponent
-                })
-                if paths.count > 1 { return key }
-            }
-            for column in disambiguators {
-                let values = Set(indexes.map { ResolveCSVNormalization.clean(rows[$0][column]) }.filter { !$0.isEmpty })
-                if values.count > 1 { return key }
-            }
-            return nil
-        })
         var recognizedKeys = Set<String>()
         var recognizedKeyOrder: [String] = []
         for record in records {
@@ -243,7 +247,7 @@ public actor ResolveCSVMerger {
                         note = ""
                     }
                     let freeText = records[primary.recordIndex].comments ?? ""
-                    for value in [primary.comments, freeText] where !value.isEmpty && !note.components(separatedBy: "\n").contains(value) {
+                    for value in [primary.comments, freeText] where !value.isEmpty && !("\n" + note + "\n").contains("\n" + value + "\n") {
                         note = note.isEmpty ? value : note + "\n" + value
                     }
                     Self.write(note, field: "comments", column: columns.comments, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)

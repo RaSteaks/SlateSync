@@ -105,6 +105,13 @@ public struct ResolveCSVView: View {
                 }))
                 .accessibilityIdentifier(AccessibilityID.csvTable)
                 .disabled(model.operation.isRunning)
+                if model.needsReview, let recognition, let workspace {
+                    SlateStatusBar(message: L10n.tr("工作表待重新核对。")) {
+                        Button(L10n.tr("重新核对")) {
+                            Task { await model.merge(records: recognition.resolveRecords, metadata: workspace.selectedTask?.slateMetadata ?? [], settings: deliverySettings) }
+                        }
+                    }
+                }
                 worksheetStatus(table)
             } else {
                 SlateEmptyState(

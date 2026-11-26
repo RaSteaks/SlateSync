@@ -270,10 +270,11 @@ private struct SlateSyncWindowRoot: View {
             try csv?.flushEditor?()
             try recognition?.flushEditor?()
         }
+        workspace.reviewInputsChanged = { [weak csv] in csv?.invalidateReview() }
         csv.onTableChange = { [weak workspace, weak metadata] snapshot in
             // A scan from the previous source must not finish onto the new sheet.
             if snapshot.invalidatesScan { metadata?.cancel(); metadata?.load(task: nil) }
-            workspace?.stageCSV(snapshot.table, filename: snapshot.filename, edits: snapshot.edits, rawBase64: snapshot.rawBase64, invalidatesScan: snapshot.invalidatesScan)
+            workspace?.stageCSV(snapshot.table, filename: snapshot.filename, edits: snapshot.edits, rawBase64: snapshot.rawBase64, invalidatesScan: snapshot.invalidatesScan, merged: snapshot.merged)
         }
         recognition.didImportLocalSheet = { [weak workspace] rows, source in
             workspace?.updateProduction { $0.localRows = rows; $0.slateCSVSource = source }

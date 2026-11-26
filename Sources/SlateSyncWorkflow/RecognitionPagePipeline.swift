@@ -52,15 +52,30 @@ public struct RecognitionPagePipeline: Sendable {
         saveCheckpoint: (@Sendable (Checkpoint) async throws -> Void)? = nil
     ) async throws -> Output {
         guard !pages.isEmpty, pages.count <= 20, pages.allSatisfy({ !$0.views.isEmpty && $0.views.count <= 3 }) else { throw RecognitionFailure.invalidInput }
+        // A backup can be reconfigured under the same public ID between shifts.
+        // Include its actual endpoint/model revision in a persistent cache key.
+        var backupConfigurations: [Data] = []
+        if recoveryID != nil, let registry {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            for candidate in candidates.dropFirst() {
+                let descriptor = try? await registry.descriptor(providerID: candidate.providerID)
+                let resolved = try? await registry.resolveModel(providerID: candidate.providerID, modelID: candidate.modelID)
+                backupConfigurations.append(try encoder.encode(descriptor))
+                backupConfigurations.append(try encoder.encode(resolved))
+            }
+        }
         let recoveryKey = try recoveryID.map {
-            try Self.recoveryKey(id: $0, pages: pages, provider: provider, model: model, candidates: candidates,
+            try Self.recoveryKey(id: $0, pages: pages, provider: provider, model: model, candidates: candidates, backupConfigurations: backupConfigurations,
                 accuracy: accuracy, formats: formats, prompts: prompts, maximumRequestBytes: maximumRequestBytes)
         }
         let limit = min(6, max(1, pageConcurrency))
         var outputs = Array<PageOutput?>(repeating: nil, count: pages.count)
+        var durablePages: [Int: PageOutput] = [:]
         let existing = try await loadCheckpoint?()
         if let existing, let recoveryKey, existing.key == recoveryKey, existing.pages.count <= pages.count {
             for page in existing.pages where (1...pages.count).contains(page.pageNumber) {
+                durablePages[page.pageNumber] = page
                 await recoveryCache?.store(page, key: recoveryKey)
             }
         }
@@ -108,14 +123,13 @@ public struct RecognitionPagePipeline: Sendable {
                 for _ in 0..<min(limit, pages.count) { enqueue() }
                 while let (index, result) = try await group.next() {
                     outputs[index] = result; completed += 1
-                    if let saveCheckpoint, let recoveryKey {
-                        // Serialize on the collecting side so a slower earlier
-                        // page cannot replace a checkpoint containing later pages.
-                        let recovered = outputs.compactMap { $0 }.map { page in
-                            PageOutput(route: page.route, pageNumber: page.pageNumber, result: page.result,
-                                responses: page.responses.map { .init(text: "", usage: $0.usage, responseID: $0.responseID, model: $0.model, formatMode: $0.formatMode) })
-                        }
-                        try await saveCheckpoint(.init(key: recoveryKey, pages: recovered))
+                    if let saveCheckpoint, let recoveryKey, durablePages[result.pageNumber] == nil {
+                        // The collector is the only writer. Preserve pages from
+                        // earlier launches even if this retry stops before they
+                        // are replayed. Raw model response text is not retained.
+                        durablePages[result.pageNumber] = PageOutput(route: result.route, pageNumber: result.pageNumber, result: result.result,
+                            responses: result.responses.map { .init(text: "", usage: $0.usage, responseID: $0.responseID, model: $0.model, formatMode: $0.formatMode) })
+                        try await saveCheckpoint(.init(key: recoveryKey, pages: durablePages.values.sorted { $0.pageNumber < $1.pageNumber }))
                     }
                     let percent = Int((35 + Double(completed) / Double(pages.count) * 60).rounded())
                     progress?(.init(phase: "page-complete", completed: completed, total: pages.count, message: "已完成第 \(result.pageNumber) 页（\(completed)/\(pages.count) 页）", percent: percent, pageNumber: result.pageNumber))
@@ -133,7 +147,7 @@ public struct RecognitionPagePipeline: Sendable {
 
     private static func recoveryKey(
         id: String, pages: [RecognitionPageInput], provider: ProviderDescriptor, model: ResolvedModel,
-        candidates: [ProviderModelSelection], accuracy: ProjectSettings.AccuracyMode, formats: ResolveFieldFormats,
+        candidates: [ProviderModelSelection], backupConfigurations: [Data], accuracy: ProjectSettings.AccuracyMode, formats: ResolveFieldFormats,
         prompts: (primary: String, audit: String, review: String), maximumRequestBytes: Int
     ) throws -> String {
         // Hasher is process-randomized. Framed SHA-256 separates adjacent
@@ -147,6 +161,7 @@ public struct RecognitionPagePipeline: Sendable {
             hash.update(data: data)
         }
         append(try encoder.encode([id, prompts.primary, prompts.audit, prompts.review, String(maximumRequestBytes)]))
+        for configuration in backupConfigurations { append(configuration) }
         append(try encoder.encode(candidates)); append(try encoder.encode(provider)); append(try encoder.encode(model))
         append(try encoder.encode(accuracy)); append(try encoder.encode(formats))
         for page in pages {

@@ -668,6 +668,7 @@ public struct TaskProductionDetails: Codable, Hashable, Sendable {
     public var localRows: [SlateCsvRecord]?
     public var originalMedia: Data?
     public var scanStats: ScanStats?
+    public var mergedWorksheet: Bool?
     public var deliveries: [MetadataDeliveryReceipt]?
     public var previousRecords: [PersistedRecognitionRecord]?
     public init() {}

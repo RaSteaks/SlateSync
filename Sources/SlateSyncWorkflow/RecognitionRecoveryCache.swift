@@ -1,7 +1,7 @@
 import Foundation
 import SlateSyncDomain
 
-/// In-memory results for retrying one task after its backup chain exhausts.
+/// In-memory page projection, seeded from the native task checkpoint on retry.
 /// The pipeline key includes all inputs that affect a page's interpretation;
 /// no partial sheet is committed as a completed task.
 public actor RecognitionRecoveryCache {

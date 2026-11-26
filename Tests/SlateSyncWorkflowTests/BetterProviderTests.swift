@@ -311,6 +311,7 @@ final class BetterProviderTests: XCTestCase {
         XCTAssertEqual(output.pages.count, 2)
         let calls = await transport.calls
         XCTAssertEqual(calls[primaryID], 1)
+        XCTAssertEqual(Set(output.pages.compactMap { $0.route?.providerID }), [backupID])
         XCTAssertEqual(calls[backupID], 2)
     }
 
@@ -350,7 +351,8 @@ final class BetterProviderTests: XCTestCase {
             label: "vision", capabilityStatus: .verified)
         let transport = BetterProviderTransport(failPageTwoOnce: true)
         let pipeline = RecognitionPagePipeline(client: ProviderRecognitionClient(transport: transport))
-        let cache = RecognitionRecoveryCache()
+        let location = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: location) }
         let image = try PreparedImage(jpeg: Data([0xff, 0xd8, 0xff, 0xd9]), width: 1, height: 1)
         let pages = (1...2).map { number in
             RecognitionPageInput(pageNumber: number, views: [.init(viewIndex: 0, viewType: .full, image: image)])
@@ -358,8 +360,13 @@ final class BetterProviderTests: XCTestCase {
         func run() async throws -> RecognitionPagePipeline.Output {
             try await pipeline.run(pages: pages, provider: provider, model: model,
                 accuracy: .standard, formats: .init(), prompts: ("primary", "audit", "review"),
-                pageConcurrency: 1, filename: "fixture.jpg", recoveryCache: cache,
-                recoveryID: "project:task")
+                pageConcurrency: 1, filename: "fixture.jpg", recoveryCache: RecognitionRecoveryCache(),
+                recoveryID: "project:task",
+                loadCheckpoint: {
+                    guard FileManager.default.fileExists(atPath: location.path) else { return nil }
+                    return try JSONDecoder().decode(RecognitionPagePipeline.Checkpoint.self, from: Data(contentsOf: location))
+                },
+                saveCheckpoint: { try JSONEncoder().encode($0).write(to: location, options: .atomic) })
         }
         do { _ = try await run(); XCTFail("First attempt must remain incomplete") }
         catch let error as SlateSyncError { XCTAssertEqual(error.code, RecognitionFailure.timeout.code) }

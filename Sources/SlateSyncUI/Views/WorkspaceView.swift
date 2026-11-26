@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 /// keeps ownership of its segmented selection; the hint only chooses the
 /// initial/target section and never changes task data.
 public enum WorkspaceEntryPoint: String, Hashable, Sendable {
+    case retryInput
     case input
     case result
     case resolveCSV
@@ -156,7 +157,7 @@ public struct WorkspaceView: View {
         self.onEntryPointConsumed = onEntryPointConsumed
         _section = State(initialValue: {
             switch entryPoint {
-            case .input: .input
+            case .input, .retryInput: .input
             case .result: .result
             case .resolveCSV: .csv
             }
@@ -187,7 +188,7 @@ public struct WorkspaceView: View {
             VStack(alignment: .leading) {
                 Text(L10n.tr("确认场记导入顺序")).font(.headline)
                 List {
-                    ForEach(Array(intakeParts.enumerated()), id: \.offset) { index, part in
+                    ForEach(Array(intakeParts.enumerated()), id: \.element) { index, part in
                         HStack {
                             Text(part.filename)
                             Spacer()
@@ -346,7 +347,7 @@ public struct WorkspaceView: View {
             // Consume the entry hint once the workspace is mounted so a later
             // sidebar visit does not unexpectedly reopen a specific tab.
             let initialSection: WorkspaceSection = switch entryPoint {
-            case .input: .input
+            case .input, .retryInput: .input
             case .result: .result
             case .resolveCSV: .csv
             }
@@ -922,7 +923,7 @@ public struct WorkspaceView: View {
             pendingEntryPoint = destination
             return
         }
-        let target = destination == .resolveCSV ? WorkspaceSection.csv : .result
+        let target: WorkspaceSection = switch destination { case .resolveCSV: .csv; case .result: .result; case .input, .retryInput: .input }
         pendingEntryPoint = nil
         changeLayout {
             visit(target)
@@ -1190,7 +1191,7 @@ private struct RecognitionResultView: View {
     @State private var confirmsRemoval = false
 
     var body: some View {
-        if !model.editableRecords.isEmpty || workspace.selectedTaskID != nil {
+        if !model.editableRecords.isEmpty {
             HStack {
                 if let previous = workspace.selectedTask?.production?.previousRecords {
                     Menu(L10n.tr("上次校对版本")) {
@@ -1269,6 +1270,10 @@ private struct RecognitionResultView: View {
                 message: L10n.tr("请先在输入页选择场记单并开始识别。")
             ) {
                 Button(L10n.tr("前往输入"), action: onInput)
+                if workspace.selectedTaskID != nil {
+                    Button(L10n.tr("补一条")) { model.addRecord(commit: workspace.stageEditedRecords) }
+                        .disabled(model.locksDisplayedTask)
+                }
             }
         }
     }

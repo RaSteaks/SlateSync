@@ -160,6 +160,11 @@ public struct SidebarView: View {
             .help(L10n.tr("新建任务"))
             .accessibilityIdentifier(AccessibilityID.taskCreate)
             Spacer(minLength: 0)
+            if taskModel.awaitingDeliveryCount > 0 {
+                Button(L10n.tr("待交付 {0}", [String(taskModel.awaitingDeliveryCount)])) {
+                    taskModel.searchText = taskModel.searchText == L10n.tr("待交付") ? "" : L10n.tr("待交付")
+                }.buttonStyle(.borderless).font(.caption)
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
     }

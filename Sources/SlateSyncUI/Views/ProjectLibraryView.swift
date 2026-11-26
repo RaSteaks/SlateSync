@@ -11,13 +11,26 @@ public struct ProjectLibraryView: View {
     @Bindable private var model: ProjectLibraryModel
     private let onOpen: (ProjectSummary) -> Void
     private let onSettings: (ProjectSummary) -> Void
-    @State private var importsProject = false
-    @State private var importsLibrary = false
-    @State private var relocatesLibrary = false
-    @State private var exportProject: ProjectSummary?
+    private enum TransferPanel {
+        case receiveProject, receiveLibrary, relocate, sendProject(ProjectSummary), sendLibrary
+        var exportMessage: Text? {
+            switch self {
+            case .sendLibrary, .sendProject: Text(L10n.tr("便携备份含场记图像、表格与诊断，使用接收方可读的格式。模型凭据和 OCR 环境需在接收机配置。"))
+            default: nil
+            }
+        }
+        var types: [UTType] {
+            switch self {
+            case .receiveProject: [.slateSyncProjectPackage]
+            case .receiveLibrary: [.slateSyncLibraryPackage]
+            default: [.folder]
+            }
+        }
+    }
+    @State private var panel = TransferPanel.receiveProject
+    @State private var showsPanel = false
+    @State private var failedPanel: TransferPanel?
     @State private var showsRename = false
-    @State private var choosesExportDirectory = false
-    @State private var exportsLibrary = false
     @State private var pendingArchive: ProjectSummary?
 
     public init(
@@ -95,35 +108,24 @@ public struct ProjectLibraryView: View {
             }
             Button(L10n.tr("取消"), role: .cancel) { pendingArchive = nil }
         } message: { Text(L10n.tr("归档项目可以从项目库恢复。")) }
-        .fileImporter(isPresented: $importsProject, allowedContentTypes: [.slateSyncProjectPackage]) { result in
-            if case .success(let url) = result { scoped(url) { await model.importProject(from: $0) } }
-        }
-        .fileImporter(isPresented: $importsLibrary, allowedContentTypes: [.slateSyncLibraryPackage]) { result in
-            if case .success(let url) = result { scoped(url) { await model.importLibrary(from: $0) } }
-        }
-        .fileImporter(isPresented: $relocatesLibrary, allowedContentTypes: [.folder]) { result in
-            if case .success(let url) = result { scoped(url) { await model.relocateLibrary(to: $0) } }
-        }
-        .fileImporter(
-            isPresented: $choosesExportDirectory,
-            allowedContentTypes: [.folder]
-        ) { result in
-            if case .success(let directory) = result {
-                // Keep consecutive shift backups independent and retain the
-                // transfer service's refusal to overwrite an existing package.
+        .fileImporter(isPresented: $showsPanel, allowedContentTypes: panel.types) { result in
+            guard case .success(let url) = result else { return }
+            let request = panel
+            scoped(url) { selected in
                 let stamp = Date().ISO8601Format().replacingOccurrences(of: ":", with: "-") + "-" + UUID().uuidString.prefix(6)
-                if exportsLibrary {
-                    let target = directory.appending(path: "SlateSync-\(stamp).slatesync-library", directoryHint: .isDirectory)
-                    scoped(directory) { _ in await model.exportLibrary(to: target) }
-                } else if let project = exportProject {
-                    let target = directory.appending(path: "\(project.name)-\(stamp).slatesync-project", directoryHint: .isDirectory)
-                    scoped(directory) { _ in await model.export(project, to: target) }
+                switch request {
+                case .receiveProject: await model.importProject(from: selected)
+                case .receiveLibrary: await model.importLibrary(from: selected)
+                case .relocate: await model.relocateLibrary(to: selected)
+                case .sendLibrary: await model.exportLibrary(to: selected.appending(path: "SlateSync-\(stamp).slatesync-library"))
+                case .sendProject(let project):
+                    let name = project.name.replacingOccurrences(of: "/", with: "_")
+                    await model.export(project, to: selected.appending(path: "\(name)-\(stamp).slatesync-project"))
                 }
+                failedPanel = model.error == nil ? nil : request
             }
-            exportProject = nil
-            exportsLibrary = false
         }
-        .fileDialogMessage(Text(L10n.tr("便携备份含场记图像、表格与诊断，使用接收方可读的格式。模型凭据和 OCR 环境需在接收机配置。")))
+        .fileDialogMessage(panel.exportMessage)
         .task {
             // A retained model may be remounted while already populated. Do
             // not publish a redundant reload from SwiftUI's table mount pass.
@@ -145,14 +147,14 @@ public struct ProjectLibraryView: View {
                     .help(L10n.tr("对所选项目的操作"))
             }
             Menu(L10n.tr("项目库操作"), systemImage: "ellipsis.circle") {
-                Button(L10n.tr("导入项目…")) { importsProject = true }
+                Button(L10n.tr("导入项目…")) { open(.receiveProject) }
                 if let project = model.selectedProject {
-                    Button(L10n.tr("导出“{0}”…", [String(describing: project.name)])) { exportProject = project; exportsLibrary = false; choosesExportDirectory = true }
+                    Button(L10n.tr("导出“{0}”…", [String(describing: project.name)])) { open(.sendProject(project)) }
                 }
-                Button(L10n.tr("导出项目库…")) { exportsLibrary = true; choosesExportDirectory = true }
+                Button(L10n.tr("导出项目库…")) { open(.sendLibrary) }
                 Divider()
-                Button(L10n.tr("切换项目库…")) { importsLibrary = true }
-                Button(L10n.tr("移动项目库…")) { relocatesLibrary = true }
+                Button(L10n.tr("切换项目库…")) { open(.receiveLibrary) }
+                Button(L10n.tr("移动项目库…")) { open(.relocate) }
                 Button(L10n.tr("重命名项目库…")) { showsRename = true }
             }
             .tint(Color.secondary)
@@ -176,6 +178,10 @@ public struct ProjectLibraryView: View {
         Button(L10n.tr("永久删除…"), role: .destructive) { model.requestDeletion(project) }
     }
 
+    private func open(_ request: TransferPanel) {
+        panel = request; failedPanel = nil; showsPanel = true
+    }
+
     private func scoped(_ url: URL, action: @escaping @MainActor (URL) async -> Void) {
         // Keep the panel grant alive through the entire async transfer,
         // including its failure/cleanup path and destination directory writes.
@@ -195,7 +201,8 @@ public struct ProjectLibraryView: View {
             // The shared surface presents feedback; retry ownership stays here.
             SlateStatusBar(message: error.message, tone: .error) {
                 Button(L10n.tr("关闭")) { model.clearError() }
-                if error.retryable { Button(L10n.tr("重新读取项目库")) { Task { await model.retryLoad() } } }
+                if let failedPanel { Button(L10n.tr("重新选择位置…")) { open(failedPanel) } }
+                else if error.retryable { Button(L10n.tr("重新读取项目库")) { Task { await model.retryLoad() } } }
             }
             .accessibilityIdentifier("project.error")
         } else if case .succeeded(let message) = model.operation {

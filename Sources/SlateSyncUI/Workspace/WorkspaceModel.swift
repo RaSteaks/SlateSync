@@ -26,6 +26,7 @@ public final class WorkspaceModel {
     }
     // Materialize the search projection only when its inputs change, not on
     // selection, progress, autosave or layout updates in the sidebar task rows.
+    public private(set) var awaitingDeliveryCount = 0
     public private(set) var filteredTasks: [TaskListItem] = []
     public private(set) var selectableTasks: [TaskListItem] = []
     public var customPrompt = "" {
@@ -50,6 +51,7 @@ public final class WorkspaceModel {
     /// at once (a pending row, a disabled button) instead of looking idle while
     /// the durable creation call runs.
     public private(set) var isCreatingTask = false
+    public var reviewInputsChanged: (@MainActor () -> Void)?
     public var prepareTaskSwitch: (@MainActor () async throws -> Void)?
     public var prepareSelectionChange: (@MainActor () async throws -> Void)?
     public var flushEditor: (@MainActor () throws -> Void)?
@@ -80,8 +82,11 @@ public final class WorkspaceModel {
 
     private func refreshTaskProjection() {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let filtered = query.isEmpty ? tasks : tasks.filter {
-            [$0.filename, $0.id, $0.title, $0.shootDay, $0.unit, $0.statusTitle].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+        awaitingDeliveryCount = tasks.count { ($0.deliveryCount ?? 0) == 0 }
+        let filtered = query.isEmpty ? tasks : tasks.filter { task in
+            let delivery = (task.deliveryCount ?? 0) == 0 ? L10n.tr("待交付") : L10n.tr("已交付")
+            return [task.filename, task.id, task.title, task.shootDay, task.unit, task.statusTitle, delivery]
+                .compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
         }
         if filteredTasks != filtered { filteredTasks = filtered }
         let selectable = filtered.filter { $0.id != nil }
@@ -328,16 +333,25 @@ public final class WorkspaceModel {
     /// overtake a subsequent general edit or navigation flush.
     public func stageEditedRecords(_ records: [PersistedRecognitionRecord]) {
         guard let selectedTask else { return }
+        reviewInputsChanged?()
         let snapshot = selectedTask.replacingEditedRecords(records)
         self.selectedTask = snapshot
         enqueue(snapshot, delay: .milliseconds(250))
     }
 
-    public func stageCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?, invalidatesScan: Bool = false) {
+    public func stageCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?, invalidatesScan: Bool = false, merged: Bool = false) {
         guard let selectedTask else { return }
         let replaced = invalidatesScan || selectedTask.resolveCsvFilename != filename || selectedTask.resolveCsvBase64 != rawBase64
         var snapshot = selectedTask.replacingCSV(table, filename: filename, edits: edits, rawBase64: rawBase64, invalidatesScan: replaced)
-        if replaced { snapshot.production?.scanStats = nil }
+        if replaced {
+            snapshot.production?.scanStats = nil
+            snapshot.production?.mergedWorksheet = nil
+        }
+        if merged {
+            var details = snapshot.production ?? .init()
+            details.mergedWorksheet = true
+            snapshot.production = details
+        }
         self.selectedTask = snapshot
         enqueue(snapshot, delay: .milliseconds(250))
     }
@@ -356,6 +370,7 @@ public final class WorkspaceModel {
 
     public func stageMetadata(_ scan: ScanResult, directoryName: String) {
         guard let selectedTask else { return }
+        reviewInputsChanged?()
         var snapshot = selectedTask.replacingMetadata(scan, directoryName: directoryName)
         var details = snapshot.production ?? .init()
         details.scanStats = scan.stats
@@ -386,6 +401,7 @@ public final class WorkspaceModel {
 
     public func stageLocalRecords(_ records: [PersistedRecognitionRecord], filename: String) {
         guard let selectedTask else { return }
+        reviewInputsChanged?()
         let snapshot = selectedTask.replacingLocalRecords(records, filename: filename)
         self.selectedTask = snapshot
         enqueue(snapshot)
