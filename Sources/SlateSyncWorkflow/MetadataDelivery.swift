@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SlateSyncDomain
 
@@ -16,8 +17,12 @@ package struct PreparedMetadata: Sendable {
 
     package let data: Data
     package let preview: Preview?
+    package let offlineMedia: [String]
+    package let files: [String: Data]?
 
-    package init(_ data: Data, preview: Preview? = nil) {
+    package init(_ data: Data, preview: Preview? = nil, offlineMedia: [String] = [], files: [String: Data]? = nil) {
+        self.files = files
+        self.offlineMedia = offlineMedia
         self.data = data
         self.preview = preview
     }
@@ -48,7 +53,7 @@ public actor MetadataDeliveryEncoder {
         catch let issue as DeliveryInputIssue { throw issue.error }
     }
 
-    package func prepare(_ table: ResolveCSVTable, as format: MetadataDeliveryFormat, name: String, mediaDirectory: URL? = nil) async throws -> PreparedMetadata {
+    package func prepare(_ table: ResolveCSVTable, as format: MetadataDeliveryFormat, name: String, mediaDirectory: URL? = nil, groupALE: Bool = false) async throws -> PreparedMetadata {
         try Task.checkCancellation()
         switch format {
         case .csv:
@@ -65,12 +70,41 @@ public actor MetadataDeliveryEncoder {
         case .ale, .fcpxml, .xmeml:
             let schema = try DeliveryColumns(table.headers)
             guard !table.rows.isEmpty else { throw SlateSyncError(code: "DELIVERY_EMPTY", message: "当前表格没有可交付的素材行。") }
-            if format == .ale { return try ale(table, schema) }
+            if format == .ale {
+                if groupALE { return try groupedALE(table, schema) }
+                return try ale(table, schema)
+            }
             return try xml(table, schema, format: format, name: name, mediaDirectory: mediaDirectory)
         }
     }
 
-    private func ale(_ table: ResolveCSVTable, _ columns: DeliveryColumns) throws -> PreparedMetadata {
+    private func groupedALE(_ table: ResolveCSVTable, _ columns: DeliveryColumns) throws -> PreparedMetadata {
+        // One ALE heading can describe exactly one playback rate and video format.
+        // Keep source row numbers for diagnostics after grouping.
+        var groups: [String: [Int]] = [:]
+        for (index, values) in table.rows.enumerated() {
+            try Task.checkCancellation()
+            let row = DeliveryRow(values: values, number: index + 2)
+            let rate = try row.rate(columns).label
+            let video = try row.required(columns.video, "Video Format / Resolution")
+            groups[rate + " " + video, default: []].append(index)
+        }
+        var files: [String: Data] = [:], manifest: [String] = []
+        for (offset, group) in groups.keys.sorted().enumerated() {
+            guard let indices = groups[group] else { continue }
+            let part = ResolveCSVTable(headers: table.headers, rows: indices.map { table.rows[$0] }, format: table.format)
+            let bytes = try ale(part, columns, originalRows: indices).data
+            let filename = String(format: "group-%03d.ale", offset + 1)
+            files[filename] = bytes
+            let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+            manifest.append([filename, group, String(indices.count), digest].joined(separator: "\t"))
+        }
+        let data = Data((manifest.joined(separator: "\n") + "\n").utf8)
+        files["manifest.tsv"] = data
+        return .init(data, files: files)
+    }
+
+    private func ale(_ table: ResolveCSVTable, _ columns: DeliveryColumns, originalRows: [Int]? = nil) throws -> PreparedMetadata {
         let headings = ["Name", "Tracks", "Start", "End", "Tape", "Source File", "Scene", "Shot", "Take", "Comments", "Camera FPS", "Shoot Day"]
         var preview: PreparedMetadata.Preview?
         var projectRate = ""
@@ -78,7 +112,7 @@ public actor MetadataDeliveryEncoder {
         var body = ""
         for (index, values) in table.rows.enumerated() {
             try Task.checkCancellation()
-            let row = DeliveryRow(values: values, number: index + 2)
+            let row = DeliveryRow(values: values, number: (originalRows?[index] ?? index) + 2)
             let rate = try row.rate(columns)
             let video = try row.required(columns.video, "Video Format / Resolution")
             let raster = video.lowercased().replacingOccurrences(of: " ", with: "").components(separatedBy: CharacterSet(charactersIn: "x×"))
@@ -120,6 +154,7 @@ public actor MetadataDeliveryEncoder {
             throw DeliveryRow(values: [], number: 1).invalid("XML 1.0")
         }
         var preview: PreparedMetadata.Preview?
+        var offlineMedia: [String] = []
         let modern = format == .fcpxml
         let root = XMLElement(name: modern ? "fcpxml" : "xmeml")
         // Version 1.9 is Apple's single-document FCPXML interchange format.
@@ -149,7 +184,18 @@ public actor MetadataDeliveryEncoder {
             let row = DeliveryRow(values: values, number: index + 2)
             // Reject non-XML control codes instead of silently truncating a cell.
             guard values.allSatisfy(isXMLText) else { throw row.invalid("XML 1.0") }
-            let url = try row.mediaURL(columns, fallback: mediaDirectory)
+            var url = try row.mediaURL(columns, fallback: mediaDirectory)
+            // An absolute path may refer to yesterday's shuttle volume. Preserve
+            // its relative hierarchy when the operator selects the new mount.
+            if !FileManager.default.isReadableFile(atPath: url.path), let mediaDirectory {
+                let parts = url.pathComponents.filter { $0 != "/" }
+                let relative = parts.first == "Volumes" ? Array(parts.dropFirst(2)) : Array(parts.dropFirst())
+                if !relative.isEmpty {
+                    let candidate = relative.reduce(mediaDirectory) { $0.appendingPathComponent($1) }
+                    if FileManager.default.isReadableFile(atPath: candidate.path) { url = candidate }
+                }
+            }
+            if !FileManager.default.isReadableFile(atPath: url.path) { offlineMedia.append(url.path) }
             let clipName = row[columns.clipName].isEmpty ? url.lastPathComponent : row[columns.clipName]
             if modern {
                 addFCPAsset(row, columns: columns, headers: table.headers, keys: customKeys, id: "r\(index + 1)", clipName: clipName,
@@ -166,7 +212,7 @@ public actor MetadataDeliveryEncoder {
         let dtd = XMLDTD()
         dtd.name = root.name
         document.dtd = dtd
-        return PreparedMetadata(document.xmlData(options: [.nodePrettyPrint]), preview: preview)
+        return PreparedMetadata(document.xmlData(options: [.nodePrettyPrint]), preview: preview, offlineMedia: offlineMedia)
     }
 
     private func addFCPAsset(_ row: DeliveryRow, columns: DeliveryColumns, headers: [String], keys: [String], id: String,
@@ -225,6 +271,11 @@ public actor MetadataDeliveryEncoder {
         file.child("name", url.lastPathComponent)
         file.child("pathurl", url.absoluteString)
         let start = row[columns.start]
+        if start.isEmpty, !row[columns.reel].isEmpty {
+            // XMEML stores tape identity under timecode. Carry the supplied reel
+            // independently and let the NLE derive timing from the media.
+            file.child("timecode").child("reel").child("name", row[columns.reel])
+        }
         if !start.isEmpty {
             guard let frame = rate.frames(timecode: start) else { throw row.invalid("Start TC", column: columns.start) }
             let tc = file.child("timecode")
@@ -303,7 +354,12 @@ private struct DeliveryRow {
     }
 
     func tracks(_ columns: DeliveryColumns) throws -> String {
-        if !self[columns.tracks].isEmpty { return self[columns.tracks] }
+        if !self[columns.tracks].isEmpty {
+            let tracks = self[columns.tracks].uppercased().trimmingCharacters(in: .whitespaces)
+            guard tracks.range(of: #"^(?:V(?:[1-9][0-9]*)?)?(?:A[1-9][0-9]*)*$"#, options: .regularExpression) != nil,
+                  !tracks.isEmpty else { throw invalid("Tracks", column: columns.tracks) }
+            return tracks
+        }
         let type = self[columns.type].lowercased()
         if type == "video" || type == "视频" { return "V" }
         let video = ["video + audio", "video+audio", "视频 + 音频"].contains(type)

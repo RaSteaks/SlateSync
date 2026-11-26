@@ -17,6 +17,10 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
     }
 
     public func scan(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult {
+        try await scan(directory: directory, options: options, progress: nil)
+    }
+
+    public func scan(directory: URL, options: SlateMetadataScanOptions, progress: (@Sendable (ScanStats) -> Void)?) async throws -> ScanResult {
         let expected = Set(options.expectedKeys)
         guard !expected.isEmpty else {
             throw SlateSyncError(code: "METADATA_EXPECTED_KEYS", message: "Resolve CSV 中没有可用于查找 slate.txt 的素材编号")
@@ -37,6 +41,14 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
         var learned = 0
         let rootName = directory.lastPathComponent.isEmpty ? "素材根目录" : directory.lastPathComponent
 
+        var nextReport = ContinuousClock.now
+        func reportProgress() {
+            guard let progress, ContinuousClock.now >= nextReport else { return }
+            nextReport = ContinuousClock.now.advanced(by: .milliseconds(150))
+            progress(.init(visitedDirectories: visited, prunedDirectories: pruned, skippedDeepDirectories: skippedDeep,
+                           discoveredSlateFiles: discovered, readSlateFiles: read, learnedStructures: learned))
+        }
+
         func entries(_ url: URL, source: String) -> [URL] {
             do {
                 return try manager.contentsOfDirectory(
@@ -50,9 +62,10 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
             }
         }
 
-        func walk(_ current: URL, parts: [String], depth: Int, root: Bool = false) throws {
+        func walk(_ current: URL, parts: [String], depth: Int, root: Bool = false, enclosingMaterial: String = "") throws {
             try Task.checkCancellation()
             visited += 1
+            reportProgress()
             let directoryName = parts.last ?? ""
             // A selected clip root gets the usual identity check only when it
             // belongs to the expected set. Arbitrary volume/UUID root names can
@@ -85,7 +98,7 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                 // A selected container can coincidentally parse as an expected
                 // clip (including a UUID). Without direct sidecars it is not a
                 // leaf: continue into children rather than dropping the subtree.
-                if !root || !found.isEmpty { return }
+                if !found.isEmpty { return }
             }
 
             for entry in entries(current, source: parts.joined(separator: "/")) {
@@ -94,14 +107,14 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                 if values.isRegularFile == true, registry.hasParser(matching: entry.lastPathComponent) {
                     let fileKey = ResolveCSVNormalization.extractCombinedMaterialKey(entry.lastPathComponent)
                     if fileKey.isEmpty || expected.contains(fileKey) {
-                        candidates.append(Candidate(url: entry, sourceName: (parts + [entry.lastPathComponent]).joined(separator: "/"), directoryKey: ""))
+                        candidates.append(Candidate(url: entry, sourceName: (parts + [entry.lastPathComponent]).joined(separator: "/"), directoryKey: directoryKey.isEmpty ? enclosingMaterial : directoryKey))
                         discovered += 1
                     }
                 } else if values.isDirectory == true {
                     let childKey = ResolveCSVNormalization.extractCombinedMaterialKey(entry.lastPathComponent)
                     if !childKey.isEmpty, !expected.contains(childKey) { pruned += 1 }
                     else if depth >= options.maxDepth { skippedDeep += 1 }
-                    else { try walk(entry, parts: parts + [entry.lastPathComponent], depth: depth + 1) }
+                    else { try walk(entry, parts: parts + [entry.lastPathComponent], depth: depth + 1, enclosingMaterial: directoryKey.isEmpty ? enclosingMaterial : directoryKey) }
                 }
             }
         }
@@ -118,6 +131,7 @@ public actor SlateMetadataScanner: SlateMetadataScanning {
                     continue
                 }
                 read += 1
+                reportProgress()
                 // Ambiguous or unregistered names fail closed here instead of
                 // picking a parser by registration order; the failure lands in
                 // the warnings below like any other unparseable candidate.

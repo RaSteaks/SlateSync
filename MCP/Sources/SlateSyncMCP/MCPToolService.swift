@@ -79,8 +79,7 @@ public actor MCPToolService {
                 let source = try files.read(try text("csvPath", arguments), maximumBytes: CSVInputBudget.maximumInputBytes)
                 let directory = try files.directory(try text("directoryPath", arguments))
                 let edits = try optional([ResolveSparseEdit].self, "edits", arguments) ?? []
-                let preview = try await workflow.previewMerge(source: source, records: [], edits: edits)
-                let keys = Array(Set(preview.rowKeys.filter { !$0.isEmpty })).sorted()
+                let keys = try await workflow.resolveMaterialKeys(source: source, edits: edits)
                 let config = try await runtime.workflowConfigProvider().current()
                 let scan = try await workflow.scanMetadata(directory: directory,
                     options: .init(expectedKeys: keys, maxDepth: config.slate.maxDirectoryDepth))
@@ -110,7 +109,7 @@ public actor MCPToolService {
         let defaults = try await runtime.workflowConfigProvider().current().resolve
         let settings = try optional(ProjectSettings.ResolveSettings.self, "resolve", arguments) ?? defaults
         let preview = try await workflow.previewMerge(source: source, records: records, metadata: metadata,
-            fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits)
+            fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: !settings.addMissingColumns)
         let offset = arguments["offset"]?.intValue ?? 0, limit = arguments["limit"]?.intValue ?? 50
         let canExport = preview.permitsExport(recordCount: records.count, edits: edits)
         var output: String?

@@ -22,12 +22,14 @@ public struct CSVStageSnapshot: Sendable {
     public let filename: String?
     public let edits: [String: String]
     public let rawBase64: String?
+    public let invalidatesScan: Bool
 
-    public init(table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?) {
+    public init(table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?, invalidatesScan: Bool = false) {
         self.table = table
         self.filename = filename
         self.edits = edits
         self.rawBase64 = rawBase64
+        self.invalidatesScan = invalidatesScan
     }
 }
 
@@ -56,6 +58,7 @@ public final class ResolveCSVModel {
     private var rawData: Data?
     private var rawBase64: String?
     private var sparseEdits: [String: String] = [:]
+    public var manualEditCount: Int { sparseEdits.count }
     private var work: Task<Void, Never>?
     private var exportWork: Task<(ResolveMergeResult, PreparedMetadata), Error>?
     private var exportID: UUID?
@@ -88,7 +91,7 @@ public final class ResolveCSVModel {
             // A new table geometry invalidates the previous merge's row keys.
             lastMergeDiagnostics = nil
             revision += 1
-            onTableChange?(CSVStageSnapshot(table: decoded, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
+            onTableChange?(CSVStageSnapshot(table: decoded, filename: filename, edits: sparseEdits, rawBase64: rawBase64, invalidatesScan: true))
             operation = .succeeded(message: L10n.tr("已载入 {0} 行", [String(describing: decoded.rows.count)]))
         }
     }
@@ -114,7 +117,9 @@ public final class ResolveCSVModel {
         // The coordinator commits its IME-safe draft after 250 ms. Persist
         // this canonical table plus raw bytes/edits through Workspace's single
         // autosave writer.
-        onTableChange?(CSVStageSnapshot(table: current, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
+        let identityChanged = (try? ResolveHeaders.resolve(current.headers).identityColumns.contains(commit.columnID)) ?? false
+        if lastMergeDiagnostics != nil { lastMergeDiagnostics = nil }
+        onTableChange?(CSVStageSnapshot(table: current, filename: filename, edits: sparseEdits, rawBase64: rawBase64, invalidatesScan: identityChanged))
     }
 
     public func encodedData(format: MetadataDeliveryFormat = .csv, mediaDirectory: URL? = nil) async throws -> Data {
@@ -142,7 +147,7 @@ public final class ResolveCSVModel {
     }
 
     func prepareExport(records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings,
-                       format: MetadataDeliveryFormat, mediaDirectory: URL?) async throws -> PreparedMetadata {
+                       format: MetadataDeliveryFormat, mediaDirectory: URL?, groupALE: Bool = false) async throws -> PreparedMetadata {
         guard permitsNewOperation?() != false, !operation.isRunning, exportWork == nil else {
             throw SlateSyncError(code: "CSV_BUSY", message: L10n.tr("CSV 正在处理中，请稍后重试。"), retryable: true)
         }
@@ -165,12 +170,20 @@ public final class ResolveCSVModel {
             let source: Data
             if let raw { source = raw } else { source = try await service.encodeResolveCSV(current) }
             try Task.checkCancellation()
-            let result = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: overrides)
-            guard format != .csv else { return (result.merge, PreparedMetadata(result.data)) }
+            if format == .csv {
+                let artifact = try await service.mergeResolve(source: source, records: records, metadata: metadata, settings: settings, edits: overrides)
+                return (artifact.merge, PreparedMetadata(artifact.data))
+            }
+            // Other recipients consume the checked table directly; encoding and
+            // discarding a second CSV copy adds work and peak memory for no gain.
+            let merged = try await service.previewResolve(source: source, records: records, metadata: metadata, settings: settings, edits: overrides)
+            guard merged.permitsExport(recordCount: records.count, edits: overrides) else {
+                throw SlateSyncError(code: "CSV_NO_EXPORT", message: L10n.tr("没有可回填的匹配行，请校对或选择导出当前工作表。"))
+            }
             // Convert this exact merge inside the cancellable export task. A stale
             // preview or a second merge could discard manual edits or change alerts.
-            let payload = try await MetadataDeliveryEncoder().prepare(result.merge.table, as: format, name: name, mediaDirectory: mediaDirectory)
-            return (result.merge, payload)
+            let payload = try await MetadataDeliveryEncoder().prepare(merged.table, as: format, name: name, mediaDirectory: mediaDirectory, groupALE: groupALE)
+            return (merged, payload)
         }
         let operationID = UUID()
         exportID = operationID
@@ -274,7 +287,7 @@ public final class ResolveCSVModel {
             lastMergeDiagnostics = result
             revision += 1
             onTableChange?(CSVStageSnapshot(table: result.table, filename: filename, edits: sparseEdits, rawBase64: rawBase64))
-            operation = .succeeded(message: L10n.tr("已更新 {0} 行", [String(describing: result.updatedRowCount)]))
+            operation = .succeeded(message: L10n.tr("匹配 {0} 条 · 更新 {1} 行 · 修改 {2} 格", [String(result.matchedRecordCount), String(result.updatedRowCount), String(result.changedCellCount)]))
         }
     }
 

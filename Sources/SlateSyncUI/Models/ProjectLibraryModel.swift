@@ -23,6 +23,7 @@ public final class ProjectLibraryModel {
     public var projectPendingDeletion: ProjectSummary?
     public var libraryNameDraft = ""
     public var mutationCoordinator: (@MainActor (@escaping @MainActor () async throws -> Void) async throws -> Void)?
+    public var exportCoordinator: (@MainActor (String, @escaping @MainActor () async throws -> Void) async throws -> Void)?
     public var didChangeLibrary: (@MainActor (Set<String>) async -> Void)?
     public var didRequireRestart: (@MainActor () -> Void)?
 
@@ -142,7 +143,7 @@ public final class ProjectLibraryModel {
     }
 
     public func export(_ project: ProjectSummary, to url: URL) async {
-        await perform(label: L10n.tr("正在导出项目…"), success: L10n.tr("项目已导出")) {
+        await perform(label: L10n.tr("正在导出项目…"), success: L10n.tr("项目已导出"), exportID: project.id) {
             let result = try await self.service.exportProject(id: project.id, to: url)
             if result.canceled { throw CancellationError() }
         }
@@ -186,6 +187,7 @@ public final class ProjectLibraryModel {
     private func perform(
         label: String,
         success: String,
+        exportID: String? = nil,
         action: @escaping @MainActor () async throws -> Void
     ) async {
         guard !operation.isRunning, !libraryRestartRequired else { return }
@@ -199,7 +201,8 @@ public final class ProjectLibraryModel {
                 try await action()
                 try await self.refreshAfterMutation()
             }
-            if let mutationCoordinator { try await mutationCoordinator(mutation) }
+            if let exportID, let exportCoordinator { try await exportCoordinator(exportID, mutation) }
+            else if let mutationCoordinator { try await mutationCoordinator(mutation) }
             else { try await mutation() }
             operation = .succeeded(message: success)
         } catch is CancellationError {

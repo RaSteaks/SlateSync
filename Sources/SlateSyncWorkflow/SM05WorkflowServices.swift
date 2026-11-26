@@ -85,12 +85,17 @@ public actor SM05WorkflowServices {
     /// Resolve material identifiers are normalized by the merger, so metadata
     /// lookup can consume the same canonical key set as CSV export without
     /// reimplementing header or card-number parsing in SwiftUI.
+    public func resolveMaterialKeys(source: Data, edits: [ResolveSparseEdit]) async throws -> [String] {
+        let table = try await csv.decode(source)
+        return try await merger.collectMaterialKeys(table, edits: edits).keys
+    }
+
     public func resolveMaterialKeys(in table: ResolveCSVTable) async throws -> [String] {
         try await merger.collectMaterialKeys(table).keys
     }
 
-    public func scanMetadata(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult {
-        let result = try await scanner.scan(directory: directory, options: options)
+    public func scanMetadata(directory: URL, options: SlateMetadataScanOptions, progress: (@Sendable (ScanStats) -> Void)? = nil) async throws -> ScanResult {
+        let result = try await scanner.scan(directory: directory, options: options, progress: progress)
         logger.info("Slate metadata scan completed", metadata: [
             "expectedKeyCount": .number(Double(options.expectedKeys.count)),
             "metadataCount": .number(Double(result.metadata.count)),

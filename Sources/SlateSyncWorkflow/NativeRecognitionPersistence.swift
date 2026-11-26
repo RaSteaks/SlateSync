@@ -16,7 +16,25 @@ struct NativeRecognitionPersistence: RecognitionPersistence {
         // Native recognition completes an existing draft. Losing its identity
         // must fail instead of leaving a draft beside a new completed task.
         let id = try Self.requireTaskID(taskID)
-        return try await runtime.updateTask(projectID: projectID, taskID: id, patch: payload)
+        // Retire the resumable page set in the same transaction as the
+        // completed result; a failed final save can still resume.
+        var fields = try JSONDecoder().decode([String: JSONValue].self, from: payload)
+        fields["pageCheckpoint"] = .null
+        return try await runtime.updateTask(projectID: projectID, taskID: id, patch: JSONEncoder().encode(fields))
+    }
+
+    func checkpoint(projectID: String, taskID: String) async throws -> RecognitionPagePipeline.Checkpoint? {
+        struct Envelope: Decodable { let pageCheckpoint: RecognitionPagePipeline.Checkpoint? }
+        let bytes = try await runtime.loadTask(projectID: projectID, taskID: taskID)
+        // A cache created by a newer recognizer may be unreadable. The task
+        // itself remains available; rebuild its pages using the current schema.
+        do { return try JSONDecoder().decode(Envelope.self, from: bytes).pageCheckpoint }
+        catch is DecodingError { return nil }
+    }
+
+    func checkpoint(_ value: RecognitionPagePipeline.Checkpoint, projectID: String, taskID: String) async throws {
+        let payload = try JSONEncoder().encode(["pageCheckpoint": value])
+        _ = try await runtime.updateTask(projectID: projectID, taskID: taskID, patch: payload)
     }
 
     static func requireTaskID(_ taskID: String?) throws -> String {

@@ -15,6 +15,25 @@ public actor LocalLogStore {
     private let now: @Sendable () -> Date
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    // Keep only the redacted, bounded result of the last filter. File identity
+    // and change time also detect another process appending or rotating a log.
+    private struct FileStamp: Equatable {
+        let name: String
+        let inode: ino_t
+        let size: off_t
+        let seconds: Int
+        let nanoseconds: Int
+        init?(_ file: URL) {
+            var status = stat()
+            guard lstat(file.path, &status) == 0, (status.st_mode & S_IFMT) == S_IFREG else { return nil }
+            name = file.lastPathComponent
+            inode = status.st_ino
+            size = status.st_size
+            seconds = status.st_ctimespec.tv_sec
+            nanoseconds = status.st_ctimespec.tv_nsec
+        }
+    }
+    private var lastRead: (files: [FileStamp], limit: Int, severities: Set<ProductLogSeverity>, category: String?, result: ProductLogReadResult)?
 
     public init(
         directory: URL,
@@ -93,7 +112,13 @@ public actor LocalLogStore {
         var degraded = false, skipped = 0
         let cutoff = fileURL(for: calendar.date(byAdding: .day, value: -(Self.retentionDays - 1), to: now()) ?? now()).lastPathComponent
         let today = fileURL(for: now()).lastPathComponent
-        for file in files.filter({ isLogFile($0) && $0.lastPathComponent >= cutoff && $0.lastPathComponent <= today }).sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
+        let dailyFiles = files.filter { isLogFile($0) && $0.lastPathComponent >= cutoff && $0.lastPathComponent <= today }.sorted { $0.lastPathComponent > $1.lastPathComponent }
+        let stamps = dailyFiles.compactMap(FileStamp.init)
+        if let cached = lastRead, stamps.count == dailyFiles.count, cached.files == stamps,
+           cached.limit == limit, cached.severities == severities, cached.category == requestedCategory {
+            return cached.result
+        }
+        for file in dailyFiles {
             // Read a bounded tail with O_NOFOLLOW. Invalid UTF-8/partial JSON
             // damages only its line, never the whole day's valid entries.
             let descriptor = open(file.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
@@ -119,10 +144,15 @@ public actor LocalLogStore {
                 guard let entry = try? decoder.decode(ProductLogEntry.self, from: Data(line)) else { degraded = true; skipped += 1; continue }
                 guard severities.isEmpty || severities.contains(entry.severity) else { continue }
                 guard requestedCategory?.isEmpty != false || entry.category == requestedCategory else { continue }
-                result.append(ProductPrivacy.log(entry))
+                result.append(entry)
             }
         }
-        return .init(entries: Array(result.sorted { $0.timestamp > $1.timestamp }.prefix(limit)), degraded: degraded, skippedLines: skipped)
+        // Filter and sort first. Redaction runs only on entries leaving this
+        // actor; the returned and cached projections never hold raw messages.
+        let snapshot = ProductLogReadResult(entries: result.sorted { $0.timestamp > $1.timestamp }.prefix(limit).map(ProductPrivacy.log),
+                                            degraded: degraded, skippedLines: skipped)
+        lastRead = !degraded && stamps.count == dailyFiles.count ? (stamps, limit, severities, requestedCategory, snapshot) : nil
+        return snapshot
     }
 
     private func prepareDirectory() throws {

@@ -48,9 +48,10 @@ enum EncryptedSQLiteSnapshot {
         guard let bytes = sqlite3_serialize(handle, "main", &count, 0) else {
             throw LocalProjectEncryption.error("无法序列化项目数据库")
         }
-        defer { sqlite3_free(bytes) }
-        var data = Data(bytes: bytes, count: Int(count))
-        if data.count >= 20 { data[18] = 1; data[19] = 1 }
+        // sqlite3_serialize transfers a private allocation to the caller. Seal
+        // that buffer directly instead of copying every page before encryption.
+        if count >= 20 { bytes[18] = 1; bytes[19] = 1 }
+        let data = Data(bytesNoCopy: bytes, count: Int(count), deallocator: .custom { pointer, _ in sqlite3_free(pointer) })
         let encrypted = try LocalProjectEncryption.seal(data, id: id)
         guard try LocalProjectEncryption.open(encrypted) == data else { throw LocalProjectEncryption.error("项目数据库加密校验失败") }
         try FileManagerAtomicFileWriter().writeRaw(encrypted, to: url, permissions: 0o600)

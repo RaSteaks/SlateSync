@@ -20,6 +20,7 @@ public struct SlateCsvRecord: Codable, Hashable, Sendable {
     public let scene: String?
     public let shot: String?
     public let take: String?
+    public let notes: String?
     public let comments: TakeStatus?
     public let cameraFps: String?
     public let shootDay: String?
@@ -32,6 +33,7 @@ public struct SlateCsvRecord: Codable, Hashable, Sendable {
         scene: String? = nil,
         shot: String? = nil,
         take: String? = nil,
+        notes: String? = nil,
         comments: TakeStatus? = nil,
         cameraFps: String? = nil,
         shootDay: String? = nil
@@ -43,6 +45,7 @@ public struct SlateCsvRecord: Codable, Hashable, Sendable {
         self.scene = scene
         self.shot = shot
         self.take = take
+        self.notes = notes
         self.comments = comments
         self.cameraFps = cameraFps
         self.shootDay = shootDay
@@ -157,6 +160,9 @@ public struct PersistedRecognitionRecord: Codable, Hashable, Sendable {
     public let comments: String?
     public let shotSize: String?
     public let cameraPosition: String?
+    public let sourceFileName: String?
+    public let cameraFps: String?
+    public let shootDay: String?
     public let confidence: RecognitionConfidence?
     public let reviewRequiredFields: [String]?
 
@@ -173,6 +179,7 @@ public struct PersistedRecognitionRecord: Codable, Hashable, Sendable {
         comments: String? = nil,
         shotSize: String? = nil,
         cameraPosition: String? = nil,
+        sourceFileName: String? = nil, cameraFps: String? = nil, shootDay: String? = nil,
         confidence: RecognitionConfidence? = nil,
         reviewRequiredFields: [String]? = nil
     ) {
@@ -188,6 +195,9 @@ public struct PersistedRecognitionRecord: Codable, Hashable, Sendable {
         self.comments = comments
         self.shotSize = shotSize
         self.cameraPosition = cameraPosition
+        self.sourceFileName = sourceFileName
+        self.cameraFps = cameraFps
+        self.shootDay = shootDay
         self.confidence = confidence
         self.reviewRequiredFields = reviewRequiredFields
     }
@@ -571,6 +581,10 @@ public struct LogsOpenDirectoryResult: Codable, Hashable, Sendable {
 }
 
 public struct TaskListItem: Codable, Hashable, Sendable {
+    public var title: String?
+    public var shootDay: String?
+    public var unit: String?
+    public var deliveryCount: Int?
     public let id: String?
     public let filename: String?
     public let provider: String?
@@ -644,9 +658,43 @@ public struct PersistedSlateMetadata: Codable, Hashable, Sendable {
     }
 }
 
+/// Task-owned handoff facts travel with the project package; older tasks have no extension.
+public struct TaskProductionDetails: Codable, Hashable, Sendable {
+    public var title: String?
+    public var shootDay: String?
+    public var unit: String?
+    public var operatorName: String?
+    public var slateCSVSource: String?
+    public var localRows: [SlateCsvRecord]?
+    public var originalMedia: Data?
+    public var scanStats: ScanStats?
+    public var deliveries: [MetadataDeliveryReceipt]?
+    public var previousRecords: [PersistedRecognitionRecord]?
+    public init() {}
+}
+
+public struct MetadataDeliveryReceipt: Codable, Hashable, Identifiable, Sendable {
+    public let id: UUID
+    public let date: Date
+    public let filename: String
+    public let source: String?
+    public let format: String
+    public let rows: Int
+    public let operatorName: String?
+    public let warnings: [String]
+    public let sha256: String
+    public init(filename: String, source: String?, format: String, rows: Int, operatorName: String?, warnings: [String], sha256: String) {
+        id = UUID(); date = Date()
+        self.filename = filename; self.source = source; self.format = format; self.rows = rows
+        self.operatorName = operatorName; self.warnings = warnings; self.sha256 = sha256
+    }
+}
+
 public struct TaskData: Codable, Hashable, Sendable {
+    public var production: TaskProductionDetails?
+    public var pageRoutes: [String]?
     public let id: String?
-    public let projectId: String?
+    public var projectId: String?
     public let projectSettingsSnapshot: ProjectSettings?
     public let status: String?
     public let filename: String?
@@ -681,6 +729,8 @@ public struct TaskData: Codable, Hashable, Sendable {
     // The complete replacement schema also defines which fields a native edit
     // owns. Persistence retains every other top-level compatibility field.
     public enum CodingKeys: String, CodingKey, CaseIterable {
+        case production
+        case pageRoutes
         case id
         case projectId
         case projectSettingsSnapshot

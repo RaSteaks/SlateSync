@@ -50,6 +50,7 @@ public final class WorkspaceModel {
     /// at once (a pending row, a disabled button) instead of looking idle while
     /// the durable creation call runs.
     public private(set) var isCreatingTask = false
+    public var prepareTaskSwitch: (@MainActor () async throws -> Void)?
     public var prepareSelectionChange: (@MainActor () async throws -> Void)?
     public var flushEditor: (@MainActor () throws -> Void)?
     public var acquireProject: (@MainActor (String) throws -> Void)?
@@ -80,8 +81,7 @@ public final class WorkspaceModel {
     private func refreshTaskProjection() {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let filtered = query.isEmpty ? tasks : tasks.filter {
-            ($0.filename ?? "").localizedCaseInsensitiveContains(query) ||
-                ($0.id ?? "").localizedCaseInsensitiveContains(query)
+            [$0.filename, $0.id, $0.title, $0.shootDay, $0.unit, $0.statusTitle].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
         }
         if filteredTasks != filtered { filteredTasks = filtered }
         let selectable = filtered.filter { $0.id != nil }
@@ -136,6 +136,17 @@ public final class WorkspaceModel {
         if let oldProjectID, oldProjectID != newProjectID { releaseProject?(oldProjectID) }
     }
 
+    public func refreshAfterRecognition(projectID: String, taskID: String?) async throws {
+        // Selection must finish publishing before deciding whether to restore the
+        // completed task or refresh its sidebar summary in the background.
+        while isTransitioning && self.projectID == projectID { try await Task.sleep(for: .milliseconds(10)) }
+        guard self.projectID == projectID else { return }
+        if selectedTaskID == taskID { try await reloadTasks(selecting: taskID); return }
+        let request = generation
+        let loaded = try await service.listTasks(projectID: projectID)
+        if self.projectID == projectID, generation == request { tasks = loaded }
+    }
+
     public func reloadTasks(selecting preferredID: String? = nil) async throws {
         guard let projectID else { return }
         let requestGeneration = generation
@@ -165,7 +176,7 @@ public final class WorkspaceModel {
         defer { isTransitioning = false }
         do {
             try await flush()
-            try await prepareSelectionChange?()
+            try await (prepareTaskSwitch ?? prepareSelectionChange)?()
             // A completing operation may have staged data while the first
             // flush was suspended. Drain first, then persist its final state.
             try await flush()
@@ -211,7 +222,7 @@ public final class WorkspaceModel {
         do {
             try await flush()
             finishStage(next: "drain")
-            try await prepareSelectionChange?()
+            try await (prepareTaskSwitch ?? prepareSelectionChange)?()
             finishStage(next: "finalFlush")
             // A completing operation may have staged data while the first
             // flush was suspended. Drain first, then persist its final state.
@@ -322,25 +333,55 @@ public final class WorkspaceModel {
         enqueue(snapshot, delay: .milliseconds(250))
     }
 
-    public func stageCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?) {
+    public func stageCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String], rawBase64: String?, invalidatesScan: Bool = false) {
         guard let selectedTask else { return }
-        let snapshot = selectedTask.replacingCSV(table, filename: filename, edits: edits, rawBase64: rawBase64)
+        let replaced = invalidatesScan || selectedTask.resolveCsvFilename != filename || selectedTask.resolveCsvBase64 != rawBase64
+        var snapshot = selectedTask.replacingCSV(table, filename: filename, edits: edits, rawBase64: rawBase64, invalidatesScan: replaced)
+        if replaced { snapshot.production?.scanStats = nil }
         self.selectedTask = snapshot
         enqueue(snapshot, delay: .milliseconds(250))
     }
 
-    public func stageMedia(_ document: PreparedDocument) {
-        guard let selectedTask else { return }
-        let snapshot = selectedTask.replacingMedia(document)
+    public func stageMedia(_ document: PreparedDocument, original: Data? = nil) {
+        guard let selectedTask, selectedTask.result == nil, selectedTask.editedRecords?.isEmpty != false else { return }
+        var snapshot = selectedTask.replacingMedia(document)
+        if let original {
+            var details = snapshot.production ?? .init()
+            details.originalMedia = original
+            snapshot.production = details
+        }
         self.selectedTask = snapshot
         enqueue(snapshot)
     }
 
     public func stageMetadata(_ scan: ScanResult, directoryName: String) {
         guard let selectedTask else { return }
-        let snapshot = selectedTask.replacingMetadata(scan, directoryName: directoryName)
+        var snapshot = selectedTask.replacingMetadata(scan, directoryName: directoryName)
+        var details = snapshot.production ?? .init()
+        details.scanStats = scan.stats
+        snapshot.production = details
         self.selectedTask = snapshot
         enqueue(snapshot)
+    }
+
+    public func originalPage(_ source: ScenarioSourcePage) async throws -> Data {
+        guard let projectID else { throw transitionError }
+        let task = try await service.loadTask(projectID: projectID, taskID: source.taskID)
+        guard self.projectID == projectID, let groups = task.imageDataGroups, source.page >= 1, source.page <= groups.count,
+              let url = groups[source.page - 1].first, let separator = url.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(url[url.index(after: separator)...])) else {
+            throw SlateSyncError(code: "SCENARIO_SOURCE", message: L10n.tr("找不到对应的原稿页。"))
+        }
+        return data
+    }
+
+    public func updateProduction(_ update: (inout TaskProductionDetails) -> Void) {
+        guard var task = selectedTask else { return }
+        var details = task.production ?? TaskProductionDetails()
+        update(&details)
+        task.production = details
+        selectedTask = task
+        enqueue(task)
     }
 
     public func stageLocalRecords(_ records: [PersistedRecognitionRecord], filename: String) {
@@ -444,13 +485,16 @@ public final class WorkspaceModel {
         // The rail and editor describe the same task, including local CSV
         // completion. Replace its summary in place; never append a result row.
         if let taskID, let index = tasks.firstIndex(where: { $0.id == taskID }) {
-            tasks[index] = TaskListItem(
+            var item = TaskListItem(
                 id: taskID, filename: snapshot.filename, provider: snapshot.provider,
                 model: snapshot.model, pageCount: snapshot.pageCount, scenarioId: snapshot.scenarioId,
                 recordCount: (snapshot.editedRecords ?? snapshot.result?.records ?? []).count,
                 status: snapshot.status ?? "draft", createdAt: snapshot.createdAt,
                 updatedAt: snapshot.updatedAt
             )
+            item.title = snapshot.production?.title; item.shootDay = snapshot.production?.shootDay
+            item.unit = snapshot.production?.unit; item.deliveryCount = snapshot.production?.deliveries?.count
+            tasks[index] = item
         }
         editRevision += 1
         isDirty = true
@@ -474,8 +518,8 @@ private extension TaskData {
         replacing(customPrompt: customPrompt, editedRecords: editedRecords)
     }
 
-    func replacingCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String]? = nil, rawBase64: String? = nil) -> TaskData {
-        replacing(customPrompt: customPrompt, editedRecords: editedRecords, csv: table, csvFilename: filename, csvEdits: edits, csvRawBase64: rawBase64)
+    func replacingCSV(_ table: ResolveCSVTable, filename: String?, edits: [String: String]? = nil, rawBase64: String? = nil, invalidatesScan: Bool = false) -> TaskData {
+        replacing(customPrompt: customPrompt, editedRecords: editedRecords, csv: table, csvFilename: filename, csvEdits: edits, csvRawBase64: rawBase64, invalidatesScan: invalidatesScan)
     }
 
     func replacingMedia(_ document: PreparedDocument) -> TaskData {
@@ -510,6 +554,7 @@ private extension TaskData {
         csvFilename: String? = nil,
         csvEdits: [String: String]? = nil,
         csvRawBase64: String? = nil,
+        invalidatesScan: Bool = false,
         media: PreparedDocument? = nil,
         scan: ScanResult? = nil,
         directoryName: String? = nil,
@@ -520,7 +565,7 @@ private extension TaskData {
         let nextModel: String? = recognitionOptions == nil ? model : recognitionOptions?.model
         let nextAccuracy: ProjectSettings.AccuracyMode? = recognitionOptions == nil ? accuracyMode : recognitionOptions?.accuracyMode
         let nextScenario: String? = recognitionOptions == nil ? scenarioId : recognitionOptions?.scenarioID
-        return TaskData(
+        var snapshot = TaskData(
             id: id,
             projectId: projectId,
             projectSettingsSnapshot: projectSettingsSnapshot,
@@ -537,10 +582,10 @@ private extension TaskData {
             slateMetadata: scan?.metadata.map {
                 PersistedSlateMetadata(materialKey: $0.materialKey, sourceName: $0.sourceName,
                     clipName: $0.clipName, sensorFps: $0.sensorFps, shootDay: $0.shootDay)
-            } ?? slateMetadata,
-            slateWarnings: scan?.warnings ?? slateWarnings,
-            missingMetadataKeys: scan?.missingKeys ?? missingMetadataKeys,
-            slateDirectoryName: directoryName ?? slateDirectoryName,
+            } ?? (invalidatesScan ? nil : slateMetadata),
+            slateWarnings: scan?.warnings ?? (invalidatesScan ? nil : slateWarnings),
+            missingMetadataKeys: scan?.missingKeys ?? (invalidatesScan ? nil : missingMetadataKeys),
+            slateDirectoryName: directoryName ?? (invalidatesScan ? nil : slateDirectoryName),
             scenarioId: localFilename == nil ? nextScenario : nil,
             scenarioMatch: localFilename == nil ? scenarioMatch : nil,
             scenarioFingerprint: localFilename == nil ? scenarioFingerprint : nil,
@@ -557,6 +602,9 @@ private extension TaskData {
             createdAt: createdAt,
             updatedAt: updatedAt
         )
+        snapshot.pageRoutes = localFilename == nil ? pageRoutes : nil
+        snapshot.production = production
+        return snapshot
     }
 }
 

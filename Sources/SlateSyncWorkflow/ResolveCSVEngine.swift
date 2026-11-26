@@ -5,6 +5,12 @@ public actor ResolveCSVEngine: CSVProcessing {
     public init() {}
 
     public func decode(_ data: Data) throws -> ResolveCSVTable {
+        try Self.decodeTable(data, resolveTemplate: true)
+    }
+
+    // Local sheets and Resolve templates share the byte, quoting and newline
+    // contract. Each importer owns validation of its own column vocabulary.
+    nonisolated static func decodeTable(_ data: Data, resolveTemplate: Bool) throws -> ResolveCSVTable {
         guard !data.isEmpty else {
             throw SlateSyncError(code: "CSV_EMPTY", message: "CSV 文件为空")
         }
@@ -28,8 +34,7 @@ public actor ResolveCSVEngine: CSVProcessing {
             throw SlateSyncError(code: "CSV_EMPTY", message: "CSV 没有表头")
         }
         let headers = rawHeaders
-        let columns = try ResolveHeaders.resolve(headers)
-        guard ResolveHeaders.hasIdentifier(columns) else {
+        if resolveTemplate, !ResolveHeaders.hasIdentifier(try ResolveHeaders.resolve(headers)) {
             throw SlateSyncError(code: "CSV_COLUMNS", message: "CSV 中未找到 File Name（文件名）、Reel Name（卷名）或 Clip Name（条名）列。")
         }
         let rows = records.dropFirst().map { record -> [String] in

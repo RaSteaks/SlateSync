@@ -99,29 +99,34 @@ public struct ProjectSettings: Codable, Hashable, Sendable {
 
     public struct ResolveSettings: Codable, Hashable, Sendable {
         public var fieldFormats: ResolveFieldFormats
+        public var addMissingColumns: Bool
         public var comments: ResolveComments
 
         public init(
             fieldFormats: ResolveFieldFormats = .init(),
-            comments: ResolveComments = .init()
+            comments: ResolveComments = .init(), addMissingColumns: Bool = false
         ) {
             self.fieldFormats = fieldFormats
+            self.addMissingColumns = addMissingColumns
             self.comments = comments
         }
 
         private enum CodingKeys: String, CodingKey {
             case fieldFormats
+            case addMissingColumns
             case comments
         }
 
         public init(from decoder: any Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
+            addMissingColumns = try values.decodeIfPresent(Bool.self, forKey: .addMissingColumns) ?? false
             fieldFormats = try values.decodeIfPresent(ResolveFieldFormats.self, forKey: .fieldFormats) ?? .init()
             comments = try values.decodeIfPresent(ResolveComments.self, forKey: .comments) ?? .init()
         }
 
         public func encode(to encoder: any Encoder) throws {
             var values = encoder.container(keyedBy: CodingKeys.self)
+            if addMissingColumns { try values.encode(true, forKey: .addMissingColumns) }
             try values.encode(fieldFormats, forKey: .fieldFormats)
             try values.encode(comments, forKey: .comments)
         }

@@ -17,6 +17,31 @@ final class ResolveCSVMergerTests: XCTestCase {
         XCTAssertTrue(result.warnings.contains { $0.contains("素材标识冲突") })
     }
 
+    func testShootDayCollisionsManualFileLinksAndNotes() async throws {
+        let rows = [["A001C001.mov", "/D1/A001C001.mov", "", "", "", "同期声", "", ""],
+                    ["A001C001.mov", "/D2/A001C001.mov", "", "", "", "补拍", "", ""]]
+        let source = ResolveCSVTable(headers: ["File Name", "File Path", "Scene", "Shot", "Take", "Comments", "Camera FPS", "Shoot Day"],
+                                     rows: rows, format: .init())
+        let merger = ResolveCSVMerger()
+        var record = ResolveSlateRecord(cardNumber: "A001", videoCode: "C001", scene: "7", shot: "2", take: "1", comments: "另收环境声")
+        let ambiguous = try await merger.merge(source: source, records: [record], metadata: [.init(materialKey: "A:1:1", sensorFps: "96", shootDay: "2026-11-20")], preserveTemplate: true)
+        XCTAssertEqual(ambiguous.table.rows, rows)
+        XCTAssertEqual(ambiguous.statuses.first??.rowIndexes, [0, 1])
+        XCTAssertGreaterThan(ambiguous.reviewIssueCount, 0)
+        record.sourceFileName = "/D2/A001C001.mov"
+        record.cameraFps = "48"; record.shootDay = "2026-11-21"
+        let linked = try await merger.merge(source: source, records: [record], preserveTemplate: true)
+        XCTAssertEqual(linked.table.rows[0], rows[0])
+        XCTAssertEqual(linked.table.rows[1], ["A001C001.mov", "/D2/A001C001.mov", "007", "02", "01", "补拍\n另收环境声", "48", "26-11-21"])
+        let thin = ResolveCSVTable(headers: ["File Name"], rows: [["A001C001.mov"]], format: .init())
+        record.sourceFileName = nil
+        let missing = try await merger.merge(source: thin, records: [record], preserveTemplate: true)
+        XCTAssertEqual(missing.changedCellCount, 0)
+        XCTAssertEqual(missing.updatedRowCount, 0)
+        XCTAssertFalse(missing.permitsExport(recordCount: 1, edits: []))
+        XCTAssertGreaterThan(missing.reviewIssueCount, 0)
+    }
+
     /// Reused immutable parsers retain Unicode, invalid-date and numeral rules.
     func testReusedNormalizationParsersPreserveCompatibility() {
         // Reject conflicting embedded reels before producing an export key or prefix.
@@ -96,8 +121,10 @@ final class ResolveCSVMergerTests: XCTestCase {
         // Matched cells still use the requested widths and status markers.
         let merged = try await engine.encode(result.table)
         XCTAssertEqual(result.table.rows[2][1...3], ["keep", "keep", "keep"])
-        XCTAssertEqual(merged.count, 208)
-        XCTAssertEqual(sha256(merged), "1349b0603b92942e7fd4ed56b27b526f49ff5bc0844e2b2bd6db2f145c7bdb79")
+        // Existing production notes survive alongside the configured status.
+        XCTAssertEqual(result.table.rows[1][4], "_OLD\nHOLD")
+        XCTAssertEqual(merged.count, 215)
+        XCTAssertEqual(sha256(merged), "708edde43485380cd8de6d284a7c511710417291f20fa4e7589ca0d25a634d58")
         XCTAssertEqual(result.matchedRecordCount, 2)
         XCTAssertEqual(result.unrecognizedMaterials, ["A001C999"])
         // Export review must include records that the merger skipped, not just

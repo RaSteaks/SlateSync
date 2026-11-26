@@ -33,6 +33,9 @@ public final class MCPSettingsModel {
 
     // Preparation discovers/builds the helper; file grants never gate startup.
     public var canStart: Bool { acceptsOperations && !isBusy && !isRunning }
+    public var offlineLaunchAvailable: Bool {
+        !configuration.executablePath.isEmpty && FileManager.default.isExecutableFile(atPath: configuration.executablePath)
+    }
     public var hasClientConfiguration: Bool { !configuration.executablePath.isEmpty }
     public var statusText: String {
         if case .running(let label) = operation { return label }

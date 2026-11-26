@@ -208,7 +208,7 @@ final class ContentMotionTests: XCTestCase {
     /// deterministic state tests above cover cancellation without timer waits.
     func testQueuedNavigationEventuallyMountsOnlyTheLatestDestination() async throws {
         let state = RegionState()
-        let host = NSHostingView(rootView: LiveFixture(state: state))
+        let host = NSHostingView(rootView: LiveFixture(state: state, duration: 1))
         host.sizingOptions = []
         let window = makeWindow(size: CGSize(width: 900, height: 500))
         window.contentView = host
@@ -225,11 +225,11 @@ final class ContentMotionTests: XCTestCase {
         state.page = 3
         try await settle(host)
         XCTAssertEqual(editors(), ["editor-0", "editor-1"])
-        try await Task.sleep(for: .seconds(SlateMotion.revealDuration + 0.15))
+        try await Task.sleep(for: .seconds(1.15))
         try await settle(host)
         XCTAssertEqual(editors(), ["editor-1", "editor-3"])
         XCTAssertEqual(state.navigation.title, "Page 3")
-        try await Task.sleep(for: .seconds(SlateMotion.revealDuration + 0.15))
+        try await Task.sleep(for: .seconds(1.15))
         try await settle(host)
         XCTAssertEqual(editors(), ["editor-3"])
         XCTAssertFalse(descendants(of: ContentRevealInputShield.Shield.self, in: host).contains { $0.blocked })
@@ -331,7 +331,7 @@ final class ContentMotionTests: XCTestCase {
     }
 
     private func assertSharedTiming(_ animation: CAAnimation, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertEqual(animation.duration, 2.0, file: file, line: line)
+        XCTAssertEqual(animation.duration, SlateMotion.handoffDuration, file: file, line: line)
         guard let timing = animation.timingFunction else {
             XCTFail("Motion must use the shared Bézier timing function", file: file, line: line)
             return
@@ -379,11 +379,13 @@ final class ContentMotionTests: XCTestCase {
 
     private struct LiveFixture: View {
         let state: RegionState
+        // Stretch only the test clock so both intermediate owners can be observed.
+        var duration = SlateMotion.revealDuration
         var body: some View {
             NavigationSplitView {
                 Text("Sidebar")
             } detail: {
-                ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion) { page in
+                ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion, duration: duration) { page in
                     Editor(page: page).contentRevealNavigationTitle("Page \(page)")
                 }.sidebarResizeBoundary()
             }

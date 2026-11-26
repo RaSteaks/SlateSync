@@ -109,17 +109,21 @@ public struct ProjectLibraryView: View {
             allowedContentTypes: [.folder]
         ) { result in
             if case .success(let directory) = result {
+                // Keep consecutive shift backups independent and retain the
+                // transfer service's refusal to overwrite an existing package.
+                let stamp = Date().ISO8601Format().replacingOccurrences(of: ":", with: "-") + "-" + UUID().uuidString.prefix(6)
                 if exportsLibrary {
-                    let target = directory.appending(path: "SlateSync.slatesync-library", directoryHint: .isDirectory)
+                    let target = directory.appending(path: "SlateSync-\(stamp).slatesync-library", directoryHint: .isDirectory)
                     scoped(directory) { _ in await model.exportLibrary(to: target) }
                 } else if let project = exportProject {
-                    let target = directory.appending(path: "\(project.name).slatesync-project", directoryHint: .isDirectory)
+                    let target = directory.appending(path: "\(project.name)-\(stamp).slatesync-project", directoryHint: .isDirectory)
                     scoped(directory) { _ in await model.export(project, to: target) }
                 }
             }
             exportProject = nil
             exportsLibrary = false
         }
+        .fileDialogMessage(Text(L10n.tr("便携备份含场记图像、表格与诊断，使用接收方可读的格式。模型凭据和 OCR 环境需在接收机配置。")))
         .task {
             // A retained model may be remounted while already populated. Do
             // not publish a redundant reload from SwiftUI's table mount pass.
@@ -183,15 +187,19 @@ public struct ProjectLibraryView: View {
     }
 
     @ViewBuilder private var errorBanner: some View {
-        if model.libraryRestartRequired {
+        if case .running(let label) = model.operation {
+            SlateStatusBar(message: label, busy: true) {}
+        } else if model.libraryRestartRequired {
             SlateStatusBar(L10n.tr("项目库已切换；重启 SlateSync 后生效。"), tone: .warning)
         } else if let error = model.error {
             // The shared surface presents feedback; retry ownership stays here.
             SlateStatusBar(message: error.message, tone: .error) {
                 Button(L10n.tr("关闭")) { model.clearError() }
-                if error.retryable { Button(L10n.tr("重试")) { Task { await model.retryLoad() } } }
+                if error.retryable { Button(L10n.tr("重新读取项目库")) { Task { await model.retryLoad() } } }
             }
             .accessibilityIdentifier("project.error")
+        } else if case .succeeded(let message) = model.operation {
+            SlateStatusBar(message, tone: .success)
         }
     }
 
@@ -211,6 +219,10 @@ private struct ProjectRow: View {
                 }
             }
             Spacer()
+            if let latest = project.latestTaskAt {
+                Text(String(latest.prefix(10))).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    .help(latest)
+            }
             Text(L10n.tr("{0} 个任务", [String(describing: project.taskCount)]))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)

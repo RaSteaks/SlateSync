@@ -43,12 +43,17 @@ final class WindowSession {
 
 private actor WindowSessionRegistry {
     private var sessions: [UUID: WindowSession] = [:]
+    private var exportBarriers: [UUID: @MainActor @Sendable (String) async throws -> Void] = [:]
     private var refreshes: [UUID: @MainActor @Sendable (Set<String>) async -> Void] = [:]
 
     func register(id: UUID, session: WindowSession, refresh: (@MainActor @Sendable (Set<String>) async -> Void)? = nil) {
         sessions[id] = session; refreshes[id] = refresh
     }
-    func unregister(id: UUID) { sessions[id] = nil; refreshes[id] = nil }
+    func registerExportBarrier(id: UUID, action: @escaping @MainActor @Sendable (String) async throws -> Void) { exportBarriers[id] = action }
+    func prepareExport(projectID: String) async throws {
+        for barrier in exportBarriers.values { try await barrier(projectID) }
+    }
+    func unregister(id: UUID) { sessions[id] = nil; refreshes[id] = nil; exportBarriers[id] = nil }
     func session(for id: UUID) -> WindowSession? { sessions[id] }
 
     func refreshAll(activeIDs: Set<String>) async {
@@ -72,6 +77,7 @@ public final class TerminationCoordinator {
     public private(set) var error: SlateSyncError?
     public private(set) var isDraining = false
     public private(set) var isMutatingLibrary = false
+    public private(set) var exportingProjectID: String?
     public private(set) var restartRequired = false
     private let lifecycle: any ProductLifecycleServing
     private let windows = WindowSessionRegistry()
@@ -114,6 +120,13 @@ public final class TerminationCoordinator {
             ),
             refresh: refresh
         )
+        await windows.registerExportBarrier(id: id) { target in
+            guard workspace.projectID == target else { return }
+            try workspace.requireStableSelection()
+            try await settings?.flushIfNeeded()
+            await recognition.waitForCompletion()
+            try await workspace.flush()
+        }
     }
 
     /// Low-level registration for the shared pipeline; `registerWindow` builds
@@ -152,18 +165,28 @@ public final class TerminationCoordinator {
     public func refreshProjects(activeIDs: Set<String>) async { await windows.refreshAll(activeIDs: activeIDs) }
 
     public func performLibraryMutation(_ action: @escaping @MainActor () async throws -> Void) async throws {
-        guard !isMutatingLibrary, !isDraining, !restartRequired else {
+        try await coordinateLibrary(projectID: nil, action)
+    }
+
+    public func performProjectExport(_ projectID: String, _ action: @escaping @MainActor () async throws -> Void) async throws {
+        try await coordinateLibrary(projectID: projectID, action)
+    }
+
+    private func coordinateLibrary(projectID: String?, _ action: @escaping @MainActor () async throws -> Void) async throws {
+        guard libraryMutationTask == nil, !isMutatingLibrary, !isDraining, !restartRequired else {
             throw SlateSyncError(code: "LIBRARY_BUSY", message: L10n.tr("项目库正在更新或等待重启，请稍后重试"), retryable: true)
         }
         // All windows freeze editing before the shared mutation starts. Each
         // writer and operation drains, including windows that are not focused.
-        isMutatingLibrary = true
+        isMutatingLibrary = projectID == nil
+        exportingProjectID = projectID
         let task = Task { @MainActor [windows] in
-            try await windows.drainAll()
+            if let projectID { try await windows.prepareExport(projectID: projectID) }
+            else { try await windows.drainAll() }
             try await action()
         }
         libraryMutationTask = task
-        defer { isMutatingLibrary = false; libraryMutationTask = nil }
+        defer { isMutatingLibrary = false; exportingProjectID = nil; libraryMutationTask = nil }
         try await task.value
     }
 

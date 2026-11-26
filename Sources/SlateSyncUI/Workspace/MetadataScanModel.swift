@@ -8,6 +8,7 @@ import SlateSyncDomain
 /// cannot replace the snapshot chosen by a newer file-panel action.
 @MainActor @Observable
 public final class MetadataScanModel {
+    public private(set) var progress: ScanStats?
     public private(set) var result: ScanResult?
     public private(set) var operation: OperationState = .idle
     private let service: any WorkspaceWorkflowServing
@@ -22,6 +23,7 @@ public final class MetadataScanModel {
     public func scan(_ directory: URL, expectedKeys: [String] = []) {
         // A late file-panel completion must honor recognition/close barriers.
         guard permitsNewOperation?() != false else { return }
+        progress = nil
         let previous = scanTask
         previous?.cancel()
         generation += 1
@@ -39,7 +41,12 @@ public final class MetadataScanModel {
                 let value = try await service.scanMetadata(
                     directory: directory,
                     options: SlateMetadataScanOptions(expectedKeys: expectedKeys)
-                )
+                ) { [weak self] stats in
+                    Task { @MainActor in
+                        guard let self, self.generation == request, self.operation.isRunning else { return }
+                        self.progress = stats
+                    }
+                }
                 guard request == generation, !Task.isCancelled else { return }
                 result = value
                 onResult?(value, directory.lastPathComponent)
@@ -73,11 +80,14 @@ public final class MetadataScanModel {
     public func load(task: TaskData?) {
         // Task selection resets scan results synchronously; the preceding
         // selection barrier has already joined the previous directory scan.
-        result = task.map { task in
-            ScanResult(metadata: (task.slateMetadata ?? []).map {
+        progress = nil
+        result = task.flatMap { task -> ScanResult? in
+            guard task.slateDirectoryName != nil || task.slateMetadata?.isEmpty == false
+                    || task.slateWarnings?.isEmpty == false || task.missingMetadataKeys?.isEmpty == false else { return nil }
+            return ScanResult(metadata: (task.slateMetadata ?? []).map {
                 ScannedSlateMetadata(sourceName: $0.sourceName ?? "", clipName: $0.clipName ?? "", materialKey: $0.materialKey,
                     sensorFps: $0.sensorFps ?? "", shootDay: $0.shootDay ?? "")
-            }, warnings: task.slateWarnings ?? [], stats: .init(visitedDirectories: 0, prunedDirectories: 0,
+            }, warnings: task.slateWarnings ?? [], stats: task.production?.scanStats ?? .init(visitedDirectories: 0, prunedDirectories: 0,
                 skippedDeepDirectories: 0, discoveredSlateFiles: 0, readSlateFiles: 0, learnedStructures: 0),
                 missingKeys: task.missingMetadataKeys ?? [])
         }

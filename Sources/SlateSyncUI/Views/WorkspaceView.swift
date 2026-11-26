@@ -55,17 +55,27 @@ public struct WorkspaceView: View {
     @State private var pendingEntryPoint: WorkspaceEntryPoint?
     @State private var importsFile = false
     @State private var importKind = ImportKind.media
+    @State private var importTaskID: String?
+    @State private var importProjectID: String?
+    @State private var importTableID: UUID?
+    @State private var intakeParts: [MediaIntakePart] = []
+    @State private var showsBatch = false
+    @State private var receivingMedia = false
+    @State private var resumeDelivery: ((URL?) -> Void)?
+    @State private var showsHandoff = false
+    @State private var confirmRerun = false
+    @State private var confirmCSVReplacement = false
     @State private var metadataReport: WorkflowDiagnosticReport?
     // The parent owns this ledger so completion events are not lost when the
     // workspace route is replaced by Projects, Logs, or Help.
     @Binding private var unseenSections: Set<WorkspaceSection>
 
     private enum ImportKind {
-        case media, metadata, slateCSV, resolveCSV
+        case media, metadata, slateCSV, resolveCSV, deliveryFolder
         var types: [UTType] {
             switch self {
-            case .media: [.pdf, .image]
-            case .metadata: [.folder]
+            case .media: [.pdf, .jpeg, .png, .webP]
+            case .metadata, .deliveryFolder: [.folder]
             case .slateCSV, .resolveCSV: [.commaSeparatedText, .plainText]
             }
         }
@@ -165,11 +175,50 @@ public struct WorkspaceView: View {
         }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WorkspaceEditorProbe(boundary: editorBoundary).frame(width: 0, height: 0))
-        .contentRevealNavigationTitle(workspace.selectedTask?.filename ?? L10n.tr("当前任务"), subtitle: headerFacts)
+        .contentRevealNavigationTitle(workspace.selectedTask?.production?.title.flatMap { $0.isEmpty ? nil : $0 } ?? workspace.selectedTask?.filename ?? L10n.tr("当前任务"), subtitle: headerFacts)
+        .confirmationDialog(L10n.tr("重新识别并保留当前校对版本？"), isPresented: $confirmRerun) {
+            Button(L10n.tr("保存当前版本并重新识别")) { startRecognition() }
+        }
+        .confirmationDialog(L10n.tr("替换已有人工编辑的工作表？"), isPresented: $confirmCSVReplacement) {
+            Button(L10n.tr("选择替换文件…")) { openImporter(.resolveCSV) }
+            Button(L10n.tr("取消"), role: .cancel) {}
+        } message: { Text(L10n.tr("现有 {0} 处人工编辑。需要保留时，请先导出当前工作表。", [String(csv.manualEditCount)])) }
+        .sheet(isPresented: $showsBatch) {
+            VStack(alignment: .leading) {
+                Text(L10n.tr("确认场记导入顺序")).font(.headline)
+                List {
+                    ForEach(Array(intakeParts.enumerated()), id: \.offset) { index, part in
+                        HStack {
+                            Text(part.filename)
+                            Spacer()
+                            Button { intakeParts.swapAt(index, index - 1) } label: { Image(systemName: "arrow.up") }
+                                .disabled(index == 0).accessibilityLabel(L10n.tr("上移"))
+                            Button { intakeParts.swapAt(index, index + 1) } label: { Image(systemName: "arrow.down") }
+                                .disabled(index + 1 == intakeParts.count).accessibilityLabel(L10n.tr("下移"))
+                        }
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button(L10n.tr("取消")) { showsBatch = false }
+                    Button(L10n.tr("按顺序建任务")) {
+                        showsBatch = false
+                        receiveMedia(intakeParts)
+                    }.keyboardShortcut(.defaultAction)
+                }
+            }.padding().frame(minWidth: 450, minHeight: 320)
+        }
+        .sheet(isPresented: $showsHandoff) { TaskHandoffView(workspace: workspace) }
         .sheet(item: $metadataReport) { WorkflowDiagnosticsSheet(report: $0) }
         .onChange(of: workspace.selectedTaskID) { _, _ in metadataReport = nil }
         .safeAreaInset(edge: .bottom) {
             autosaveBanner
+            switch recognition.localOperation {
+            case .running(let label): SlateStatusBar(message: label, busy: true) {}
+            case .failed(let error): SlateInlineError(error.message)
+            case .succeeded(let message): SlateStatusBar(message, tone: .success)
+            default: EmptyView()
+            }
             if let layoutError {
                 SlateStatusBar(message: layoutError, tone: .warning) {
                     if entryPoint != .input {
@@ -193,7 +242,7 @@ public struct WorkspaceView: View {
                             Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
                                 .disabled(!media.canAcceptInput || workspace.projectID == nil)
                             Button(L10n.tr("载入场记 CSV…")) { presentImport(.slateCSV) }
-                                .disabled(workspace.selectedTaskID == nil)
+                                .disabled(workspace.projectID == nil)
                             if !recognition.slateCSVRecords.isEmpty {
                                 Button(L10n.tr("从场记 CSV 生成结果")) {
                                     recognition.generateLocalRecords(
@@ -208,11 +257,13 @@ public struct WorkspaceView: View {
                             // so it lives here (and in the empty state) rather than
                             // as a toolbar glyph that reads like a Save button.
                             Button(L10n.tr("导入 CSV…")) { presentImport(.resolveCSV) }
-                                .disabled(workspace.selectedTaskID == nil || csv.operation.isRunning)
+                                .disabled(workspace.projectID == nil || csv.operation.isRunning)
                             Divider()
                         }
                         // The File menu owns the single ⌘S registration; this item
                         // invokes the same workspace owner without competing.
+                        Button(L10n.tr("任务与交班记录…")) { showsHandoff = true }
+                            .disabled(workspace.selectedTaskID == nil)
                         Button(L10n.tr("保存")) { Task { try? await workspace.flush() } }
                     }
                     // A bare ellipsis: the menu indicator would be an unexplained
@@ -227,11 +278,26 @@ public struct WorkspaceView: View {
         }
         // A single importer owns the workspace presentation. Multiple
         // fileImporter modifiers on the same native host can mask each other.
-        .fileImporter(isPresented: $importsFile, allowedContentTypes: importKind.types) { result in
+        .fileImporter(isPresented: $importsFile, allowedContentTypes: importKind.types, allowsMultipleSelection: importKind == .media) { selection in
+            let result = selection.flatMap { urls -> Result<URL, Error> in
+                guard let first = urls.first else { return .failure(CancellationError()) }; return .success(first)
+            }
+            let taskID = importTaskID, projectID = importProjectID, tableID = importTableID
+            @MainActor func stillOwnsImport() -> Bool {
+                workspace.selectedTaskID == taskID && workspace.projectID == projectID && csv.tableID == tableID && !workspace.isTransitioning
+            }
+            if importKind == .deliveryFolder {
+                let resume = resumeDelivery
+                resumeDelivery = nil
+                resume?(stillOwnsImport() ? try? result.get() : nil)
+                return
+            }
+            guard stillOwnsImport() else { return }
             switch importKind {
+            case .deliveryFolder: break
             case .media:
                 switch result {
-                case .success(let url): chooseMedia(url)
+                case .success: chooseMedia((try? selection.get()) ?? [])
                 case .failure(let error): media.report(error)
                 }
             case .metadata:
@@ -244,25 +310,28 @@ public struct WorkspaceView: View {
                     do {
                         let url = try result.get()
                         let data = try await SecurityScopedFileReader.read(url)
+                        guard stillOwnsImport() else { return }
                         await csv.importData(data, filename: url.lastPathComponent)
-                    } catch { csv.report(error) }
+                    } catch { if stillOwnsImport() { csv.report(error) } }
                 }
             case .slateCSV:
                 Task {
                     do {
                         let url = try result.get()
                         let data = try await SecurityScopedFileReader.read(url)
-                        guard let projectID = workspace.projectID else { return }
+                        guard stillOwnsImport(), let projectID else { return }
                         recognition.importSlateCSV(data, filename: url.lastPathComponent, projectID: projectID) {
                             try await workspace.flush()
                         }
-                    } catch { recognition.report(error) }
+                    } catch { if stillOwnsImport() { recognition.report(error) } }
                 }
             }
+        } onCancellation: {
+            if importKind == .deliveryFolder { resumeDelivery?(nil); resumeDelivery = nil }
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard media.canAcceptInput, let url = urls.first, urls.count == 1 else { return false }
-            chooseMedia(url)
+            guard media.canAcceptInput, !urls.isEmpty, !receivingMedia else { return false }
+            chooseMedia(urls)
             return true
         }
         .task {
@@ -312,6 +381,26 @@ public struct WorkspaceView: View {
     }
 
     private func presentImport(_ kind: ImportKind) {
+        if (kind == .slateCSV || kind == .resolveCSV), workspace.selectedTaskID == nil {
+            Task {
+                await workspace.createTask()
+                if workspace.selectedTaskID != nil { openImporter(kind) }
+            }
+            return
+        }
+        if kind == .resolveCSV {
+            do { try csv.flushEditor?() } catch { csv.report(error); return }
+            if csv.manualEditCount > 0 { confirmCSVReplacement = true; return }
+        }
+        openImporter(kind)
+    }
+
+    private func openImporter(_ kind: ImportKind) {
+        // Capture the document which opened the panel; a network volume read
+        // may complete after another project, task, or CSV has been selected.
+        importTaskID = workspace.selectedTaskID
+        importProjectID = workspace.projectID
+        importTableID = csv.tableID
         importKind = kind
         importsFile = true
     }
@@ -328,7 +417,7 @@ public struct WorkspaceView: View {
         }
         facts.append(L10n.tr("{0} 条", [String(describing: item.recordCount)]))
         // The subtitle follows the live operation, not the last saved status.
-        if recognition.operation.isRunning, id == workspace.selectedTaskID {
+        if recognition.locksDisplayedTask, id == workspace.selectedTaskID {
             if let progress = recognition.progress, progress.total > 0 {
                 facts.append(L10n.tr("识别中 {0}/{1}", [String(progress.completed), String(progress.total)]))
             } else {
@@ -377,13 +466,17 @@ public struct WorkspaceView: View {
     /// supplies its own (export) from the CSV view.
     @ViewBuilder private var recognitionAction: some View {
         if section == .input {
-            if recognition.operation.isRunning {
+            if let running = recognition.runningTaskID, running != workspace.selectedTaskID {
+                Button(L10n.tr("返回后台识别任务")) { Task { try? await workspace.selectTask(running) } }
+            } else if recognition.operation.isRunning {
                 Button(L10n.tr("取消识别"), systemImage: "xmark.circle") { recognition.cancel() }
                     .labelStyle(.titleAndIcon)
                     .help(L10n.tr("停止当前的识别"))
                     .accessibilityIdentifier(AccessibilityID.recognitionCancel)
             } else {
-                Button(L10n.tr("开始识别"), systemImage: "viewfinder") { startRecognition() }
+                Button(L10n.tr("开始识别"), systemImage: "viewfinder") {
+                    if recognition.editableRecords.isEmpty { startRecognition() } else { confirmRerun = true }
+                }
                     .slateToolbarPrimaryStyle()
                     .labelStyle(.titleAndIcon)
                     .help(recognitionUnavailableReason ?? L10n.tr("识别当前场记单"))
@@ -420,6 +513,10 @@ public struct WorkspaceView: View {
                 ResolveCSVView(
                     model: csv, recognition: recognition, workspace: workspace,
                     onImport: { presentImport(.resolveCSV) },
+                    onChooseMediaDirectory: { resume in
+                        resumeDelivery = resume
+                        presentImport(.deliveryFolder)
+                    },
                     onShowResults: { sectionBinding.wrappedValue = .result })
                 Divider()
                 metadataPanel
@@ -456,7 +553,7 @@ public struct WorkspaceView: View {
                     } else {
                         SlateEmptyState(
                             title: L10n.tr("导入场记单"), symbol: "doc.viewfinder",
-                            message: L10n.tr("选择或拖入 PDF、图像，然后配置识别。")
+                            message: L10n.tr("选择或拖入 PDF、JPEG、PNG 或 WebP。每个任务最多 20 页、20 MiB；长 PDF 可分段导入。")
                         ) {
                             Button(L10n.tr("选择 PDF 或图像…")) { presentImport(.media) }
                                 .disabled(!media.canAcceptInput || workspace.projectID == nil)
@@ -488,7 +585,7 @@ public struct WorkspaceView: View {
             // Recognition pauses editing: only the form is frozen. The page
             // stays at full strength so the evidence is never dimmed.
             configurationPanel
-                .disabled(recognition.operation.isRunning)
+                .disabled(recognition.locksDisplayedTask)
                 .transaction { $0.animation = nil }
                 .frame(width: Self.configurationPanelWidth)
                 .frame(maxHeight: .infinity)
@@ -664,6 +761,7 @@ public struct WorkspaceView: View {
                 Label(L10n.tr("场记元数据"), systemImage: "folder").fontWeight(.medium)
                 if metadata.operation.isRunning {
                     ProgressView().controlSize(.small)
+                    if let stats = metadata.progress { Text(L10n.tr("已检查 {0} 个目录", [String(stats.visitedDirectories)])) }
                     Button(L10n.tr("取消扫描"), role: .cancel) { metadata.cancel() }
                 } else {
                     Button(L10n.tr("选择目录并扫描…")) { presentImport(.metadata) }
@@ -674,6 +772,9 @@ public struct WorkspaceView: View {
                     Text(L10n.tr("已读取 {0} 条 · 缺少素材 {1} · 警告 {2}",
                                  [String(result.metadata.count), String(result.missingKeys.count), String(result.warnings.count)]))
                         .foregroundStyle(.secondary)
+                    if result.stats.visitedDirectories > 0 {
+                        Text(L10n.tr("已检查 {0} 个目录", [String(result.stats.visitedDirectories)]))
+                    }
                     if !result.warnings.isEmpty || !result.missingKeys.isEmpty {
                         // Keep every finding reachable without consuming grid rows.
                         Button(L10n.tr("查看完整扫描报告")) {
@@ -684,30 +785,33 @@ public struct WorkspaceView: View {
                     }
                 }
             }
+            if metadata.result == nil, !metadata.operation.isRunning { Text(L10n.tr("未扫描 · 支持 Kinefinity slate.txt")).foregroundStyle(.secondary) }
+            if let directory = workspace.selectedTask?.slateDirectoryName {
+                Text(L10n.tr("扫描来源：{0}", [directory])).textSelection(.enabled)
+            }
             if case .failed(let error) = metadata.operation { SlateInlineError(error.message) }
         }
         .font(.caption).buttonStyle(.borderless)
         .padding(.horizontal, density.panelPadding).padding(.vertical, 6)
-        .disabled(recognition.operation.isRunning)
+        .disabled(recognition.locksDisplayedTask)
     }
 
-    /// Static take-status legend for the result page: four glyphs with their
-    /// counts. The canonical NSTableView keeps its frozen cell identity, so the
-    /// glyphs summarize row statuses beside the table instead of rewriting its
-    /// cells (deviation recorded in AGENT.md 2026-09-14). It is a legend, not a
-    /// filter, and is drawn as plain text — no chips.
+    /// A status filter keeps stable record identities while the operator edits a row.
     @ViewBuilder private var takeMarkSummary: some View {
-        let records = recognition.resolveRecords
+        let records = recognition.editableRecords
         if !records.isEmpty {
             let counts: [(TakeMark.Phase, Int)] = [
-                (.passed, records.filter { $0.takeStatus == .passed }.count),
-                (.hold, records.filter { $0.takeStatus == .hold }.count),
-                (.rejected, records.filter { $0.takeStatus == .rejected }.count),
-                (.pending, records.filter { $0.takeStatus == nil }.count),
+                (.passed, records.count { $0.takeStatus == TakeStatus.passed.rawValue }),
+                (.hold, records.count { $0.takeStatus == TakeStatus.hold.rawValue }),
+                (.rejected, records.count { $0.takeStatus == TakeStatus.rejected.rawValue }),
+                (.pending, records.count { $0.takeStatus.isEmpty }),
             ]
             HStack(spacing: 22) {
                 ForEach(counts, id: \.0) { phase, count in
-                    takeMarkCount(phase: phase, count: count)
+                    let status: String = switch phase { case .passed: TakeStatus.passed.rawValue; case .hold: TakeStatus.hold.rawValue; case .rejected: TakeStatus.rejected.rawValue; case .pending: "" }
+                    Button { recognition.filterStatus(recognition.selectedStatus == status ? nil : status) } label: {
+                        takeMarkCount(phase: phase, count: count)
+                    }.buttonStyle(.borderless).foregroundStyle(recognition.selectedStatus == status ? Color.accentColor : Color.primary)
                 }
                 Spacer(minLength: 0)
             }
@@ -739,6 +843,10 @@ public struct WorkspaceView: View {
                 takeMarkSummary
                 RecognitionResultView(
                     model: recognition, workspace: workspace,
+                    showPage: { page in
+                        guard let count = media.document?.pages.count, (1...count).contains(page) else { return }
+                        media.pageIndex = page - 1
+                    },
                     onInput: { changeLayout { visit(.input) } }
                 )
             }
@@ -906,6 +1014,9 @@ public struct WorkspaceView: View {
         guard let projectID = workspace.projectID, let document = media.document,
             let firstImage = document.pages.first?.views.first?.image
         else { return }
+        do { try recognition.flushEditor?() } catch { recognition.report(error); return }
+        let prior = recognition.editableRecords.map(\.persisted)
+        if !prior.isEmpty { workspace.updateProduction { $0.previousRecords = prior } }
         var settings = workspace.projectSettings
         workspace.stageRecognitionOptions(
             providerID: providerID,
@@ -920,14 +1031,14 @@ public struct WorkspaceView: View {
         settings.scenarioId = scenarioID.isEmpty ? nil : scenarioID
         let request = NativeRecognitionRequest(
             projectID: projectID,
-            input: .bytes(firstImage.jpeg, filename: document.filename),
+            input: .bytes(media.originalBytes ?? firstImage.jpeg, filename: document.filename),
             filename: document.filename,
             taskID: workspace.selectedTaskID,
             providerID: providerID,
             modelID: modelID,
             settings: settings,
             slateCSVRecords: recognition.slateCSVRecords,
-            preparedDocument: document
+            preparedDocument: accuracy == .high && media.originalBytes != nil ? nil : document
         )
         recognition.recognize(request) {
             // Recognition patches and autosave cannot be concurrent writers.
@@ -940,14 +1051,43 @@ public struct WorkspaceView: View {
         }
     }
 
-    private func chooseMedia(_ url: URL) {
-        // Button and drop share task creation, validation and scope ownership.
-        guard media.canAcceptInput else { return }
+    private func chooseMedia(_ urls: [URL]) {
+        guard media.canAcceptInput, !receivingMedia, !urls.isEmpty else { return }
+        let project = workspace.projectID, taskID = workspace.selectedTaskID
+        receivingMedia = true
         Task {
-            guard media.canAcceptInput else { return }
-            if workspace.selectedTaskID == nil { await workspace.createTask() }
-            guard workspace.selectedTaskID != nil else { return }
-            media.select(url)
+            defer { receivingMedia = false }
+            do {
+                let parts = try await media.plan(urls)
+                guard project == workspace.projectID, taskID == workspace.selectedTaskID else { return }
+                if parts.count == 1 { receiveMedia(parts) }
+                else { intakeParts = parts; showsBatch = true }
+            } catch { media.report(error) }
+        }
+    }
+
+    private func receiveMedia(_ parts: [MediaIntakePart]) {
+        let project = workspace.projectID
+        var expectedTask = workspace.selectedTaskID
+        Task {
+            receivingMedia = true
+            defer { receivingMedia = false }
+            for part in parts {
+                guard project != nil, workspace.projectID == project, workspace.selectedTaskID == expectedTask,
+                      media.canAcceptInput, !workspace.isTransitioning else { return }
+                // Never attach a second original to an existing completed task.
+                if expectedTask == nil || workspace.selectedTask?.imageDataGroups?.isEmpty == false
+                    || workspace.selectedTask?.result != nil || workspace.selectedTask?.editedRecords?.isEmpty == false {
+                    await workspace.createTask()
+                    guard workspace.selectedTaskID != expectedTask else { return }
+                }
+                guard let id = workspace.selectedTaskID else { return }
+                expectedTask = id
+                media.select(part)
+                await media.waitForPreparation()
+                guard case .succeeded = media.operation, workspace.selectedTaskID == id else { return }
+                do { try await workspace.flush() } catch { return }
+            }
         }
     }
 
@@ -1044,17 +1184,79 @@ public struct WorkspaceView: View {
 private struct RecognitionResultView: View {
     @Bindable var model: RecognitionModel
     let workspace: WorkspaceModel
+    let showPage: (Int) -> Void
     let onInput: () -> Void
+    @State private var selected: CSVWorksheetCell?
+    @State private var confirmsRemoval = false
 
     var body: some View {
-        if !model.editableRecords.isEmpty {
+        if !model.editableRecords.isEmpty || workspace.selectedTaskID != nil {
+            HStack {
+                if let previous = workspace.selectedTask?.production?.previousRecords {
+                    Menu(L10n.tr("上次校对版本")) {
+                        Button(L10n.tr("恢复整个版本")) {
+                            let current = model.editableRecords.map(\.persisted)
+                            model.restoreReview(previous, commit: workspace.stageEditedRecords)
+                            workspace.updateProduction { $0.previousRecords = current }
+                        }
+                        if let selected, let index = model.sourceIndex(selected.row) {
+                            let current = model.editableRecords[index]
+                            let matching = previous.filter { $0.cardNumber == current.cardNumber && $0.videoCode == current.videoCode }
+                            if matching.count == 1, let old = matching.first {
+                                Text([old.scene, old.shot, old.take, old.comments].compactMap { $0 }.joined(separator: " / "))
+                                Button(L10n.tr("采用这条旧记录")) {
+                                    var records = model.editableRecords.map(\.persisted)
+                                    records[index] = old
+                                    model.restoreReview(records, commit: workspace.stageEditedRecords)
+                                }
+                            }
+                        }
+                    }
+                }
+                Button(L10n.tr("补一条")) { model.addRecord(commit: workspace.stageEditedRecords) }
+                if let selected, let index = model.sourceIndex(selected.row) {
+                    let record = model.editableRecords[index]
+                    if let page = record.sourcePage { Text(L10n.tr("第 {0} 页", [String(page)])) }
+                    if let confidence = record.confidence { Text(L10n.message(confidence.rawValue)) }
+                    Button(L10n.tr("确认此字段")) { model.accept(selected, commit: workspace.stageEditedRecords) }
+                        .disabled(!(2...5).contains(selected.column))
+                    Menu(L10n.tr("条次状态")) {
+                        ForEach(["", TakeStatus.passed.rawValue, TakeStatus.hold.rawValue, TakeStatus.rejected.rawValue], id: \.self) { value in
+                            Button(value.isEmpty ? L10n.tr("待定") : L10n.message(value)) {
+                                model.update(recordID: record.id, path: \.takeStatus, value: value, commit: workspace.stageEditedRecords)
+                                model.filterStatus(model.selectedStatus)
+                            }
+                        }
+                    }
+                    Button(L10n.tr("移除此条")) { confirmsRemoval = true }
+                }
+                Spacer()
+            }.padding(.horizontal).buttonStyle(.borderless)
+             .disabled(model.locksDisplayedTask)
+             .confirmationDialog(L10n.tr("移除选中的场记？"), isPresented: $confirmsRemoval) {
+                 Button(L10n.tr("移除"), role: .destructive) {
+                     if let selected { model.removeRecord(selected.row, commit: workspace.stageEditedRecords) }
+                 }
+             }
             EditableCSVTableRepresentable(
                 tableID: model.resultTableID, table: model.resultTable, revision: 0,
                 accessibilityLabel: L10n.tr("可编辑识别结果"),
                 onCommit: { model.receiveResult($0, commit: workspace.stageEditedRecords) },
                 editorRegistration: { model.flushEditor = $0 }
             )
-            .disabled(model.operation.isRunning)
+            .onCellSelection(jump: model.resultJump) { cell in
+                selected = cell
+                if let cell, let index = model.sourceIndex(cell.row), let page = model.editableRecords[index].sourcePage { showPage(page) }
+            }
+            .onChange(of: model.resultTableID) { selected = nil }
+            .onChange(of: model.resultJump, initial: true) {
+                if let jump = model.resultJump, jump.tableID == model.resultTableID, let row = jump.row,
+                   let index = model.sourceIndex(row) {
+                    selected = .init(row: row, column: jump.column ?? 0)
+                    if let page = model.editableRecords[index].sourcePage { showPage(page) }
+                }
+            }
+            .disabled(model.locksDisplayedTask)
 
         } else if case .failed(let error) = model.operation {
             SlateEmptyState(title: L10n.tr("识别失败"), symbol: "exclamationmark.triangle", message: error.message) {
@@ -1071,4 +1273,62 @@ private struct RecognitionResultView: View {
         }
     }
 
+}
+
+/// Operator labels and receipts are scoped to the same task as its source evidence.
+private struct TaskHandoffView: View {
+    let workspace: WorkspaceModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var day = ""
+    @State private var unit = ""
+    @State private var operatorName = ""
+
+    var body: some View {
+        Form {
+            if let task = workspace.selectedTask {
+                if let routes = task.pageRoutes, !routes.isEmpty {
+                    DisclosureGroup(L10n.tr("逐页识别模型")) { Text(routes.joined(separator: "\n")).textSelection(.enabled) }
+                }
+                if let warnings = task.result?.warnings, !warnings.isEmpty {
+                    DisclosureGroup(L10n.tr("识别警告")) { Text(warnings.joined(separator: "\n")).textSelection(.enabled) }
+                }
+            }
+            LabeledContent(L10n.tr("源文件"), value: workspace.selectedTask?.filename ?? "—")
+            TextField(L10n.tr("任务名称"), text: $title)
+            TextField(L10n.tr("拍摄日"), text: $day)
+            TextField(L10n.tr("机组"), text: $unit)
+            TextField(L10n.tr("交付人"), text: $operatorName)
+            Section(L10n.tr("交付记录")) {
+                let receipts = workspace.selectedTask?.production?.deliveries ?? []
+                if receipts.isEmpty { Text(L10n.tr("尚未交付")) }
+                ForEach(receipts.reversed()) { receipt in
+                    DisclosureGroup(receipt.filename) {
+                        Text(receipt.date.formatted())
+                        Text([receipt.source, receipt.format, receipt.operatorName].compactMap { $0 }.joined(separator: " · "))
+                        Text(L10n.tr("{0} 行", [String(receipt.rows)]))
+                        Text(receipt.sha256).textSelection(.enabled)
+                        ShareLink(item: ([receipt.filename, receipt.date.formatted(), receipt.source ?? "", receipt.format,
+                                         receipt.operatorName ?? "", String(receipt.rows), receipt.sha256] + receipt.warnings).joined(separator: "\n")) {
+                            Label(L10n.tr("分享交付清单"), systemImage: "square.and.arrow.up")
+                        }
+                        Text(receipt.warnings.joined(separator: "\n")).textSelection(.enabled)
+                    }
+                }
+            }
+            HStack {
+                Button(L10n.tr("取消")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L10n.tr("保存")) {
+                    workspace.updateProduction { $0.title = title; $0.shootDay = day; $0.unit = unit; $0.operatorName = operatorName }
+                    dismiss()
+                }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .formStyle(.grouped).frame(minWidth: 460, minHeight: 360)
+        .onAppear {
+            let details = workspace.selectedTask?.production
+            title = details?.title ?? ""; day = details?.shootDay ?? ""
+            unit = details?.unit ?? ""; operatorName = details?.operatorName ?? ""
+        }
+    }
 }

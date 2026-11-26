@@ -636,7 +636,7 @@ public struct SettingsRootView: View {
                 LabeledContent(L10n.tr("可用模型"), value: "\(settings.live?.models.count ?? 0)")
             }
             HStack {
-                Button(L10n.tr("保存")) { Task { await settings.save() } }
+                Button(L10n.tr("保存")) { Task { await settings.save(keys: [.modelRequestTimeoutMS, .modelRequestMaxRetries, .modelPageConcurrency, .maxConcurrentRecognitions]) } }
                     .slatePrimaryActionStyle()
                     .accessibilityIdentifier("settings.recognition.save")
                 Button(L10n.tr("恢复默认值")) { settings.restoreRecognitionRequestDefaults() }
@@ -701,7 +701,7 @@ public struct SettingsRootView: View {
                 }
                 .id(SettingsSubregion.paddleOCR.rawValue)
                 ocrEnvironmentSection
-                Button(L10n.tr("保存")) { Task { await settings.save() } }
+                Button(L10n.tr("保存")) { Task { await settings.save(keys: [.visionOCREnabled, .visionOCRLanguage, .visionOCRRecognitionLevel, .paddleOCREnabled, .paddleOCRPreset, .paddleOCRProfile, .paddleOCRPython, .paddleOCRLanguage]) } }
                     .slatePrimaryActionStyle()
                     .disabled(settings.operation.isRunning)
             }
@@ -736,6 +736,8 @@ public struct SettingsRootView: View {
         Section(L10n.tr("OCR 环境检测")) {
             Text(L10n.tr("按当前设置检测 Vision、Python 和 Paddle OCR 依赖；不会保存设置、安装依赖或下载模型。模型与设备能否识别需运行实际任务验证。"))
                 .font(.caption).foregroundStyle(.secondary)
+            Button(L10n.tr("用合成样张实测本地 OCR")) { Task { await settings.checkOCREnvironment(sample: true) } }
+            Text(L10n.tr("不使用项目原稿；首次使用 Paddle 可能需要下载模型。模型服务可在“模型服务”中单独用测试图验证。")).font(.caption)
             Button(L10n.tr("检测 OCR 环境")) { Task { await settings.checkOCREnvironment() } }
                 .disabled(settings.ocrCheckOperation.isRunning || paddleInstaller.operation.isRunning || settings.live == nil)
                 .accessibilityIdentifier("settings.ocr.check")
@@ -811,7 +813,7 @@ public struct SettingsRootView: View {
 
                 }
             }
-            Button(L10n.tr("保存")) { Task { await settings.save() } }
+            Button(L10n.tr("保存")) { Task { await settings.save(keys: [.slateSyncConfigPath]) } }
                 .slatePrimaryActionStyle()
                 .disabled(settings.operation.isRunning)
         }.formStyle(.grouped)

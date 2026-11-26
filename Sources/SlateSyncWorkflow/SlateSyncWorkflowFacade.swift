@@ -199,12 +199,16 @@ public actor SlateSyncWorkflowFacade:
     }
 
     public func scanMetadata(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult {
+        try await scanMetadata(directory: directory, options: options, progress: { _ in })
+    }
+
+    public func scanMetadata(directory: URL, options: SlateMetadataScanOptions, progress: @escaping @Sendable (ScanStats) -> Void) async throws -> ScanResult {
         // The native workflow owns the scan-depth policy; the low-level
         // scanner continues to accept explicit options for independent callers.
         let config = try await runtime.workflowConfigProvider().current()
         var effective = options
         effective.maxDepth = config.slate.maxDirectoryDepth
-        return try await sm05.scanMetadata(directory: directory, options: effective)
+        return try await sm05.scanMetadata(directory: directory, options: effective, progress: progress)
     }
 
     public func decodeSlateCSV(_ data: Data) async throws -> [SlateCsvRecord] { try await SlateCSVWorkflow().decode(data) }
@@ -233,6 +237,21 @@ public actor SlateSyncWorkflowFacade:
     }
     public func undoScenarioMerge(projectID: String, receiptID: String) async throws {
         try await library.projectRuntime().undoScenarioMerge(projectID: projectID, receiptID: receiptID)
+    }
+
+    public func intakeParts(for url: URL) async throws -> [MediaIntakePart] {
+        try await MediaPreparationService().intakeParts(for: url)
+    }
+    public func previewPart(_ part: MediaIntakePart) async throws -> MediaIntakePreview {
+        try await MediaPreparationService().previewPart(part)
+    }
+    public func restorePreview(groups: [[String]], filename: String) async throws -> PreparedDocument {
+        guard !groups.isEmpty, groups.count <= MediaPreparationService.maximumPages else { throw MediaFailure.invalidInput }
+        let pages = try groups.enumerated().map { index, group in
+            try Task.checkCancellation()
+            return PreparedMediaPage(pageNumber: index + 1, views: try PreparedDocumentRestore.views(Array(group.prefix(1))))
+        }
+        return PreparedDocument(filename: filename, pages: pages)
     }
 
     public func prepareInput(_ input: MediaInput) async throws -> PreparedDocument {
@@ -273,11 +292,11 @@ public actor SlateSyncWorkflowFacade:
 
     /// Preview shares merge rules with export without applying its admission guard.
     public func previewResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveMergeResult {
-        try await sm05.previewMerge(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: true)
+        try await sm05.previewMerge(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: !settings.addMissingColumns)
     }
 
     public func mergeResolve(source: Data, records: [ResolveSlateRecord], metadata: [PersistedSlateMetadata], settings: ProjectSettings.ResolveSettings, edits: [ResolveSparseEdit]) async throws -> ResolveExportArtifact {
-        try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: true)
+        try await sm05.mergeAndEncode(source: source, records: records, metadata: metadata, fieldFormats: settings.fieldFormats, comments: settings.comments, edits: edits, preserveTemplate: !settings.addMissingColumns)
     }
 
     public func exportStandalone(records: [ResolveSlateRecord], settings: ProjectSettings.ResolveSettings) async throws -> Data {
@@ -337,6 +356,24 @@ public actor SlateSyncWorkflowFacade:
 
     /// Probe the editor's effective configuration without saving its draft or
     /// replacing the recognition coordinator currently serving a project.
+    public func checkOCRSample(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
+        try requireExternalOperations()
+        let resolved = await runtime.resolveSettingsDraft(values)
+        guard let png = Data(base64Encoded: ModelCapabilityProbeService.syntheticProbePNGBase64) else { throw MediaFailure.invalidInput }
+        let resources = try await RecognitionMediaFactory.make(runtime: runtime, values: resolved)
+        let workflow = resources.make()
+        do {
+            let artifact = try await workflow.run(input: .bytes(png, filename: "SlateSync-preflight.png"), session: UUID().uuidString, accuracy: .standard)
+            await workflow.close(); await resources.close()
+            let result = artifact.summary
+            let detail = "\(result.engine?.rawValue ?? "disabled") · \(result.blockCount) blocks · \(result.durationMs) ms"
+            return [.init(id: "sample", title: "OCR 样张", status: result.used && result.blockCount > 0 ? .passed : .warning, detail: detail)]
+        } catch {
+            await workflow.close(); await resources.close()
+            throw error
+        }
+    }
+
     public func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
         let resolved = await runtime.resolveSettingsDraft(values)
         let resourcePaths = try OCRRuntimePaths(

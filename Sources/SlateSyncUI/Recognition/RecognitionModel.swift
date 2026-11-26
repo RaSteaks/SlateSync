@@ -20,6 +20,9 @@ struct EditableRecognitionRecord: Identifiable, Hashable, Sendable {
     let shotSize: String?
     let cameraPosition: String?
     let confidence: RecognitionConfidence?
+    var sourceFileName = ""
+    var cameraFps = ""
+    var shootDay = ""
     var reviewRequiredFields: [String]?
 
     init(_ value: RecognitionRecord) {
@@ -32,6 +35,7 @@ struct EditableRecognitionRecord: Identifiable, Hashable, Sendable {
     }
 
     init(_ value: PersistedRecognitionRecord, fallbackID: String) {
+        sourceFileName = value.sourceFileName ?? ""; cameraFps = value.cameraFps ?? ""; shootDay = value.shootDay ?? ""
         id = value.id ?? fallbackID; sourcePage = value.sourcePage; cardNumber = value.cardNumber ?? ""
         videoCode = value.videoCode ?? ""; scene = value.scene ?? ""; shot = value.shot ?? ""
         take = value.take ?? ""; takeStatus = value.takeStatus?.rawValue ?? ""
@@ -54,6 +58,7 @@ struct EditableRecognitionRecord: Identifiable, Hashable, Sendable {
             comments: comments.nilIfEmpty,
             shotSize: shotSize,
             cameraPosition: cameraPosition,
+            sourceFileName: sourceFileName.nilIfEmpty, cameraFps: cameraFps.nilIfEmpty, shootDay: shootDay.nilIfEmpty,
             confidence: confidence,
             reviewRequiredFields: reviewRequiredFields
         )
@@ -116,14 +121,88 @@ public final class RecognitionModel {
     public private(set) var slateCSVFilename: String?
     public var flushEditor: (@MainActor () throws -> Void)?
     public var permitsNewOperation: (@MainActor () -> Bool)?
-    private(set) var editableRecords: [EditableRecognitionRecord] = []
+    private(set) var editableRecords: [EditableRecognitionRecord] = [] {
+        didSet { projection = nil }
+    }
+    @ObservationIgnored private var projection: [ResolveSlateRecord]?
+    private(set) var filteredIndices: [Int]?
+    private(set) var resultJump: CSVWorksheetJump?
+    func requestRecord(_ index: Int) {
+        filterStatus(nil)
+        guard editableRecords.indices.contains(index) else { return }
+        resultJump = .init(tableID: resultTableID, row: index, column: 0)
+    }
+    private(set) var selectedStatus: String?
+    var displayedRecords: [EditableRecognitionRecord] {
+        filteredIndices?.compactMap { editableRecords.indices.contains($0) ? editableRecords[$0] : nil } ?? editableRecords
+    }
+
+    func filterStatus(_ status: String?) {
+        guard commitVisibleEditor() else { return }
+        selectedStatus = status
+        filteredIndices = status.map { selected in editableRecords.indices.filter { editableRecords[$0].takeStatus == selected } }
+        resultTableID = UUID()
+    }
+
+    func accept(_ cell: CSVWorksheetCell, commit: ([PersistedRecognitionRecord]) -> Void) {
+        guard let index = sourceIndex(cell.row), (2...5).contains(cell.column) else { return }
+        let field = ["scene", "shot", "take", "takeStatus"][cell.column - 2]
+        editableRecords[index].reviewRequiredFields?.removeAll { $0 == field }
+        commit(editableRecords.map(\.persisted))
+    }
+
+    func sourceIndex(_ row: Int) -> Int? {
+        if let filteredIndices { return filteredIndices.indices.contains(row) ? filteredIndices[row] : nil }
+        return editableRecords.indices.contains(row) ? row : nil
+    }
+
+    func restoreReview(_ records: [PersistedRecognitionRecord], commit: ([PersistedRecognitionRecord]) -> Void) {
+        guard !locksDisplayedTask, commitVisibleEditor() else { return }
+        editableRecords = records.enumerated().map { .init($0.element, fallbackID: "restored-\($0.offset)") }
+        filteredIndices = nil; selectedStatus = nil; resultTableID = UUID()
+        commit(records)
+    }
+
+    func addRecord(commit: ([PersistedRecognitionRecord]) -> Void) {
+        guard commitVisibleEditor() else { return }
+        filterStatus(nil)
+        editableRecords.append(.init(.init(id: UUID().uuidString), fallbackID: UUID().uuidString))
+        commit(editableRecords.map(\.persisted))
+    }
+
+    func removeRecord(_ row: Int, commit: ([PersistedRecognitionRecord]) -> Void) {
+        guard commitVisibleEditor(), let index = sourceIndex(row) else { return }
+        editableRecords.remove(at: index)
+        filterStatus(nil)
+        commit(editableRecords.map(\.persisted))
+    }
 
     private let service: any WorkspaceWorkflowServing & LocalSlateWorkflowServing
     private let settings: any GlobalSettingsWorkflowServing
+    public private(set) var runningTaskID: String?
+    private var displayedTaskID: String?
+    private var localWork: Task<Void, Never>?
+    public private(set) var localOperation: OperationState = .idle
+    private var initialFlush: Task<Void, Error>?
+    public var locksDisplayedTask: Bool {
+        localOperation.isRunning || (operation.isRunning && (runningTaskID == nil || displayedTaskID == runningTaskID))
+    }
+
+    /// Only the immutable network request can continue after task selection.
+    /// Local imports and generation publish into an editor and must drain first.
+    public func prepareTaskSwitch() async {
+        localWork?.cancel(); await localWork?.value
+        if runningTaskID != nil { _ = try? await initialFlush?.value }
+        else { await drain() }
+    }
+
+    public func waitForCompletion() async { await recognitionTask?.value }
+
     private var recognitionTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
     private var cancelTask: Task<Void, Never>?
     private var optionsGeneration = 0
+    public var didImportLocalSheet: (@MainActor ([SlateCsvRecord], String) -> Void)?
     public var didComplete: (@MainActor (NativeRecognitionRequest, RecognitionData) async throws -> Void)?
 
     public init(
@@ -179,6 +258,10 @@ public final class RecognitionModel {
         }
         let id = UUID()
         projectID = request.projectID
+        displayedTaskID = request.taskID
+        runningTaskID = request.taskID
+        let flushTask = Task { try await flush() }
+        initialFlush = flushTask
         operationID = id
         operation = .running(label: L10n.tr("准备识别…"))
         progress = nil
@@ -196,7 +279,7 @@ public final class RecognitionModel {
             defer { if accessed { scopedURL?.stopAccessingSecurityScopedResource() } }
             var terminalState: OperationState = .idle
             do {
-                try await flush()
+                try await flushTask.value
                 try Task.checkCancellation()
                 // Await stream registration before dispatch so progress and
                 // execution share the same lazily constructed coordinator.
@@ -207,10 +290,13 @@ public final class RecognitionModel {
                 try Task.checkCancellation()
                 guard operationID == id else { return }
                 try await didComplete?(request, value)
-                result = value
-                editableRecords = value.result.records.map(EditableRecognitionRecord.init)
-                resultTaskID = request.taskID
-                resultTableID = UUID()
+                if displayedTaskID == request.taskID {
+                    result = value
+                    filteredIndices = nil; selectedStatus = nil
+                    editableRecords = value.result.records.map(EditableRecognitionRecord.init)
+                    resultTaskID = request.taskID
+                    resultTableID = UUID()
+                }
                 terminalState = .succeeded(message: L10n.tr("已识别 {0} 条场记", [String(describing: value.result.records.count)]))
             } catch {
                 guard operationID == id else { return }
@@ -225,6 +311,16 @@ public final class RecognitionModel {
         // File-panel completions can arrive after a Library/close barrier has
         // disabled the view. Enforce admission again at the operation owner.
         guard permitsNewOperation?() != false else { return }
+        if let runningTaskID, let target = displayedTaskID, target != runningTaskID {
+            runLocal(target: target, flush: flush) { [self] in
+                let rows = try await service.decodeSlateCSV(data)
+                try Task.checkCancellation()
+                guard displayedTaskID == target else { throw CancellationError() }
+                slateCSVRecords = rows; slateCSVFilename = filename
+                didImportLocalSheet?(rows, filename)
+            }
+            return
+        }
         // Local CSV processing is a required capability of this model.
         guard recognitionTask == nil, cancelTask == nil else { return }
         guard commitVisibleEditor() else { return }
@@ -242,6 +338,7 @@ public final class RecognitionModel {
                 if operationID == id {
                     slateCSVRecords = records
                     slateCSVFilename = filename
+                    didImportLocalSheet?(records, filename)
                     terminalState = .succeeded(message: L10n.tr("已载入 {0} 条本地场记", [String(describing: records.count)]))
                 }
             } catch {
@@ -259,6 +356,19 @@ public final class RecognitionModel {
         taskID: String? = nil
     ) {
         guard permitsNewOperation?() != false else { return }
+        if let runningTaskID, let target = taskID, target == displayedTaskID, target != runningTaskID, !slateCSVRecords.isEmpty {
+            let input = slateCSVRecords, filename = slateCSVFilename ?? L10n.tr("场记 CSV")
+            runLocal(target: target, flush: flush) { [self] in
+                let rows = await service.localSlateRecords(input)
+                try Task.checkCancellation()
+                guard displayedTaskID == target else { throw CancellationError() }
+                filteredIndices = nil; selectedStatus = nil; resultTableID = UUID()
+                editableRecords = rows.enumerated().map { .init($0.element, fallbackID: "local-\($0.offset)") }
+                resultTaskID = target
+                commit(rows, filename)
+            }
+            return
+        }
         guard recognitionTask == nil, cancelTask == nil, !slateCSVRecords.isEmpty else { return }
         guard commitVisibleEditor() else { return }
         let id = UUID()
@@ -277,6 +387,7 @@ public final class RecognitionModel {
                     // A local result must not retain a previous Provider response.
                     result = nil
                     resultTableID = UUID()
+                    filteredIndices = nil; selectedStatus = nil
                     editableRecords = value.enumerated().map { EditableRecognitionRecord($0.element, fallbackID: "slate-csv-\($0.offset)") }
                     resultTaskID = taskID
                     commit(value, filename)
@@ -291,10 +402,28 @@ public final class RecognitionModel {
         }
     }
 
+    private func runLocal(target: String, flush: @escaping @MainActor () async throws -> Void,
+                          action: @escaping @MainActor () async throws -> Void) {
+        guard localWork == nil, commitVisibleEditor() else { return }
+        localOperation = .running(label: L10n.tr("正在读取场记 CSV…"))
+        localWork = Task { [self] in
+            defer { localWork = nil }
+            do {
+                try await flush()
+                try Task.checkCancellation()
+                guard displayedTaskID == target else { throw CancellationError() }
+                try await action()
+                localOperation = .succeeded(message: L10n.tr("本地场记已更新"))
+            } catch is CancellationError { localOperation = .canceled }
+            catch { localOperation = .failed(ProductPrivacy.error(error)) }
+        }
+    }
+
     public func cancel() {
         // A worker can still be draining progress after relinquishing its ID.
         // It no longer accepts cancellation, even before its terminal state is published.
         guard let projectID, let task = recognitionTask, let id = operationID, cancelTask == nil else { return }
+        initialFlush?.cancel()
         operation = .running(label: L10n.tr("正在取消…"))
         // Cancel the captured task before awaiting the service; a cancellation
         // during flush must never start a new request after cancel returned.
@@ -324,6 +453,7 @@ public final class RecognitionModel {
     }
 
     public func drain() async {
+        localWork?.cancel(); await localWork?.value
         cancel()
         if let cancelTask { await cancelTask.value }
         if let recognitionTask { await recognitionTask.value }
@@ -334,18 +464,24 @@ public final class RecognitionModel {
     }
 
     public func load(task: TaskData?) {
-        guard recognitionTask == nil, cancelTask == nil else { return }
+        guard runningTaskID != nil || (recognitionTask == nil && cancelTask == nil) else { return }
+        localOperation = .idle
+        displayedTaskID = task?.id
+        resultJump = nil
         // A task switch invalidates the previous operation message and its
         // route action; otherwise a success from task A could open task B's
         // result table after the user changes selection.
-        operation = .idle
-        progress = nil
-        operationID = nil
+        if runningTaskID == nil {
+            operation = .idle
+            progress = nil
+            operationID = nil
+        }
         result = nil
         resultTaskID = nil
         resultTableID = UUID()
-        slateCSVRecords = []
-        slateCSVFilename = nil
+        slateCSVRecords = task?.production?.localRows ?? []
+        slateCSVFilename = task?.production?.slateCSVSource
+        selectedStatus = nil; filteredIndices = nil
         let records = task?.editedRecords ?? task?.result?.records ?? []
         editableRecords = records.enumerated().map {
             EditableRecognitionRecord($0.element, fallbackID: "persisted-\($0.offset)")
@@ -355,28 +491,32 @@ public final class RecognitionModel {
     /// Recognition and Resolve share one native cell editor, including its
     /// marked-text barrier, keyboard semantics and delayed commit behavior.
     public var resultTable: ResolveCSVTable {
-        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("次"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注")],
-            rows: editableRecords.map { [$0.cardNumber, $0.videoCode, $0.scene, $0.shot, $0.take, $0.takeStatus, $0.description, $0.comments] },
+        ResolveCSVTable(headers: [L10n.tr("卡号"), L10n.tr("素材编号"), L10n.tr("场"), L10n.tr("镜"), L10n.tr("次"), L10n.tr("状态"), L10n.tr("描述"), L10n.tr("备注"), L10n.tr("匹配文件名"), "Camera FPS", "Shoot Day"],
+            rows: displayedRecords.map { [$0.cardNumber, $0.videoCode, $0.scene, $0.shot, $0.take, $0.takeStatus, $0.description, $0.comments, $0.sourceFileName, $0.cameraFps, $0.shootDay] },
             format: .init())
     }
 
     public func receiveResult(_ cell: CSVCellCommit, commit: @MainActor ([PersistedRecognitionRecord]) -> Void) {
-        guard cell.tableID == resultTableID, cell.revision == 0, !operation.isRunning,
-              editableRecords.indices.contains(cell.rowID) else { return }
-        let fields: [WritableKeyPath<EditableRecognitionRecord, String>] = [\.cardNumber, \.videoCode, \.scene, \.shot, \.take, \.takeStatus, \.description, \.comments]
+        guard cell.tableID == resultTableID, cell.revision == 0, !locksDisplayedTask,
+              let source = sourceIndex(cell.rowID) else { return }
+        let fields: [WritableKeyPath<EditableRecognitionRecord, String>] = [\.cardNumber, \.videoCode, \.scene, \.shot, \.take, \.takeStatus, \.description, \.comments, \.sourceFileName, \.cameraFps, \.shootDay]
         guard fields.indices.contains(cell.columnID) else { return }
-        update(recordID: editableRecords[cell.rowID].id, path: fields[cell.columnID], value: cell.value, commit: commit)
+        update(recordID: editableRecords[source].id, path: fields[cell.columnID], value: cell.value, commit: commit)
     }
 
     public var resolveRecords: [ResolveSlateRecord] {
         // Preserve canonical status and material identity when adapting the
         // editable record projection to the existing SM-05 merger.
-        editableRecords.map { row in
+        _ = editableRecords
+        if let projection { return projection }
+        let records = editableRecords.map { row in
             let record = row.persisted
             return ResolveSlateRecord(cardNumber: record.cardNumber, videoCode: record.videoCode,
                 scene: record.scene, shot: record.shot, take: record.take, takeStatus: record.takeStatus,
-                comments: record.comments, reviewRequiredFields: record.reviewRequiredFields ?? [])
+                comments: record.comments, sourceFileName: record.sourceFileName, cameraFps: record.cameraFps, shootDay: record.shootDay, reviewRequiredFields: record.reviewRequiredFields ?? [])
         }
+        projection = records
+        return records
     }
 
     func update(
@@ -386,7 +526,12 @@ public final class RecognitionModel {
         commit: @MainActor ([PersistedRecognitionRecord]) -> Void
     ) {
         guard let index = editableRecords.firstIndex(where: { $0.id == recordID }) else { return }
-        editableRecords[index][keyPath: path] = value
+        if path == \.takeStatus, !value.isEmpty, LegacyTakeStatusAdapter.status(from: value) == nil {
+            operation = .failed(.init(code: "TAKE_STATUS", message: L10n.tr("请选择过条、保条、废条或待定。")))
+            resultTableID = UUID()
+            return
+        }
+        editableRecords[index][keyPath: path] = path == \.takeStatus ? (LegacyTakeStatusAdapter.status(from: value)?.rawValue ?? "") : value
         // Editing a specific core field acknowledges that field only; other
         // automatic repairs retain their review markers across autosave/reopen.
         let fields: [(WritableKeyPath<EditableRecognitionRecord, String>, String)] = [
@@ -413,6 +558,8 @@ public final class RecognitionModel {
 
     private func finishOperation(_ id: UUID, state: OperationState) async {
         guard operationID == id else { return }
+        runningTaskID = nil
+        initialFlush = nil
         // Clear the identity first: from here on no late cancel, progress
         // event, or completion continuation may adopt this operation — e.g.
         // a cancel() that lands while the progress task is still draining

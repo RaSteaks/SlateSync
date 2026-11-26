@@ -14,6 +14,10 @@ public struct OCREnvironmentCheck: Identifiable, Hashable, Sendable {
 }
 
 public extension GlobalSettingsWorkflowServing {
+    func checkOCRSample(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
+        throw SlateSyncError(code: "OCR_CHECK_UNAVAILABLE", message: "当前服务不支持 OCR 样张检测")
+    }
+
     // Non-platform service doubles explicitly report unsupported diagnostics.
     func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck] {
         throw SlateSyncError(code: "OCR_CHECK_UNAVAILABLE", message: "当前服务不支持 OCR 环境检测")

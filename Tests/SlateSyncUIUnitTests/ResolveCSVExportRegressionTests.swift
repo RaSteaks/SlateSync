@@ -247,6 +247,10 @@ final class ResolveCSVExportRegressionTests: XCTestCase {
         } catch let error as SlateSyncError {
             XCTAssertEqual(error.code, "CSV_NO_EXPORT")
         }
+        model.receive(.init(tableID: model.tableID, rowID: 0, columnID: 1, revision: model.revision, value: "087B"))
+        let manual = try await model.encodedData()
+        let manualTable = try await ResolveCSVEngine().decode(manual)
+        XCTAssertEqual(manualTable.rows[0][1], "087B")
     }
 
     func testIncompletePreviewReportsDetailsWhileExportStaysBlocked() async throws {

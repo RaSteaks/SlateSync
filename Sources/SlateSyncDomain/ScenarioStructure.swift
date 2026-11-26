@@ -61,11 +61,20 @@ public struct ScenarioPageDecision: Codable, Hashable, Sendable {
     }
 }
 
+public struct ScenarioSourcePage: Codable, Hashable, Sendable {
+    public let taskID: String
+    public let filename: String
+    public let page: Int
+    public init(taskID: String, filename: String, page: Int) { self.taskID = taskID; self.filename = filename; self.page = page }
+}
+
 public struct ScenarioCandidate: Codable, Hashable, Sendable {
     public let id: String
     public let profile: ScenarioProfile
     public let sourceCount: Int
-    public init(id: String, profile: ScenarioProfile, sourceCount: Int) {
+    public let source: ScenarioSourcePage?
+    public init(id: String, profile: ScenarioProfile, sourceCount: Int, source: ScenarioSourcePage? = nil) {
+        self.source = source
         self.id = id; self.profile = profile; self.sourceCount = sourceCount
     }
 }
@@ -75,7 +84,9 @@ public struct ScenarioCandidate: Codable, Hashable, Sendable {
 public struct ScenarioLearningObservation: Codable, Hashable, Sendable {
     public let sourceDigest: String
     public let decision: ScenarioPageDecision
-    public init(sourceDigest: String, decision: ScenarioPageDecision) {
+    public let source: ScenarioSourcePage?
+    public init(sourceDigest: String, decision: ScenarioPageDecision, source: ScenarioSourcePage? = nil) {
+        self.source = source
         self.sourceDigest = sourceDigest; self.decision = decision
     }
 }

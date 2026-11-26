@@ -9,6 +9,7 @@ import SlateSyncDomain
 /// its own resources. Persisted tasks restore through the same Media façade.
 @MainActor @Observable
 public final class MediaInputModel {
+    public private(set) var originalBytes: Data?
     public private(set) var document: PreparedDocument?
     public private(set) var operation: OperationState = .idle
     public var pageIndex = 0
@@ -25,24 +26,47 @@ public final class MediaInputModel {
         // Apply the shared admission policy below every picker/drop entry.
         // Restoring an already selected task remains an internal read path.
         guard canAcceptInput else { return }
+        select(.init(url: url))
+    }
+
+    public func plan(_ urls: [URL]) async throws -> [MediaIntakePart] {
+        var result: [MediaIntakePart] = []
+        for url in urls {
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            result += try await service.intakeParts(for: url)
+        }
+        return result
+    }
+
+    public func select(_ part: MediaIntakePart) {
+        guard canAcceptInput else { return }
         replace { [service] in
-            let accessed = url.startAccessingSecurityScopedResource()
-            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            return try await service.prepareInput(.file(url))
+            let access = part.url.startAccessingSecurityScopedResource()
+            defer { if access { part.url.stopAccessingSecurityScopedResource() } }
+            return try await service.previewPart(part)
         }
     }
 
+    public func waitForPreparation() async { await task?.value }
+
     public func load(task value: TaskData?) {
+        // Restoration belongs to a different task even if its preparation fails.
+        document = nil
+        originalBytes = nil
+        pageIndex = 0
         guard let groups = value?.imageDataGroups, !groups.isEmpty else {
             generation += 1
             task?.cancel()
-            document = nil
-            pageIndex = 0
             operation = .idle
             return
         }
         replace(persist: false) { [service] in
-            try await service.restoreInput(groups: groups, filename: value?.filename ?? L10n.tr("场记单"))
+            let filename = value?.filename ?? L10n.tr("场记单")
+            if let bytes = value?.production?.originalMedia {
+                return try await .init(document: service.restorePreview(groups: groups, filename: filename), original: bytes)
+            }
+            return try await .init(document: service.restoreInput(groups: groups, filename: filename), original: nil)
         }
     }
 
@@ -57,7 +81,7 @@ public final class MediaInputModel {
 
     public func report(_ error: Error) { operation = .failed(ProductPrivacy.error(error)) }
 
-    private func replace(persist: Bool = true, prepare: @escaping @Sendable () async throws -> PreparedDocument) {
+    private func replace(persist: Bool = true, prepare: @escaping @Sendable () async throws -> MediaIntakePreview) {
         generation += 1
         let request = generation
         let previous = task
@@ -70,10 +94,11 @@ public final class MediaInputModel {
                 let value = try await prepare()
                 try Task.checkCancellation()
                 guard request == generation else { return }
-                document = value
+                originalBytes = value.original
+                document = value.document
                 pageIndex = 0
-                if persist { onPrepared?(value) }
-                operation = .succeeded(message: L10n.tr("已准备 {0} 页", [String(describing: value.pages.count)]))
+                if persist { onPrepared?(value.document) }
+                operation = .succeeded(message: L10n.tr("已准备 {0} 页", [String(describing: value.document.pages.count)]))
             } catch {
                 guard request == generation else { return }
                 operation = error is CancellationError ? .canceled : .failed(ProductPrivacy.error(error))

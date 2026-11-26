@@ -343,7 +343,7 @@ public actor ScenarioStore {
             guard observation.decision.status != .reused, let profile = observation.decision.candidate else { continue }
             let previous = candidates[profile.fingerprint]
             candidates[profile.fingerprint] = .init(id: previous?.id ?? id, profile: previous?.profile ?? profile,
-                                                  sourceCount: (previous?.sourceCount ?? 0) + 1)
+                                                  sourceCount: (previous?.sourceCount ?? 0) + 1, source: previous?.source ?? observation.source)
         }
         return candidates.values.sorted { $0.id < $1.id }
     }

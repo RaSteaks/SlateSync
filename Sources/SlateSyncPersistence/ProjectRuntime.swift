@@ -77,10 +77,10 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
     public func saveTaskProjection(projectID: String, taskID: String?, task: TaskData) async throws -> String {
         let context = try await acquire(projectID)
         defer { release(projectID) }
-        var object = try PersistenceJSON.object(from: JSONEncoder().encode(task), errorCode: "TASK_INVALID")
-        object["projectId"] = projectID
+        var owned = task
+        owned.projectId = projectID
         return try await context.tasks.saveTask(
-            PersistenceJSON.data(from: object, errorCode: "TASK_INVALID"), taskID: taskID,
+            JSONEncoder().encode(owned), taskID: taskID,
             replacingKeys: TaskData.persistenceFieldNames)
     }
 
@@ -89,9 +89,9 @@ public actor ProjectRuntime: TaskRepository, ScenarioMatchingPersistence, Recogn
     public func createTask(projectID: String, task: TaskData) async throws -> TaskCreationResult {
         let context = try await acquire(projectID)
         defer { release(projectID) }
-        var object = try PersistenceJSON.object(from: JSONEncoder().encode(task), errorCode: "TASK_INVALID")
-        object["projectId"] = projectID
-        return try await context.tasks.createTask(PersistenceJSON.data(from: object, errorCode: "TASK_INVALID"))
+        var owned = task
+        owned.projectId = projectID
+        return try await context.tasks.createTask(JSONEncoder().encode(owned))
     }
 
     /// Recognition reads the canonical project/settings snapshot through the

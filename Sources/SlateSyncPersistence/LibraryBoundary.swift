@@ -13,7 +13,17 @@ public enum LibraryBoundary {
     /// the already-resolved ancestor chain and are checked the same way, which
     /// is exactly the "check all parents" requirement for new paths.
     public static func canonicalized(_ url: URL) -> URL {
-        url.standardizedFileURL.resolvingSymlinksInPath()
+        var ancestor = url.standardizedFileURL
+        var suffix: [String] = []
+        while !FileManager.default.fileExists(atPath: ancestor.path),
+              ancestor.path != "/", !ancestor.lastPathComponent.isEmpty {
+            if (try? FileManager.default.destinationOfSymbolicLink(atPath: ancestor.path)) != nil { break }
+            suffix.append(ancestor.lastPathComponent)
+            ancestor.deleteLastPathComponent()
+        }
+        return suffix.reversed().reduce(ancestor.resolvingSymlinksInPath().standardizedFileURL) {
+            $0.appendingPathComponent($1)
+        }
     }
 
     /// Validates the Library root itself and returns its canonical form for

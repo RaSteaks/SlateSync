@@ -181,6 +181,7 @@ public protocol WorkspaceWorkflowServing: Sendable {
     func encodeResolveCSV(_ table: ResolveCSVTable) async throws -> Data
     func resolveMaterialKeys(in table: ResolveCSVTable) async throws -> [String]
     func scanMetadata(directory: URL, options: SlateMetadataScanOptions) async throws -> ScanResult
+    func scanMetadata(directory: URL, options: SlateMetadataScanOptions, progress: @escaping @Sendable (ScanStats) -> Void) async throws -> ScanResult
     func recognize(_ request: NativeRecognitionRequest) async throws -> RecognitionData
     func recognitionProgress(projectID: String) async -> AsyncStream<RecognitionProgress>
     func cancelRecognition(projectID: String) async
@@ -200,9 +201,30 @@ extension WorkspaceWorkflowServing {
 
 /// Native input/preview adapters expose only SM-06 prepared JPEGs. Original
 /// PDF bytes are consumed inside Media and never become downstream evidence.
+public extension WorkspaceWorkflowServing {
+    func scanMetadata(directory: URL, options: SlateMetadataScanOptions, progress: @escaping @Sendable (ScanStats) -> Void) async throws -> ScanResult {
+        let result = try await scanMetadata(directory: directory, options: options)
+        progress(result.stats)
+        return result
+    }
+}
+
 public protocol MediaInputWorkflowServing: Sendable {
     func prepareInput(_ input: MediaInput) async throws -> PreparedDocument
     func restoreInput(groups: [[String]], filename: String) async throws -> PreparedDocument
+    func intakeParts(for url: URL) async throws -> [MediaIntakePart]
+    func previewPart(_ part: MediaIntakePart) async throws -> MediaIntakePreview
+    func restorePreview(groups: [[String]], filename: String) async throws -> PreparedDocument
+}
+
+public extension MediaInputWorkflowServing {
+    func intakeParts(for url: URL) async throws -> [MediaIntakePart] { [.init(url: url)] }
+    func previewPart(_ part: MediaIntakePart) async throws -> MediaIntakePreview {
+        try await .init(document: prepareInput(.file(part.url)), original: nil)
+    }
+    func restorePreview(groups: [[String]], filename: String) async throws -> PreparedDocument {
+        try await restoreInput(groups: groups, filename: filename)
+    }
 }
 
 public protocol ResolveExportWorkflowServing: Sendable {
@@ -225,6 +247,7 @@ public protocol LocalSlateWorkflowServing: ScenarioListWorkflowServing {
 
 public protocol GlobalSettingsWorkflowServing: Sendable {
     /// Checks a settings draft without persisting it or installing dependencies.
+    func checkOCRSample(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck]
     func checkOCREnvironment(values: GlobalSettingValues) async throws -> [OCREnvironmentCheck]
     func globalSettings() async throws -> GlobalSettingsProjection
     func saveGlobalSettings(values: GlobalSettingValues, customProviders: [CustomProviderConfiguration]) async throws -> GlobalSettingsProjection

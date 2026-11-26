@@ -10,6 +10,9 @@ public struct ResolveSlateRecord: Codable, Hashable, Sendable {
     public var shot: String?
     public var take: String?
     public var takeStatus: TakeStatus?
+    public var sourceFileName: String?
+    public var cameraFps: String?
+    public var shootDay: String?
     public var goodTake: Bool?
     public var comments: String?
     public var reviewRequiredFields: [String]
@@ -22,7 +25,7 @@ public struct ResolveSlateRecord: Codable, Hashable, Sendable {
         take: String? = nil,
         takeStatus: TakeStatus? = nil,
         goodTake: Bool? = nil,
-        comments: String? = nil,
+        comments: String? = nil, sourceFileName: String? = nil, cameraFps: String? = nil, shootDay: String? = nil,
         reviewRequiredFields: [String] = []
     ) {
         self.cardNumber = cardNumber
@@ -31,6 +34,7 @@ public struct ResolveSlateRecord: Codable, Hashable, Sendable {
         self.shot = shot
         self.take = take
         self.takeStatus = takeStatus
+        self.sourceFileName = sourceFileName; self.cameraFps = cameraFps; self.shootDay = shootDay
         self.goodTake = goodTake
         self.comments = comments
         self.reviewRequiredFields = reviewRequiredFields
@@ -129,7 +133,7 @@ public struct ResolveMergeResult: Codable, Hashable, Sendable {
     }
 
     private static let unresolvedStatusValues: Set<String> = [
-        "missing-key", "incomplete", "conflict", "unmatched", "duplicate", "review-required"
+        "missing-key", "incomplete", "conflict", "unmatched", "duplicate", "review-required", "missing-columns"
     ]
 
     /// Shared native/MCP review boundary. Unidentifiable source rows also need
@@ -137,14 +141,15 @@ public struct ResolveMergeResult: Codable, Hashable, Sendable {
     public var reviewIssueCount: Int {
         unrecognizedMaterials.count + missingCameraFPSKeys.count + missingShootDayKeys.count
             + sequenceAnomalies.count + unresolvedStatuses.count + rowKeys.filter(\.isEmpty).count
+            + changes.count { !$0.previous.isEmpty && $0.next.isEmpty }
     }
 
     /// Native and MCP exports use the same guard. Out-of-range overrides are
     /// ignored by merging and therefore cannot manufacture export eligibility.
     public func permitsExport(recordCount: Int, edits: [ResolveSparseEdit]) -> Bool {
-        recordCount > 0 && (matchedRecordCount > 0 || edits.contains {
+        (recordCount > 0 && matchedRecordCount > 0) || edits.contains {
             table.rows.indices.contains($0.rowIndex) && table.headers.indices.contains($0.columnIndex)
-        })
+        }
     }
 
     public init(

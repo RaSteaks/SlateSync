@@ -354,6 +354,9 @@ public enum ResolveCSVNormalization {
 package struct ResolveColumnIndexes: Sendable {
     package var fileName: [Int] = []
     package var clipDirectory: [Int] = []
+    package var filePath: [Int] = []
+    package var startTC: [Int] = []
+    package var identityColumns: Set<Int> { Set(fileName + filePath + clipDirectory + reelName + clipName + startTC + [shootDay]) }
     package var reelName: [Int] = []
     package var clipName: [Int] = []
     package var shot = -1
@@ -381,6 +384,8 @@ package struct ResolveColumnIndexes: Sendable {
 package enum ResolveHeaders {
     private static let aliases: [(String, [String])] = [
         ("fileName", ["File Name", "Filename", "文件名"]),
+        ("filePath", ["File Path", "Source File Path", "文件路径", "素材路径"]),
+        ("startTC", ["Start TC", "Start Timecode", "起始时间码"]),
         ("clipDirectory", ["Clip Directory", "片段目录", "素材目录"]),
         ("reelName", ["Reel Name", "Reel", "卷名"]),
         ("clipName", ["Clip Name", "条名", "片段名", "片段名称"]),
@@ -397,11 +402,13 @@ package enum ResolveHeaders {
         for (field, names) in aliases {
             let accepted = Set(names.map(ResolveCSVNormalization.normalizeHeader))
             let matches = headers.indices.filter { accepted.contains(ResolveCSVNormalization.normalizeHeader(headers[$0])) }
-            let writable = !["fileName", "clipDirectory", "reelName", "clipName"].contains(field)
+            let writable = !["fileName", "clipDirectory", "reelName", "clipName", "filePath", "startTC"].contains(field)
             if writable, matches.count > 1 {
                 throw SlateSyncError(code: "CSV_COLUMNS", message: "CSV 中存在多个 \(names[0]) 对应列，无法确定应写入哪一列。")
             }
             switch field {
+            case "filePath": result.filePath = matches
+            case "startTC": result.startTC = matches
             case "fileName": result.fileName = matches
             case "clipDirectory": result.clipDirectory = matches
             case "reelName": result.reelName = matches

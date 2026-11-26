@@ -261,7 +261,7 @@ private struct SidebarTaskRow: View, Equatable {
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.task == rhs.task && lhs.isRunning == rhs.isRunning }
 
-    private var name: String { task.filename ?? L10n.tr("未命名任务") }
+    private var name: String { task.title.flatMap { $0.isEmpty ? nil : $0 } ?? task.filename ?? L10n.tr("未命名任务") }
 
     var body: some View {
         // The glyph encodes the file type; only failure and live processing
@@ -273,6 +273,11 @@ private struct SidebarTaskRow: View, Equatable {
                 Image(systemName: fileSymbol).foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
+            if (task.deliveryCount ?? 0) > 0 {
+                Image(systemName: "shippingbox").help(L10n.tr("已有交付记录"))
+            } else if !isRunning, task.status == "completed" {
+                Image(systemName: "checkmark.circle").help(L10n.tr("识别已完成"))
+            }
             trailingMark
         }
         .accessibilityElement(children: .combine)

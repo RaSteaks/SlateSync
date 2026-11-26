@@ -138,10 +138,18 @@
     "englishTitle": "Resolve CSV and metadata",
     "englishBody": "Resolve CSV files can be imported, edited, matched, and exported in the current task. Export preserves the original delimiter, newline, and BOM semantics. Metadata scanning reads only a directory the user explicitly selects and returns results to the current task.",
     "paragraphs": [
-      "Resolve CSV 可在当前任务中导入、编辑、匹配并导出；导出会保留原分隔符、换行和 BOM 语义。元数据扫描只读取用户明确选择的目录，并把扫描结果放回当前任务上下文。"
+      "Resolve CSV 可在当前任务中导入、编辑、匹配并导出；导出会保留原分隔符、换行和 BOM 语义。元数据扫描只读取用户明确选择的目录，并把扫描结果放回当前任务上下文。",
+      "Resolve CSV 原模板保存当前列和行序。只有手工编辑时可在导出菜单选择当前工作表。",
+      "Avid ALE 需要卷名、起止时码、轨道、播放帧率与视频制式。混合帧率请选分组 ALE 文件夹。",
+      "Final Cut 导入 FCPXML 事件。Resolve 从媒体池导入 XML，Premiere 从文件菜单导入素材箱。XML 引用原始媒体，离线卷可重选素材根目录。",
+      "交付前核对跨日同号素材和已有备注。任务与交班记录保存源表、输出文件名、摘要、告警和交付人。"
     ],
     "englishParagraphs": [
-      "Resolve CSV files can be imported, edited, matched, and exported in the current task. Export preserves the original delimiter, newline, and BOM semantics. Metadata scanning reads only a directory the user explicitly selects and returns results to the current task."
+      "Resolve CSV files can be imported, edited, matched, and exported in the current task. Export preserves the original delimiter, newline, and BOM semantics. Metadata scanning reads only a directory the user explicitly selects and returns results to the current task.",
+      "Resolve template export preserves columns and row order. Use Export Current Worksheet for manual-only sheets.",
+      "Avid ALE needs tape, start and end timecode, tracks, playback rate and video format. Choose grouped ALE for mixed rates.",
+      "Import FCPXML into a Final Cut event. Import XML through the Resolve media pool or Premiere File menu. Choose a new media root when the original volume is offline.",
+      "Check repeated roll and clip numbers across shoot days and existing comments. Task Handoff records the source, filename, digest, findings and operator."
     ],
     "steps": [
       { "id": "resolve-import", "title": "导入 CSV", "detail": "从当前任务导入 CSV；大表格采用按需编辑，未编辑的行不会被提前复制到视图状态。", "englishTitle": "Import a CSV", "englishDetail": "Import a CSV from the current task. Large tables edit on demand, so untouched rows are not eagerly copied into view state." },

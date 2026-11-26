@@ -68,7 +68,7 @@ public struct AppRootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 selection: routeBinding, currentProjectName: currentProjectName, workspace: workspace,
-                runningTaskID: recognition.operation.isRunning ? session.taskID : nil)
+                runningTaskID: recognition.runningTaskID ?? (recognition.operation.isRunning ? session.taskID : nil))
                 // SidebarView protects its internal width during native
                 // reveal; keep the column's resize limit on the same policy.
                 .navigationSplitViewColumnWidth(min: SidebarView.minimumColumnWidth, ideal: 230, max: 280)
@@ -97,7 +97,7 @@ public struct AppRootView: View {
         .preferredColorScheme(AppearanceController.colorScheme(for: appearance, systemIsDark: SystemAppearanceMonitor.shared.isDark))
         .safeAreaInset(edge: .top) { sessionError }
         .focusedSceneValue(\.slateSyncActions, focusedActions)
-        .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning || session.openingProjectName != nil)
+        .disabled(termination.isDraining || termination.isMutatingLibrary || termination.restartRequired || workspace.isTransitioning || session.openingProjectName != nil || (termination.exportingProjectID != nil && termination.exportingProjectID == workspace.projectID))
         .overlay {
             // Attach to the entire split view so the panel is window-centered,
             // outside the disabled content, without resizing the project list.
@@ -215,7 +215,7 @@ public struct AppRootView: View {
                 model: projectSettings,
                 recognition: recognition,
                 projectID: session.projectID,
-                settingsRevision: settingsRevision
+                settingsRevision: settingsRevision, originalPage: workspace.originalPage
             )
         case .logs:
             LogsView(model: logs, recognition: recognition)

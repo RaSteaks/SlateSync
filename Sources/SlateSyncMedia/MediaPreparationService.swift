@@ -1,3 +1,4 @@
+import PDFKit
 import Darwin
 import Foundation
 import SlateSyncDomain
@@ -106,6 +107,55 @@ public actor MediaPreparationService: MediaPreparing, MediaRecompressing {
         try operation.check()
         return (data, filename)
     }
+    /// Detect split points before allocating any raster views. Each child still
+    /// passes through the normal document/page/byte admission path.
+    public func intakeParts(for url: URL) throws -> [MediaIntakePart] {
+        guard url.pathExtension.lowercased() == "pdf" else { return [.init(url: url)] }
+        guard let document = PDFDocument(url: url), !document.isLocked, document.pageCount > 0 else { throw MediaFailure.invalidInput }
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        if document.pageCount <= Self.maximumPages && size <= MediaPreparationOptions().maximumInputBytes { return [.init(url: url)] }
+        var parts: [MediaIntakePart] = []
+        func append(_ range: ClosedRange<Int>) throws {
+            try Task.checkCancellation()
+            let bytes = try pdfPart(document, range)
+            if bytes.count <= MediaPreparationOptions().maximumInputBytes {
+                parts.append(.init(url: url, pages: range))
+            } else {
+                guard range.count > 1 else { throw sizeError() }
+                let middle = range.lowerBound + range.count / 2 - 1
+                try append(range.lowerBound...middle)
+                try append((middle + 1)...range.upperBound)
+            }
+        }
+        for start in stride(from: 1, through: document.pageCount, by: Self.maximumPages) {
+            try append(start...min(document.pageCount, start + Self.maximumPages - 1))
+        }
+        return parts
+    }
+
+    private func pdfPart(_ document: PDFDocument, _ range: ClosedRange<Int>) throws -> Data {
+        let part = PDFDocument()
+        for page in range {
+            guard let item = document.page(at: page - 1)?.copy() as? PDFPage else { throw MediaFailure.invalidInput }
+            part.insert(item, at: part.pageCount)
+        }
+        guard let bytes = part.dataRepresentation() else { throw MediaFailure.invalidInput }
+        return bytes
+    }
+
+    public func previewPart(_ part: MediaIntakePart) async throws -> MediaIntakePreview {
+        let options = MediaPreparationOptions(includesDetails: false)
+        let bytes: Data
+        if let pages = part.pages {
+            guard let pdf = PDFDocument(url: part.url), !pdf.isLocked else { throw MediaFailure.invalidInput }
+            bytes = try pdfPart(pdf, pages)
+        } else {
+            bytes = try read(.file(part.url), maximum: options.maximumInputBytes, operation: .init()).0
+        }
+        let document = try await prepare(.bytes(bytes, filename: part.filename), options: options)
+        return .init(document: document, original: bytes)
+    }
+
     private func sizeError() -> SlateSyncError { .init(code: "MEDIA_SIZE", message: "文件超出输入大小上限") }
 }
 

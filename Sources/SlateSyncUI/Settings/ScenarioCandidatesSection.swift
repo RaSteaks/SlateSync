@@ -1,3 +1,4 @@
+import AppKit
 import SlateSyncDomain
 import SwiftUI
 
@@ -5,6 +6,7 @@ import SwiftUI
 /// an explicit commit independent of unsaved project-setting fields.
 struct ScenarioCandidatesSection: View {
     let model: ProjectSettingsModel
+    var originalPage: ((ScenarioSourcePage) async throws -> Data)?
 
     var body: some View {
         Section(L10n.tr("待确认的场记版式")) {
@@ -15,7 +17,7 @@ struct ScenarioCandidatesSection: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(model.scenarioCandidates, id: \.id) { candidate in
-                ScenarioCandidateRow(candidate: candidate, model: model)
+                ScenarioCandidateRow(candidate: candidate, model: model, originalPage: originalPage)
             }
             if model.scenarios.count > 1 || model.lastScenarioMerge != nil {
                 ScenarioMergeControls(model: model)
@@ -82,7 +84,12 @@ private struct ScenarioCandidateRow: View {
     @State private var existingID = ""
     @State private var expanded: Bool
 
-    init(candidate: ScenarioCandidate, model: ProjectSettingsModel) {
+    let originalPage: ((ScenarioSourcePage) async throws -> Data)?
+    @State private var showsSource = false
+    @State private var sourceImage: NSImage?
+    @State private var sourceError: String?
+    init(candidate: ScenarioCandidate, model: ProjectSettingsModel, originalPage: ((ScenarioSourcePage) async throws -> Data)?) {
+        self.originalPage = originalPage
         self.candidate = candidate; self.model = model
         // The stable observation ID owns this one-time editable seed. Refreshing
         // the same candidate must not replace a name the user is composing.
@@ -95,6 +102,23 @@ private struct ScenarioCandidateRow: View {
         DisclosureGroup(isExpanded: $expanded) {
             LabeledContent(L10n.tr("识别到的表头"), value: candidate.profile.recognition.headerTokens.map { L10n.tr($0) }.joined(separator: " → "))
                 .textSelection(.enabled)
+            if let source = candidate.source, let originalPage {
+                Button(L10n.tr("查看来源页")) { showsSource = true }
+                    .sheet(isPresented: $showsSource) {
+                        VStack {
+                            Text(L10n.tr("{0} · 第 {1} 页", [source.filename, String(source.page)]))
+                            if let sourceImage { Image(nsImage: sourceImage).resizable().scaledToFit() }
+                            else if let sourceError { Text(sourceError) }
+                            else { ProgressView() }
+                            Button(L10n.tr("关闭")) { showsSource = false }
+                        }.padding().frame(minWidth: 540, minHeight: 460)
+                         .task(id: source) {
+                             sourceImage = nil; sourceError = nil
+                             do { sourceImage = NSImage(data: try await originalPage(source)) }
+                             catch { sourceError = ProductPrivacy.error(error).message }
+                         }
+                    }
+            }
             Picker(L10n.tr("归属版式"), selection: $existingID) {
                 Text(L10n.tr("创建新版式")).tag("")
                 ForEach(model.scenarios, id: \.id) { Text($0.label).tag($0.id) }

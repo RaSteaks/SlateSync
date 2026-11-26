@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SlateSyncDomain
 
@@ -13,7 +14,13 @@ public struct RecognitionPagePipeline: Sendable {
         public let pages: [PageOutput]
     }
 
-    public struct PageOutput: Sendable {
+    public struct Checkpoint: Codable, Sendable {
+        public let key: String
+        public let pages: [PageOutput]
+    }
+
+    public struct PageOutput: Codable, Sendable {
+        public var route: ProviderModelSelection?
         public let pageNumber: Int
         public let result: RecognitionSheet
         public let responses: [RecognitionStageResponse]
@@ -40,15 +47,23 @@ public struct RecognitionPagePipeline: Sendable {
         registry: ProviderRegistry? = nil,
         failoverState: RecognitionFailoverState? = nil,
         recoveryCache: RecognitionRecoveryCache? = nil,
-        recoveryID: String? = nil
+        recoveryID: String? = nil,
+        loadCheckpoint: (@Sendable () async throws -> Checkpoint?)? = nil,
+        saveCheckpoint: (@Sendable (Checkpoint) async throws -> Void)? = nil
     ) async throws -> Output {
         guard !pages.isEmpty, pages.count <= 20, pages.allSatisfy({ !$0.views.isEmpty && $0.views.count <= 3 }) else { throw RecognitionFailure.invalidInput }
-        let recoveryKey = recoveryID.map {
-            Self.recoveryKey(id: $0, pages: pages, provider: provider, model: model,
+        let recoveryKey = try recoveryID.map {
+            try Self.recoveryKey(id: $0, pages: pages, provider: provider, model: model, candidates: candidates,
                 accuracy: accuracy, formats: formats, prompts: prompts, maximumRequestBytes: maximumRequestBytes)
         }
         let limit = min(6, max(1, pageConcurrency))
         var outputs = Array<PageOutput?>(repeating: nil, count: pages.count)
+        let existing = try await loadCheckpoint?()
+        if let existing, let recoveryKey, existing.key == recoveryKey, existing.pages.count <= pages.count {
+            for page in existing.pages where (1...pages.count).contains(page.pageNumber) {
+                await recoveryCache?.store(page, key: recoveryKey)
+            }
+        }
         var next = 0, completed = 0
         do {
             try await withThrowingTaskGroup(of: (Int, PageOutput).self) { group in
@@ -93,6 +108,15 @@ public struct RecognitionPagePipeline: Sendable {
                 for _ in 0..<min(limit, pages.count) { enqueue() }
                 while let (index, result) = try await group.next() {
                     outputs[index] = result; completed += 1
+                    if let saveCheckpoint, let recoveryKey {
+                        // Serialize on the collecting side so a slower earlier
+                        // page cannot replace a checkpoint containing later pages.
+                        let recovered = outputs.compactMap { $0 }.map { page in
+                            PageOutput(route: page.route, pageNumber: page.pageNumber, result: page.result,
+                                responses: page.responses.map { .init(text: "", usage: $0.usage, responseID: $0.responseID, model: $0.model, formatMode: $0.formatMode) })
+                        }
+                        try await saveCheckpoint(.init(key: recoveryKey, pages: recovered))
+                    }
                     let percent = Int((35 + Double(completed) / Double(pages.count) * 60).rounded())
                     progress?(.init(phase: "page-complete", completed: completed, total: pages.count, message: "已完成第 \(result.pageNumber) 页（\(completed)/\(pages.count) 页）", percent: percent, pageNumber: result.pageNumber))
                     enqueue()
@@ -108,34 +132,28 @@ public struct RecognitionPagePipeline: Sendable {
     }
 
     private static func recoveryKey(
-        id: String, pages: [RecognitionPageInput], provider: ProviderDescriptor,
-        model: ResolvedModel, accuracy: ProjectSettings.AccuracyMode,
-        formats: ResolveFieldFormats,
+        id: String, pages: [RecognitionPageInput], provider: ProviderDescriptor, model: ResolvedModel,
+        candidates: [ProviderModelSelection], accuracy: ProjectSettings.AccuracyMode, formats: ResolveFieldFormats,
         prompts: (primary: String, audit: String, review: String), maximumRequestBytes: Int
-    ) -> String {
-        var hash = Hasher()
-        hash.combine(id)
-        hash.combine(provider.id)
-        hash.combine(provider.baseURL)
-        hash.combine(provider.revision)
-        hash.combine(model.apiID)
-        hash.combine(model.jsonMode)
-        hash.combine(accuracy)
-        hash.combine(formats)
-        hash.combine(prompts.primary)
-        hash.combine(prompts.audit)
-        hash.combine(prompts.review)
-        hash.combine(maximumRequestBytes)
-        for page in pages {
-            hash.combine(page.pageNumber)
-            hash.combine(page.fullOCREvidence)
-            hash.combine(page.coreOCREvidence)
-            hash.combine(page.scenarioInstruction)
-            hash.combine(page.layoutInstruction)
-            hash.combine(page.optimizationIdentity)
-            for view in page.views { hash.combine(view.image) }
+    ) throws -> String {
+        // Hasher is process-randomized. Framed SHA-256 separates adjacent
+        // evidence fields and is stable across a restart or a transferred task.
+        var hash = SHA256()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        func append(_ data: Data) {
+            var size = UInt64(data.count).bigEndian
+            withUnsafeBytes(of: &size) { hash.update(bufferPointer: $0) }
+            hash.update(data: data)
         }
-        return String(hash.finalize())
+        append(try encoder.encode([id, prompts.primary, prompts.audit, prompts.review, String(maximumRequestBytes)]))
+        append(try encoder.encode(candidates)); append(try encoder.encode(provider)); append(try encoder.encode(model))
+        append(try encoder.encode(accuracy)); append(try encoder.encode(formats))
+        for page in pages {
+            append(try encoder.encode([String(page.pageNumber), page.fullOCREvidence, page.coreOCREvidence, page.scenarioInstruction, page.layoutInstruction, page.optimizationIdentity]))
+            for view in page.views { append(view.image.jpeg) }
+        }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func recognizePageWithFailover(
@@ -233,7 +251,7 @@ public struct RecognitionPagePipeline: Sendable {
             let primaryRequest = request(page: page, stage: .primary, images: page.views.map(\.image), provider: provider, model: model, filename: pageName, prompt: prompts.primary, instruction: primaryInstruction, timeout: timeoutMilliseconds, retries: maximumTimeoutRetries, budget: maximumRequestBytes)
             if accuracy == .standard {
                 let (sheet, response) = try await Self.stage(primaryRequest, client: client, pageNumber: page.pageNumber)
-                return .init(pageNumber: page.pageNumber, result: sheet, responses: [response])
+                return .init(route: .init(providerID: provider.id, modelID: model.publicID), pageNumber: page.pageNumber, result: sheet, responses: [response])
             }
 
             progress?(.init(phase: "audit", completed: completedBeforePage, total: count, message: "正在独立查漏第 \(page.pageNumber)/\(count) 页", percent: percent, pageNumber: page.pageNumber))
@@ -248,7 +266,7 @@ public struct RecognitionPagePipeline: Sendable {
             let ((primary, first), (audit, second)) = try await (primaryStage, auditStage)
             let combined = RecognitionPostprocessor.mergeHighAccuracy(primary, audit)
             guard !combined.conflicts.isEmpty || !combined.auditOnlyKeys.isEmpty else {
-                return .init(pageNumber: page.pageNumber, result: combined.result, responses: [first, second])
+                return .init(route: .init(providerID: provider.id, modelID: model.publicID), pageNumber: page.pageNumber, result: combined.result, responses: [first, second])
             }
 
             let targets = combined.conflicts.map { conflict in
@@ -269,7 +287,7 @@ public struct RecognitionPagePipeline: Sendable {
             let resolved = RecognitionPostprocessor.applyReview(combined, review: review)
             let result = RecognitionSheet(sheetTitle: resolved.sheetTitle, records: resolved.records,
                 warnings: resolved.warnings + (reviewImages.warning.map { [$0] } ?? []))
-            return .init(pageNumber: page.pageNumber, result: result, responses: [first, second, third])
+            return .init(route: .init(providerID: provider.id, modelID: model.publicID), pageNumber: page.pageNumber, result: result, responses: [first, second, third])
         } catch is CancellationError { throw RecognitionFailure.canceled }
         catch let error as SlateSyncError { throw RecognitionFailure.page(error, page: page.pageNumber, count: count) }
         catch { throw RecognitionFailure.page(error, page: page.pageNumber, count: count) }

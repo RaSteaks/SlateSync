@@ -19,7 +19,7 @@ public enum WindowAdmission {
     /// Preview paging and restoration do not use this admission predicate.
     public static func media(_ termination: TerminationCoordinator, recognition: RecognitionModel) -> @MainActor () -> Bool {
         let shared = shared(termination)
-        return { !recognition.operation.isRunning && shared() }
+        return { !recognition.locksDisplayedTask && shared() }
     }
 
     /// Metadata scanning waits for the shared freeze like media; a superseded
@@ -32,7 +32,7 @@ public enum WindowAdmission {
     /// table would replace the recognition-merged evidence.
     public static func csv(_ termination: TerminationCoordinator, recognition: RecognitionModel) -> @MainActor () -> Bool {
         let shared = shared(termination)
-        return { !recognition.operation.isRunning && shared() }
+        return { !recognition.locksDisplayedTask && shared() }
     }
 
     /// Recognition waits for the shared freeze and a stable workspace

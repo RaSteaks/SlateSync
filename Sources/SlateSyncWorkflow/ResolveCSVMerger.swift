@@ -45,9 +45,16 @@ public actor ResolveCSVMerger {
         var addedColumns: [String] = []
         // Electron emits sidecar conflicts before missing-column and row-identity
         // warnings because it builds this index before resolving target columns.
-        let metadataIndex = Self.buildMetadataIndex(metadata, warnings: &warnings)
+        var localMetadata = metadata
+        for record in records where record.cameraFps != nil || record.shootDay != nil {
+            let key = Self.recordKey(record)
+            if !key.isEmpty {
+                localMetadata.append(.init(materialKey: key, sensorFps: record.cameraFps, shootDay: record.shootDay))
+            }
+        }
+        let metadataIndex = Self.buildMetadataIndex(localMetadata, warnings: &warnings)
 
-        let required: [(WritableKeyPath<ResolveColumnIndexes, Int>, String)] = metadata.isEmpty
+        let required: [(WritableKeyPath<ResolveColumnIndexes, Int>, String)] = localMetadata.isEmpty
             ? [(\.shot, "Shot"), (\.scene, "Scene"), (\.take, "Take"), (\.comments, "Comments")]
             : [(\.shot, "Shot"), (\.scene, "Scene"), (\.take, "Take"), (\.comments, "Comments"), (\.cameraFPS, "Camera FPS"), (\.shootDay, "Shoot Day")]
         for (path, header) in required where columns[keyPath: path] < 0 {
@@ -68,18 +75,54 @@ public actor ResolveCSVMerger {
         var updatedRows = Set<Int>()
         // Identity edits must participate in the same matching used by the
         // scanner. Other cell overrides still apply after automatic backfill.
-        let identityColumns = Set(columns.reelName + columns.fileName + columns.clipName + columns.clipDirectory)
+        let identityColumns = columns.identityColumns.subtracting([columns.shootDay, columns.cameraFPS])
         for edit in edits where identityColumns.contains(edit.columnIndex) {
             guard rows.indices.contains(edit.rowIndex), headers.indices.contains(edit.columnIndex) else { continue }
             Self.applySparseEdit(edit.value, column: edit.columnIndex, row: edit.rowIndex, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
         }
-        let rowIndex = Self.buildRowIndex(rows, columns: columns, warnings: &warnings)
+        var rowIndex = Self.buildRowIndex(rows, columns: columns, warnings: &warnings)
         var rowKeys = Array(repeating: "", count: rows.count)
         for (key, numbers) in rowIndex { for number in numbers { rowKeys[number] = key } }
+        // Explicit names/paths are used only for records without a usable
+        // camera key, or a full path deliberately assigned by the operator.
+        let namedKeys = Set(records.map(Self.recordKey).filter { $0.hasPrefix("file:") })
+        if !namedKeys.isEmpty {
+            let identityFields = columns.filePath + columns.fileName + columns.clipName
+            for (index, row) in rows.enumerated() {
+                let names = Set(identityFields.map { "file:" + row[$0] }).intersection(namedKeys)
+                guard names.count == 1, let name = names.first else { continue }
+                if !rowKeys[index].isEmpty {
+                    let old = rowKeys[index]
+                    rowIndex[old]?.removeAll { $0 == index }
+                    if rowIndex[old]?.isEmpty == true { rowIndex.removeValue(forKey: old) }
+                }
+                rowKeys[index] = name
+                rowIndex[name, default: []].append(index)
+            }
+        }
+        // Roll/clip numbers can repeat across shooting days. A duplicate key is
+        // safe for fan-out only if the source rows do not contradict one another.
+        let disambiguators = columns.filePath + columns.clipDirectory + columns.startTC + [columns.shootDay].filter { $0 >= 0 }
+        let ambiguousKeys = Set(rowIndex.compactMap { key, indexes -> String? in
+            guard indexes.count > 1 else { return nil }
+            for column in columns.fileName {
+                let paths = Set(indexes.compactMap { index -> String? in
+                    let name = rows[index][column]
+                    guard name.contains("/") || name.contains("\\") else { return nil }
+                    return (name.replacingOccurrences(of: "\\", with: "/") as NSString).deletingLastPathComponent
+                })
+                if paths.count > 1 { return key }
+            }
+            for column in disambiguators {
+                let values = Set(indexes.map { ResolveCSVNormalization.clean(rows[$0][column]) }.filter { !$0.isEmpty })
+                if values.count > 1 { return key }
+            }
+            return nil
+        })
         var recognizedKeys = Set<String>()
         var recognizedKeyOrder: [String] = []
         for record in records {
-            let key = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: record.cardNumber, videoCode: record.videoCode)
+            let key = Self.recordKey(record)
             if !key.isEmpty, recognizedKeys.insert(key).inserted { recognizedKeyOrder.append(key) }
         }
         var fpsRows = Set<Int>()
@@ -94,6 +137,7 @@ public actor ResolveCSVMerger {
         for key in recognizedKeyOrder {
             try Task.checkCancellation()
             guard let matchedRows = rowIndex[key], !matchedRows.isEmpty else { continue }
+            guard !ambiguousKeys.contains(key) else { continue }
             let sidecar = metadataIndex[key]
             if columns.cameraFPS >= 0, let sidecar, !sidecar.sensorFPS.isEmpty {
                 fpsMaterials += 1
@@ -106,7 +150,7 @@ public actor ResolveCSVMerger {
                         warnings.append("CSV 第 \(rowNumber + 2) 行 \(fileName.isEmpty ? ResolveCSVNormalization.canonicalKeyToMaterialPrefix(key) : fileName) 已覆盖：\(headers[columns.cameraFPS])“\(previous)”→“\(sidecar.sensorFPS)”。")
                     }
                 }
-            } else if columns.cameraFPS >= 0, !metadata.isEmpty { missingFPSKeys.insert(key) }
+            } else if columns.cameraFPS >= 0, !localMetadata.isEmpty { missingFPSKeys.insert(key) }
             if columns.shootDay >= 0, let sidecar, !sidecar.shootDay.isEmpty {
                 dayMaterials += 1
                 for rowNumber in matchedRows {
@@ -118,7 +162,7 @@ public actor ResolveCSVMerger {
                         warnings.append("CSV 第 \(rowNumber + 2) 行 \(fileName.isEmpty ? ResolveCSVNormalization.canonicalKeyToMaterialPrefix(key) : fileName) 已覆盖：\(headers[columns.shootDay])“\(previous)”→“\(sidecar.shootDay)”。")
                     }
                 }
-            } else if columns.shootDay >= 0, !metadata.isEmpty { missingDayKeys.insert(key) }
+            } else if columns.shootDay >= 0, !localMetadata.isEmpty { missingDayKeys.insert(key) }
         }
 
         let unrecognizedKeys = rowIndex.keys.filter { !recognizedKeys.contains($0) }.sorted(by: ResolveCSVNormalization.compareMaterialKeys)
@@ -132,8 +176,9 @@ public actor ResolveCSVMerger {
 
         for (index, record) in records.enumerated() {
             if index.isMultiple(of: 256) { try Task.checkCancellation() }
-            let key = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: record.cardNumber, videoCode: record.videoCode)
-            guard !key.isEmpty, let fileName = ResolveCSVNormalization.materialPrefix(cardNumber: record.cardNumber, videoCode: record.videoCode) else {
+            let key = Self.recordKey(record)
+            let fileName = key.hasPrefix("file:") ? String(key.dropFirst(5)) : ResolveCSVNormalization.materialPrefix(cardNumber: record.cardNumber, videoCode: record.videoCode)
+            guard !key.isEmpty, let fileName else {
                 statuses[index] = ResolveRecordStatus(recordIndex: index, status: "missing-key")
                 warnings.append("第 \(index + 1) 条缺少卷号、视频码不是 C0XX 格式，或卷号与视频码内的素材标识冲突，不会写入 CSV。")
                 continue
@@ -142,7 +187,7 @@ public actor ResolveCSVMerger {
             let shot = ResolveCSVNormalization.normalizeShot(record.shot, format: fieldFormats.shot)
             let take = ResolveCSVNormalization.normalizeTake(record.take, format: fieldFormats.take)
             let missing = [(scene, "场次"), (shot, "镜"), (take, "次")].filter { $0.0.isEmpty }.map(\.1)
-            let comment = ResolveCSVNormalization.comment(for: record.takeStatus, legacyGoodTake: record.goodTake, comments: comments)
+            let comment = record.takeStatus == .rejected ? "NG" : ResolveCSVNormalization.comment(for: record.takeStatus, legacyGoodTake: record.goodTake, comments: comments)
             let status = record.takeStatus?.rawValue ?? (record.goodTake == true ? TakeStatus.passed.rawValue : record.goodTake == false ? TakeStatus.hold.rawValue : "")
             candidates.append(Candidate(recordIndex: index, key: key, fileName: fileName, scene: scene, shot: shot, take: take, comments: comment, status: status, missing: missing,
                 reviewFields: record.reviewRequiredFields.filter { ["scene", "shot", "take", "takeStatus"].contains($0) }))
@@ -178,20 +223,43 @@ public actor ResolveCSVMerger {
                 warnings.append("\(primary.fileName) 未在 Resolve CSV 的卷名或文件名中找到，不会新增虚构素材行。")
                 continue
             }
+            if ambiguousKeys.contains(key) {
+                statuses[primary.recordIndex] = .init(recordIndex: primary.recordIndex, status: "conflict", fileName: primary.fileName, rowIndexes: matchedRows)
+                warnings.append("\(primary.fileName) 对应多个来源、时码或拍摄日，已停止自动回填。请在对应素材行人工填写。")
+                continue
+            }
             var fileNames: [String] = []
             for rowNumber in matchedRows {
                 let changeStart = changes.count
                 Self.write(primary.scene, field: "scene", column: columns.scene, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
                 Self.write(primary.shot, field: "shot", column: columns.shot, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
                 Self.write(primary.take, field: "take", column: columns.take, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
-                Self.write(primary.comments, field: "comments", column: columns.comments, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
+                if columns.comments >= 0 {
+                    let existing = rows[rowNumber][columns.comments]
+                    var note = existing
+                    // A recognized status can replace a status-only cell. Keep
+                    // production notes verbatim and append new information once.
+                    if !primary.comments.isEmpty, LegacyTakeStatusAdapter.status(fromResolveComment: existing, comments: comments) != nil {
+                        note = ""
+                    }
+                    let freeText = records[primary.recordIndex].comments ?? ""
+                    for value in [primary.comments, freeText] where !value.isEmpty && !note.components(separatedBy: "\n").contains(value) {
+                        note = note.isEmpty ? value : note + "\n" + value
+                    }
+                    Self.write(note, field: "comments", column: columns.comments, row: rowNumber, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
+                }
                 let displayName = Self.rowDisplayName(rows[rowNumber], columns: columns)
                 fileNames.append(displayName.isEmpty ? primary.fileName : displayName)
                 let overwritten = changes[changeStart...].filter { !$0.previous.isEmpty }
                 if !overwritten.isEmpty {
                     warnings.append("CSV 第 \(rowNumber + 2) 行 \(displayName.isEmpty ? primary.fileName : displayName) 已覆盖：\(overwritten.map { "\($0.header)“\($0.previous)”→“\($0.next)”" }.joined(separator: "，"))。")
                 }
-                updatedRows.insert(rowNumber)
+            }
+            // A match to a template without writable target columns is not
+            // an exportable backfill. Count actual row changes only in write().
+            if [columns.scene, columns.shot, columns.take, columns.comments].allSatisfy({ $0 < 0 }) && !fpsRows.isSuperset(of: matchedRows) && !dayRows.isSuperset(of: matchedRows) {
+                statuses[primary.recordIndex] = .init(recordIndex: primary.recordIndex, status: "missing-columns", fileName: primary.fileName, rowIndexes: matchedRows)
+                continue
             }
             matchedRecordCount += 1
             // Automatic repairs stay previewable but must remain visible at
@@ -220,6 +288,9 @@ public actor ResolveCSVMerger {
             Self.applySparseEdit(edit.value, column: edit.columnIndex, row: edit.rowIndex, headers: headers, rows: &rows, changes: &changes, updatedRows: &updatedRows)
         }
 
+        for change in changes where !change.previous.isEmpty && change.next.isEmpty {
+            warnings.append("CSV 第 \(change.rowIndex + 2) 行 \(change.header)“\(change.previous)”→“”。")
+        }
         return ResolveMergeResult(
             table: ResolveCSVTable(headers: headers, rows: rows, format: source.format),
             statuses: statuses,
@@ -261,10 +332,15 @@ public actor ResolveCSVMerger {
         )
     }
 
-    public func collectMaterialKeys(_ table: ResolveCSVTable) throws -> (keys: [String], warnings: [String]) {
+    public func collectMaterialKeys(_ table: ResolveCSVTable, edits: [ResolveSparseEdit] = []) throws -> (keys: [String], warnings: [String]) {
         let columns = try ResolveHeaders.resolve(table.headers)
         var warnings: [String] = []
-        let index = Self.buildRowIndex(table.rows.map { Self.normalizedRow($0, width: table.headers.count) }, columns: columns, warnings: &warnings)
+        var rows = table.rows.map { Self.normalizedRow($0, width: table.headers.count) }
+        let identities = columns.identityColumns
+        for edit in edits where identities.contains(edit.columnIndex) && rows.indices.contains(edit.rowIndex) && table.headers.indices.contains(edit.columnIndex) {
+            rows[edit.rowIndex][edit.columnIndex] = edit.value
+        }
+        let index = Self.buildRowIndex(rows, columns: columns, warnings: &warnings)
         return (index.keys.sorted(by: ResolveCSVNormalization.compareMaterialKeys), warnings)
     }
 
@@ -277,6 +353,18 @@ public actor ResolveCSVMerger {
         excluding knownAnomalyKeys: Set<String> = []
     ) throws -> [SlateSequenceAnomaly] {
         try SequenceAnomalyDetector.detect(records.map(SequenceAnomalyDetector.Input.init), excluding: knownAnomalyKeys)
+    }
+
+    private static func recordKey(_ record: ResolveSlateRecord) -> String {
+        let canonical = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: record.cardNumber, videoCode: record.videoCode)
+        let name = ResolveCSVNormalization.clean(record.sourceFileName)
+        if !name.isEmpty {
+            if name.hasPrefix("/") { return "file:" + name }
+            // A filename can identify a nonstandard camera. Never use it to
+            // override two explicit, contradictory camera identifiers.
+            if canonical.isEmpty, ResolveCSVNormalization.extractCombinedMaterialKey(record.videoCode).isEmpty { return "file:" + name }
+        }
+        return canonical
     }
 
     private static func buildMetadataIndex(_ entries: [PersistedSlateMetadata], warnings: inout [String]) -> [String: MetadataValue] {

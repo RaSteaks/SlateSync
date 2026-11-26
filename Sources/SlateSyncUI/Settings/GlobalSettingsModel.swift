@@ -56,14 +56,17 @@ public final class GlobalSettingsModel {
         values.values.filter { $0.key.rawValue.hasPrefix("VISIONOCR_") || $0.key.rawValue.hasPrefix("PADDLEOCR_") }
     }
 
-    public func checkOCREnvironment() async {
+    public func checkOCREnvironment(sample: Bool = false) async {
         guard !ocrCheckOperation.isRunning, beginOperation() else { return }
         defer { endOperation() }
         let snapshot = draft
         ocrChecks = []
         checkedOCRDraft = nil
         ocrCheckOperation = .running(label: L10n.tr("正在检测 OCR 环境…"))
-        let task = Task { try await service.checkOCREnvironment(values: snapshot) }
+        let task = Task {
+            if sample { return try await service.checkOCRSample(values: snapshot) }
+            return try await service.checkOCREnvironment(values: snapshot)
+        }
         ocrCheckTask = task
         defer { ocrCheckTask = nil }
         do {
@@ -231,13 +234,16 @@ public final class GlobalSettingsModel {
         return false
     }
 
-    public func save() async {
+    public func save(keys: Set<GlobalSettingKey>? = nil) async {
         guard beginOperation() else { return }
         defer { endOperation() }
         guard !operation.isRunning else { return }
         operation = .running(label: L10n.tr("正在保存全局设置…"))
-        let values = draft
-        let providers = customProviders
+        // A pane's Save owns only its visible controls. Preserve drafts on
+        // other panes, including invalid text the user is still composing.
+        var values = keys == nil ? draft : (live?.values ?? .init())
+        if let keys { for key in keys { values[key] = draft[key] } }
+        let providers = keys == nil ? customProviders : (live?.customProviders ?? [])
         do {
             // Store loading remains deliberately tolerant for legacy config.
             // Explicit UI saves validate every entered field before any write.
@@ -263,7 +269,10 @@ public final class GlobalSettingsModel {
                 }
             }
             let saved = try await service.saveGlobalSettings(values: values, customProviders: providers)
-            if draft == values, customProviders == providers { publish(saved) }
+            if let keys {
+                for key in keys where draft[key] == values[key] { draft[key] = saved.values[key] }
+                refreshPreservingDraft(saved)
+            } else if draft == values, customProviders == providers { publish(saved) }
             else {
                 live = saved
                 revision += 1

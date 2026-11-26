@@ -19,6 +19,7 @@ public enum MCPToolCatalog {
         "scene": nullableString, "shot": nullableString, "take": nullableString,
         "takeStatus": .object(["enum": ["过", "保", "废条", .null]]),
         "goodTake": .object(["type": ["boolean", "null"]]), "comments": nullableString,
+        "sourceFileName": nullableString, "cameraFps": nullableString, "shootDay": nullableString,
         "reviewRequiredFields": array(.stringSchema, maximum: 20)
     ])
     private static let metadata = object([
@@ -32,6 +33,7 @@ public enum MCPToolCatalog {
         "value": .stringSchema
     ], required: ["rowIndex", "columnIndex", "value"])
     private static let resolve = object([
+        "addMissingColumns": .object(["type": "boolean", "description": "Explicitly add missing backfill columns. Defaults to preserving the source template."]),
         "fieldFormats": object(["scene": .stringSchema, "shot": .stringSchema, "take": .stringSchema],
                                required: ["scene", "shot", "take"]),
         "comments": object(["goodTake": .stringSchema, "holdTake": .stringSchema], required: ["goodTake", "holdTake"])

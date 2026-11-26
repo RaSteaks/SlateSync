@@ -1,3 +1,4 @@
+import CryptoKit
 import SlateSyncDomain
 import SlateSyncWorkflow
 import SwiftUI
@@ -18,6 +19,7 @@ public struct ResolveCSVView: View {
     @State private var directoryRequest: DirectoryRequest?
     @State private var failedCell: CSVWorksheetJump?
     @State private var preparing = false
+    @State private var useCurrentFormat = false
     // Start compact until the detail column is measured. The sidebar, title and
     // workspace picker share the window toolbar with this page.
     @State private var compactToolbar = true
@@ -36,6 +38,7 @@ public struct ResolveCSVView: View {
     private let workspace: WorkspaceModel?
     private let onImport: (@MainActor () -> Void)?
 
+    private let onChooseMediaDirectory: ((@escaping (URL?) -> Void) -> Void)?
     private let onShowResults: (() -> Void)?
 
     private struct DirectoryRequest: Identifiable {
@@ -48,16 +51,18 @@ public struct ResolveCSVView: View {
         let message: String
         var row: Int?
         var column: Int?
+        var recordIndex: Int?
     }
 
     public init(
         model: ResolveCSVModel, recognition: RecognitionModel? = nil, workspace: WorkspaceModel? = nil,
-        onImport: (@MainActor () -> Void)? = nil, onShowResults: (() -> Void)? = nil
+        onImport: (@MainActor () -> Void)? = nil, onChooseMediaDirectory: ((@escaping (URL?) -> Void) -> Void)? = nil, onShowResults: (() -> Void)? = nil
     ) {
         self.model = model
         self.recognition = recognition
         self.workspace = workspace
         self.onImport = onImport
+        self.onChooseMediaDirectory = onChooseMediaDirectory
         self.onShowResults = onShowResults
     }
 
@@ -108,7 +113,7 @@ public struct ResolveCSVView: View {
                 ) { importAction }
             }
         }
-        .disabled(recognition?.operation.isRunning == true)
+        .disabled(recognition?.locksDisplayedTask == true)
         .onGeometryChange(for: Bool.self) { $0.size.width < 880 } action: { compactToolbar = $0 }
         .toolbar {
             if revealIsActive {
@@ -168,13 +173,19 @@ public struct ResolveCSVView: View {
         .fileExporter(
             isPresented: $showsSavePanel,
             document: exportDocument,
-            contentType: exportDocument?.format.contentType ?? .commaSeparatedText,
+            contentType: exportDocument?.contentType ?? .commaSeparatedText,
             defaultFilename: exportDocument?.filename
         ) { result in
             guard let delivery = exportDocument, delivery.tableID == model.tableID else { return }
             exportDocument = nil
             switch result {
-            case .success: model.exported(format: delivery.format)
+            case .success(let url):
+                model.exported(format: delivery.format)
+                let receipt = MetadataDeliveryReceipt(filename: url.lastPathComponent, source: model.filename,
+                    format: delivery.format.rawValue, rows: model.table?.rows.count ?? 0,
+                    operatorName: workspace?.selectedTask?.production?.operatorName,
+                    warnings: delivery.findings, sha256: delivery.digest)
+                workspace?.updateProduction { $0.deliveries = ($0.deliveries ?? []) + [receipt] }
             case .failure(let error): model.report(error)
             }
         }
@@ -184,6 +195,12 @@ public struct ResolveCSVView: View {
         ) {
             Button(confirmationActionTitle) {
                 if exportDocument?.tableID == model.tableID { showsSavePanel = true }
+            }
+            if let document = exportDocument, !document.offlineMedia.isEmpty {
+                Button(L10n.tr("重新定位素材目录…")) {
+                    exportDocument = nil
+                    chooseDirectory(for: document.destination)
+                }
             }
             Button(L10n.tr("返回校对"), role: .cancel) { exportDocument = nil }
         } message: {
@@ -205,6 +222,7 @@ public struct ResolveCSVView: View {
             // Confirmation artifacts belong to the original table, never the
             // task selected while an async merge or save panel was pending.
             showsSavePanel = false
+            useCurrentFormat = false
             exportDocument = nil
             selectsMediaDirectory = false
             directoryRequest = nil
@@ -288,8 +306,11 @@ public struct ResolveCSVView: View {
                 }
                 if let issue {
                     Label(issue.message, systemImage: "exclamationmark.triangle").lineLimit(2).help(issue.message)
-                    if issue.row == nil, let onShowResults {
-                        Button(L10n.tr("查看识别结果"), action: onShowResults).buttonStyle(.link)
+                    if let record = issue.recordIndex, let onShowResults {
+                        Button(L10n.tr("查看识别结果")) {
+                            recognition?.requestRecord(record)
+                            onShowResults()
+                        }.buttonStyle(.link)
                     }
                 } else if let activeCell, warningCells.contains(activeCell) {
                     Label(L10n.tr("此字段需要核对"), systemImage: "exclamationmark.triangle")
@@ -306,14 +327,16 @@ public struct ResolveCSVView: View {
         let byKey = Dictionary(grouping: diagnostics.rowKeys.indices.filter { !diagnostics.rowKeys[$0].isEmpty },
                                by: { diagnostics.rowKeys[$0] })
         let columns = try? ResolveHeaders.resolve(diagnostics.table.headers)
-        func findings(_ message: String, rows: [Int]?, column: Int? = nil) -> [DiagnosticRow] {
-            guard let rows, !rows.isEmpty else { return [DiagnosticRow(message: message)] }
-            return rows.map { DiagnosticRow(message: message, row: $0, column: column.flatMap { $0 >= 0 ? $0 : nil }) }
+        func findings(_ message: String, rows: [Int]?, column: Int? = nil, record: Int? = nil) -> [DiagnosticRow] {
+            guard let rows, !rows.isEmpty else { return [DiagnosticRow(message: message, recordIndex: record)] }
+            return rows.map { DiagnosticRow(message: message, row: $0, column: column.flatMap { $0 >= 0 ? $0 : nil }, recordIndex: record) }
         }
         let statusRows = diagnostics.unresolvedStatuses.flatMap { status in
             let subject = status.fileName ?? L10n.tr("第 {0} 条", [String(describing: status.recordIndex + 1)])
             let message: String
             switch status.status {
+            case "missing-columns":
+                message = L10n.tr("源表缺少可回填列，请添加 Scene、Shot、Take 或 Comments。")
             case "missing-key":
                 message = L10n.tr("{0} 缺少素材标识，未写入 CSV", [String(describing: subject)])
             case "incomplete":
@@ -333,9 +356,9 @@ public struct ResolveCSVView: View {
             let rows = status.rowIndexes ?? byKey[ResolveCSVNormalization.extractCombinedMaterialKey(status.fileName)]
             let fields = (status.missingFields ?? []).compactMap { columns?.reviewColumn(for: $0) }
             if rows != nil, !fields.isEmpty {
-                return fields.flatMap { findings(message, rows: rows, column: $0) }
+                return fields.flatMap { findings(message, rows: rows, column: $0, record: status.recordIndex) }
             }
-            return findings(message, rows: rows)
+            return findings(message, rows: rows, record: status.recordIndex)
         }
         let materials = diagnostics.unrecognizedMaterials.flatMap { material in
             findings(L10n.tr("素材 {0} 未在识别结果中匹配", [material]),
@@ -356,7 +379,19 @@ public struct ResolveCSVView: View {
         return statusRows + materials + fps + days + sequence + unidentified
     }
 
+    private var deliverySettings: ProjectSettings.ResolveSettings {
+        if !useCurrentFormat, let saved = workspace?.selectedTask?.projectSettingsSnapshot?.resolve { return saved }
+        return workspace?.projectSettings.resolve ?? .init()
+    }
+
     @ViewBuilder private var deliveryItems: some View {
+        if let original = workspace?.selectedTask?.projectSettingsSnapshot?.resolve,
+           let latest = workspace?.projectSettings.resolve, original != latest {
+            Picker(L10n.tr("交付字段格式"), selection: $useCurrentFormat) {
+                Text(L10n.tr("任务保存的格式")).tag(false)
+                Text(L10n.tr("当前项目格式")).tag(true)
+            }
+        }
         ForEach(DeliveryDestination.allCases, id: \.self) { destination in
             Button(destination.title) { performExport(destination) }
         }
@@ -374,12 +409,17 @@ public struct ResolveCSVView: View {
         failedCell = nil
         let format = destination.format
         let identity = model.tableID
+        let rawSheet = destination == .worksheetCSV || destination == .worksheetJSON
         let folder = directory ?? (mediaDirectory?.tableID == identity ? mediaDirectory?.url : nil)
         Task {
-            defer { if identity == model.tableID { preparing = false } }
+            let scoped = folder?.startAccessingSecurityScopedResource() == true
+            defer {
+                if scoped { folder?.stopAccessingSecurityScopedResource() }
+                if identity == model.tableID { preparing = false }
+            }
             do {
                 let payload: PreparedMetadata
-                if let recognition, let workspace {
+                if !rawSheet, let recognition, let workspace {
                     try await workspace.flush()
                     guard identity == model.tableID else { return }
                     // Canonical merged export: re-merge from the raw
@@ -389,7 +429,7 @@ public struct ResolveCSVView: View {
                     payload = try await model.prepareExport(
                         records: recognition.resolveRecords,
                         metadata: workspace.selectedTask?.slateMetadata ?? [],
-                        settings: workspace.projectSettings.resolve, format: format, mediaDirectory: folder)
+                        settings: deliverySettings, format: format, mediaDirectory: folder, groupALE: destination == .avidGroups)
                 } else {
                     payload = try await model.preparedTable(format: format, mediaDirectory: folder)
                 }
@@ -397,12 +437,18 @@ public struct ResolveCSVView: View {
                 let csvName = recognition != nil && workspace != nil
                     ? ResolveCSVModel.suggestedFilename(model.filename, fallback: "Resolve", suffix: L10n.tr("场记已回填"))
                     : model.filename ?? "Resolve.csv"
-                let filename = format == .csv ? csvName : (csvName as NSString).deletingPathExtension + "." + format.fileExtension
+                let sourceName = ((model.filename ?? "Resolve.csv") as NSString).deletingPathExtension
+                let filename = rawSheet ? sourceName + "_" + L10n.tr("工作表") + "." + format.fileExtension
+                    : (format == .csv ? csvName : (csvName as NSString).deletingPathExtension + "." + format.fileExtension)
+                let report = model.lastMergeDiagnostics
+                var findings = report?.warnings ?? []
+                findings.append(contentsOf: payload.offlineMedia.map { L10n.tr("本机无法读取素材：{0}", [$0]) })
+                let warningCount = unresolvedCount + payload.offlineMedia.count
                 // The save panel and warning confirmation share immutable bytes,
                 // format and filename from this table's canonical merge.
                 exportDocument = MetadataDocument(payload: payload, tableID: identity, destination: destination, filename: filename,
-                    scope: scopeDescription, warningCount: unresolvedCount)
-                if format == .ale || unresolvedCount > 0 { requestsExport = true } else { showsSavePanel = true }
+                    scope: scopeDescription, warningCount: warningCount, findings: findings)
+                if format == .ale || warningCount > 0 { requestsExport = true } else { showsSavePanel = true }
             } catch is CancellationError { }
             catch let issue as DeliveryInputIssue {
                 guard identity == model.tableID else { return }
@@ -410,8 +456,7 @@ public struct ResolveCSVView: View {
                 case .relativeMedia:
                     // Resume the original recipient after choosing the folder.
                     // A retry revalidates the current task and its edits before saving.
-                    directoryRequest = DirectoryRequest(tableID: identity, destination: destination)
-                    selectsMediaDirectory = true
+                    chooseDirectory(for: destination)
                 case .field(let row, let column, _):
                     if row >= 2 { failedCell = CSVWorksheetJump(tableID: identity, row: row - 2, column: column) }
                     model.report(issue.error)
@@ -419,6 +464,22 @@ public struct ResolveCSVView: View {
             }
             catch { if identity == model.tableID { model.report(error) } }
         }
+    }
+
+    private func chooseDirectory(for destination: DeliveryDestination) {
+        let request = DirectoryRequest(tableID: model.tableID, destination: destination)
+        directoryRequest = request
+        // The embedded editor and its enclosing workspace share one native
+        // importer. Competing sheet presenters can silently mask the folder panel.
+        if let onChooseMediaDirectory {
+            onChooseMediaDirectory { url in
+                guard directoryRequest?.id == request.id, request.tableID == model.tableID else { return }
+                directoryRequest = nil
+                guard let url else { return }
+                mediaDirectory = (request.tableID, url)
+                performExport(destination, directory: url)
+            }
+        } else { selectsMediaDirectory = true }
     }
 
     private var importAction: some View {
@@ -448,13 +509,13 @@ public struct ResolveCSVView: View {
                         await model.merge(
                             records: recognition.resolveRecords,
                             metadata: workspace.selectedTask?.slateMetadata ?? [],
-                            settings: workspace.projectSettings.resolve)
+                            settings: deliverySettings)
                     } catch { model.report(error) }
                 }
             }
             .help(L10n.tr("把识别结果合并进 Resolve CSV"))
             .disabled(
-                model.table == nil || recognition.resolveRecords.isEmpty || model.operation.isRunning)
+                model.table == nil || recognition.editableRecords.isEmpty || model.operation.isRunning)
         }
     }
 
@@ -502,14 +563,17 @@ public struct ResolveCSVView: View {
 
 /// Resolve and Premiere use the same XMEML bytes but expose different import workflows.
 private enum DeliveryDestination: CaseIterable {
-    case resolveCSV, resolveMediaPool, premiereBin, finalCutEvent, avid, json
+    case resolveCSV, resolveMediaPool, premiereBin, finalCutEvent, avid, avidGroups, json, worksheetCSV, worksheetJSON
 
     var title: String {
         switch self {
+        case .worksheetCSV: L10n.tr("导出当前工作表（CSV）")
+        case .worksheetJSON: L10n.tr("导出当前工作表（JSON）")
         case .resolveCSV: L10n.tr("DaVinci Resolve · 回填已有素材（CSV）")
         case .resolveMediaPool: L10n.tr("DaVinci Resolve · 导入素材到媒体池（XML）")
         case .premiereBin: L10n.tr("Premiere Pro · 导入素材箱（XML）")
         case .finalCutEvent: L10n.tr("Final Cut Pro · 导入事件（FCPXML）")
+        case .avidGroups: L10n.tr("Avid · 按帧率和制式分组导出（文件夹）")
         case .avid: L10n.tr("Avid Media Composer · 合并场记（ALE）")
         case .json: L10n.tr("通用数据 · 完整工作表（JSON）")
         }
@@ -517,17 +581,18 @@ private enum DeliveryDestination: CaseIterable {
 
     var format: MetadataDeliveryFormat {
         switch self {
-        case .resolveCSV: .csv
+        case .resolveCSV, .worksheetCSV: .csv
         case .resolveMediaPool, .premiereBin: .xmeml
         case .finalCutEvent: .fcpxml
-        case .avid: .ale
-        case .json: .json
+        case .avid, .avidGroups: .ale
+        case .json, .worksheetJSON: .json
         }
     }
 }
 
 private struct MetadataDocument: FileDocument {
     static var readableContentTypes: [UTType] { MetadataDeliveryFormat.allCases.map(\.contentType) }
+    static var writableContentTypes: [UTType] { readableContentTypes + [.folder] }
     let data: Data
     let tableID: UUID?
     let format: MetadataDeliveryFormat
@@ -535,14 +600,26 @@ private struct MetadataDocument: FileDocument {
     let saveMessage: String
     let confirmationMessage: String
     let warningCount: Int
+    let destination: DeliveryDestination
+    let offlineMedia: [String]
+    let findings: [String]
+    let digest: String
+    let files: [String: Data]?
+    var contentType: UTType { files == nil ? format.contentType : .folder }
 
-    init(payload: PreparedMetadata, tableID: UUID, destination: DeliveryDestination, filename: String, scope: String, warningCount: Int) {
+    init(payload: PreparedMetadata, tableID: UUID, destination: DeliveryDestination, filename: String, scope: String, warningCount: Int, findings: [String]) {
+        files = payload.files
+        self.findings = findings
+        self.destination = destination
+        offlineMedia = payload.offlineMedia
+        digest = SHA256.hash(data: payload.data).map { String(format: "%02x", $0) }.joined()
         data = payload.data
         self.tableID = tableID
         format = destination.format
-        self.filename = filename
+        self.filename = payload.files == nil ? filename : (filename as NSString).deletingPathExtension + "_ALE"
         self.warningCount = warningCount
         var lines = [scope]
+        if let files { lines.append(L10n.tr("按帧率和制式生成 {0} 份 ALE。", [String(files.count - 1)])) }
         switch (destination, payload.preview) {
         case let (.avid, .avid(tape, start, fps)):
             lines.append(L10n.tr("首条素材按卷名 {0} 和起始时码 {1} 匹配，播放帧率 {2} fps。", [tape, start, fps]))
@@ -550,14 +627,20 @@ private struct MetadataDocument: FileDocument {
             lines.append(L10n.tr("首条素材在 Premiere 中显示为 Scene「{0}」、Shot「{1}」。", [scene, shotTake]))
         default: break
         }
+        if !offlineMedia.isEmpty {
+            lines.append(L10n.tr("有 {0} 个素材路径本机无法读取，可更换根目录或交给接收机重联。", [String(offlineMedia.count)]))
+            lines.append(contentsOf: offlineMedia.prefix(3))
+        }
         saveMessage = lines.joined(separator: "\n")
         if warningCount > 0 {
             lines.append(L10n.tr("当前合并结果包含 {0} 项告警，导出文件会保留这些行的当前值。", [String(warningCount)]))
         }
+        lines.append(contentsOf: findings.filter { $0.contains("→“”") }.prefix(5))
         confirmationMessage = lines.joined(separator: "\n")
     }
 
     init(configuration: ReadConfiguration) throws {
+        destination = .resolveCSV; offlineMedia = []; findings = []; digest = ""; files = nil
         data = configuration.file.regularFileContents ?? Data()
         format = MetadataDeliveryFormat.allCases.first { $0.contentType == configuration.contentType } ?? .csv
         filename = configuration.file.preferredFilename
@@ -567,7 +650,8 @@ private struct MetadataDocument: FileDocument {
         confirmationMessage = ""
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
+        if let files { return FileWrapper(directoryWithFileWrappers: files.mapValues(FileWrapper.init(regularFileWithContents:))) }
+        return FileWrapper(regularFileWithContents: data)
     }
 }
 

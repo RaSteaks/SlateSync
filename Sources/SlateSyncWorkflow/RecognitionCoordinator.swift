@@ -303,7 +303,15 @@ public actor RecognitionCoordinator: RecognitionServing {
                 filename: request.filename, progress: { event in Task { await publish(event) } },
                 candidates: candidates, registry: registry, failoverState: failoverState,
                 recoveryCache: recoveryCache,
-                recoveryID: request.taskID.map { "\(request.projectID):\($0)" }
+                recoveryID: request.taskID.map { "\(request.projectID):\($0)" },
+                loadCheckpoint: {
+                    guard let native = persistence as? NativeRecognitionPersistence, let id = request.taskID else { return nil }
+                    return try await native.checkpoint(projectID: request.projectID, taskID: id)
+                },
+                saveCheckpoint: { value in
+                    guard let native = persistence as? NativeRecognitionPersistence, let id = request.taskID else { return }
+                    try await native.checkpoint(value, projectID: request.projectID, taskID: id)
+                }
             )
             var stageDurations = artifact.stageDurationsMs
             stageDurations["structure"] = max(0, Int(modelStarted - structureStarted))
@@ -311,6 +319,9 @@ public actor RecognitionCoordinator: RecognitionServing {
             await media.close()
             try Task.checkCancellation()
             await publish(.init(phase: "merge", completed: pages.count, total: pages.count, message: "正在合并逐页结果并检查场、镜、次连续性", percent: 97))
+            let routes = output.pages.compactMap { page in
+                page.route.map { "第 \(page.pageNumber) 页 · \($0.providerID) / \($0.modelID)" }
+            }
             var warnings = output.result.warnings
             warnings += artifact.optimization?.diagnostics ?? []
             if let warning = artifact.summary.warning { warnings.insert(warning, at: 0) }
@@ -326,7 +337,8 @@ public actor RecognitionCoordinator: RecognitionServing {
                 diagnosticID = try await persistence.saveDiagnostic(projectID: request.projectID, sessionID: nil, payload: try JSONEncoder().encode(diagnostic))
                 try Task.checkCancellation()
                 let savedSheet = persisted(sheet)
-                let task = TaskData(projectId: request.projectID, projectSettingsSnapshot: projectSettings, status: "completed", filename: request.filename, pageCount: pages.count, scenarioId: scenario.selection?.id, scenarioMatch: scenario.selection?.match, scenarioFingerprint: scenario.selection?.fingerprint, provider: providerID, model: model.publicID, customPrompt: projectSettings.customPrompt, accuracyMode: accuracy, result: savedSheet, usage: output.usage, durationMs: duration, ocrSummary: ocr, diagnosticSessionId: diagnosticID, editedRecords: savedSheet.records)
+                var task = TaskData(projectId: request.projectID, projectSettingsSnapshot: projectSettings, status: "completed", filename: request.filename, pageCount: pages.count, scenarioId: scenario.selection?.id, scenarioMatch: scenario.selection?.match, scenarioFingerprint: scenario.selection?.fingerprint, provider: providerID, model: model.publicID, customPrompt: projectSettings.customPrompt, accuracyMode: accuracy, result: savedSheet, usage: output.usage, durationMs: duration, ocrSummary: ocr, diagnosticSessionId: diagnosticID, editedRecords: savedSheet.records)
+                task.pageRoutes = routes
                 taskID = try await persistence.saveTask(projectID: request.projectID, taskID: request.taskID, payload: try JSONEncoder().encode(task))
                 try Task.checkCancellation()
                 try await persistence.touchRecognitionActivity(projectID: request.projectID)
@@ -339,7 +351,7 @@ public actor RecognitionCoordinator: RecognitionServing {
                     guard !Task.isCancelled, let digest = artifact.sourceDigests[decision.pageNumber] else { break }
                     do {
                         try await scenarioPersistence.saveScenarioObservation(projectID: request.projectID,
-                            observation: .init(sourceDigest: digest, decision: decision))
+                            observation: .init(sourceDigest: digest, decision: decision, source: taskID.map { .init(taskID: $0, filename: request.filename, page: decision.pageNumber) }))
                     } catch {
                         let warning = "识别结果已完成，场记版式观察未保存"
                         if !sheet.warnings.contains(warning) {

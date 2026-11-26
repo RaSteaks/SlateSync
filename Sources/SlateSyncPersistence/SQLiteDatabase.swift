@@ -184,18 +184,27 @@ public actor SQLiteDatabase {
     func saveTaskSnapshot(_ id: String, data: Data, snapshotURL: URL, writer: any AtomicFileWriting, replacingKeys: Set<String>? = nil) throws {
         try mutateTaskSnapshot(id, snapshotURL: snapshotURL, writer: writer) { database in
             var object = try PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
-            if let replacingKeys, let row = try database.rowsUnlocked(
-                "SELECT data_json, created_at FROM tasks WHERE id = ?;", bindings: [id]).first,
-               let text = row["data_json"] ?? nil {
-                let previous = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
-                // Missing known fields intentionally clear old values. Unknown
-                // extension fields survive native decode/edit/save round trips.
-                for (key, value) in previous where !replacingKeys.contains(key) { object[key] = value }
-                // Legacy JSON can omit this optional field. SQLite's non-null
-                // column is authoritative and must survive a native edit.
-                object["createdAt"] = row["created_at"] ?? nil
+            var merged = data
+            if let replacingKeys {
+                // Read only compatibility extensions from the old task. Moving
+                // its unchanged base64 media across the SQLite/Swift boundary
+                // just to discard it dominated native autosave on large tasks.
+                let keys = replacingKeys.sorted()
+                let placeholders = keys.map { _ in "?" }.joined(separator: ",")
+                let expression = keys.isEmpty ? "data_json" : "json_remove(data_json," + placeholders + ")"
+                let paths = keys.map { "$." + $0 }
+                if let row = try database.rowsUnlocked("SELECT " + expression + " AS extensions, created_at FROM tasks WHERE id = ?;", bindings: paths + [id]).first,
+                   let text = row["extensions"] ?? nil {
+                    let previous = try PersistenceJSON.object(from: Data(text.utf8), errorCode: "TASK_INVALID")
+                    // Missing known fields intentionally clear old values. Unknown
+                    // extension fields survive native decode/edit/save round trips.
+                    for (key, value) in previous where !replacingKeys.contains(key) { object[key] = value }
+                    // Legacy JSON can omit this optional field. SQLite's non-null
+                    // column is authoritative and must survive a native edit.
+                    object["createdAt"] = row["created_at"] ?? nil
+                    merged = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
+                }
             }
-            let merged = try PersistenceJSON.data(from: object, errorCode: "TASK_INVALID")
             _ = try database.executeUnlocked("""
                 INSERT INTO tasks (id, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json,
@@ -363,6 +372,10 @@ public actor SQLiteDatabase {
                 CASE WHEN json_type(data_json) = 'object' THEN json_object(
                     'id', json_extract(data_json, '$.id'),
                     'filename', json_extract(data_json, '$.filename'),
+                    'title', json_extract(data_json, '$.production.title'),
+                    'shootDay', json_extract(data_json, '$.production.shootDay'),
+                    'unit', json_extract(data_json, '$.production.unit'),
+                    'deliveryCount', json_array_length(json_extract(data_json, '$.production.deliveries')),
                     'provider', json_extract(data_json, '$.provider'),
                     'model', json_extract(data_json, '$.model'),
                     'pageCount', json_extract(data_json, '$.pageCount'),
@@ -385,7 +398,7 @@ public actor SQLiteDatabase {
                 let data = text.data(using: .utf8),
                 let object = try? PersistenceJSON.object(from: data, errorCode: "TASK_INVALID")
             else { return nil }
-            return TaskListItem(
+            var item = TaskListItem(
                 id: PersistenceJSON.string(object["id"]),
                 filename: PersistenceJSON.string(object["filename"]),
                 provider: PersistenceJSON.string(object["provider"]),
@@ -397,6 +410,11 @@ public actor SQLiteDatabase {
                 createdAt: PersistenceJSON.string(object["createdAt"]),
                 updatedAt: PersistenceJSON.string(object["updatedAt"])
             )
+            item.title = PersistenceJSON.string(object["title"])
+            item.shootDay = PersistenceJSON.string(object["shootDay"])
+            item.unit = PersistenceJSON.string(object["unit"])
+            item.deliveryCount = PersistenceJSON.int(object["deliveryCount"])
+            return item
         }
     }
 

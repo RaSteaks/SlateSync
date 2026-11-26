@@ -12,12 +12,15 @@ public struct ProjectSettingsView: View {
     private let projectID: String?
     private let settingsRevision: Int
 
+    private let originalPage: ((ScenarioSourcePage) async throws -> Data)?
+
     public init(
         model: ProjectSettingsModel,
         recognition: RecognitionModel,
         projectID: String?,
-        settingsRevision: Int = 0
+        settingsRevision: Int = 0, originalPage: ((ScenarioSourcePage) async throws -> Data)? = nil
     ) {
+        self.originalPage = originalPage
         self.model = model
         self.recognition = recognition
         self.projectID = projectID
@@ -71,12 +74,13 @@ public struct ProjectSettingsView: View {
                             .lineLimit(3...8)
                             .accessibilityLabel(L10n.tr("自定义提示词"))
                     }
-                    ScenarioCandidatesSection(model: model)
+                    ScenarioCandidatesSection(model: model, originalPage: originalPage)
                         // Observation IDs are project-local. Identical source
                         // images in another project must not inherit row drafts.
                         .id(model.project?.id)
                         .disabled(recognition.operation.isRunning)
                     Section(L10n.tr("Resolve 格式")) {
+                        Toggle(L10n.tr("回填时补充缺失列"), isOn: $model.settings.resolve.addMissingColumns)
                         TextField(L10n.tr("场"), text: $model.settings.resolve.fieldFormats.scene)
                         TextField(L10n.tr("镜"), text: $model.settings.resolve.fieldFormats.shot)
                         TextField(L10n.tr("次"), text: $model.settings.resolve.fieldFormats.take)

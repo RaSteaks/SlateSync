@@ -1597,7 +1597,13 @@ extension SM08OwnershipTests {
             let cases: [Case]
         }
         let url = try XCTUnwrap(Bundle.module.url(forResource: "sm08-local-slate-oracle", withExtension: "json"))
-        let oracle = try JSONDecoder().decode(Oracle.self, from: Data(contentsOf: url))
+        // The sealed worker fixtures remain the input corpus. The native
+        // delivery contract additionally preserves identified empty takes,
+        // filenames, free notes, multiline text, frame rates and dates.
+        let legacy = try JSONDecoder().decode(Oracle.self, from: Data(contentsOf: url))
+        let nativeURL = try XCTUnwrap(Bundle.module.url(forResource: "dit-local-slate-cases", withExtension: "json"))
+        let oracle = try JSONDecoder().decode(Oracle.self, from: Data(contentsOf: nativeURL))
+        XCTAssertEqual(oracle.cases.prefix(legacy.cases.count).map(\.input), legacy.cases.map(\.input))
         let workflow = SlateCSVWorkflow()
         for fixture in oracle.cases {
             do {

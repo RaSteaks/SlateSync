@@ -99,7 +99,7 @@ This contract owns observable behavior. Visual intent is defined in `DESIGN.md`.
 - The stable region and keyed pages remain in the existing SwiftUI hierarchy,
   preserving environment and preferences. Sidebar visibility animates at the
   split container; native children receive animation-free layout transactions.
-- Committed reveals, sidebar visibility and in-region handoffs share a 2 s
+- Committed reveals, sidebar visibility and in-region handoffs share a 160 ms
   cubic Bézier `(0.4, 0, 0.2, 1)` pace. Only the masks animate during page changes;
   the independent four-second theme transition is outside this replacement.
 
@@ -179,6 +179,7 @@ keeps old IDs as aliases, with a durable, conflict-checked undo operation.
 - CSV export has a busy state, rejects duplicate submissions, and joins the
   existing task-switch/close cancellation barrier. A confirmation artifact
   cannot be accepted for a different table.
+- Selecting a result identifies its source page. A reviewer may acknowledge a correct value without modifying it.
 - Automatic corrections retain a review status at export. Editing a core field
   acknowledges that field only; unresolved source identities also remain visible.
 - Full scan/merge diagnostics use `WorkflowDiagnosticsSheet`; inline truncation

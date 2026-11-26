@@ -35,6 +35,8 @@ struct MCPServiceSettingsSection: View {
             }
             Text(L10n.tr("自动查找组件并构建后启动。首次构建需要 Xcode / Swift 和网络，后续使用增量构建。无需先选择授权目录。"))
                 .font(.caption).foregroundStyle(.secondary)
+            Text(model.offlineLaunchAvailable ? L10n.tr("离线启动程序已就绪") : L10n.tr("离线工作前请先构建，或在高级设置选择已有启动程序。"))
+                .font(.caption).foregroundStyle(.secondary)
             Toggle(L10n.tr("随 SlateSync 自动启动 / 停止"), isOn: Binding(get: { model.automaticallyStarts }, set: { model.setAutomaticallyStarts($0) }))
                 .disabled(model.isBusy)
                 .accessibilityIdentifier("settings.mcp.automatic")

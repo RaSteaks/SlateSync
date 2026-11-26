@@ -2,12 +2,13 @@ import AppKit
 import QuartzCore
 import SwiftUI
 
-/// Navigation and in-region handoffs share a two-second Bézier pace. The
+/// Navigation and in-region handoffs share a short Bézier transition. The
 /// four-second appearance reveal remains separate; native editors never
 /// independently inherit the container's animations.
 enum SlateMotion {
-    static let revealDuration: TimeInterval = 2.0
-    static let handoffDuration: TimeInterval = 2.0
+    // Keep field-to-field navigation responsive during repeated worksheet checks.
+    static let revealDuration: TimeInterval = 0.16
+    static let handoffDuration: TimeInterval = revealDuration
     // Slow start, faster middle, then a gentle finish. One curve owns both
     // SwiftUI layout motion and the Core Animation masks/image handoffs.
     static let controlPoints: (Double, Double, Double, Double) = (0.4, 0, 0.2, 1)
@@ -207,6 +208,7 @@ struct ContentRevealRegion<Value: Equatable, Content: View>: View {
     let origin: ContentRevealOrigin
     private let content: (Value) -> Content
     private let reduceMotionOverride: Bool?
+    private let duration: TimeInterval
     @State private var presentation: ContentRevealState<Value>
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -215,11 +217,12 @@ struct ContentRevealRegion<Value: Equatable, Content: View>: View {
     // Production callers inherit the system policy. Offscreen tests inject both
     // policies because SwiftUI's accessibilityReduceMotion is read-only and a
     // hosted runner may enable it independently of the developer's machine.
-    init(value: Value, origin: ContentRevealOrigin, reduceMotion: Bool? = nil,
+    init(value: Value, origin: ContentRevealOrigin, reduceMotion: Bool? = nil, duration: TimeInterval = SlateMotion.revealDuration,
          @ViewBuilder content: @escaping (Value) -> Content) {
         self.value = value
         self.origin = origin
         self.content = content
+        self.duration = duration
         reduceMotionOverride = reduceMotion
         _presentation = State(initialValue: ContentRevealState(value, origin: origin))
     }
@@ -281,7 +284,7 @@ struct ContentRevealRegion<Value: Equatable, Content: View>: View {
             // Plain assignment: the mask's own .animation(value:) supplies the
             // curve, so ancestor transaction resets cannot cancel the reveal.
             presentation.progress = presentation.targetProgress
-            do { try await Task.sleep(for: .seconds(SlateMotion.revealDuration)) }
+            do { try await Task.sleep(for: .seconds(duration)) }
             catch { return }
             withoutAnimation { presentation.complete(generation: token) }
         }

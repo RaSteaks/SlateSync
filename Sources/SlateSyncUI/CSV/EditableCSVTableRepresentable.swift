@@ -273,9 +273,11 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
     private var effectiveDensity: SlateSyncDensity { density ?? sceneDensity }
     var worksheet: CSVWorksheet?
     var selectionHandler: ((CSVWorksheetCell?) -> Void)?
+    var requestedJump: CSVWorksheetJump?
 
-    func onCellSelection(_ handler: @escaping (CSVWorksheetCell?) -> Void) -> Self {
+    func onCellSelection(jump: CSVWorksheetJump? = nil, _ handler: @escaping (CSVWorksheetCell?) -> Void) -> Self {
         var grid = self
+        grid.requestedJump = jump
         grid.selectionHandler = handler
         return grid
     }
@@ -495,7 +497,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         }
 
         fileprivate func applyWorksheetJump() {
-            guard let jump = parent.worksheet?.jump, jump.id != lastJump, jump.tableID == parent.tableID,
+            guard let jump = parent.worksheet?.jump ?? parent.requestedJump, jump.id != lastJump, jump.tableID == parent.tableID,
                   let tableView else { return }
             lastJump = jump.id
             if let editingField { finishEditing(editingField) }

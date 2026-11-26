@@ -49,6 +49,24 @@ final class TaskCreationFeedbackTests: XCTestCase {
         let edited = try await service.loadTask(projectID: projectID, taskID: id)
         XCTAssertEqual(edited.customPrompt, workspace.customPrompt)
         XCTAssertEqual(edited.createdAt, created.createdAt)
+        let bytes = Data("File Name,Scene,Shot,Take,Camera FPS,Shoot Day\nA001C001.mov,,,,,\n".utf8)
+        let csv = ResolveCSVModel(service: service)
+        csv.onTableChange = { snap in
+            workspace.stageCSV(snap.table, filename: snap.filename, edits: snap.edits, rawBase64: snap.rawBase64, invalidatesScan: snap.invalidatesScan)
+        }
+        await csv.importData(bytes, filename: "Day1.csv")
+        let scan = ScanResult(metadata: [.init(sourceName: "Day1/slate.txt", clipName: "A001C001.mov", materialKey: "A:1:1", sensorFps: "96", shootDay: "26-11-20")],
+                              warnings: [], stats: .init(visitedDirectories: 1, prunedDirectories: 0, skippedDeepDirectories: 0, discoveredSlateFiles: 1, readSlateFiles: 1, learnedStructures: 0), missingKeys: [])
+        workspace.stageMetadata(scan, directoryName: "Day1")
+        await csv.importData(bytes, filename: "Day2.csv")
+        try await workspace.flush()
+        let day2 = try await service.loadTask(projectID: projectID, taskID: id)
+        XCTAssertNil(day2.slateDirectoryName)
+        XCTAssertNil(day2.slateMetadata)
+        XCTAssertNil(day2.production?.scanStats)
+        workspace.stageLocalRecords([.init(scene: "7")], filename: "original.csv")
+        workspace.stageMedia(.init(filename: "another.pdf", pages: []))
+        XCTAssertEqual(workspace.selectedTask?.filename, "original.csv")
         try await workspace.close()
         try await library.close()
     }

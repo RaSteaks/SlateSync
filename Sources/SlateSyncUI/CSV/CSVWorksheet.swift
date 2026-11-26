@@ -40,6 +40,24 @@ struct CSVWorksheet {
 final class CSVWorksheetRuler: NSRulerView {
     var materialHeader: String?
     var labelForRow: ((Int) -> String?)?
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let table = scrollView?.documentView as? NSTableView else { return nil }
+        let point = table.convert(event.locationInWindow, from: nil)
+        let row = table.row(at: NSPoint(x: table.visibleRect.midX, y: point.y))
+        guard row >= 0, let name = labelForRow?(row), !name.isEmpty else { return nil }
+        let menu = NSMenu()
+        menu.addItem(withTitle: name, action: nil, keyEquivalent: "")
+        let copy = menu.addItem(withTitle: L10n.tr("复制完整素材名"), action: #selector(copyName(_:)), keyEquivalent: "")
+        copy.target = self; copy.representedObject = name
+        return menu
+    }
+
+    @objc private func copyName(_ item: NSMenuItem) {
+        guard let name = item.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(name, forType: .string)
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         guard let table = scrollView?.documentView as? NSTableView else { return }
         let style = NSMutableParagraphStyle()

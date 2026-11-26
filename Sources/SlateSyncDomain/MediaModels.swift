@@ -16,6 +16,23 @@ public struct MediaPreparationOptions: Sendable {
     }
 }
 
+/// A page range is one-based for direct comparison with the original PDF.
+public struct MediaIntakePart: Hashable, Sendable, Identifiable {
+    public let url: URL
+    public let pages: ClosedRange<Int>?
+    public var id: Self { self }
+    public var filename: String {
+        guard let pages else { return url.lastPathComponent }
+        return url.deletingPathExtension().lastPathComponent + "_p\(pages.lowerBound)-\(pages.upperBound).pdf"
+    }
+    public init(url: URL, pages: ClosedRange<Int>? = nil) { self.url = url; self.pages = pages }
+}
+public struct MediaIntakePreview: Sendable {
+    public let document: PreparedDocument
+    public let original: Data?
+    public init(document: PreparedDocument, original: Data?) { self.document = document; self.original = original }
+}
+
 public enum PreparedViewType: String, Codable, Sendable { case full, coreDetail = "core-detail" }
 public enum MediaAccuracy: String, Codable, Sendable { case standard, high }
 

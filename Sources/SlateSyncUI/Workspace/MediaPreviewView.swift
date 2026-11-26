@@ -11,6 +11,7 @@ struct MediaPreviewView: View {
     let document: PreparedDocument
     @Binding var pageIndex: Int
     @State private var showsLightbox = false
+    @State private var magnification = 1.0
     // Retain only the visible page image. Progress/layout updates reuse it;
     // page or document changes replace it without retaining the full PDF.
     @State private var previewImage: NSImage?
@@ -32,7 +33,12 @@ struct MediaPreviewView: View {
         .sheet(isPresented: $showsLightbox) {
             VStack {
                 HStack { navigation; Spacer(); Button(L10n.tr("关闭预览")) { showsLightbox = false }.keyboardShortcut(.cancelAction) }
-                pageStage
+                Slider(value: $magnification, in: 1...6, step: 0.25) { Text(L10n.tr("原稿缩放")) }
+                GeometryReader { geometry in
+                    ScrollView([.horizontal, .vertical]) {
+                        pageStage.frame(width: geometry.size.width * magnification, height: geometry.size.height * magnification)
+                    }
+                }
             }
             .padding(20).frame(minWidth: 720, minHeight: 480)
             // Paging shortcuts exist only inside the enlarged preview, so arrow keys
