@@ -244,6 +244,32 @@ final class SM08NativeSurfaceTests: XCTestCase {
         XCTAssertTrue(field.isSelectable)
     }
 
+    func testContinuousSeekingPaintsDataAndRestoresTheDestinationEditor() async throws {
+        let fixture = fixtureTable()
+        let harness = CSVHarness(table: fixture)
+        defer { harness.unmount() }
+        try await harness.mount()
+        let table = try XCTUnwrap(harness.tableView)
+        let coordinator = try XCTUnwrap(table.delegate as? EditableCSVTableRepresentable.Coordinator)
+        let offset = min(300, fixture.rows.count - 1)
+        for row in [offset, offset / 2, offset * 2] {
+            table.scrollRowToVisible(row)
+            table.layoutSubtreeIfNeeded()
+        }
+        let visible = NSIntersectionRect(table.visibleRect, table.bounds)
+        let image = try XCTUnwrap(table.bitmapImageRepForCachingDisplay(in: visible))
+        table.cacheDisplay(in: visible, to: image)
+        if !NSWorkspace.shared.isVoiceOverEnabled {
+            XCTAssertGreaterThan(coordinator.cellWork.paintedCells, 0, "Reading mode must draw source values while seeking")
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        table.layoutSubtreeIfNeeded()
+        let field = try XCTUnwrap(table.view(atColumn: 0, row: offset * 2, makeIfNecessary: true) as? NSTextField)
+        XCTAssertTrue(field.isEditable)
+        XCTAssertEqual(field.stringValue, fixture.rows[offset * 2][0])
+        XCTAssertEqual(field.accessibilityValue(), fixture.rows[offset * 2][0])
+    }
+
     func testBorderlessCellPreservesMultilineEditing() async throws {
         // Display sizing must not become the text system's single-line mode:
         // embedded CSV newlines remain editable and cross the commit boundary.

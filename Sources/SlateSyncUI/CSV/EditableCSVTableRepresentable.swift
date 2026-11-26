@@ -84,6 +84,7 @@ struct CSVCellWorkMetrics: Sendable {
     var valueWrites = 0
     var styleWrites = 0
     var accessibilityFormats = 0
+    var paintedCells = 0
 }
 
 /// Keep native text editing/layout intact, but format the contextual AX label
@@ -107,8 +108,8 @@ final class CSVTableTextField: NSTextField {
         style.lineBreakMode = .byTruncatingTail
         return [.font: displayFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: style]
     }
-    private static let leadingAttributes = attributes(.left)
-    private static let trailingAttributes = attributes(.right)
+    fileprivate static let leadingAttributes = attributes(.left)
+    fileprivate static let trailingAttributes = attributes(.right)
 
     func bindText(_ text: String) {
         guard text != displayText else { return }
@@ -187,6 +188,81 @@ final class CSVTableTextField: NSTextField {
     }
 }
 
+/// While the viewport is moving rapidly, paint the actual visible values once
+/// per row. At rest, on input, and with VoiceOver, use the native editable cells.
+@MainActor
+private final class CSVScrollingTableView: NSTableView {
+    var paintsRows = false
+    private var lastMove: TimeInterval = 0
+    private var restoration: Task<Void, Never>?
+    private var previousY: CGFloat?
+    private var scrollingToRow = false
+    func observeViewport(_ clip: NSClipView) {
+        clip.postsBoundsChangedNotifications = true
+        previousY = clip.bounds.minY
+        NotificationCenter.default.addObserver(self, selector: #selector(moved(_:)), name: NSView.boundsDidChangeNotification, object: clip)
+    }
+
+    @objc private func moved(_ event: Notification) {
+        guard !scrollingToRow, let clip = event.object as? NSClipView else { return }
+        prepareMovement(to: clip.bounds.minY)
+    }
+
+    private func prepareMovement(to y: CGFloat) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard previousY != y else { return }
+        previousY = y
+        defer { lastMove = now }
+        guard now - lastMove < 0.15 || paintsRows, numberOfRows > 100,
+              !(window?.firstResponder is NSTextView), !NSWorkspace.shared.isVoiceOverEnabled else { return }
+        if !paintsRows {
+            paintsRows = true
+            reloadData()
+        }
+        restoration?.cancel()
+        restoration = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(90)) } catch { return }
+            self?.restoreEditors()
+        }
+    }
+
+    override func scrollRowToVisible(_ row: Int) {
+        // Detect programmatic seeking before AppKit materializes the new rows.
+        if (0..<numberOfRows).contains(row), !visibleRect.contains(rect(ofRow: row)) {
+            prepareMovement(to: rect(ofRow: row).minY)
+        }
+        scrollingToRow = true
+        super.scrollRowToVisible(row)
+        previousY = enclosingScrollView?.contentView.bounds.minY
+        scrollingToRow = false
+    }
+
+    func restoreEditors() {
+        restoration?.cancel(); restoration = nil
+        guard paintsRows else { return }
+        paintsRows = false
+        reloadData()
+    }
+    override func mouseDown(with event: NSEvent) { restoreEditors(); super.mouseDown(with: event) }
+    override func keyDown(with event: NSEvent) { restoreEditors(); super.keyDown(with: event) }
+    override func accessibilityChildren() -> [Any]? { restoreEditors(); return super.accessibilityChildren() }
+
+    func stopObserving() {
+        restoration?.cancel(); restoration = nil
+        NotificationCenter.default.removeObserver(self)
+    }
+}
+
+@MainActor
+private final class CSVDisplayRow: NSTableRowView {
+    weak var owner: EditableCSVTableRepresentable.Coordinator?
+    var sourceRow = 0
+    override func drawBackground(in dirtyRect: NSRect) {
+        super.drawBackground(in: dirtyRect)
+        owner?.paintRow(sourceRow, in: bounds)
+    }
+}
+
 /// The single SM-08 AppKit data-surface bridge. NSTableView supplies row reuse
 /// for 10k editable rows; the coordinator owns only AppKit edit/scroll state
 /// and reports immutable identities back to the MainActor model.
@@ -238,7 +314,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
     public func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     public func makeNSView(context: Context) -> NSScrollView {
-        let tableView = NSTableView()
+        let tableView = CSVScrollingTableView()
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.allowsMultipleSelection = false
         tableView.allowsEmptySelection = true
@@ -265,6 +341,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         // eagerly create all 10k rows while addTableColumn recalculates layout.
         let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 640, height: 400))
         scrollView.documentView = tableView
+        tableView.observeViewport(scrollView.contentView)
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
@@ -349,6 +426,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
 
     public static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
         coordinator.timer?.cancel()
+        (coordinator.tableView as? CSVScrollingTableView)?.stopObserving()
         coordinator.parent.editorRegistration?(nil)
         // Break AppKit delegate cycles and finish the edit session explicitly;
         // no database or timer is retained by this bridge.
@@ -501,11 +579,43 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
 
         public func numberOfRows(in tableView: NSTableView) -> Int { parent.table.rows.count }
 
+        public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+            let id = NSUserInterfaceItemIdentifier("csv.display.row")
+            let view = (tableView.makeView(withIdentifier: id, owner: nil) as? CSVDisplayRow) ?? CSVDisplayRow()
+            view.identifier = id
+            view.sourceRow = row
+            view.owner = self
+            return view
+        }
+
+        fileprivate func paintRow(_ row: Int, in bounds: NSRect) {
+            guard let table = tableView as? CSVScrollingTableView, table.paintsRows,
+                  parent.table.rows.indices.contains(row) else { return }
+            let viewport = table.visibleRect
+            let values = parent.table.rows[row]
+            let height = ceil(Self.cellFont.ascender - Self.cellFont.descender + Self.cellFont.leading)
+            for (index, column) in table.tableColumns.enumerated() {
+                let frame = table.rect(ofColumn: index)
+                guard frame.maxX >= viewport.minX, frame.minX <= viewport.maxX,
+                      let binding = columnBindings[ObjectIdentifier(column)], values.indices.contains(binding.sourceIndex) else { continue }
+                let style = binding.alignment == .right ? CSVTableTextField.trailingAttributes : CSVTableTextField.leadingAttributes
+                let rect = NSRect(x: frame.minX + 3, y: floor((bounds.height - height) / 2),
+                                  width: max(0, frame.width - 6), height: height)
+                cellWork.paintedCells += 1
+                (values[binding.sourceIndex] as NSString).draw(in: rect, withAttributes: style)
+                if parent.worksheet?.warnings.contains(.init(row: row, column: binding.sourceIndex)) == true {
+                    NSColor.systemOrange.setFill()
+                    NSRect(x: frame.maxX - 4, y: bounds.minY, width: 3, height: 4).fill()
+                }
+            }
+        }
+
         public func tableView(
             _ tableView: NSTableView,
             viewFor tableColumn: NSTableColumn?,
             row: Int
         ) -> NSView? {
+            if (tableView as? CSVScrollingTableView)?.paintsRows == true { return nil }
             guard let tableColumn,
                   let binding = columnBindings[ObjectIdentifier(tableColumn)],
                   parent.table.headers.indices.contains(binding.sourceIndex) else { return nil }
