@@ -109,7 +109,16 @@ public actor ResolveCSVMerger {
         if !namedKeys.isEmpty {
             let identityFields = columns.filePath + columns.fileName + columns.clipName
             for (index, row) in rows.enumerated() {
-                let names = Set(identityFields.map { "file:" + row[$0] }).intersection(namedKeys)
+                var names = Set(identityFields.map { "file:" + Self.matchName(row[$0]) }).intersection(namedKeys)
+                // Resolve also exports a directory and basename in separate
+                // columns. The same explicit path must select the same clip.
+                for directory in columns.clipDirectory where !row[directory].isEmpty {
+                    let root = Self.matchName(row[directory])
+                    for file in columns.fileName where !row[file].isEmpty {
+                        let path = "file:" + (root as NSString).appendingPathComponent(Self.matchName(row[file]))
+                        if namedKeys.contains(path) { names.insert(path) }
+                    }
+                }
                 guard names.count == 1, let name = names.first else { continue }
                 if !rowKeys[index].isEmpty {
                     let old = rowKeys[index]
@@ -359,11 +368,17 @@ public actor ResolveCSVMerger {
         try SequenceAnomalyDetector.detect(records.map(SequenceAnomalyDetector.Input.init), excluding: knownAnomalyKeys)
     }
 
+    private static func matchName(_ name: String) -> String {
+        let clean = ResolveCSVNormalization.clean(name)
+        if clean.hasPrefix("file:"), let url = URL(string: clean), url.isFileURL { return url.path }
+        return clean.replacingOccurrences(of: "\\", with: "/")
+    }
+
     private static func recordKey(_ record: ResolveSlateRecord) -> String {
         let canonical = ResolveCSVNormalization.canonicalMaterialKey(cardNumber: record.cardNumber, videoCode: record.videoCode)
-        let name = ResolveCSVNormalization.clean(record.sourceFileName)
+        let name = matchName(record.sourceFileName ?? "")
         if !name.isEmpty {
-            if name.hasPrefix("/") { return "file:" + name }
+            if name.contains("/") { return "file:" + name }
             // A filename can identify a nonstandard camera. Never use it to
             // override two explicit, contradictory camera identifiers.
             if canonical.isEmpty, ResolveCSVNormalization.extractCombinedMaterialKey(record.videoCode).isEmpty { return "file:" + name }

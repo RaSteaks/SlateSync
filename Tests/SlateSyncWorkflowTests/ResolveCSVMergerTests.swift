@@ -33,6 +33,13 @@ final class ResolveCSVMergerTests: XCTestCase {
         let linked = try await merger.merge(source: source, records: [record], preserveTemplate: true)
         XCTAssertEqual(linked.table.rows[0], rows[0])
         XCTAssertEqual(linked.table.rows[1], ["A001C001.mov", "/D2/A001C001.mov", "007", "02", "01", "补拍\n另收环境声", "48", "26-11-21"])
+        var directoryHeaders = source.headers
+        directoryHeaders[1] = "Clip Directory"
+        var directoryRows = rows
+        directoryRows[0][1] = "/D1"; directoryRows[1][1] = "/D2"
+        let separate = try await merger.merge(source: .init(headers: directoryHeaders, rows: directoryRows, format: .init()), records: [record], preserveTemplate: true)
+        XCTAssertEqual(separate.table.rows[0], directoryRows[0])
+        XCTAssertEqual(separate.table.rows[1][2], "007")
         let thin = ResolveCSVTable(headers: ["File Name"], rows: [["A001C001.mov"]], format: .init())
         record.sourceFileName = nil
         let missing = try await merger.merge(source: thin, records: [record], preserveTemplate: true)

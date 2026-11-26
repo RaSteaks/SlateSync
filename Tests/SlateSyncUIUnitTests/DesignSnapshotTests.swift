@@ -394,7 +394,7 @@ private actor DesignFixtureService: WorkspaceWorkflowServing, MediaInputWorkflow
             statuses: [ResolveRecordStatus(recordIndex: 0, status: "unmatched", fileName: "A002C099_0812_R3KD.mov")],
             warnings: [], addedColumns: [], matchedRecordCount: 36,
             cameraFpsMatchedMaterialCount: 36, cameraFpsMatchedRowCount: 36,
-            shootDayMatchedMaterialCount: 35, shootDayMatchedRowCount: 35, updatedRowCount: 36, changes: [],
+            shootDayMatchedMaterialCount: 35, shootDayMatchedRowCount: 35, updatedRowCount: 0, changes: [],
             expectedMaterialCount: 40, recognizedMaterialCount: 36,
             unrecognizedMaterials: ["A002C099_0812_R3KD", "A003C099_0812_R3KD"], unrecognizedRowIndexes: [],
             rowKeys: Self.resolveTable.rows.map { $0[0] },
