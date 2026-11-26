@@ -169,7 +169,7 @@ final class ContentMotionTests: XCTestCase {
         try await settle(host)
         XCTAssertLessThan(try trailingBrightness(of: host), 0.05,
                           "Early in the reveal the far edge still shows the outgoing page")
-        try await Task.sleep(for: .seconds(SlateMotion.revealDuration + 0.15))
+        try await Task.sleep(for: .seconds(state.sampleDuration + 0.15))
         try await settle(host)
         XCTAssertGreaterThan(try trailingBrightness(of: host), 0.95, "The finished reveal covers the region")
         XCTAssertFalse(window.isVisible)
@@ -197,7 +197,7 @@ final class ContentMotionTests: XCTestCase {
         let returned = descendants(of: NSTextField.self, in: host).first { $0.identifier?.rawValue == "editor-0" }
         XCTAssertTrue(returned === original)
         XCTAssertEqual(returned?.stringValue, "Retained draft")
-        try await Task.sleep(for: .seconds(SlateMotion.revealDuration + 0.15))
+        try await Task.sleep(for: .seconds(state.sampleDuration + 0.15))
         try await settle(host)
         XCTAssertEqual(descendants(of: NSTextField.self, in: host).filter { $0.identifier?.rawValue.hasPrefix("editor-") == true }.count, 1)
         XCTAssertFalse(descendants(of: ContentRevealInputShield.Shield.self, in: host).contains { $0.blocked })
@@ -208,7 +208,7 @@ final class ContentMotionTests: XCTestCase {
     /// deterministic state tests above cover cancellation without timer waits.
     func testQueuedNavigationEventuallyMountsOnlyTheLatestDestination() async throws {
         let state = RegionState()
-        let host = NSHostingView(rootView: LiveFixture(state: state, duration: 1))
+        let host = NSHostingView(rootView: LiveFixture(state: state))
         host.sizingOptions = []
         let window = makeWindow(size: CGSize(width: 900, height: 500))
         window.contentView = host
@@ -225,11 +225,11 @@ final class ContentMotionTests: XCTestCase {
         state.page = 3
         try await settle(host)
         XCTAssertEqual(editors(), ["editor-0", "editor-1"])
-        try await Task.sleep(for: .seconds(1.15))
+        try await Task.sleep(for: .seconds(state.sampleDuration + 0.15))
         try await settle(host)
         XCTAssertEqual(editors(), ["editor-1", "editor-3"])
         XCTAssertEqual(state.navigation.title, "Page 3")
-        try await Task.sleep(for: .seconds(1.15))
+        try await Task.sleep(for: .seconds(state.sampleDuration + 0.15))
         try await settle(host)
         XCTAssertEqual(editors(), ["editor-3"])
         XCTAssertFalse(descendants(of: ContentRevealInputShield.Shield.self, in: host).contains { $0.blocked })
@@ -371,6 +371,10 @@ final class ContentMotionTests: XCTestCase {
 
     @MainActor @Observable final class RegionState {
         var page = 0
+        // Pixel readback on the CI window server can take longer than a real
+        // on-set tab transition. Use the same curve and stretch its clock for
+        // intermediate-frame and ownership assertions.
+        let sampleDuration: TimeInterval = 2
         // Explicit fixture input lets both accessibility policies run without
         // changing the developer's or hosted runner's system preferences.
         var reduceMotion = false
@@ -379,13 +383,11 @@ final class ContentMotionTests: XCTestCase {
 
     private struct LiveFixture: View {
         let state: RegionState
-        // Stretch only the test clock so both intermediate owners can be observed.
-        var duration = SlateMotion.revealDuration
         var body: some View {
             NavigationSplitView {
                 Text("Sidebar")
             } detail: {
-                ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion, duration: duration) { page in
+                ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion, duration: state.sampleDuration) { page in
                     Editor(page: page).contentRevealNavigationTitle("Page \(page)")
                 }.sidebarResizeBoundary()
             }
@@ -396,7 +398,7 @@ final class ContentMotionTests: XCTestCase {
     private struct PaintFixture: View {
         let state: RegionState
         var body: some View {
-            ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion) { page in
+            ContentRevealRegion(value: state.page, origin: .leading, reduceMotion: state.reduceMotion, duration: state.sampleDuration) { page in
                 NativePaint(color: page == 0 ? NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
                                              : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
             }.sidebarResizeBoundary()

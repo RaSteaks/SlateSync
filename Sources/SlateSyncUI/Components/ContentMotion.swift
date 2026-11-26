@@ -13,9 +13,11 @@ enum SlateMotion {
     // SwiftUI layout motion and the Core Animation masks/image handoffs.
     static let controlPoints: (Double, Double, Double, Double) = (0.4, 0, 0.2, 1)
 
-    static var handoff: Animation {
+    static var handoff: Animation { handoff(duration: handoffDuration) }
+
+    static func handoff(duration: TimeInterval) -> Animation {
         let p = controlPoints
-        return .timingCurve(p.0, p.1, p.2, p.3, duration: handoffDuration)
+        return .timingCurve(p.0, p.1, p.2, p.3, duration: duration)
     }
 
     static var timingFunction: CAMediaTimingFunction {
@@ -251,7 +253,7 @@ struct ContentRevealRegion<Value: Equatable, Content: View>: View {
                         // from this region. Re-attach the curve below that boundary,
                         // on the masks only. New legs reset without animation;
                         // reversing a leg animates the existing radius back to 0.
-                        .animation(SlateMotion.handoff, value: presentation.progress)
+                        .animation(SlateMotion.handoff(duration: duration), value: presentation.progress)
                         .allowsHitTesting(active && !presentation.isTransitioning && ancestorIsActive)
                         .accessibilityHidden(!active || !ancestorIsActive)
                         .transition(.identity)

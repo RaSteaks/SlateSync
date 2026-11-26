@@ -1215,6 +1215,7 @@ private struct RecognitionResultView: View {
                     }
                 }
                 Button(L10n.tr("补一条")) { model.addRecord(commit: workspace.stageEditedRecords) }
+                    .accessibilityIdentifier("workspace.result.add")
                 if let selected, let index = model.sourceIndex(selected.row) {
                     let record = model.editableRecords[index]
                     if let page = record.sourcePage { Text(L10n.tr("第 {0} 页", [String(page)])) }
@@ -1272,6 +1273,7 @@ private struct RecognitionResultView: View {
                 Button(L10n.tr("前往输入"), action: onInput)
                 if workspace.selectedTaskID != nil {
                     Button(L10n.tr("补一条")) { model.addRecord(commit: workspace.stageEditedRecords) }
+                    .accessibilityIdentifier("workspace.result.add")
                         .disabled(model.locksDisplayedTask)
                 }
             }

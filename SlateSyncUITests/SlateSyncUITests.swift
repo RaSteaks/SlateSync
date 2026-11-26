@@ -994,7 +994,14 @@ final class SlateSyncUITests: XCTestCase {
         app.buttons["workspace.preview.next"].click()
         XCTAssertTrue(app.staticTexts["2 / 2"].waitForExistence(timeout: 5))
         app.radioButtons["识别结果"].firstMatch.click()
+        // A second original starts a separate task. Give this PDF its own
+        // reviewed row before testing selection across page changes; borrowing
+        // the legacy task's scene would reintroduce the source-mixing defect.
+        let addRecord = app.buttons["workspace.result.add"].firstMatch
+        guard waitForControl(addRecord, visible: true, in: app.windows.firstMatch, app: app) else { return }
         let table = app.tables["可编辑识别结果"].firstMatch
+        XCTAssertFalse(table.exists && table.tableRows.firstMatch.exists, "A new original must not inherit another task’s rows")
+        addRecord.click()
         XCTAssertTrue(table.waitForExistence(timeout: 5))
         let row = table.tableRows.firstMatch
         row.click()
@@ -1007,7 +1014,7 @@ final class SlateSyncUITests: XCTestCase {
         }
         guard waitForControl(closeOriginal, visible: true, in: app.windows.firstMatch, app: app) else { return }
         XCTAssertTrue(app.staticTexts["2 / 2"].waitForExistence(timeout: 5))
-        // The second source page is unrelated to the one restored result row.
+        // The second source page is unrelated to the new manual result row.
         // Paging in the comparison panel must preserve native row selection.
         app.buttons["workspace.preview.previous"].click()
         XCTAssertTrue(app.staticTexts["1 / 2"].waitForExistence(timeout: 5))

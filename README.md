@@ -247,7 +247,7 @@ SlateSyncApp/Resources/PaddleOCR
 | profile | 检查 | 用途 |
 | --- | --- | --- |
 | `quick` | 与普通 push / PR 相同 | 日常反馈 |
-| `csv-ui` | 只运行 Debug 的旧项目 CSV 导入、编辑、导出和重开用例，保存 `.xcresult` | 单独复现单元格编辑或导出失败 |
+| `csv-ui` | 运行 Debug 旧项目 CSV 导入、编辑、导出与重开，以及新原稿翻页和结果选择两个场景，保存 `.xcresult` | 单独复现单元格编辑或导出失败 |
 | `sm09` | 完整功能 Gate，含 Debug UI、Universal 归档、ZIP/DMG、打包 Release UI 及覆盖核验 | 按需验证候选提交 |
 | `performance` | 独立的性能基准和报告 | 需要比较耗时或资源消耗时运行 |
 

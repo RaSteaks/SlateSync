@@ -56,13 +56,13 @@ jobs:
             ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
 
   csv-ui:
-    name: CSV export UI regression (Debug)
+    name: Workspace CSV and source review regressions (Debug)
     if: github.event_name == 'workflow_dispatch' && inputs.profile == 'csv-ui'
     runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Run the legacy CSV import, edit and export scenario
+      - name: Verify legacy CSV delivery and new-source review selection
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/csv-ui"
@@ -70,11 +70,12 @@ jobs:
             -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=- \
             -parallel-testing-enabled NO \
             -only-testing:SlateSyncUITests/SlateSyncUITests/testLegacyLibraryCSVExportAndReopenInDeliveredApp \
+            -only-testing:SlateSyncUITests/SlateSyncUITests/testPreviewPagingPreservesResultSelection \
             -resultBundlePath "$RUNNER_TEMP/csv-ui/CSV.xcresult" test
           # A stale test selector can produce zero executions; check the actual result.
           xcrun xcresulttool get test-results summary --format json --path "$RUNNER_TEMP/csv-ui/CSV.xcresult" \
             | tee "$RUNNER_TEMP/csv-ui/summary.json" \
-            | jq -e '.result == "Passed" and .passedTests == 1 and .failedTests == 0 and .skippedTests == 0'
+            | jq -e '.result == "Passed" and .passedTests == 2 and .failedTests == 0 and .skippedTests == 0'
       - name: Keep the focused XCTest result
         if: always()
         uses: actions/upload-artifact@v4
