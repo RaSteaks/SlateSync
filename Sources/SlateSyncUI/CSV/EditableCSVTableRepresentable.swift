@@ -94,8 +94,59 @@ final class CSVTableTextField: NSTextField {
     var active = false { didSet { if active != oldValue { needsDisplay = true } } }
     var warns = false { didSet { if warns != oldValue { needsDisplay = true } } }
 
+    // NSTableView already supplies a fixed row height and column width. Updating
+    // NSCell.stringValue on every reuse invalidates intrinsic layout for every
+    // visible field. Draw the immutable display value directly, and hydrate the
+    // native field editor only when keyboard, pointer or AX actually edits it.
+    private var displayText: String?
+    private var nativeEditing = false
+    private static let displayFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    private static func attributes(_ alignment: NSTextAlignment) -> [NSAttributedString.Key: Any] {
+        let style = NSMutableParagraphStyle()
+        style.alignment = alignment
+        style.lineBreakMode = .byTruncatingTail
+        return [.font: displayFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: style]
+    }
+    private static let leadingAttributes = attributes(.left)
+    private static let trailingAttributes = attributes(.right)
+
+    func bindText(_ text: String) {
+        guard text != displayText else { return }
+        displayText = text
+        needsDisplay = true
+    }
+
+    override var stringValue: String {
+        get { nativeEditing ? super.stringValue : (displayText ?? super.stringValue) }
+        set { displayText = newValue; super.stringValue = newValue }
+    }
+    override func accessibilityValue() -> String? {
+        nativeEditing ? super.accessibilityValue() : (displayText ?? super.stringValue)
+    }
+    private func hydrateEditor() {
+        guard !nativeEditing, let displayText else { return }
+        if super.stringValue != displayText { super.stringValue = displayText }
+    }
+    override func becomeFirstResponder() -> Bool { hydrateEditor(); return super.becomeFirstResponder() }
+    override func mouseDown(with event: NSEvent) { hydrateEditor(); super.mouseDown(with: event) }
+    override func selectText(_ sender: Any?) { hydrateEditor(); super.selectText(sender) }
+    func beganEditing() { nativeEditing = true }
+    func finishedEditing(_ value: String) {
+        displayText = value
+        if super.stringValue != value { super.stringValue = value }
+        nativeEditing = false
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
+        if !nativeEditing, let displayText {
+            let font = Self.displayFont
+            let height = ceil(font.ascender - font.descender + font.leading)
+            let rect = NSRect(x: 2, y: floor((bounds.height - height) / 2), width: max(0, bounds.width - 4), height: height)
+            (displayText as NSString).draw(in: rect, withAttributes: alignment == .right ? Self.trailingAttributes : Self.leadingAttributes)
+        } else {
+            super.draw(dirtyRect)
+        }
         if active {
             NSColor.controlAccentColor.setStroke()
             NSBezierPath(rect: bounds.insetBy(dx: 1, dy: 1)).stroke()
@@ -145,6 +196,13 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
     private let density: SlateSyncDensity?
     private var effectiveDensity: SlateSyncDensity { density ?? sceneDensity }
     var worksheet: CSVWorksheet?
+    var selectionHandler: ((CSVWorksheetCell?) -> Void)?
+
+    func onCellSelection(_ handler: @escaping (CSVWorksheetCell?) -> Void) -> Self {
+        var grid = self
+        grid.selectionHandler = handler
+        return grid
+    }
 
     func worksheet(_ configuration: CSVWorksheet) -> Self {
         var grid = self
@@ -186,8 +244,8 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         tableView.allowsEmptySelection = true
         // Content-sized columns; only the last one stretches to fill the width.
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        if worksheet != nil {
-            tableView.gridStyleMask = [.solidVerticalGridLineMask]
+        if worksheet != nil { tableView.gridStyleMask = [.solidVerticalGridLineMask] }
+        if worksheet != nil || selectionHandler != nil {
             tableView.target = context.coordinator
             tableView.action = #selector(Coordinator.selectWorksheetCell(_:))
             tableView.doubleAction = #selector(Coordinator.editWorksheetCell(_:))
@@ -344,7 +402,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         private var activeCell: CSVWorksheetCell?
 
         private func activate(_ cell: CSVWorksheetCell?) {
-            guard let tableView, parent.worksheet != nil, cell != activeCell else { return }
+            guard let tableView, parent.worksheet != nil || parent.selectionHandler != nil, cell != activeCell else { return }
             let previous = activeCell
             activeCell = cell
             for address in [previous, cell].compactMap({ $0 }) {
@@ -355,7 +413,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
                 tableView.tableColumns[index].headerCell.font = address == cell ? .boldSystemFont(ofSize: NSFont.smallSystemFontSize) : Self.headerFont
             }
             tableView.headerView?.needsDisplay = true
-            if !updating { parent.worksheet?.onActiveCell(cell) }
+            if !updating { parent.worksheet?.onActiveCell(cell); parent.selectionHandler?(cell) }
         }
 
         fileprivate func applyWorksheetJump() {
@@ -394,6 +452,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             guard let field = notification.object as? NSTextField else { return }
             let cell = cellIdentity(for: field)
             activate(.init(row: cell.row, column: cell.column))
+            (field as? CSVTableTextField)?.beganEditing()
             editingField = field
             lastCommittedValue = field.stringValue
             editingIdentity = CSVCellCommit(tableID: parent.tableID, rowID: cell.row,
@@ -499,7 +558,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             }
             let text = value(row: row, column: column)
             if field.stringValue != text {
-                field.stringValue = text
+                field.bindText(text)
                 cellWork.valueWrites += 1
             }
             return field
@@ -510,7 +569,9 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
         public func controlTextDidEndEditing(_ notification: Notification) {
             guard let field = notification.object as? NSTextField,
                   !((field.currentEditor() as? NSTextView)?.hasMarkedText() ?? false) else { return }
+            let finalText = field.currentEditor()?.string ?? field.stringValue
             commit(field)
+            (field as? CSVTableTextField)?.finishedEditing(finalText)
             timer?.cancel()
             editingField = nil
             editingIdentity = nil
@@ -537,7 +598,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             case .cancel:
                 timer?.cancel()
                 let identity = cellIdentity(for: field)
-                field.stringValue = value(row: identity.row, column: identity.column)
+                (field as? CSVTableTextField)?.finishedEditing(value(row: identity.row, column: identity.column))
                 editingField = nil
                 editingIdentity = nil
                 lastCommittedValue = nil
@@ -624,7 +685,7 @@ public struct EditableCSVTableRepresentable: NSViewRepresentable {
             // the final text to both the control (including AX) and the model.
             let finalText = field.currentEditor()?.string ?? field.stringValue
             commit(field)
-            if field.stringValue != finalText { field.stringValue = finalText }
+            (field as? CSVTableTextField)?.finishedEditing(finalText)
             editingField = nil
             editingIdentity = nil
             lastCommittedValue = nil
