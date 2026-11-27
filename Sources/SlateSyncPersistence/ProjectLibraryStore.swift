@@ -247,11 +247,31 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             ORDER BY archived_at IS NOT NULL, updated_at DESC;
             """
         )
-        var projects: [ProjectSummary] = []
-        for row in rows {
-            if let summary = try await projectSummary(row) { projects.append(summary) }
+        // Each project has an independent SQLite handle. Limit concurrency and
+        // keep registry order; do not retain hundreds of database handles or
+        // cache counts across writers. Older encrypted images use a smaller pool.
+        let sourceRoot = root, projectsRoot = self.projectsRoot
+        let canonicalRoot = try LibraryBoundary.validateRoot(sourceRoot)
+        let limit = try LocalProjectEncryption.identifier(for: databaseURL) == nil ? 4 : 2
+        var summaries = Array<ProjectSummary?>(repeating: nil, count: rows.count)
+        try await withThrowingTaskGroup(of: (Int, ProjectSummary?).self) { group in
+            var next = 0
+            func enqueue() {
+                guard next < rows.count else { return }
+                let index = next, row = rows[index]
+                next += 1
+                group.addTask {
+                    try Task.checkCancellation()
+                    return try await (index, Self.readSummary(row, root: sourceRoot, projectsRoot: projectsRoot, canonicalRoot: canonicalRoot))
+                }
+            }
+            for _ in 0..<min(limit, rows.count) { enqueue() }
+            while let (index, summary) = try await group.next() {
+                summaries[index] = summary
+                enqueue()
+            }
         }
-        return projects
+        return summaries.compactMap { $0 }
     }
 
     public func listProjects() async throws -> [ProjectSummary] {
@@ -654,6 +674,10 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
     }
 
     private func projectSummary(_ row: [String: String?]) async throws -> ProjectSummary? {
+        try await Self.readSummary(row, root: root, projectsRoot: projectsRoot, canonicalRoot: LibraryBoundary.validateRoot(root))
+    }
+
+    private nonisolated static func readSummary(_ row: [String: String?], root: URL, projectsRoot: URL, canonicalRoot: URL) async throws -> ProjectSummary? {
         guard
             let id = row["id"] ?? nil,
             let relativePath = row["relative_path"] ?? nil,
@@ -661,11 +685,14 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
             let createdAt = row["created_at"] ?? nil,
             let updatedAt = row["updated_at"] ?? nil
         else { return nil }
-        let projectDirectory = try checkedProjectDirectory(row)
+        let projectDirectory = try checkedDirectory(relativePath, root: root, projectsRoot: projectsRoot, canonicalRoot: canonicalRoot)
         var taskCount = 0
         var latestTaskAt: String?
-        let projectDatabaseURL = try checkedProjectDatabaseURL(projectDirectory)
-        if FileManager.default.fileExists(atPath: projectDatabaseURL.path) {
+        let projectDatabaseURL = try checkedDatabase(projectDirectory, canonicalRoot: canonicalRoot)
+        if let summary = try EncryptedSQLiteBlocks.taskSummary(at: projectDatabaseURL) {
+            taskCount = summary.count
+            latestTaskAt = summary.latest
+        } else if FileManager.default.fileExists(atPath: projectDatabaseURL.path) {
             // Library startup needs aggregates only. A read-only connection
             // avoids schema writes and encrypted snapshot reserialization for
             // every already-initialized project. Legacy empty databases still
@@ -851,6 +878,10 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         guard let relativePath = row["relative_path"] ?? nil else {
             throw SlateSyncError(code: "PROJECT_INVALID", message: "项目路径缺失")
         }
+        return try Self.checkedDirectory(relativePath, root: root, projectsRoot: projectsRoot, canonicalRoot: LibraryBoundary.validateRoot(root))
+    }
+
+    private nonisolated static func checkedDirectory(_ relativePath: String, root: URL, projectsRoot: URL, canonicalRoot: URL) throws -> URL {
         let candidate = root.appending(path: relativePath).standardizedFileURL
         let boundary = projectsRoot.standardizedFileURL.path + "/"
         guard candidate.path.hasPrefix(boundary) else {
@@ -859,7 +890,6 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
         // Symlink resolution against the canonicalized root and Projects root:
         // an existing candidate reached through an interior link that lands
         // outside the Library fails closed instead of being read or written.
-        let canonicalRoot = try LibraryBoundary.validateRoot(root)
         try LibraryBoundary.validateInterior(candidate, canonicalRoot: canonicalRoot)
         return candidate
     }
@@ -867,8 +897,11 @@ public actor ProjectLibraryStore: ProjectLibraryServing {
     /// Project databases are opened only through this check so a swapped
     /// `project.sqlite` symlink cannot point SQLite outside the Library.
     private func checkedProjectDatabaseURL(_ projectDirectory: URL) throws -> URL {
+        try Self.checkedDatabase(projectDirectory, canonicalRoot: LibraryBoundary.validateRoot(root))
+    }
+
+    private nonisolated static func checkedDatabase(_ projectDirectory: URL, canonicalRoot: URL) throws -> URL {
         let url = projectDirectory.appending(path: SQLiteV1.projectDatabaseFilename)
-        let canonicalRoot = try LibraryBoundary.validateRoot(root)
         try LibraryBoundary.validateInterior(url, canonicalRoot: canonicalRoot)
         return url
     }

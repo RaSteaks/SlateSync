@@ -279,6 +279,9 @@ final class LocalProjectEncryptionTests: XCTestCase {
         let encrypted = try ProjectLibraryStore(libraryRoot: internalURL)
         let recovered = try await encrypted.getProject(project.id)
         XCTAssertEqual(recovered.name, "Secret Project Name")
+        let indexSummary = try await encrypted.listProjects().first { $0.id == project.id }
+        XCTAssertEqual(indexSummary?.taskCount, 1)
+        XCTAssertNotNil(indexSummary?.latestTaskAt)
         let reader = try ProjectTaskStore(projectDirectory: projectURL)
         let recoveredTask = try await reader.loadTask("private-task")
         XCTAssertNotNil(recoveredTask.range(of: Data("confidential-dialogue".utf8)))

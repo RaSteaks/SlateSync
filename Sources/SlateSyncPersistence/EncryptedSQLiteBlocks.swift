@@ -18,9 +18,36 @@ enum EncryptedSQLiteBlocks {
         let length: Int
         var filename: String { id.uuidString + ".chunk" }
     }
+    struct TaskSummary: Codable, Sendable {
+        let count: Int
+        let latest: String?
+    }
     struct Manifest: Codable {
         let bytes: Int
         let blocks: [Block]
+        let taskSummary: TaskSummary?
+    }
+
+    /// The aggregate is authenticated together with the exact SQLite image.
+    /// Browsing a library should not decrypt and allocate every media block.
+    static func taskSummary(at url: URL) throws -> TaskSummary? {
+        let path = url.deletingLastPathComponent().appending(path: directoryName)
+        guard FileManager.default.fileExists(atPath: path.path),
+              try LocalProjectEncryption.identifier(for: url) != nil else { return nil }
+        _ = try directory(for: url)
+        let bytes = try Data(contentsOf: url)
+        guard LocalProjectEncryption.isEncrypted(bytes) else { return nil }
+        let payload = try LocalProjectEncryption.open(bytes)
+        guard payload.starts(with: magic) else { return nil }
+        return try JSONDecoder().decode(Manifest.self, from: payload.dropFirst(magic.count)).taskSummary
+    }
+
+    private static func taskSummary(in handle: OpaquePointer) -> TaskSummary? {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, "SELECT COUNT(*), MAX(updated_at) FROM tasks;", -1, &statement, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
+        return .init(count: Int(sqlite3_column_int64(statement, 0)), latest: sqlite3_column_text(statement, 1).map { String(cString: $0) })
     }
     struct FileStamp: Equatable, Sendable {
         let inode: ino_t
@@ -76,7 +103,7 @@ enum EncryptedSQLiteBlocks {
         return blocks
     }
 
-    static func save(_ bytes: UnsafePointer<UInt8>, count: Int, at url: URL, keyID: String,
+    static func save(_ bytes: UnsafePointer<UInt8>, count: Int, handle: OpaquePointer, at url: URL, keyID: String,
                      previous: [Cached]) throws -> EncryptedSQLiteSnapshot.State {
         let directory = try directory(for: url, create: true)
         let writer = FileManagerAtomicFileWriter()
@@ -110,7 +137,7 @@ enum EncryptedSQLiteBlocks {
             current.append(verified)
         }
         try synchronize(directory)
-        let manifest = Manifest(bytes: count, blocks: current.map(\.block))
+        let manifest = Manifest(bytes: count, blocks: current.map(\.block), taskSummary: taskSummary(in: handle))
         let payload = try magic + JSONEncoder().encode(manifest)
         let envelope = try LocalProjectEncryption.seal(payload, id: keyID)
         guard try LocalProjectEncryption.open(envelope) == payload else { throw damaged() }

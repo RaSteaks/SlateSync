@@ -61,7 +61,7 @@ enum EncryptedSQLiteSnapshot {
         }
         defer { if borrowed == nil { sqlite3_free(bytes) } }
         if url.lastPathComponent == SQLiteV1.projectDatabaseFilename && (count >= EncryptedSQLiteBlocks.threshold || previous?.blocks.isEmpty == false) {
-            let state = try EncryptedSQLiteBlocks.save(bytes, count: Int(count), at: url, keyID: id, previous: previous?.blocks ?? [])
+            let state = try EncryptedSQLiteBlocks.save(bytes, count: Int(count), handle: handle, at: url, keyID: id, previous: previous?.blocks ?? [])
             try LocalProjectEncryption.removeSQLiteSidecars(for: url)
             return state
         }
